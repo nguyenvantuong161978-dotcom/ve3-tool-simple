@@ -3141,8 +3141,15 @@ class BrowserFlowGenerator:
 
         # === DRISSION MODE ONLY ===
         # Sử dụng DrissionPage + Interceptor để tạo ảnh
-        if not prompts:
-            return {"success": False, "error": "Khong co prompts"}
+        # Cho phép prompts=[] nếu có video_count > 0 (chỉ tạo video, không tạo ảnh)
+        video_count_setting = self.config.get('video_count', 0)
+        try:
+            video_count = 999999 if video_count_setting == 'full' else int(video_count_setting)
+        except:
+            video_count = 0
+
+        if not prompts and video_count <= 0:
+            return {"success": False, "error": "Khong co prompts va video_count=0"}
 
         try:
             from modules.drission_flow_api import DrissionFlowAPI
