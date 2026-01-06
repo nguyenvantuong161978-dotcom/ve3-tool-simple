@@ -452,25 +452,33 @@ JS_SELECT_IMAGE_MODE = '''
 '''
 
 # JS để chọn "Tạo video từ các thành phần" từ dropdown (cho I2V)
-# QUAN TRỌNG: Click 2 lần - lần 1 đóng dropdown cũ, lần 2 mở dropdown đúng
-JS_SELECT_VIDEO_MODE = '''
-(async function() {
+# Bước 1: Click dropdown 2 lần để mở menu đúng
+JS_SELECT_VIDEO_MODE_STEP1 = '''
+(function() {
     var dropdown = document.querySelector('button[role="combobox"]');
     if (!dropdown) {
-        console.log('[VIDEO] Dropdown not found');
         return 'NO_DROPDOWN';
     }
-
-    // Click 2 lần: đóng rồi mở lại để hiển thị đúng options
     dropdown.click();
-    await new Promise(r => setTimeout(r, 100));
+    return 'CLICKED_FIRST';
+})();
+'''
+
+# Bước 2: Click lần 2 để mở lại
+JS_SELECT_VIDEO_MODE_STEP2 = '''
+(function() {
+    var dropdown = document.querySelector('button[role="combobox"]');
+    if (!dropdown) {
+        return 'NO_DROPDOWN';
+    }
     dropdown.click();
-    console.log('[VIDEO] Clicked dropdown (2x)');
+    return 'CLICKED_SECOND';
+})();
+'''
 
-    // Đợi dropdown mở
-    await new Promise(r => setTimeout(r, 300));
-
-    // Tìm và click "Tạo video từ các thành phần"
+# Bước 3: Tìm và click option
+JS_SELECT_VIDEO_MODE_STEP3 = '''
+(function() {
     var allSpans = document.querySelectorAll('span');
     for (var el of allSpans) {
         var text = (el.textContent || '').trim();
@@ -483,6 +491,9 @@ JS_SELECT_VIDEO_MODE = '''
     return 'NOT_FOUND';
 })();
 '''
+
+# Alias cho backward compatibility
+JS_SELECT_VIDEO_MODE = JS_SELECT_VIDEO_MODE_STEP1
 
 
 class DrissionFlowAPI:
@@ -2396,14 +2407,16 @@ class DrissionFlowAPI:
         self.log(f"[I2V-Chrome] Tạo video từ media: {media_id[:50]}...")
         self.log(f"[I2V-Chrome] Prompt: {prompt[:60]}...")
 
-        # 1. Chuyển sang video mode trong Chrome
+        # 1. Chuyển sang video mode trong Chrome (3 bước với delay)
         self.log("[I2V-Chrome] Chuyển sang mode 'Tạo video từ các thành phần'...")
-        result = self.driver.run_js(JS_SELECT_VIDEO_MODE)
+        self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP1)  # Click 1
+        time.sleep(0.1)
+        self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP2)  # Click 2
+        time.sleep(0.3)
+        result = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP3)  # Click option
         if result == 'CLICKED':
             self.log("[I2V-Chrome] ✓ Đã chuyển sang video mode")
             time.sleep(1)  # Đợi UI update
-        elif result == 'ALREADY_VIDEO_MODE':
-            self.log("[I2V-Chrome] ✓ Đã ở video mode sẵn")
         else:
             self.log(f"[I2V-Chrome] Không thể chuyển sang video mode: {result}", "WARN")
 
@@ -2583,20 +2596,29 @@ class DrissionFlowAPI:
             return False
 
     def switch_to_video_mode(self) -> bool:
-        """Chuyển Chrome sang mode tạo video từ ảnh."""
+        """Chuyển Chrome sang mode tạo video từ ảnh (3 bước với delay)."""
         if not self._ready:
             return False
         try:
-            result = self.driver.run_js(JS_SELECT_VIDEO_MODE)
+            # Bước 1: Click dropdown lần 1 (đóng nếu đang mở)
+            r1 = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP1)
+            if r1 == 'NO_DROPDOWN':
+                self.log("[Mode] Dropdown not found", "WARN")
+                return False
+            time.sleep(0.1)
+
+            # Bước 2: Click dropdown lần 2 (mở lại)
+            r2 = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP2)
+            time.sleep(0.3)
+
+            # Bước 3: Tìm và click option
+            result = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP3)
             if result == 'CLICKED':
                 self.log("[Mode] ✓ Đã chuyển sang Video mode")
                 time.sleep(0.5)
                 return True
-            elif result == 'ALREADY_VIDEO_MODE':
-                self.log("[Mode] ✓ Đã ở Video mode sẵn")
-                return True
             else:
-                self.log(f"[Mode] Không tìm thấy Video mode: {result}", "WARN")
+                self.log(f"[Mode] Không tìm thấy Video option: {result}", "WARN")
                 return False
         except Exception as e:
             self.log(f"[Mode] Error: {e}", "ERROR")
@@ -2640,17 +2662,18 @@ class DrissionFlowAPI:
         self.log(f"[I2V] Tạo video từ media: {media_id[:50]}...")
         self.log(f"[I2V] Prompt: {prompt[:60]}...")
 
-        # 1. Chuyển sang video mode
+        # 1. Chuyển sang video mode (3 bước với delay)
         self.log("[I2V] Chuyển sang mode 'Tạo video từ các thành phần'...")
-        result = self.driver.run_js(JS_SELECT_VIDEO_MODE)
+        self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP1)  # Click 1
+        time.sleep(0.1)
+        self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP2)  # Click 2
+        time.sleep(0.3)
+        result = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP3)  # Click option
         if result == 'CLICKED':
             self.log("[I2V] ✓ Đã chuyển sang video mode")
             time.sleep(1)
-        elif result == 'ALREADY_VIDEO_MODE':
-            self.log("[I2V] ✓ Đã ở video mode sẵn")
         else:
             self.log(f"[I2V] Không thể chuyển sang video mode: {result}", "WARN")
-            # Thử tiếp dù không click được
 
         # 2. Reset video state
         self.driver.run_js("""
