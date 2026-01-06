@@ -1953,6 +1953,15 @@ class DrissionFlowAPI:
                     except Exception as e:
                         self.log(f"✗ Download error: {e}", "WARN")
 
+        # F5 refresh sau mỗi ảnh thành công để tránh 403 cho prompt tiếp theo
+        try:
+            if self._page:
+                self._page.refresh()
+                time.sleep(1)  # Đợi page load
+                self.log("🔄 Refreshed page")
+        except Exception as e:
+            self.log(f"⚠️ Refresh warning: {e}", "WARN")
+
         return True, images, None
 
     def generate_batch(
