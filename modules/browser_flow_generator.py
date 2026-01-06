@@ -2929,14 +2929,38 @@ class BrowserFlowGenerator:
         workbook = PromptWorkbook(excel_path)
         workbook.load_or_create()
 
-        # Lấy scenes cần tạo video (có media_id, chưa có video)
+        # === ĐỌC MEDIA_ID TỪ CACHE (giống tạo ảnh đọc cached_media_names) ===
+        cache_path = Path(excel_path).parent / ".media_cache.json"
+        cached_media_names = {}
+        if cache_path.exists():
+            try:
+                import json
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    cache_data = json.load(f)
+                for key, value in cache_data.items():
+                    if key.startswith('_'):
+                        continue  # Skip metadata
+                    if isinstance(value, dict):
+                        cached_media_names[key] = value.get('mediaName', '')
+                    elif isinstance(value, str):
+                        cached_media_names[key] = value
+                self._log(f"[CACHE] Loaded {len(cached_media_names)} media_ids từ cache")
+            except Exception as e:
+                self._log(f"[CACHE] Error: {e}", "warn")
+
+        # Lấy scenes cần tạo video (có media_id trong cache, chưa có video)
         scenes_for_video = []
         for scene in workbook.get_scenes():
             scene_id = str(scene.scene_id) if hasattr(scene, 'scene_id') else ''
             if not scene_id or not scene_id.isdigit():
                 continue
 
-            media_id = getattr(scene, 'media_id', '') or ''
+            # Lấy media_id từ CACHE (giống tạo ảnh)
+            media_id = cached_media_names.get(scene_id, '')
+            if not media_id:
+                # Fallback: thử Excel
+                media_id = getattr(scene, 'media_id', '') or ''
+
             video_path = getattr(scene, 'video_path', '') or ''
             status_vid = getattr(scene, 'status_vid', '') or ''
 
@@ -2956,7 +2980,7 @@ class BrowserFlowGenerator:
                 break
 
         if not scenes_for_video:
-            self._log("Không có scene nào cần tạo video")
+            self._log(f"Không có scene nào cần tạo video (cache có {len(cached_media_names)} items)")
             return {"success": True, "message": "No scenes to process"}
 
         self._log(f"Sẽ tạo {len(scenes_for_video)} video")
