@@ -2419,7 +2419,7 @@ class SmartEngine:
         # Giống hệt như tạo ảnh - mở Chrome, chuyển mode, tạo video
         if not prompts:
             self.log("[VIDEO] Tất cả ảnh đã xong - tạo video (giống flow ảnh)...")
-            self._create_videos_like_images(proj_dir, excel_files[0] if excel_files else None)
+            self._create_videos_like_images(proj_dir, excel_path)
 
         # === LOAD CACHED MEDIA_NAMES ===
         # Dùng để tạo video từ ảnh mà không cần upload lại
