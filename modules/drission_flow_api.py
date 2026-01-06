@@ -452,32 +452,32 @@ JS_SELECT_IMAGE_MODE = '''
 '''
 
 # JS để chọn "Tạo video từ các thành phần" từ dropdown (cho I2V)
+# QUAN TRỌNG: Click 2 lần - lần 1 đóng dropdown cũ, lần 2 mở dropdown đúng
 JS_SELECT_VIDEO_MODE = '''
 (async function() {
-    // 1. Click dropdown
     var dropdown = document.querySelector('button[role="combobox"]');
     if (!dropdown) {
         console.log('[VIDEO] Dropdown not found');
         return 'NO_DROPDOWN';
     }
+
+    // Click 2 lần: đóng rồi mở lại để hiển thị đúng options
     dropdown.click();
-    console.log('[VIDEO] Clicked dropdown');
+    await new Promise(r => setTimeout(r, 100));
+    dropdown.click();
+    console.log('[VIDEO] Clicked dropdown (2x)');
 
-    // 2. Đợi dropdown mở
-    await new Promise(r => setTimeout(r, 500));
+    // Đợi dropdown mở
+    await new Promise(r => setTimeout(r, 300));
 
-    // 3. Tìm và click "Tạo video từ các thành phần" (KHÔNG phải "khung hình")
-    var allElements = document.querySelectorAll('*');
-    for (var el of allElements) {
-        var text = el.textContent || '';
-        // includes() nhưng LOẠI TRỪ "khung hình"
-        if (text.includes('Tạo video từ các thành phần') && !text.includes('khung hình')) {
-            var rect = el.getBoundingClientRect();
-            if (rect.height > 10 && rect.height < 80 && rect.width > 50) {
-                el.click();
-                console.log('[VIDEO] Clicked: Tao video tu cac thanh phan');
-                return 'CLICKED';
-            }
+    // Tìm và click "Tạo video từ các thành phần"
+    var allSpans = document.querySelectorAll('span');
+    for (var el of allSpans) {
+        var text = (el.textContent || '').trim();
+        if (text === 'Tạo video từ các thành phần') {
+            el.click();
+            console.log('[VIDEO] Clicked: Tao video tu cac thanh phan');
+            return 'CLICKED';
         }
     }
     return 'NOT_FOUND';
