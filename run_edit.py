@@ -5,11 +5,14 @@ VE3 Tool - Edit Mode (Compose MP4 on Master)
 Chạy trên máy chủ, quét VISUAL folder và ghép video.
 
 Workflow:
-    1. Quét D:\AUTO\VISUAL\ tìm project đã có đủ video
-    2. Ghép video + audio thành MP4 final
+    1. Quét D:\AUTO\VISUAL\ tìm project đã có đủ video/ảnh
+    2. Ghép video theo kế hoạch Excel (dùng SmartEngine._compose_video)
+       - Đọc srt_start từ Excel
+       - Xử lý video clips + images
+       - Ken Burns effect, fade transitions
     3. Copy kết quả về D:\AUTO\done\{code}\
        - Video MP4
-       - Thumbnail (từ thumbnails/)
+       - Thumbnail
        - SRT file
     4. Cập nhật Google Sheet: "EDIT XONG"
 
@@ -106,14 +109,19 @@ def get_project_info(project_dir: Path) -> Dict:
     info["has_excel"] = excel_path.exists()
     info["srt_path"] = srt_path if srt_path.exists() else None
     info["audio_path"] = audio_path if audio_path.exists() else None
+    info["excel_path"] = excel_path if excel_path.exists() else None
 
     # Check img folder
     img_dir = project_dir / "img"
     if img_dir.exists():
-        videos = list(img_dir.glob("scene_*.mp4"))
-        images = list(img_dir.glob("scene_*.png"))
+        # Count scene videos and images (not nv/loc)
+        videos = [f for f in img_dir.glob("*.mp4")
+                  if not f.stem.startswith('nv') and not f.stem.startswith('loc')]
+        images = [f for f in img_dir.glob("*.png")
+                  if not f.stem.startswith('nv') and not f.stem.startswith('loc')]
         info["video_count"] = len(videos)
         info["image_count"] = len(images)
+        info["media_count"] = len(videos) + len(images)
 
         # Count total scenes from Excel
         if excel_path.exists():
@@ -124,12 +132,12 @@ def get_project_info(project_dir: Path) -> Dict:
                 info["total_scenes"] = stats.get('total_scenes', 0)
             except:
                 # Fallback: count from videos + images
-                all_scenes = set()
+                all_ids = set()
                 for v in videos:
-                    all_scenes.add(v.stem)
+                    all_ids.add(v.stem)
                 for i in images:
-                    all_scenes.add(i.stem)
-                info["total_scenes"] = len(all_scenes)
+                    all_ids.add(i.stem)
+                info["total_scenes"] = len(all_ids)
 
     # Check if already done
     done_dir = DONE_DIR / code
@@ -137,11 +145,12 @@ def get_project_info(project_dir: Path) -> Dict:
         mp4_files = list(done_dir.glob("*.mp4"))
         info["already_done"] = len(mp4_files) > 0
 
-    # Ready for edit: has videos and audio
-    if info["video_count"] > 0 and info["has_audio"]:
-        # Check if all scenes have videos (full video mode)
+    # Ready for edit: has media (video or image) and audio
+    if info["media_count"] > 0 and info["has_audio"] and info["has_excel"]:
+        # Check if have enough media (at least 80% of scenes)
         if info["total_scenes"] > 0:
-            info["ready_for_edit"] = info["video_count"] >= info["total_scenes"]
+            coverage = info["media_count"] / info["total_scenes"]
+            info["ready_for_edit"] = coverage >= 0.8
         else:
             info["ready_for_edit"] = True
 
@@ -166,18 +175,25 @@ def scan_visual_projects() -> List[Dict]:
 
 
 # ============================================================================
-# VIDEO COMPOSITION
+# VIDEO COMPOSITION (Using SmartEngine)
 # ============================================================================
 
 def compose_video(project_info: Dict, callback=None) -> Tuple[bool, Optional[Path], Optional[str]]:
     """
-    Compose final video from scene videos + audio.
+    Compose final video using SmartEngine._compose_video.
+
+    Handles:
+    - Reading Excel timeline (srt_start)
+    - Video clips + images
+    - Ken Burns effect, fade transitions
+    - Audio merge
 
     Returns:
         Tuple[success, output_path, error]
     """
     code = project_info["code"]
     project_dir = project_info["path"]
+    excel_path = project_info.get("excel_path")
 
     def plog(msg, level="INFO"):
         if callback:
@@ -185,104 +201,32 @@ def compose_video(project_info: Dict, callback=None) -> Tuple[bool, Optional[Pat
         else:
             log(f"[{code}] {msg}", level)
 
-    plog("Starting video composition...")
+    plog("Starting video composition (SmartEngine)...")
 
-    # Get paths
-    img_dir = project_dir / "img"
-    audio_path = project_info.get("audio_path")
-
-    if not audio_path or not audio_path.exists():
-        return False, None, "Audio file not found"
-
-    # Get all scene videos sorted
-    videos = sorted(img_dir.glob("scene_*.mp4"), key=lambda x: x.name)
-
-    if not videos:
-        return False, None, "No scene videos found"
-
-    plog(f"Found {len(videos)} scene videos")
-
-    # Create concat file
-    concat_file = project_dir / "concat_list.txt"
-    with open(concat_file, 'w', encoding='utf-8') as f:
-        for v in videos:
-            # Escape single quotes in path
-            escaped_path = str(v).replace("'", "'\\''")
-            f.write(f"file '{escaped_path}'\n")
-
-    # Output path
-    output_path = project_dir / f"{code}.mp4"
-    temp_video = project_dir / f"{code}_temp.mp4"
+    if not excel_path or not excel_path.exists():
+        return False, None, "Excel file not found"
 
     try:
-        # Step 1: Concat videos
-        plog("Concatenating videos...")
-        concat_cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_file),
-            "-c", "copy",
-            str(temp_video)
-        ]
+        from modules.smart_engine import SmartEngine
 
-        result = subprocess.run(
-            concat_cmd,
-            capture_output=True,
-            text=True,
-            timeout=600  # 10 minutes
-        )
+        # Create engine instance
+        engine = SmartEngine()
+        engine.callback = lambda msg, lvl: plog(msg, lvl)
 
-        if result.returncode != 0:
-            plog(f"Concat failed: {result.stderr}", "ERROR")
-            return False, None, f"Concat failed: {result.stderr[:200]}"
+        # Call compose method
+        output_path = engine._compose_video(project_dir, excel_path, code)
 
-        # Step 2: Add audio
-        plog("Adding audio track...")
-        merge_cmd = [
-            "ffmpeg", "-y",
-            "-i", str(temp_video),
-            "-i", str(audio_path),
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-map", "0:v:0",
-            "-map", "1:a:0",
-            "-shortest",
-            str(output_path)
-        ]
+        if output_path and output_path.exists():
+            plog(f"Video composed: {output_path.name}")
+            return True, output_path, None
+        else:
+            return False, None, "Compose returned no output"
 
-        result = subprocess.run(
-            merge_cmd,
-            capture_output=True,
-            text=True,
-            timeout=600
-        )
-
-        if result.returncode != 0:
-            plog(f"Merge failed: {result.stderr}", "ERROR")
-            return False, None, f"Merge failed: {result.stderr[:200]}"
-
-        # Cleanup temp files
-        if temp_video.exists():
-            temp_video.unlink()
-        if concat_file.exists():
-            concat_file.unlink()
-
-        plog(f"Video composed: {output_path.name}")
-        return True, output_path, None
-
-    except subprocess.TimeoutExpired:
-        return False, None, "FFmpeg timeout (10 minutes)"
     except Exception as e:
+        plog(f"Compose error: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
         return False, None, str(e)
-    finally:
-        # Cleanup on error
-        if temp_video.exists():
-            try:
-                temp_video.unlink()
-            except:
-                pass
 
 
 # ============================================================================
@@ -529,9 +473,10 @@ def process_project(project_info: Dict, callback=None) -> bool:
     plog("="*50)
     plog(f"Processing: {code}")
     plog("="*50)
-    plog(f"Videos: {project_info['video_count']}, Scenes: {project_info['total_scenes']}")
+    plog(f"Media: {project_info['video_count']} videos + {project_info['image_count']} images")
+    plog(f"Scenes: {project_info['total_scenes']}")
 
-    # Step 1: Compose video
+    # Step 1: Compose video (using SmartEngine)
     success, video_path, error = compose_video(project_info, callback)
     if not success:
         plog(f"Compose failed: {error}", "ERROR")
@@ -584,7 +529,7 @@ def run_scan_loop(parallel: int = DEFAULT_PARALLEL):
         else:
             log(f"  Found {len(pending)} projects ready to edit:")
             for p in pending[:5]:
-                log(f"    - {p['code']} ({p['video_count']} videos)")
+                log(f"    - {p['code']} ({p['video_count']}v + {p['image_count']}i / {p['total_scenes']} scenes)")
             if len(pending) > 5:
                 log(f"    ... and {len(pending) - 5} more")
 
@@ -634,8 +579,9 @@ def run_single_project(code: str):
 
     if not info["ready_for_edit"]:
         log(f"Project not ready: {code}", "WARN")
-        log(f"  Videos: {info['video_count']}/{info['total_scenes']}")
+        log(f"  Media: {info['video_count']}v + {info['image_count']}i / {info['total_scenes']} scenes")
         log(f"  Audio: {info['has_audio']}")
+        log(f"  Excel: {info['has_excel']}")
         return
 
     process_project(info)
@@ -657,8 +603,9 @@ def run_scan_only():
 
     for p in pending:
         log(f"  {p['code']}:")
-        log(f"    Videos: {p['video_count']}/{p['total_scenes']}")
+        log(f"    Media:  {p['video_count']} videos + {p['image_count']} images / {p['total_scenes']} scenes")
         log(f"    Audio:  {'YES' if p['has_audio'] else 'NO'}")
+        log(f"    Excel:  {'YES' if p['has_excel'] else 'NO'}")
         log(f"    SRT:    {'YES' if p['has_srt'] else 'NO'}")
 
 
