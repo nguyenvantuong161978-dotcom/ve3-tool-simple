@@ -2962,6 +2962,49 @@ class BrowserFlowGenerator:
         self._log(f"Sẽ tạo {len(scenes_for_video)} video")
         self.stats["total"] = len(scenes_for_video)
 
+        # === ĐỌC PROJECT_URL TỪ EXCEL (giống tạo ảnh) ===
+        # Để vào đúng project đã tạo ảnh, giữ media_id valid
+        saved_project_url = None
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(excel_path, data_only=True)
+            if 'Config' in wb.sheetnames:
+                ws = wb['Config']
+                for row in ws.iter_rows(min_row=2, max_col=2):
+                    key = row[0].value
+                    val = row[1].value
+                    if key == 'flow_project_url' and val and '/project/' in str(val):
+                        saved_project_url = str(val)
+                        self._log(f"📂 Project URL từ Excel: {saved_project_url[:50]}...")
+                        break
+                    elif key == 'flow_project_id' and val and not saved_project_url:
+                        saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{val}"
+                        self._log(f"📂 Project ID từ Excel: {val[:20]}...")
+            wb.close()
+        except Exception as e:
+            self._log(f"Đọc Excel config error: {e}", "warn")
+
+        # Fallback: đọc từ cache
+        if not saved_project_url:
+            cache_path = Path(excel_path).parent / ".media_cache.json"
+            if cache_path.exists():
+                try:
+                    import json
+                    with open(cache_path, 'r', encoding='utf-8') as f:
+                        cache_data = json.load(f)
+                    cached_url = cache_data.get('_project_url', '')
+                    cached_id = cache_data.get('_project_id', '')
+                    if cached_url and '/project/' in cached_url:
+                        saved_project_url = cached_url
+                        self._log(f"📂 Project URL từ cache: {saved_project_url[:50]}...")
+                    elif cached_id:
+                        saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{cached_id}"
+                except:
+                    pass
+
+        if not saved_project_url:
+            return {"success": False, "error": "Không tìm thấy project URL. Hãy tạo ảnh trước!"}
+
         # Webshare config
         ws_cfg = self.config.get('webshare_proxy', {})
 
@@ -2977,9 +3020,9 @@ class BrowserFlowGenerator:
             chrome_portable=self.config.get('chrome_portable', '')
         )
 
-        # Setup Chrome (giống tạo ảnh)
-        project_url = self.config.get('flow_project_url', '')
-        if not drission_api.setup(project_url=project_url if project_url else None):
+        # Setup Chrome - VÀO ĐÚNG PROJECT ĐÃ TẠO ẢNH
+        self._log(f"Vào project: {saved_project_url[:60]}...")
+        if not drission_api.setup(project_url=saved_project_url):
             return {"success": False, "error": "Không setup được Chrome"}
 
         self._log("✓ Chrome sẵn sàng - bắt đầu tạo video...")
