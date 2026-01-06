@@ -2169,9 +2169,17 @@ class SmartEngine:
         ext = inp.suffix.lower()
         name = inp.stem
 
+        # Fix: Nếu file là XXX_prompts.xlsx thì tên thật là XXX
+        if name.endswith('_prompts'):
+            name = name[:-8]  # Bỏ "_prompts"
+
         # Setup output dir
         if output_dir:
             proj_dir = Path(output_dir)
+        elif ext == '.xlsx' and inp.parent.name == name:
+            # Excel đang ở trong đúng project folder rồi (flat structure)
+            # VD: PROJECTS/AR47-0028/AR47-0028_prompts.xlsx → dùng PROJECTS/AR47-0028
+            proj_dir = inp.parent
         else:
             proj_dir = Path("PROJECTS") / name
 
