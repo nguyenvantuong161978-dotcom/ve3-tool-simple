@@ -11,7 +11,7 @@ project_root: "./VE3_TOOL"
 
 # Đường dẫn đến Chrome portable (đã đăng nhập Google)
 # Ví dụ: C:\Users\phuonghoa\Documents\KP\KP.exe
-chrome_portable: ""
+chrome_portable: "C:\\Users\\phuonghoa\\Documents\\KP\\KP.exe"
 
 # [KHÔNG CẦN SỬA] - Chỉ dùng khi chrome_portable trống
 chrome_path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
