@@ -863,8 +863,13 @@ class SmartEngine:
         self.log("Transcribe voice -> SRT...")
 
         try:
+            # Read whisper settings from config
+            whisper_model = self.config.get('whisper_model', 'medium')
+            whisper_lang = self.config.get('whisper_language', 'en')
+            self.log(f"Whisper model: {whisper_model}, language: {whisper_lang}")
+
             from modules.voice_to_srt import VoiceToSrt
-            conv = VoiceToSrt(model_name="base", language="vi")
+            conv = VoiceToSrt(model_name=whisper_model, language=whisper_lang)
             conv.transcribe(voice_path, srt_path)
             self.log(f"OK: {srt_path.name}", "OK")
             return True

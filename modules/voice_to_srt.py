@@ -65,7 +65,7 @@ class VoiceToSrt:
     
     def __init__(
         self,
-        model_name: str = "base",
+        model_name: str = "medium",
         language: Optional[str] = None,
         device: Optional[str] = None
     ):
@@ -313,7 +313,7 @@ class VoiceToSrt:
 def convert_voice_to_srt(
     input_audio_path: Path,
     output_srt_path: Path,
-    model_name: str = "base",
+    model_name: str = "medium",
     language: Optional[str] = None
 ) -> Dict[str, Any]:
     """
