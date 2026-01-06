@@ -2923,15 +2923,17 @@ class SmartEngine:
             wb = PromptWorkbook(excel_path)
             wb.load_or_create()
 
-            # Export TXT - danh sach phan canh
+            # Export TXT - danh sach phan canh (nếu method tồn tại)
             txt_path = proj_dir / f"{name}_scenes.txt"
-            if wb.export_scenes_txt(txt_path):
-                self.log(f"  -> TXT: {txt_path.name}", "OK")
+            if hasattr(wb, 'export_scenes_txt'):
+                if wb.export_scenes_txt(txt_path):
+                    self.log(f"  -> TXT: {txt_path.name}", "OK")
 
-            # Export SRT - thoi gian phan canh
+            # Export SRT - thoi gian phan canh (nếu method tồn tại)
             srt_output_path = proj_dir / f"{name}_scenes.srt"
-            if wb.export_scenes_srt(srt_output_path):
-                self.log(f"  -> SRT: {srt_output_path.name}", "OK")
+            if hasattr(wb, 'export_scenes_srt'):
+                if wb.export_scenes_srt(srt_output_path):
+                    self.log(f"  -> SRT: {srt_output_path.name}", "OK")
 
         except Exception as e:
             self.log(f"  Export error: {e}", "WARN")
@@ -4017,11 +4019,23 @@ class SmartEngine:
             self.log("[VIDEO] Chưa có token - thử lấy token mới bằng DrissionPage...")
             try:
                 from modules.drission_flow_api import DrissionFlowAPI
-                ws_cfg = self.config.get('webshare_proxy', {})
+
+                # Load webshare config từ settings.yaml
+                ws_cfg = {}
+                try:
+                    import yaml
+                    settings_path = self.config_dir / "settings.yaml"
+                    if settings_path.exists():
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings = yaml.safe_load(f) or {}
+                            ws_cfg = settings.get('webshare_proxy', {})
+                except:
+                    pass
+
                 drission_api = DrissionFlowAPI(
                     headless=True,
                     verbose=False,
-                    webshare_enabled=ws_cfg.get('enabled', True),
+                    webshare_enabled=ws_cfg.get('enabled', False),
                     machine_id=ws_cfg.get('machine_id', 1),
                     chrome_portable=self.chrome_portable
                 )
