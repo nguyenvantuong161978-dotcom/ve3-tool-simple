@@ -201,9 +201,9 @@ early_video_start: 10
 # Su dung browser automation thay cho API (khong can bearer token)
 
 # Generation mode: "api" hoặc "chrome"
-# API mode: Gọi trực tiếp API qua nanoai.pics (nhanh, ổn định)
-# Chrome mode: Dùng DrissionPage - model mới nhất, chất lượng tốt hơn
-generation_mode: "chrome"
+# api: DrissionPage + Interceptor (Chrome API) - cần proxy_api_token
+# chrome: Selenium WebDriver (fallback)
+generation_mode: "api"
 
 # Parallel mode: So luong browser chay song song (1-5)
 # Nhieu browser = nhanh hon, nhung can nhieu RAM va profile
