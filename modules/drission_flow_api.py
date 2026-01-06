@@ -1957,11 +1957,20 @@ class DrissionFlowAPI:
         try:
             if self.driver:
                 self.driver.refresh()
-                time.sleep(2)  # Đợi page load
+                # Đợi page load hoàn toàn
+                time.sleep(3)
+                # Đợi textarea xuất hiện (page đã load xong)
+                for _ in range(10):
+                    textarea = self.driver.ele("tag:textarea", timeout=1)
+                    if textarea:
+                        break
+                    time.sleep(0.5)
                 # Re-inject JS Interceptor sau khi refresh (bị mất sau F5)
                 self._reset_tokens()
                 self.driver.run_js(JS_INTERCEPTOR)
-                self.log("🔄 Refreshed + re-injected interceptor")
+                # Click vào textarea để focus
+                self._click_textarea()
+                self.log("🔄 Refreshed + ready")
         except Exception as e:
             self.log(f"⚠️ Refresh warning: {e}", "WARN")
 
