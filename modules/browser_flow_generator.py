@@ -257,11 +257,14 @@ class BrowserFlowGenerator:
             chrome_portable_user_data = None
 
             if chrome_portable:
+                chrome_dir = Path(chrome_portable).parent
+
+                # Dùng trực tiếp chrome_portable (launcher tự chạy đúng Chrome)
                 options.binary_location = chrome_portable
-                self._log(f"Chrome portable: {chrome_portable}")
+                self._log(f"Chrome: {chrome_portable}")
 
                 # Tìm User Data của Chrome portable
-                chrome_dir = Path(chrome_portable).parent
+                # GoogleChromePortable: KP/Data/profile
                 for data_path in [chrome_dir / "Data" / "profile", chrome_dir / "User Data"]:
                     if data_path.exists():
                         chrome_portable_user_data = data_path
