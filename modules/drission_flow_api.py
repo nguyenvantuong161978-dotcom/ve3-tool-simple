@@ -102,6 +102,7 @@ window._response=null;window._responseError=null;window._requestPending=false;
 window._customPayload=null; // Payload đầy đủ từ Python (có media_id) cho IMAGE
 window._videoResponse=null;window._videoError=null;window._videoPending=false;
 window._customVideoPayload=null; // Payload đầy đủ từ Python cho VIDEO (có referenceImages.mediaId)
+window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (thêm referenceImages, đổi model)
 
 (function(){
     if(window.__interceptReady) return 'ALREADY_READY';
@@ -396,6 +397,83 @@ window._customVideoPayload=null; // Payload đầy đủ từ Python cho VIDEO (
             }
 
             // ============================================
+            // T2V → I2V CONVERSION MODE: Convert Text-to-Video thành Image-to-Video
+            // Chrome gửi T2V request (batchAsyncGenerateVideoText) với model veo_3_1_t2v_fast
+            // Interceptor đổi thành I2V (batchAsyncGenerateVideoReferenceImages) với model veo_3_0_r2v_fast
+            // ============================================
+            if (window._t2vToI2vConfig && chromeVideoBody && urlStr.includes('batchAsyncGenerateVideoText')) {
+                try {
+                    var t2vConfig = window._t2vToI2vConfig;
+                    console.log('[T2V→I2V] Converting Text-to-Video request to Image-to-Video...');
+                    console.log('[T2V→I2V] Original URL:', urlStr);
+
+                    // 1. Đổi URL: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
+                    var newUrl = urlStr.replace('batchAsyncGenerateVideoText', 'batchAsyncGenerateVideoReferenceImages');
+                    console.log('[T2V→I2V] New URL:', newUrl);
+
+                    // 2. Thêm referenceImages vào payload
+                    if (chromeVideoBody.requests && chromeVideoBody.requests.length > 0) {
+                        for (var i = 0; i < chromeVideoBody.requests.length; i++) {
+                            // Thêm reference image với mediaId từ ảnh đã upload
+                            chromeVideoBody.requests[i].referenceImages = [{
+                                "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                                "mediaId": t2vConfig.mediaId
+                            }];
+
+                            // 3. Đổi model từ T2V sang I2V
+                            // T2V: veo_3_1_t2v_fast, veo_3_1_t2v_fast_ultra, veo_3_1_t2v
+                            // I2V: veo_3_0_r2v_fast, veo_3_0_r2v_fast_ultra, veo_3_0_r2v
+                            var currentModel = chromeVideoBody.requests[i].videoModelKey || 'veo_3_1_t2v_fast';
+                            var newModel = currentModel
+                                .replace('veo_3_1_t2v', 'veo_3_0_r2v')
+                                .replace('veo_3_0_t2v', 'veo_3_0_r2v');  // Fallback
+
+                            // Override nếu config có chỉ định
+                            if (t2vConfig.videoModelKey) {
+                                newModel = t2vConfig.videoModelKey;
+                            }
+
+                            chromeVideoBody.requests[i].videoModelKey = newModel;
+                            console.log('[T2V→I2V] Model:', currentModel, '→', newModel);
+                            console.log('[T2V→I2V] MediaId:', t2vConfig.mediaId.substring(0, 50) + '...');
+                        }
+                    }
+
+                    // Update body với payload đã convert
+                    opts.body = JSON.stringify(chromeVideoBody);
+                    console.log('[T2V→I2V] Conversion complete, sending I2V request...');
+
+                    // Clear config
+                    window._t2vToI2vConfig = null;
+
+                    // Gửi request tới URL mới
+                    try {
+                        var response = await orig.apply(this, [newUrl, opts]);
+                        var cloned = response.clone();
+                        try {
+                            window._videoResponse = await cloned.json();
+                            console.log('[T2V→I2V] Response status:', response.status);
+                            if (window._videoResponse.operations) {
+                                console.log('[T2V→I2V] Got operations:', window._videoResponse.operations.length);
+                            }
+                        } catch(e) {
+                            window._videoResponse = {status: response.status, error: 'parse_failed'};
+                        }
+                        window._videoPending = false;
+                        return response;
+                    } catch(e) {
+                        console.log('[T2V→I2V] Request failed:', e);
+                        window._videoError = e.toString();
+                        window._videoPending = false;
+                        throw e;
+                    }
+                } catch(e) {
+                    console.log('[T2V→I2V] Conversion failed:', e);
+                    window._t2vToI2vConfig = null;
+                }
+            }
+
+            // ============================================
             // MODIFY VIDEO MODE: Giữ payload Chrome, chỉ thêm referenceImages
             // (GIỐNG NHƯ TẠO ẢNH - dùng model/settings của Chrome)
             // ============================================
@@ -581,6 +659,54 @@ JS_SELECT_VIDEO_MODE_STEP3 = '''
 
 # Alias cho backward compatibility
 JS_SELECT_VIDEO_MODE = JS_SELECT_VIDEO_MODE_STEP1
+
+# ============================================================================
+# JS để chọn "Từ văn bản sang video" (Text-to-Video = T2V mode)
+# Flow mới: Chrome gửi T2V request → Interceptor convert sang I2V
+# ============================================================================
+
+# T2V Mode - Bước 1: Click dropdown
+JS_SELECT_T2V_MODE_STEP1 = '''
+(function() {
+    var dropdown = document.querySelector('button[role="combobox"]');
+    if (!dropdown) {
+        return 'NO_DROPDOWN';
+    }
+    dropdown.click();
+    return 'CLICKED_FIRST';
+})();
+'''
+
+# T2V Mode - Bước 2: Click dropdown lần 2 để mở lại
+JS_SELECT_T2V_MODE_STEP2 = '''
+(function() {
+    var dropdown = document.querySelector('button[role="combobox"]');
+    if (!dropdown) {
+        return 'NO_DROPDOWN';
+    }
+    dropdown.click();
+    return 'CLICKED_SECOND';
+})();
+'''
+
+# T2V Mode - Bước 3: Tìm và click option "Từ văn bản sang video"
+JS_SELECT_T2V_MODE_STEP3 = '''
+(function() {
+    var allSpans = document.querySelectorAll('span');
+    for (var el of allSpans) {
+        var text = (el.textContent || '').trim();
+        // Tìm "Từ văn bản sang video" hoặc "Generate video from text"
+        if (text === 'Từ văn bản sang video' ||
+            text === 'Generate video from text' ||
+            text.includes('văn bản sang video')) {
+            el.click();
+            console.log('[T2V] Clicked: Tu van ban sang video');
+            return 'CLICKED';
+        }
+    }
+    return 'NOT_FOUND';
+})();
+'''
 
 
 class DrissionFlowAPI:
@@ -2864,6 +2990,209 @@ class DrissionFlowAPI:
 
         self.log("[I2V-FORCE] ✗ Timeout đợi video response", "ERROR")
         return False, None, "Timeout waiting for video response"
+
+    def generate_video_t2v_mode(
+        self,
+        media_id: str,
+        prompt: str,
+        save_path: Optional[Path] = None,
+        video_model: str = "veo_3_0_r2v_fast",
+        max_wait: int = 300,
+        timeout: int = 60
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Tạo video bằng T2V MODE - Dùng Chrome's Text-to-Video mode, Interceptor convert sang I2V.
+
+        Flow thông minh (ý tưởng của user):
+        1. Click chuyển sang "Từ văn bản sang video" (T2V mode)
+        2. Set window._t2vToI2vConfig với mediaId của ảnh đã upload
+        3. Gửi prompt bình thường (trigger Chrome gửi T2V request)
+        4. Interceptor catch T2V request và convert sang I2V:
+           - Đổi URL: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
+           - Thêm referenceImages với mediaId
+           - Đổi model: veo_3_1_t2v_fast → veo_3_0_r2v_fast
+        5. Chrome gửi I2V request với fresh reCAPTCHA!
+
+        Ưu điểm:
+        - Fresh reCAPTCHA được tạo cho VIDEO request (không phải IMAGE)
+        - Chrome handle toàn bộ T2V settings/payload
+        - Interceptor chỉ thêm referenceImages và đổi endpoint
+
+        Args:
+            media_id: Media ID của ảnh (từ generate_image)
+            prompt: Video prompt (mô tả chuyển động)
+            save_path: Đường dẫn lưu video
+            video_model: Model video I2V (default: veo_3_0_r2v_fast)
+            max_wait: Thời gian poll tối đa (giây)
+            timeout: Timeout đợi response đầu tiên
+
+        Returns:
+            Tuple[success, video_path_or_url, error]
+        """
+        if not self._ready:
+            return False, None, "API chưa setup! Gọi setup() trước."
+
+        if not media_id:
+            return False, None, "Media ID không được để trống"
+
+        self.log(f"[T2V→I2V] Tạo video từ media: {media_id[:50]}...")
+        self.log(f"[T2V→I2V] Prompt: {prompt[:60]}...")
+
+        # 1. Chuyển sang T2V mode ("Từ văn bản sang video")
+        self.log("[T2V→I2V] Chuyển sang mode 'Từ văn bản sang video'...")
+        self.driver.run_js(JS_SELECT_T2V_MODE_STEP1)  # Click dropdown lần 1
+        time.sleep(0.1)
+        self.driver.run_js(JS_SELECT_T2V_MODE_STEP2)  # Click dropdown lần 2
+        time.sleep(0.3)
+        result = self.driver.run_js(JS_SELECT_T2V_MODE_STEP3)  # Click option
+        if result == 'CLICKED':
+            self.log("[T2V→I2V] ✓ Đã chuyển sang T2V mode")
+            time.sleep(1)  # Đợi UI update
+        else:
+            self.log(f"[T2V→I2V] ⚠️ Không thể chuyển sang T2V mode: {result}", "WARN")
+            # Vẫn tiếp tục vì có thể đã ở T2V mode
+
+        # 2. Reset video state
+        self.driver.run_js("""
+            window._videoResponse = null;
+            window._videoError = null;
+            window._videoPending = false;
+            window._t2vToI2vConfig = null;
+        """)
+
+        # 3. Set T2V→I2V config - Interceptor sẽ convert T2V request thành I2V
+        t2v_config = {
+            "mediaId": media_id,
+            "videoModelKey": video_model  # Model I2V để thay thế
+        }
+        self.driver.run_js(f"window._t2vToI2vConfig = {json.dumps(t2v_config)};")
+        self.log(f"[T2V→I2V] ✓ Config ready (mediaId: {media_id[:40]}...)")
+        self.log(f"[T2V→I2V] Interceptor sẽ convert T2V → I2V khi Chrome gửi request")
+
+        # 4. Tìm textarea và nhập prompt
+        textarea = self._find_textarea()
+        if not textarea:
+            return False, None, "Không tìm thấy textarea"
+
+        try:
+            textarea.click()
+            time.sleep(0.3)
+        except:
+            pass
+
+        # Type prompt
+        try:
+            textarea.clear()
+            textarea.input(prompt[:500])
+            time.sleep(0.3)
+        except Exception as e:
+            self.log(f"[T2V→I2V] Không thể nhập prompt: {e}", "WARN")
+
+        # 5. Click nút Tạo (trigger Chrome gửi T2V request - Interceptor sẽ convert thành I2V)
+        self.log("[T2V→I2V] Click 'Tạo' → Chrome gửi T2V → Interceptor convert → I2V...")
+        clicked = self._click_generate_button()
+        if not clicked:
+            return False, None, "Không click được nút Tạo"
+
+        # 6. Đợi VIDEO response (từ Interceptor sau khi convert T2V → I2V)
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            # Check video response
+            response = self.driver.run_js("return window._videoResponse;")
+            error = self.driver.run_js("return window._videoError;")
+
+            if error:
+                self.log(f"[T2V→I2V] ✗ Error: {error}", "ERROR")
+                return False, None, error
+
+            if response:
+                self.log(f"[T2V→I2V] Got response!")
+
+                # Check error response
+                if isinstance(response, dict):
+                    if response.get('error') and response.get('error').get('code'):
+                        error_code = response['error']['code']
+                        error_msg = response['error'].get('message', '')
+                        self.log(f"[T2V→I2V] ✗ API Error {error_code}: {error_msg}", "ERROR")
+                        return False, None, f"Error {error_code}: {error_msg}"
+
+                    # Check for operations (async video generation)
+                    if response.get('operations'):
+                        operation = response['operations'][0]
+                        self.log(f"[T2V→I2V] ✓ Video operation started")
+
+                        # Build headers cho polling
+                        headers = {
+                            "Authorization": self.bearer_token,
+                            "Content-Type": "application/json",
+                            "Origin": "https://labs.google",
+                            "Referer": "https://labs.google/",
+                        }
+                        if self.x_browser_validation:
+                            headers["x-browser-validation"] = self.x_browser_validation
+
+                        proxies = None
+                        if self._use_webshare and hasattr(self, '_bridge_port') and self._bridge_port:
+                            bridge_url = f"http://127.0.0.1:{self._bridge_port}"
+                            proxies = {"http": bridge_url, "https": bridge_url}
+
+                        # Poll cho video hoàn thành
+                        video_url = self._poll_video_operation(operation, headers, proxies, max_wait)
+
+                        if video_url:
+                            self.log(f"[T2V→I2V] ✓ Video ready: {video_url[:60]}...")
+                            return self._download_video_if_needed(video_url, save_path)
+                        else:
+                            return False, None, "Timeout hoặc lỗi khi poll video"
+
+                    # Check for direct video URL
+                    if response.get('videos'):
+                        video = response['videos'][0]
+                        video_url = video.get('videoUri') or video.get('uri')
+                        if video_url:
+                            self.log(f"[T2V→I2V] ✓ Video ready: {video_url[:60]}...")
+                            return self._download_video_if_needed(video_url, save_path)
+
+                return False, None, "Response không có operations/videos"
+
+            time.sleep(0.5)
+
+        self.log("[T2V→I2V] ✗ Timeout đợi video response", "ERROR")
+        return False, None, "Timeout waiting for video response"
+
+    def switch_to_t2v_mode(self) -> bool:
+        """
+        Chuyển Chrome sang mode "Từ văn bản sang video" (Text-to-Video).
+
+        Returns:
+            True nếu thành công
+        """
+        if not self._ready:
+            return False
+        try:
+            # Bước 1: Click dropdown lần 1
+            r1 = self.driver.run_js(JS_SELECT_T2V_MODE_STEP1)
+            if r1 == 'NO_DROPDOWN':
+                self.log("[Mode] Dropdown not found", "WARN")
+                return False
+            time.sleep(0.1)
+
+            # Bước 2: Click dropdown lần 2
+            r2 = self.driver.run_js(JS_SELECT_T2V_MODE_STEP2)
+            time.sleep(0.3)
+
+            # Bước 3: Tìm và click option
+            result = self.driver.run_js(JS_SELECT_T2V_MODE_STEP3)
+            if result == 'CLICKED':
+                self.log("[Mode] ✓ Đã chuyển sang T2V mode (Từ văn bản sang video)")
+                time.sleep(0.5)
+                return True
+            else:
+                self.log(f"[Mode] Không tìm thấy T2V option: {result}", "WARN")
+                return False
+        except Exception as e:
+            self.log(f"[Mode] Error: {e}", "ERROR")
+            return False
 
     def generate_video_modify_mode(
         self,
