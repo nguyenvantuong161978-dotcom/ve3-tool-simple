@@ -35,6 +35,19 @@ env/
 PROJECTS/
 config/accounts.json
 
+# Chrome profiles (generated at runtime)
+chrome_profile/
+chrome_profiles/
+
+# Test outputs
+batch_output/
+test_output/
+
+# Test files
+test*.py
+test*.mp3
+*.mp3
+
 # Keep config template
 !config/accounts.template.json
 
