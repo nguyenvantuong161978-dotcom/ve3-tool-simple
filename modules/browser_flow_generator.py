@@ -3109,12 +3109,11 @@ class BrowserFlowGenerator:
             try:
                 video_file = output_dir / f"{scene_id}.mp4"
 
-                # Gọi generate_video_t2v_mode (T2V mode với media_id)
-                # Chuyển sang "Từ văn bản sang video", Interceptor convert T2V→I2V
-                success, result_path, error = drission_api.generate_video_t2v_mode(
+                # Gọi generate_video_modify_mode - Chuyển sang "Tạo video từ các thành phần"
+                # Chrome tự handle payload, Interceptor chỉ thêm referenceImages (media_id)
+                success, result_path, error = drission_api.generate_video_modify_mode(
                     media_id=media_id,
                     prompt=video_prompt,
-                    video_model="veo_3_0_r2v_fast",  # I2V model
                     save_path=video_file
                 )
 
@@ -4142,16 +4141,14 @@ class BrowserFlowGenerator:
                     self._log(f"[I2V] [{i+1}/{len(scenes_for_video)}] Scene {scene_id}...")
 
                     try:
-                        # Dùng generate_video_t2v_mode() - T2V mode với media_id
-                        # Chuyển Chrome sang "Từ văn bản sang video", Interceptor convert T2V→I2V với media_id
+                        # Dùng generate_video_modify_mode() - Chuyển sang "Tạo video từ các thành phần"
+                        # Chrome tự handle payload, Interceptor chỉ thêm referenceImages (media_id)
                         video_dir = output_dir  # img/ folder
                         video_file = video_dir / f"{scene_id}.mp4"
 
-                        # Dùng T2V mode: Chrome ở "Từ văn bản sang video" + gửi media_id
-                        success, result_path, error = drission_api.generate_video_t2v_mode(
+                        success, result_path, error = drission_api.generate_video_modify_mode(
                             media_id=media_id,
                             prompt=video_prompt,
-                            video_model="veo_3_0_r2v_fast",  # I2V model
                             save_path=video_file  # Tự download luôn
                         )
 
