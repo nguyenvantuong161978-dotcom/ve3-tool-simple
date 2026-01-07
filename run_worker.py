@@ -120,10 +120,18 @@ def is_local_complete(project_dir: Path, name: str) -> bool:
     """Check if local project has images/videos created."""
     img_dir = project_dir / "img"
     if not img_dir.exists():
+        print(f"    [DEBUG] img folder not found: {img_dir}")
         return False
 
     # Check for scene images/videos
     img_files = list(img_dir.glob("scene_*.png")) + list(img_dir.glob("scene_*.mp4"))
+    print(f"    [DEBUG] Found {len(img_files)} scene files in img/")
+
+    if len(img_files) == 0:
+        # List what's actually in img folder
+        all_files = list(img_dir.iterdir())
+        print(f"    [DEBUG] Actual files in img/: {[f.name for f in all_files[:10]]}")
+
     return len(img_files) > 0
 
 
