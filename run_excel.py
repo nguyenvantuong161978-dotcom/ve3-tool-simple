@@ -64,21 +64,37 @@ def is_project_complete(project_dir: Path, name: str) -> bool:
 
 
 def delete_voice_source(voice_path: Path):
-    """Delete original voice file and its txt after processing."""
+    """
+    Delete all files/folders related to this voice in the voice folder.
+
+    Example: AR35-0001.mp3 -> delete all:
+    - AR35-0001.mp3
+    - AR35-0001.txt
+    - AR35-0001-log.dgt
+    - AR35-0001/ (folder)
+    - Any file/folder starting with AR35-0001
+    """
     try:
-        name = voice_path.stem
+        name = voice_path.stem  # e.g., "AR35-0001"
         voice_dir = voice_path.parent
 
-        # Delete voice file
-        if voice_path.exists():
-            voice_path.unlink()
-            print(f"  🗑️ Deleted source: {voice_path.name}")
+        # Find and delete all files/folders starting with this name
+        deleted_count = 0
+        for item in voice_dir.iterdir():
+            # Match: AR35-0001.mp3, AR35-0001.txt, AR35-0001-log.dgt, AR35-0001/
+            if item.name.startswith(name):
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+                    print(f"  🗑️ Deleted: {item.name}")
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"  ⚠️ Cannot delete {item.name}: {e}")
 
-        # Delete associated txt file
-        txt_path = voice_dir / f"{name}.txt"
-        if txt_path.exists():
-            txt_path.unlink()
-            print(f"  🗑️ Deleted source: {txt_path.name}")
+        if deleted_count > 0:
+            print(f"  🗑️ Cleaned up {deleted_count} items for {name}")
 
         # Delete parent folder if empty
         if voice_dir.exists():
