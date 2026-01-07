@@ -94,6 +94,7 @@ def get_project_info(project_dir: Path) -> Dict:
         "has_excel": False,
         "video_count": 0,
         "image_count": 0,
+        "media_count": 0,  # FIX: khởi tạo mặc định
         "total_scenes": 0,
         "ready_for_edit": False,
         "already_done": False,
@@ -165,11 +166,34 @@ def scan_visual_projects() -> List[Dict]:
         log(f"VISUAL folder not found: {VISUAL_DIR}", "WARN")
         return projects
 
-    for item in VISUAL_DIR.iterdir():
-        if item.is_dir():
-            info = get_project_info(item)
-            if info["ready_for_edit"] and not info["already_done"]:
-                projects.append(info)
+    # List all folders
+    all_folders = [item for item in VISUAL_DIR.iterdir() if item.is_dir()]
+    log(f"  [DEBUG] Found {len(all_folders)} folders in VISUAL")
+
+    for item in all_folders:
+        info = get_project_info(item)
+        code = info["code"]
+
+        # Debug: show why project is/isn't ready
+        if info["already_done"]:
+            log(f"    - {code}: already done ✓")
+        elif info["ready_for_edit"]:
+            log(f"    - {code}: ready ({info['video_count']}v + {info['image_count']}i / {info['total_scenes']} scenes)")
+            projects.append(info)
+        else:
+            # Show why not ready
+            reasons = []
+            if info["media_count"] == 0:
+                reasons.append("no media")
+            if not info["has_audio"]:
+                reasons.append("no audio")
+            if not info["has_excel"]:
+                reasons.append("no excel")
+            if info["total_scenes"] > 0 and info["media_count"] > 0:
+                coverage = info["media_count"] / info["total_scenes"]
+                if coverage < 0.8:
+                    reasons.append(f"coverage {coverage:.0%} < 80%")
+            log(f"    - {code}: NOT ready ({', '.join(reasons)})")
 
     return sorted(projects, key=lambda x: x["code"])
 
