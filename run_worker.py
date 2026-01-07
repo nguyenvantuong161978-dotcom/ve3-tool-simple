@@ -285,6 +285,13 @@ def run_scan_loop():
 
         if not pending:
             print(f"  No pending projects")
+            # Wait before next scan
+            print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+            try:
+                time.sleep(SCAN_INTERVAL)
+            except KeyboardInterrupt:
+                print("\n\nStopped by user.")
+                break
         else:
             print(f"  Found: {len(pending)} pending projects")
             for p in pending[:5]:
@@ -292,20 +299,33 @@ def run_scan_loop():
             if len(pending) > 5:
                 print(f"    ... and {len(pending) - 5} more")
 
-            # Process first pending project
-            code = pending[0]
-            try:
-                process_project(code)
-            except Exception as e:
-                print(f"  ❌ Error: {e}")
+            # === XỬ LÝ TẤT CẢ PROJECTS LIÊN TỤC ===
+            for code in pending:
+                try:
+                    success = process_project(code)
 
-        # Wait before next scan
-        print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
-        try:
-            time.sleep(SCAN_INTERVAL)
-        except KeyboardInterrupt:
-            print("\n\nStopped by user.")
-            break
+                    # Sync lại sau mỗi project
+                    sync_local_to_visual()
+
+                    if not success:
+                        print(f"  ⏭️ Skipping {code}, moving to next...")
+                        continue
+
+                except KeyboardInterrupt:
+                    print("\n\nStopped by user.")
+                    return
+                except Exception as e:
+                    print(f"  ❌ Error processing {code}: {e}")
+                    continue
+
+            # Sau khi xử lý hết, đợi 1 chút rồi scan lại
+            print(f"\n  ✅ Processed all pending projects!")
+            print(f"  Waiting {SCAN_INTERVAL}s for new projects... (Ctrl+C to stop)")
+            try:
+                time.sleep(SCAN_INTERVAL)
+            except KeyboardInterrupt:
+                print("\n\nStopped by user.")
+                break
 
 
 def run_single_project(code: str):
