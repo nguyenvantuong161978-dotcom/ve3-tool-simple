@@ -67,21 +67,22 @@ def delete_voice_source(voice_path: Path):
     """
     Delete all files/folders related to this voice in the voice folder.
 
-    Example: AR35-0001.mp3 -> delete all:
-    - AR35-0001.mp3
-    - AR35-0001.txt
-    - AR35-0001-log.dgt
-    - AR35-0001/ (folder)
-    - Any file/folder starting with AR35-0001
+    Example: D:\\AUTO\\voice\\AR35-T1\\AR35-0001.mp3 -> delete all:
+    - D:\\AUTO\\voice\\AR35-T1\\AR35-0001.mp3
+    - D:\\AUTO\\voice\\AR35-T1\\AR35-0001.txt
+    - D:\\AUTO\\voice\\AR35-T1\\AR35-0001-log.dgt
+    - D:\\AUTO\\voice\\AR35-T1\\AR35-0001\\ (folder)
+    - D:\\AUTO\\voice\\AR35-0001.txt (in parent folder)
     """
     try:
         name = voice_path.stem  # e.g., "AR35-0001"
-        voice_dir = voice_path.parent
+        voice_dir = voice_path.parent  # e.g., D:\AUTO\voice\AR35-T1
+        parent_dir = voice_dir.parent  # e.g., D:\AUTO\voice
 
-        # Find and delete all files/folders starting with this name
         deleted_count = 0
+
+        # 1. Delete all items starting with this name in channel folder
         for item in voice_dir.iterdir():
-            # Match: AR35-0001.mp3, AR35-0001.txt, AR35-0001-log.dgt, AR35-0001/
             if item.name.startswith(name):
                 try:
                     if item.is_dir():
@@ -93,10 +94,20 @@ def delete_voice_source(voice_path: Path):
                 except Exception as e:
                     print(f"  ⚠️ Cannot delete {item.name}: {e}")
 
+        # 2. Delete txt file in parent folder (D:\AUTO\voice\AR35-0001.txt)
+        parent_txt = parent_dir / f"{name}.txt"
+        if parent_txt.exists():
+            try:
+                parent_txt.unlink()
+                print(f"  🗑️ Deleted: {parent_dir.name}/{parent_txt.name}")
+                deleted_count += 1
+            except Exception as e:
+                print(f"  ⚠️ Cannot delete {parent_txt.name}: {e}")
+
         if deleted_count > 0:
             print(f"  🗑️ Cleaned up {deleted_count} items for {name}")
 
-        # Delete parent folder if empty
+        # Delete channel folder if empty
         if voice_dir.exists():
             remaining = list(voice_dir.iterdir())
             if not remaining:
