@@ -3180,12 +3180,19 @@ class SmartEngine:
                     # Không phải số (có thể là "nv1", "loc1") -> bỏ qua
                     continue
 
-                # Tìm media file - thử cả 2 format: "1.png" và "1.0.png"
+                # Tìm media file - thử nhiều format: "1.png", "1.0.png"
                 media_path = None
                 is_video = False
 
-                # Try với scene_id đã normalize (1, 2, 3...)
-                for sid in [scene_id, scene_id_raw]:
+                # Thử các format khác nhau:
+                # - scene_id: "1" (từ Excel integer)
+                # - scene_id.0: "1.0" (ảnh có thể được lưu với .0)
+                # - scene_id_raw: giữ nguyên từ Excel
+                possible_ids = [scene_id, f"{scene_id}.0", scene_id_raw]
+                # Loại bỏ duplicate
+                possible_ids = list(dict.fromkeys(possible_ids))
+
+                for sid in possible_ids:
                     video_path = img_dir / f"{sid}.mp4"
                     img_path = img_dir / f"{sid}.png"
 
