@@ -508,7 +508,7 @@ story_structure_analysis: |
         "key_characters": ["nvc", "nv1"],
         "key_locations": ["loc1_courthouse"],
         "visual_tone": "Dark, dramatic, cold lighting",
-        "estimated_shots": 4
+        "estimated_shots": 25
       }},
       {{
         "part_number": 2,
@@ -521,7 +521,7 @@ story_structure_analysis: |
         "key_characters": ["nvc1", "nv1_young"],
         "key_locations": ["loc2_old_house", "loc3_farm"],
         "visual_tone": "Warm, nostalgic, golden hour",
-        "estimated_shots": 8
+        "estimated_shots": 55
       }}
     ]
   }}
@@ -529,7 +529,7 @@ story_structure_analysis: |
   IMPORTANT:
   - Keep response SHORT (just structure, ~2000 tokens max)
   - time_range MUST match SRT timestamps exactly
-  - estimated_shots: aim for 1 shot per 20-30 seconds of content
+  - estimated_shots = duration_seconds ÷ 6 (each shot ~5-6 seconds)
   - DO NOT include detailed prompts yet (that's Pass 2)
 
 # =============================================================================

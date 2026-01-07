@@ -985,8 +985,26 @@ class PromptGenerator:
         
         self.logger.info(f"Tìm thấy {len(srt_entries)} SRT entries")
 
+        # === ĐỌC TXT FILE (nguồn chính cho story content) ===
+        # TXT chứa nội dung đầy đủ hơn SRT, dùng để đạo diễn hiểu tổng thể
+        txt_path = project_dir / f"{code}.txt"
+        txt_content = ""
+        if txt_path.exists():
+            try:
+                with open(txt_path, 'r', encoding='utf-8') as f:
+                    txt_content = f.read().strip()
+                self.logger.info(f"Đọc TXT file: {txt_path.name} ({len(txt_content)} chars)")
+            except Exception as e:
+                self.logger.warning(f"Không thể đọc TXT: {e}")
+
         # Tạo full story text để phân tích
-        full_story = " ".join([e.text for e in srt_entries])
+        # Ưu tiên TXT (đầy đủ hơn), fallback về SRT text
+        if txt_content:
+            full_story = txt_content
+            self.logger.info("[STORY] Sử dụng TXT làm nguồn chính")
+        else:
+            full_story = " ".join([e.text for e in srt_entries])
+            self.logger.info("[STORY] Không có TXT, dùng SRT text")
 
         # Step 1: Phân tích nhân vật + bối cảnh
         # (Luôn phân tích để có context, nhưng chỉ lưu vào Excel nếu chưa có)
