@@ -191,17 +191,56 @@ def copy_to_visual(code: str, local_dir: Path) -> bool:
 
 
 def is_local_complete(project_dir: Path, name: str) -> bool:
-    """Check if local project has images/videos created."""
+    """
+    Check if local project has images AND videos created (if video enabled).
+
+    Logic:
+    1. Phải có ít nhất 1 ảnh
+    2. Nếu video_count > 0: phải có đủ video tương ứng với ảnh
+    """
     img_dir = project_dir / "img"
     if not img_dir.exists():
         return False
 
-    # Check for ANY image/video files (*.png, *.mp4, *.jpg)
-    # Ảnh có thể tên: scene_1.png, 1.0.png, image_1.png, etc.
-    img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.mp4")) + list(img_dir.glob("*.jpg"))
+    # Count images (png, jpg) - exclude videos
+    img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg"))
 
-    # Cần ít nhất 1 file ảnh/video
-    return len(img_files) > 0
+    # Count videos
+    video_files = list(img_dir.glob("*.mp4"))
+
+    # Cần ít nhất 1 file ảnh
+    if len(img_files) == 0:
+        return False
+
+    # Check video_count from settings
+    try:
+        import yaml
+        config_path = TOOL_DIR / "config" / "settings.yaml"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+
+            video_count_setting = config.get('video_count', 0)
+
+            # Parse video_count
+            if video_count_setting == 'full' or video_count_setting == "full":
+                required_videos = len(img_files)  # Tất cả ảnh cần có video
+            elif video_count_setting and int(video_count_setting) > 0:
+                required_videos = min(int(video_count_setting), len(img_files))
+            else:
+                required_videos = 0  # Video tắt
+
+            # Nếu cần video, kiểm tra đủ số lượng
+            if required_videos > 0:
+                if len(video_files) < required_videos:
+                    print(f"    [{name}] Videos: {len(video_files)}/{required_videos} - NOT complete")
+                    return False
+                else:
+                    print(f"    [{name}] Videos: {len(video_files)}/{required_videos} - OK")
+    except Exception as e:
+        print(f"    [{name}] Warning checking video: {e}")
+
+    return True
 
 
 def process_project(code: str, callback=None) -> bool:
