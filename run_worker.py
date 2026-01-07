@@ -37,6 +37,43 @@ LOCAL_PROJECTS = TOOL_DIR / "PROJECTS"
 SCAN_INTERVAL = 30
 
 
+def get_channel_from_folder() -> str:
+    """
+    Auto-detect channel from parent folder name.
+    Example: AR35-T1 -> AR35
+             AR47-T2 -> AR47
+    Returns None if cannot detect.
+    """
+    parent_name = TOOL_DIR.parent.name  # e.g., "AR35-T1"
+
+    # Try to extract channel prefix (part before -T)
+    if "-T" in parent_name:
+        channel = parent_name.split("-T")[0]  # "AR35-T1" -> "AR35"
+        return channel
+
+    # Fallback: try splitting by last dash
+    if "-" in parent_name:
+        parts = parent_name.rsplit("-", 1)
+        if parts[0]:
+            return parts[0]
+
+    return None
+
+
+# Auto-detect channel for this worker
+WORKER_CHANNEL = get_channel_from_folder()
+
+
+def matches_channel(code: str) -> bool:
+    """Check if project code matches this worker's channel."""
+    if WORKER_CHANNEL is None:
+        return True  # No filter if channel not detected
+
+    # Project code format: AR35-0001
+    # Check if starts with channel prefix
+    return code.startswith(f"{WORKER_CHANNEL}-")
+
+
 def is_project_complete_on_master(code: str) -> bool:
     """Check if project already exists in VISUAL folder on master."""
     visual_dir = MASTER_VISUAL / code
@@ -205,6 +242,7 @@ def scan_master_projects() -> list:
     pending = []
 
     print(f"  [DEBUG] Checking: {MASTER_PROJECTS}")
+    print(f"  [DEBUG] Worker channel: {WORKER_CHANNEL or 'ALL (no filter)'}")
 
     if not MASTER_PROJECTS.exists():
         print(f"  ⚠️ Master PROJECTS not accessible: {MASTER_PROJECTS}")
@@ -216,6 +254,10 @@ def scan_master_projects() -> list:
 
     for item in all_folders:
         code = item.name
+
+        # Skip if not matching this worker's channel
+        if not matches_channel(code):
+            continue  # Silent skip - not our channel
 
         # Skip if already in VISUAL
         if is_project_complete_on_master(code):
@@ -261,6 +303,10 @@ def sync_local_to_visual() -> int:
     for item in all_folders:
         code = item.name
 
+        # Skip if not matching this worker's channel
+        if not matches_channel(code):
+            continue  # Silent skip - not our channel
+
         # Skip nếu đã có trong VISUAL
         if is_project_complete_on_master(code):
             print(f"    - {code}: already in VISUAL ✓")
@@ -282,6 +328,8 @@ def run_scan_loop():
     print(f"\n{'='*60}")
     print(f"  VE3 TOOL - WORKER MODE (Image/Video)")
     print(f"{'='*60}")
+    print(f"  Worker folder:   {TOOL_DIR.parent.name}")
+    print(f"  Channel filter:  {WORKER_CHANNEL or 'ALL (no filter)'}")
     print(f"  Master PROJECTS: {MASTER_PROJECTS}")
     print(f"  Master VISUAL:   {MASTER_VISUAL}")
     print(f"  Local PROJECTS:  {LOCAL_PROJECTS}")
