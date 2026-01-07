@@ -327,6 +327,34 @@ def copy_to_done(project_info: Dict, video_path: Path, callback=None) -> Tuple[b
     return True, None
 
 
+def delete_visual_project(project_info: Dict, callback=None) -> bool:
+    """
+    Delete project from VISUAL folder after successful copy to DONE.
+
+    Returns:
+        True if deleted successfully
+    """
+    code = project_info["code"]
+    project_dir = project_info["path"]
+
+    def plog(msg, level="INFO"):
+        if callback:
+            callback(msg, level)
+        else:
+            log(f"[{code}] {msg}", level)
+
+    if not project_dir.exists():
+        return True  # Already deleted
+
+    try:
+        shutil.rmtree(project_dir)
+        plog(f"Deleted VISUAL folder: {project_dir.name}")
+        return True
+    except Exception as e:
+        plog(f"Cannot delete VISUAL folder: {e}", "WARN")
+        return False
+
+
 # ============================================================================
 # GOOGLE SHEET UPDATE
 # ============================================================================
@@ -512,7 +540,10 @@ def process_project(project_info: Dict, callback=None) -> bool:
         plog(f"Copy failed: {error}", "ERROR")
         return False
 
-    # Step 3: Update sheet
+    # Step 3: Delete from VISUAL (cleanup disk space)
+    delete_visual_project(project_info, callback)
+
+    # Step 4: Update sheet
     found, updated = update_sheet_status([code], callback)
     if updated > 0:
         plog(f"Sheet updated: {STATUS_VALUE}")
