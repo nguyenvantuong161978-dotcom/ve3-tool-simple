@@ -627,11 +627,10 @@ class DrissionFlowAPI:
             self.log("✗ Không tìm thấy textarea", "ERROR")
             return False
 
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(dummy_prompt)
+        # Paste prompt bằng Ctrl+V như người thật (tránh 403)
+        self._paste_prompt(textarea, dummy_prompt)
         time.sleep(0.3)
-        textarea.input('\n')
+        textarea.input('\n')  # Enter để gửi
         self.log("✓ Đã gửi prompt, đợi Chrome tạo ảnh...")
 
         # Đợi ảnh được tạo - kiểm tra bằng cách tìm img elements mới
@@ -1112,6 +1111,73 @@ class DrissionFlowAPI:
                 pass
         return None
 
+    def _paste_prompt(self, textarea, prompt: str) -> bool:
+        """
+        Paste prompt vào textarea bằng Ctrl+V như người thật.
+        Tránh bị 403 khi dùng JS để điền prompt.
+
+        Args:
+            textarea: Element textarea đã tìm được
+            prompt: Prompt cần paste
+
+        Returns:
+            True nếu thành công
+        """
+        try:
+            import pyperclip
+
+            # Copy prompt vào clipboard
+            pyperclip.copy(prompt)
+            time.sleep(0.1)
+
+            # Click vào textarea để focus
+            try:
+                textarea.click()
+                time.sleep(0.2)
+            except:
+                pass
+
+            # Clear textarea trước (select all + delete)
+            try:
+                # Ctrl+A để select all
+                textarea.input('\ue009a')  # Ctrl+A
+                time.sleep(0.1)
+                # Delete để xóa
+                textarea.input('\ue017')  # Delete key
+                time.sleep(0.1)
+            except:
+                # Fallback: dùng clear()
+                try:
+                    textarea.clear()
+                    time.sleep(0.1)
+                except:
+                    pass
+
+            # Ctrl+V để paste
+            textarea.input('\ue009v')  # Ctrl+V
+            time.sleep(0.3)
+
+            self.log("✓ Paste prompt (Ctrl+V)")
+            return True
+
+        except ImportError:
+            self.log("⚠️ pyperclip not installed, falling back to input()", "WARN")
+            # Fallback nếu không có pyperclip
+            textarea.clear()
+            time.sleep(0.2)
+            textarea.input(prompt)
+            return True
+        except Exception as e:
+            self.log(f"⚠️ Paste error: {e}, falling back to input()", "WARN")
+            # Fallback
+            try:
+                textarea.clear()
+                time.sleep(0.2)
+                textarea.input(prompt)
+            except:
+                pass
+            return False
+
     def _click_textarea(self):
         """
         Click vào textarea để focus - QUAN TRỌNG để nhập prompt.
@@ -1218,9 +1284,8 @@ class DrissionFlowAPI:
             self.log("✗ Không tìm thấy textarea", "ERROR")
             return False
 
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)
+        # Paste prompt bằng Ctrl+V như người thật (tránh 403)
+        self._paste_prompt(textarea, prompt)
         time.sleep(0.3)
         textarea.input('\n')  # Enter để gửi
         self.log("    ✓ Đã gửi, đợi capture...")
@@ -1285,11 +1350,10 @@ class DrissionFlowAPI:
         if not textarea:
             return False
 
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)
+        # Paste prompt bằng Ctrl+V như người thật (tránh 403)
+        self._paste_prompt(textarea, prompt)
         time.sleep(0.3)
-        textarea.input('\n')
+        textarea.input('\n')  # Enter để gửi
 
         # Đợi 3 giây
         time.sleep(3)
@@ -1495,16 +1559,8 @@ class DrissionFlowAPI:
         if not textarea:
             return [], "Không tìm thấy textarea"
 
-        # Click vào textarea trước (dùng DrissionPage click)
-        try:
-            textarea.click()
-            time.sleep(0.3)
-        except:
-            pass
-
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)  # Type FULL prompt
+        # Paste prompt bằng Ctrl+V như người thật (tránh 403)
+        self._paste_prompt(textarea, prompt)
 
         # Đợi 2 giây để reCAPTCHA chuẩn bị token
         time.sleep(2)

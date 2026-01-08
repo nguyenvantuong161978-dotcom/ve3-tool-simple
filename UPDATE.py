@@ -20,7 +20,7 @@ def get_current_branch():
         return branch_file.read_text(encoding='utf-8').strip()
     return "main"  # Fallback to main
 
-REPO = "criggerbrannon-hash/ve3-tool"
+REPO = "criggerbrannon-hash/ve3-tool-simple"
 BRANCH = get_current_branch()
 ZIP_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip"
 
