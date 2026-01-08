@@ -145,11 +145,6 @@ class SmartEngine:
         self.groq_keys: List[Resource] = []
         self.gemini_keys: List[Resource] = []
 
-        # Ollama model (fallback when all APIs fail)
-        # Default: qwen2.5:7b (fast, 32k context)
-        self.ollama_model: str = "qwen2.5:7b"
-        self.ollama_endpoint: str = "http://localhost:11434"
-
         # Settings - TOI UU TOC DO (PARALLEL OPTIMIZED)
         self.parallel = 20  # Tang len 20 - dung TAT CA tokens co san
         self.delay = 0.3    # Giam xuong 0.3s - may khoe chay nhanh
@@ -301,18 +296,6 @@ class SmartEngine:
             for k in api.get('gemini', []):
                 if k and not k.startswith('THAY_BANG') and not k.startswith('AIzaSy_YOUR'):
                     self.gemini_keys.append(Resource(type='gemini', value=k))
-
-            # Ollama local (fallback)
-            # Đọc từ nested api.ollama hoặc top-level ollama_model
-            ollama_cfg = api.get('ollama', {})
-            if ollama_cfg:
-                self.ollama_model = ollama_cfg.get('model', 'qwen2.5:7b')
-                self.ollama_endpoint = ollama_cfg.get('endpoint', 'http://localhost:11434')
-            # Fallback: đọc từ top-level (settings.yaml mới)
-            if data.get('ollama_model'):
-                self.ollama_model = data.get('ollama_model')
-            if data.get('ollama_endpoint'):
-                self.ollama_endpoint = data.get('ollama_endpoint')
 
             # Settings
             settings = data.get('settings', {})
@@ -914,18 +897,11 @@ class SmartEngine:
             with open(cfg_file, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
 
-        # Add API keys (thu tu uu tien: Gemini > Groq > DeepSeek > Ollama)
+        # Add API keys (DeepSeek)
         cfg['gemini_api_keys'] = [k.value for k in self.gemini_keys if k.status != 'exhausted']
         cfg['groq_api_keys'] = [k.value for k in self.groq_keys if k.status != 'exhausted']
         cfg['deepseek_api_keys'] = [k.value for k in self.deepseek_keys if k.status != 'exhausted']
         cfg['preferred_provider'] = 'gemini' if self.gemini_keys else ('groq' if self.groq_keys else 'deepseek')
-
-        # Ollama local model (fallback khi tat ca API fail)
-        # Ưu tiên từ settings.yaml, fallback từ self (accounts.json)
-        if not cfg.get('ollama_model'):
-            cfg['ollama_model'] = self.ollama_model
-        if not cfg.get('ollama_endpoint'):
-            cfg['ollama_endpoint'] = self.ollama_endpoint
 
         # Retry with different keys
         for attempt in range(self.max_retries):

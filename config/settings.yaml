@@ -117,13 +117,13 @@ proxy_api_url: "https://flow-api.nanoai.pics/api/fix/create-video-veo3"
 # ============================================================================
 # AI API Configuration (Cho tạo prompts từ SRT)
 # ============================================================================
-# Thứ tự ưu tiên: DeepSeek > Gemini > Groq > Ollama (local fallback)
+# Sử dụng DeepSeek API
 
 # DeepSeek API (ưu tiên - rẻ và ổn định)
 # Lấy key tại: https://platform.deepseek.com/
 deepseek_api_key: "sk-9e957b1193f54ac3870fe05a95139633"
 
-# Gemini API
+# Gemini API (optional - dự phòng)
 # Lấy key tại: https://makersuite.google.com/app/apikey
 gemini_api_keys:
   - ""  # Thêm API key của bạn vào đây
@@ -132,25 +132,10 @@ gemini_models:
   - "gemini-2.0-flash"
   - "gemini-2.5-flash"
 
-# Groq API (miễn phí)
+# Groq API (optional - miễn phí)
 # Lấy key tại: https://console.groq.com/keys
 groq_api_keys:
   - ""  # Thêm API key của bạn vào đây
-
-# ============================================================================
-# OLLAMA - LOCAL AI (FALLBACK khi API keys hết)
-# ============================================================================
-# Cài đặt Ollama: https://ollama.ai
-# Pull model: ollama pull qwen2.5:14b
-# Chạy: ollama serve
-#
-# Với RTX 4070 12GB + 64GB RAM:
-# - qwen2.5:14b: Tối ưu nhất (~10GB VRAM, 128K context, JSON xuất sắc)
-# - qwen2.5:7b: Nhanh hơn nhưng chất lượng thấp hơn
-# - gemma3:27b: Quá lớn cho 12GB VRAM, sẽ chạy CPU (chậm)
-
-ollama_model: "qwen2.5:14b"  # Tối ưu cho RTX 4070 12GB - 128K context, JSON tốt
-ollama_endpoint: "http://localhost:11434"  # Ollama server endpoint
 
 # ============================================================================
 # Automation Settings (Optional)
