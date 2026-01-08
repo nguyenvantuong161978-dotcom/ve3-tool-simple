@@ -2,6 +2,9 @@
 chcp 65001 >nul
 title VE3 - Voice to Excel (Master)
 
+:: Use pushd for UNC path support (VMware, RDP shared folders)
+pushd "%~dp0"
+
 echo ============================================
 echo   VE3 TOOL - VOICE TO EXCEL
 echo   Tao SRT + Excel tu voice file
@@ -12,6 +15,7 @@ echo.
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Python chua duoc cai dat!
+    popd
     pause
     exit /b 1
 )
@@ -29,5 +33,7 @@ python run_excel.py %*
 if %errorlevel% neq 0 (
     echo.
     echo [ERROR] Co loi xay ra!
-    pause
 )
+
+popd
+pause

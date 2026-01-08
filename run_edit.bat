@@ -1,6 +1,8 @@
 @echo off
 chcp 65001 >nul
-cd /d "%~dp0"
+
+:: Use pushd for UNC path support (VMware, RDP shared folders)
+pushd "%~dp0"
 
 echo ============================================================
 echo   VE3 TOOL - EDIT MODE (Compose MP4)
@@ -11,6 +13,7 @@ REM Check if Python is available
 python --version >nul 2>&1
 if errorlevel 1 (
     echo ERROR: Python not found!
+    popd
     pause
     exit /b 1
 )
@@ -22,4 +25,5 @@ if "%~1"=="" (
     python run_edit.py %*
 )
 
+popd
 pause

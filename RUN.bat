@@ -2,7 +2,8 @@
 :: VE3 Tool - Auto Update & Run
 :: Khong can git - tu dong tai tu GitHub
 
-cd /d "%~dp0"
+:: Use pushd for UNC path support (VMware, RDP shared folders)
+pushd "%~dp0"
 
 echo ========================================
 echo   VE3 Tool - Browser JS Mode
@@ -51,4 +52,5 @@ echo.
 
 python ve3_pro.py
 
+popd
 pause

@@ -5,7 +5,8 @@
 :: Chay file nay 1 lan khi cai tool len may moi
 :: ============================================
 
-cd /d "%~dp0"
+:: Use pushd for UNC path support (VMware, RDP shared folders)
+pushd "%~dp0"
 
 echo ========================================
 echo   VE3 TOOL - CAI DAT DEPENDENCIES
@@ -88,4 +89,5 @@ echo.
 echo   Chay RUN.bat de khoi dong tool
 echo.
 echo ========================================
+popd
 pause

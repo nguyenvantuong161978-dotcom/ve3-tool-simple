@@ -53,7 +53,7 @@ if exist "%INSTALL_DIR%" (
 
 :install_fresh
 mkdir "%INSTALL_DIR%" 2>nul
-cd /d "%INSTALL_DIR%"
+pushd "%INSTALL_DIR%"
 
 :: Tai ZIP
 echo.
@@ -86,7 +86,7 @@ del ve3-tool.zip
 goto :install_deps
 
 :update_only
-cd /d "%INSTALL_DIR%"
+pushd "%INSTALL_DIR%"
 echo.
 echo [*] Dang update...
 python UPDATE.py
@@ -103,10 +103,12 @@ echo.
 echo [*] Tao shortcut tren Desktop...
 set DESKTOP=%USERPROFILE%\Desktop
 echo @echo off > "%DESKTOP%\VE3 Tool.bat"
-echo cd /d "%INSTALL_DIR%" >> "%DESKTOP%\VE3 Tool.bat"
+echo pushd "%INSTALL_DIR%" >> "%DESKTOP%\VE3 Tool.bat"
 echo call RUN.bat >> "%DESKTOP%\VE3 Tool.bat"
+echo popd >> "%DESKTOP%\VE3 Tool.bat"
 
 :done
+popd
 echo.
 echo ========================================
 echo   CAI DAT THANH CONG!
