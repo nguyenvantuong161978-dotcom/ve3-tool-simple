@@ -1564,6 +1564,58 @@ class DrissionFlowAPI:
                 pass
         return None
 
+    def _paste_prompt_ctrlv(self, textarea, prompt: str) -> bool:
+        """
+        Paste prompt bằng Ctrl+V thay vì JS input.
+        Tránh bị 403 do bot detection.
+
+        Args:
+            textarea: Element textarea đã tìm thấy
+            prompt: Nội dung prompt cần paste
+
+        Returns:
+            True nếu thành công
+        """
+        import pyperclip
+
+        try:
+            # 1. Copy prompt vào clipboard
+            pyperclip.copy(prompt)
+            self.log(f"→ Copied to clipboard ({len(prompt)} chars)")
+
+            # 2. Click vào textarea
+            textarea.click()
+            time.sleep(0.3)
+
+            # 3. Clear textarea (Ctrl+A rồi Delete)
+            from DrissionPage.common import Keys
+            textarea.input(Keys.CTRL_A)
+            time.sleep(0.1)
+            textarea.input(Keys.DELETE)
+            time.sleep(0.1)
+
+            # 4. Paste bằng Ctrl+V
+            textarea.input(Keys.CTRL_V)
+            time.sleep(0.3)
+
+            self.log("→ Pasted with Ctrl+V ✓")
+            return True
+
+        except ImportError as e:
+            # pyperclip not installed, fallback to JS
+            self.log(f"⚠️ Import error: {e}, fallback to JS input", "WARN")
+            textarea.clear()
+            time.sleep(0.2)
+            textarea.input(prompt)
+            return True
+
+        except Exception as e:
+            self.log(f"⚠️ Ctrl+V failed: {e}, fallback to JS", "WARN")
+            textarea.clear()
+            time.sleep(0.2)
+            textarea.input(prompt)
+            return True
+
     def _click_textarea(self):
         """
         Click vào textarea để focus - QUAN TRỌNG để nhập prompt.
@@ -1670,9 +1722,8 @@ class DrissionFlowAPI:
             self.log("✗ Không tìm thấy textarea", "ERROR")
             return False
 
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)
+        # Paste bằng Ctrl+V (tránh bot detection)
+        self._paste_prompt_ctrlv(textarea, prompt)
         time.sleep(0.3)
         textarea.input('\n')  # Enter để gửi
         self.log("    ✓ Đã gửi, đợi capture...")
@@ -1737,9 +1788,8 @@ class DrissionFlowAPI:
         if not textarea:
             return False
 
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)
+        # Paste bằng Ctrl+V (tránh bot detection)
+        self._paste_prompt_ctrlv(textarea, prompt)
         time.sleep(0.3)
         textarea.input('\n')
 
@@ -1965,22 +2015,14 @@ class DrissionFlowAPI:
             self.driver.run_js(f"window._modifyConfig = {json.dumps(modify_config)};")
             self.log(f"→ MODIFY MODE: {modify_config['imageCount']} image(s), no reference")
 
-        # 3. Tìm textarea và nhập prompt (giống phiên bản hoạt động)
+        # 3. Tìm textarea và nhập prompt bằng Ctrl+V (tránh bot detection)
         self.log(f"→ Prompt: {prompt[:50]}...")
         textarea = self._find_textarea()
         if not textarea:
             return [], "Không tìm thấy textarea"
 
-        # Click vào textarea trước (dùng DrissionPage click)
-        try:
-            textarea.click()
-            time.sleep(0.3)
-        except:
-            pass
-
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)  # Type FULL prompt
+        # Paste prompt bằng Ctrl+V (như thủ công)
+        self._paste_prompt_ctrlv(textarea, prompt)
 
         # Đợi 2 giây để reCAPTCHA chuẩn bị token
         time.sleep(2)
@@ -2662,20 +2704,13 @@ class DrissionFlowAPI:
         self.driver.run_js(f"window._forceVideoPayload = {json.dumps(video_payload)};")
         self.log(f"[I2V-Chrome] ✓ FORCE payload ready (mediaId: {media_id[:40]}...)")
 
-        # 3. Tìm textarea và nhập prompt (trigger Chrome gửi IMAGE request)
+        # 3. Tìm textarea và nhập prompt (Ctrl+V để tránh bot detection)
         textarea = self._find_textarea()
         if not textarea:
             return False, None, "Không tìm thấy textarea"
 
-        try:
-            textarea.click()
-            time.sleep(0.3)
-        except:
-            pass
-
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)
+        # Paste bằng Ctrl+V (như thủ công)
+        self._paste_prompt_ctrlv(textarea, prompt)
 
         # Đợi reCAPTCHA chuẩn bị token
         time.sleep(2)
@@ -3420,20 +3455,13 @@ class DrissionFlowAPI:
         self.driver.run_js(f"window._modifyVideoConfig = {json.dumps(modify_config)};")
         self.log(f"[I2V] ✓ MODIFY MODE: referenceImages ready")
 
-        # 4. Tìm textarea và nhập prompt
+        # 4. Tìm textarea và nhập prompt (Ctrl+V để tránh bot detection)
         textarea = self._find_textarea()
         if not textarea:
             return False, None, "Không tìm thấy textarea"
 
-        try:
-            textarea.click()
-            time.sleep(0.3)
-        except:
-            pass
-
-        textarea.clear()
-        time.sleep(0.2)
-        textarea.input(prompt)
+        # Paste bằng Ctrl+V (như thủ công)
+        self._paste_prompt_ctrlv(textarea, prompt)
 
         # Đợi reCAPTCHA chuẩn bị token
         time.sleep(2)

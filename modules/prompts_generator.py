@@ -3209,11 +3209,36 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
             duration_seconds = (entry.end_time - entry.start_time).total_seconds()
             planned_duration = min(max(duration_seconds, 3), 8)  # 3-8s
 
-            # IMPORTANT: KHÔNG đưa dialogue/narration text vào img_prompt!
+            # IMPORTANT: KHÔNG đưa dialogue/narration text trực tiếp vào img_prompt!
             # Điều này sẽ khiến AI vẽ text lên ảnh.
-            # Thay vào đó, tạo prompt mô tả visual chung.
+            # Thay vào đó, tạo visual description từ text.
             base_style = global_style or 'Cinematic, 4K photorealistic, natural lighting'
-            img_prompt = f"{base_style}, medium shot, dramatic scene, subtle film grain"
+
+            # Tạo visual description từ text (không dùng text trực tiếp)
+            entry_text = entry.text[:100] if entry.text else ""
+            entry_text_lower = entry_text.lower()
+
+            # Detect shot type từ text
+            shot_type = "medium shot"
+            if any(kw in entry_text_lower for kw in ['nói', 'hỏi', 'thì thầm', 'whisper', 'said', 'asked']):
+                shot_type = "close-up shot, emotional expression"
+            elif any(kw in entry_text_lower for kw in ['đi', 'chạy', 'walk', 'run', 'moving']):
+                shot_type = "tracking shot, movement"
+            elif any(kw in entry_text_lower for kw in ['nhìn', 'look', 'gaze', 'stare']):
+                shot_type = "medium shot, contemplative mood"
+
+            # Tạo visual cue từ text (không phải text gốc)
+            visual_cue = "person in scene, natural expression"
+            if any(kw in entry_text_lower for kw in ['buồn', 'sad', 'cry', 'khóc']):
+                visual_cue = "emotional moment, melancholic expression"
+            elif any(kw in entry_text_lower for kw in ['vui', 'happy', 'smile', 'cười']):
+                visual_cue = "joyful moment, warm atmosphere"
+            elif any(kw in entry_text_lower for kw in ['sợ', 'fear', 'afraid', 'lo']):
+                visual_cue = "tense moment, worried expression"
+            elif any(kw in entry_text_lower for kw in ['giận', 'angry', 'mad']):
+                visual_cue = "intense moment, dramatic lighting"
+
+            img_prompt = f"{base_style}, {shot_type}, {visual_cue}, dramatic scene, subtle film grain (reference: nvc.png)"
 
             shot = {
                 "shot_number": shot_num,
