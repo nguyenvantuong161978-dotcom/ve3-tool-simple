@@ -34,45 +34,32 @@ echo [2/3] Cai Whisper (Voice to SRT)...
 echo       (Co the mat 5-10 phut)
 pip install openai-whisper -q
 
-:: Check/Install FFmpeg
+:: Check/Setup FFmpeg
 echo.
 echo [3/3] Kiem tra FFmpeg...
 where ffmpeg >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [!] FFmpeg chua cai - Dang tai...
-
-    :: Create tools folder
-    if not exist "tools\ffmpeg" mkdir "tools\ffmpeg"
-
-    :: Download FFmpeg
-    echo     Dang tai FFmpeg...
-    curl -L -o "tools\ffmpeg.zip" "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-
-    if exist "tools\ffmpeg.zip" (
-        echo     Dang giai nen...
-        powershell -command "Expand-Archive -Path 'tools\ffmpeg.zip' -DestinationPath 'tools\ffmpeg' -Force"
-        del "tools\ffmpeg.zip"
-
-        :: Find and move ffmpeg.exe to tools/ffmpeg/
-        for /d %%i in (tools\ffmpeg\ffmpeg-*) do (
-            move "%%i\bin\ffmpeg.exe" "tools\ffmpeg\" >nul 2>&1
-            move "%%i\bin\ffprobe.exe" "tools\ffmpeg\" >nul 2>&1
-            rmdir /s /q "%%i" 2>nul
-        )
-
-        :: Add to PATH for this session
-        set "PATH=%CD%\tools\ffmpeg;%PATH%"
-        echo [OK] FFmpeg da cai vao tools\ffmpeg\
+    :: Check if FFmpeg exists in tools folder
+    if exist "tools\ffmpeg\ffmpeg.exe" (
+        echo [OK] Tim thay FFmpeg trong tools\ffmpeg\
         echo.
-        echo [!] QUAN TRONG: Them duong dan sau vao PATH:
-        echo     %CD%\tools\ffmpeg
+        echo [!] Them vao PATH vinh vien...
+        setx PATH "%CD%\tools\ffmpeg;%PATH%" >nul 2>&1
+        set "PATH=%CD%\tools\ffmpeg;%PATH%"
+        echo [OK] Da them vao PATH
     ) else (
-        echo [!] Khong tai duoc FFmpeg tu dong
-        echo     Tai thu cong: https://www.gyan.dev/ffmpeg/builds/
-        echo     Giai nen vao: tools\ffmpeg\
+        echo [!] Chua co FFmpeg!
+        echo.
+        echo     Cach 1: Tai va giai nen vao tools\ffmpeg\
+        echo            https://www.gyan.dev/ffmpeg/builds/
+        echo.
+        echo     Cach 2: Cai bang winget:
+        echo            winget install ffmpeg
+        echo.
+        echo     Sau do chay lai SETUP_MASTER.bat
     )
 ) else (
-    echo [OK] FFmpeg da co san
+    echo [OK] FFmpeg da co trong PATH
 )
 
 echo.
