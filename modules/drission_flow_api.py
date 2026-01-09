@@ -1154,12 +1154,21 @@ class DrissionFlowAPI:
                         user_data = data_path
                         break
 
-            # 2. Tự động detect Chrome portable tại Documents\ve3\chrome.exe
+            # 2. Tự động detect Chrome portable
             if not chrome_exe and platform.system() == 'Windows':
-                home = Path.home()  # C:\Users\{username}
-                # Thử các tên file chrome phổ biến
-                for chrome_name in ["chrome.exe", "Chrome.exe", "ve3.exe"]:
-                    ve3_chrome = home / "Documents" / "ve3" / chrome_name
+                ve3_locations = []
+
+                # 2a. Ưu tiên: Thư mục tool/ve3/ve3.exe
+                tool_dir = Path(__file__).parent.parent  # ve3-tool-simple/
+                ve3_locations.append(tool_dir / "ve3" / "ve3.exe")
+
+                # 2b. Fallback: Documents\ve3\
+                home = Path.home()
+                for chrome_name in ["ve3.exe", "chrome.exe", "Chrome.exe"]:
+                    ve3_locations.append(home / "Documents" / "ve3" / chrome_name)
+
+                # Tìm Chrome portable
+                for ve3_chrome in ve3_locations:
                     if ve3_chrome.exists():
                         chrome_exe = str(ve3_chrome)
                         ve3_dir = ve3_chrome.parent

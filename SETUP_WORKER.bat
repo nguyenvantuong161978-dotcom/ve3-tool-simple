@@ -37,9 +37,12 @@ echo [OK] Chrome automation
 :: Check Chrome
 echo.
 echo [*] Kiem tra Chrome...
-if exist "%USERPROFILE%\Documents\ve3\chrome.exe" (
-    echo [OK] Chrome Portable (ve3) da cai
-    echo     %USERPROFILE%\Documents\ve3\chrome.exe
+if exist "ve3\ve3.exe" (
+    echo [OK] Chrome Portable (local) da cai
+    echo     %CD%\ve3\ve3.exe
+) else if exist "%USERPROFILE%\Documents\ve3\ve3.exe" (
+    echo [OK] Chrome Portable (Documents) da cai
+    echo     %USERPROFILE%\Documents\ve3\ve3.exe
 ) else if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
     echo [OK] Chrome da cai (Program Files)
 ) else if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" (
@@ -50,7 +53,8 @@ if exist "%USERPROFILE%\Documents\ve3\chrome.exe" (
     echo [!] Chua tim thay Chrome!
     echo.
     echo     Copy Chrome Portable vao:
-    echo     %USERPROFILE%\Documents\ve3\chrome.exe
+    echo     %CD%\ve3\ve3.exe  (uu tien)
+    echo     Hoac: %USERPROFILE%\Documents\ve3\ve3.exe
     echo.
     echo     Hoac cai Chrome binh thuong
 )
