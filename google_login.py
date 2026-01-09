@@ -342,7 +342,29 @@ def login_google_chrome(account_info: dict) -> bool:
 
                 time.sleep(3)
             else:
-                log("Password input not found!", "WARN")
+                # === FALLBACK: Dùng Ctrl+V để paste password ===
+                log("Password input not found, trying Ctrl+V fallback...", "WARN")
+                try:
+                    import pyperclip
+                    pyperclip.copy(password)
+                    log("Password copied to clipboard")
+                except ImportError:
+                    # Fallback nếu không có pyperclip - dùng Windows clipboard
+                    import subprocess
+                    subprocess.run(['clip'], input=password.encode(), check=True)
+                    log("Password copied to clipboard (via clip)")
+
+                # Gửi Ctrl+V
+                from DrissionPage.common import Actions
+                actions = Actions(driver)
+                actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                log("Sent Ctrl+V")
+                time.sleep(0.5)
+
+                # Nhấn Enter để submit
+                actions.key_down('enter').key_up('enter')
+                log("Pressed Enter")
+                time.sleep(3)
         except Exception as e:
             log(f"Password step error: {e}", "WARN")
 
