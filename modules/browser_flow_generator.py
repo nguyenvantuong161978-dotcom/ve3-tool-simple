@@ -1199,14 +1199,17 @@ class BrowserFlowGenerator:
             self._log(f"Prompt ({len(prompt)} chars): {prompt[:100]}...")
             self._log(f"[REF] Final reference_files: {reference_files}")
 
-            # VERIFY: Check if prompt has filename annotations
+            # VERIFY: Check if prompt has filename annotations (case-insensitive)
             has_annotations = False
+            prompt_lower = prompt.lower()
             for ref in reference_files:
+                ref_lower = ref.lower()
                 ref_name = ref.replace('.png', '').replace('.jpg', '')
-                if f"({ref})" in prompt or f"({ref_name}.png)" in prompt:
+                ref_name_lower = ref_name.lower()
+                if f"({ref_lower})" in prompt_lower or f"({ref_name_lower}.png)" in prompt_lower:
                     has_annotations = True
                     break
-            if "(reference:" in prompt:
+            if "(reference:" in prompt_lower:
                 has_annotations = True
 
             if reference_files:

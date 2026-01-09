@@ -763,19 +763,29 @@ class PromptGenerator:
 
         # Check which refs are NOT yet in the result
         # Check for both (ref.png) and (reference: ref.png) patterns
+        # Use case-insensitive matching
+        result_lower = result.lower()
         refs_not_in_result = []
         for ref in all_refs_normalized:
+            ref_lower = ref.lower()
             ref_base = ref.replace('.png', '').replace('.jpg', '').replace('.jpeg', '').replace('.webp', '')
-            # Skip if already mentioned in any form
-            if f"({ref})" in result:
+            ref_base_lower = ref_base.lower()
+            # Skip if already mentioned in any form (case-insensitive)
+            if f"({ref_lower})" in result_lower:
                 continue
-            if f"({ref_base})" in result:
+            if f"({ref_base_lower})" in result_lower:
                 continue
-            if f"reference: {ref}" in result:
+            if f"reference: {ref_lower}" in result_lower:
                 continue
-            if f"reference: {ref_base}" in result:
+            if f"reference: {ref_base_lower}" in result_lower:
                 continue
             refs_not_in_result.append(ref)
+
+        # CRITICAL: Also check if result already has ANY "(reference:" annotation
+        # to prevent duplicate reference annotations entirely
+        if "(reference:" in result_lower:
+            # Already has a reference annotation, don't add more
+            return result
 
         if refs_not_in_result:
             # Add as consolidated annotation at end
@@ -3148,8 +3158,8 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                 "shot_type": "MEDIUM",
                 "camera_angle": "EYE LEVEL",
                 "emotional_weight": "MEDIUM",
-                "reference_files": [],
-                "characters_in_shot": [],
+                "reference_files": ["nvc.png"],  # Match hardcoded reference in img_prompt
+                "characters_in_shot": ["nvc"],
                 "visual_description": "Cinematic scene with natural lighting",
                 "purpose": "Auto-generated fallback shot"
             }
