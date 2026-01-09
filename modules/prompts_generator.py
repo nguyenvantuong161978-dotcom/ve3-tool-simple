@@ -5478,7 +5478,7 @@ OUTPUT FORMAT (JSON only):
         - Prompts cơ bản dựa trên SRT text (có đánh dấu FALLBACK)
         """
         from .excel_manager import Scene, Character as CharObj
-        from .srt_parser import group_srt_into_scenes
+        from .utils import group_srt_into_scenes
 
         self.logger.info("[FALLBACK-ONLY] Bắt đầu tạo Excel cơ bản...")
 
