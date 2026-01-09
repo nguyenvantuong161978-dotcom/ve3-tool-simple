@@ -844,7 +844,8 @@ class PromptGenerator:
         overwrite: bool = False,
         on_characters_ready: Callable = None,
         on_scenes_batch_ready: Callable = None,
-        total_scenes_callback: Callable = None
+        total_scenes_callback: Callable = None,
+        fallback_only: bool = False
     ) -> bool:
         """
         Tạo prompts cho một project.
@@ -862,6 +863,8 @@ class PromptGenerator:
             total_scenes_callback: Callback để thông báo tổng số scenes cần tạo
                                    Signature: total_scenes_callback(total_count)
                                    Gọi trước khi bắt đầu generate để caller biết số lượng
+            fallback_only: Nếu True, chỉ tạo fallback prompts (không gọi API)
+                          Dùng cho run_srt.py - Workers sẽ gọi API sau
 
         Returns:
             True nếu thành công
@@ -923,6 +926,19 @@ class PromptGenerator:
             return False
         
         self.logger.info(f"Tìm thấy {len(srt_entries)} SRT entries")
+
+        # === FALLBACK-ONLY MODE: Tạo prompts cơ bản, không gọi API ===
+        if fallback_only:
+            self.logger.info("=" * 60)
+            self.logger.info("[FALLBACK-ONLY] Tạo Excel cơ bản (workers sẽ gọi API sau)")
+            self.logger.info("=" * 60)
+            return self._generate_fallback_only(
+                srt_entries=srt_entries,
+                project_dir=project_dir,
+                code=code,
+                excel_path=excel_path,
+                workbook=workbook
+            )
 
         # === ĐỌC TXT FILE (nguồn chính cho story content) ===
         # TXT chứa nội dung đầy đủ hơn SRT, dùng để đạo diễn hiểu tổng thể
@@ -5443,3 +5459,92 @@ OUTPUT FORMAT (JSON only):
             import traceback
             self.logger.error(traceback.format_exc())
             return False
+
+    def _generate_fallback_only(
+        self,
+        srt_entries: List,
+        project_dir: Path,
+        code: str,
+        excel_path: Path,
+        workbook
+    ) -> bool:
+        """
+        Tạo Excel với fallback prompts cơ bản (không gọi API).
+        Workers sẽ gọi API sau để hoàn thiện.
+
+        Fallback mode:
+        - Tạo nhân vật mặc định (nvc - narrator)
+        - Tạo scenes từ SRT với timestamps chính xác
+        - Prompts cơ bản dựa trên SRT text (có đánh dấu FALLBACK)
+        """
+        from .excel_manager import Scene, Character as CharObj
+        from .srt_parser import group_srt_into_scenes
+
+        self.logger.info("[FALLBACK-ONLY] Bắt đầu tạo Excel cơ bản...")
+
+        # === BƯỚC 1: Tạo nhân vật mặc định ===
+        # Chỉ tạo nvc (narrator) - Workers sẽ phân tích lại sau
+        default_char = Character(
+            id="nvc",
+            name="Narrator",
+            role="narrator",
+            vietnamese_prompt="Người kể chuyện",
+            english_prompt="A storyteller narrating the video",
+            character_lock="A 35-year-old narrator with expressive face",
+            image_file="nvc.png",
+            status="pending"
+        )
+        workbook.add_character(default_char)
+        self.logger.info("[FALLBACK-ONLY] ✓ Đã thêm nhân vật mặc định: nvc")
+
+        # === BƯỚC 2: Nhóm SRT thành scenes ===
+        scenes_data = group_srt_into_scenes(
+            srt_entries,
+            min_duration=self.min_scene_duration,
+            max_duration=self.max_scene_duration
+        )
+        self.logger.info(f"[FALLBACK-ONLY] ✓ Chia thành {len(scenes_data)} scenes từ SRT")
+
+        # === BƯỚC 3: Tạo fallback prompts cho mỗi scene ===
+        shot_types = ["WIDE", "CLOSE-UP", "MEDIUM", "EXTREME CLOSE-UP", "LOW ANGLE"]
+
+        for idx, scene in enumerate(scenes_data):
+            scene_id = idx + 1
+
+            # Lấy thông tin từ SRT
+            srt_text = scene.get("text", "")[:300]
+            srt_start = scene.get("srt_start", "00:00:00,000")
+            srt_end = scene.get("srt_end", "00:00:05,000")
+            duration = scene.get("duration_seconds", 5)
+
+            # Tạo shot type đa dạng
+            shot_type = shot_types[idx % len(shot_types)]
+
+            # === FALLBACK PROMPT ===
+            # Đánh dấu [FALLBACK] để workers biết cần gọi API hoàn thiện
+            fallback_prompt = f"[FALLBACK] {shot_type}. Narrator (nvc.png). Illustrating: {srt_text[:150]}. Cinematic lighting, 4K photorealistic"
+
+            # Tạo Scene object
+            scene_obj = Scene(
+                scene_id=scene_id,
+                srt_start=srt_start,
+                srt_end=srt_end,
+                duration=duration,
+                planned_duration=duration,
+                srt_text=srt_text,
+                img_prompt=fallback_prompt,
+                video_prompt=fallback_prompt,
+                status_img="pending",
+                status_vid="pending",
+                characters_used="nvc",
+                location_used="",
+                reference_files='["nvc.png"]'
+            )
+            workbook.add_scene(scene_obj)
+
+        # Lưu Excel
+        workbook.save()
+        self.logger.info(f"[FALLBACK-ONLY] ✓ Đã lưu {len(scenes_data)} scenes vào Excel")
+        self.logger.info("[FALLBACK-ONLY] ✓ Excel cơ bản hoàn thành - Workers sẽ gọi API hoàn thiện")
+
+        return True
