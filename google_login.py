@@ -280,13 +280,33 @@ def login_google_chrome(account_info: dict) -> bool:
         # === BƯỚC 2: ĐIỀN PASSWORD ===
         log("Finding password input...")
         try:
-            # Đợi trang password load
-            time.sleep(2)
+            # Đợi trang password load lâu hơn
+            time.sleep(3)
 
-            # Tìm input password
-            pass_input = driver.ele('input[type="password"]', timeout=5)
+            # Thử nhiều selectors khác nhau
+            pass_input = None
+            selectors = [
+                'input[type="password"]',
+                'input[name="Passwd"]',
+                'input[autocomplete="current-password"]',
+                '.whsOnd[type="password"]',
+            ]
+
+            for sel in selectors:
+                log(f"Trying selector: {sel}")
+                try:
+                    pass_input = driver.ele(sel, timeout=3)
+                    if pass_input:
+                        log(f"Found with selector: {sel}")
+                        break
+                except:
+                    continue
+
+            # Nếu vẫn không tìm được, thử đợi thêm
             if not pass_input:
-                pass_input = driver.ele('input[name="Passwd"]', timeout=3)
+                log("Waiting more for password field...")
+                time.sleep(3)
+                pass_input = driver.ele('input[type="password"]', timeout=5)
 
             if pass_input:
                 log("Found password input, filling...")
