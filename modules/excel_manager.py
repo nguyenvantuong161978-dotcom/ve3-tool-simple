@@ -4,6 +4,7 @@ VE3 Tool - Excel Manager Module
 Quản lý file Excel chứa prompts và thông tin nhân vật.
 """
 
+import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
@@ -801,9 +802,19 @@ class PromptWorkbook:
             ws.cell(row=next_row, column=4, value=round(duration, 2) if duration else 0)
             ws.cell(row=next_row, column=5, value=scene.get("text", "")[:500])
             # New columns for backup
-            ws.cell(row=next_row, column=6, value=scene.get("characters_used", "[]"))
+            # Handle characters_used - convert list to JSON string if needed
+            chars_used = scene.get("characters_used", "[]")
+            if isinstance(chars_used, list):
+                chars_used = json.dumps(chars_used)
+            ws.cell(row=next_row, column=6, value=chars_used)
+
             ws.cell(row=next_row, column=7, value=scene.get("location_used", ""))
-            ws.cell(row=next_row, column=8, value=scene.get("reference_files", "[]"))
+
+            # Handle reference_files - convert list to JSON string if needed
+            ref_files = scene.get("reference_files", "[]")
+            if isinstance(ref_files, list):
+                ref_files = json.dumps(ref_files)
+            ws.cell(row=next_row, column=8, value=ref_files)
             ws.cell(row=next_row, column=9, value=scene.get("img_prompt", "")[:1000])
             ws.cell(row=next_row, column=10, value=scene.get("status", "backup"))
 

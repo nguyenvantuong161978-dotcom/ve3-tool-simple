@@ -762,7 +762,20 @@ class PromptGenerator:
             all_refs_normalized.append(ref)
 
         # Check which refs are NOT yet in the result
-        refs_not_in_result = [ref for ref in all_refs_normalized if f"({ref})" not in result]
+        # Check for both (ref.png) and (reference: ref.png) patterns
+        refs_not_in_result = []
+        for ref in all_refs_normalized:
+            ref_base = ref.replace('.png', '').replace('.jpg', '').replace('.jpeg', '').replace('.webp', '')
+            # Skip if already mentioned in any form
+            if f"({ref})" in result:
+                continue
+            if f"({ref_base})" in result:
+                continue
+            if f"reference: {ref}" in result:
+                continue
+            if f"reference: {ref_base}" in result:
+                continue
+            refs_not_in_result.append(ref)
 
         if refs_not_in_result:
             # Add as consolidated annotation at end
