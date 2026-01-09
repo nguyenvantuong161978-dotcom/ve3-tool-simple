@@ -230,105 +230,101 @@ def login_google_chrome(account_info: dict) -> bool:
             log("Already logged in!", "OK")
             return True
 
-        # === BƯỚC 1: ĐIỀN EMAIL BẰNG JAVASCRIPT ===
-        log("Entering email with JavaScript...")
-        js_fill_email = f'''
-        (function() {{
-            var emailInput = document.getElementById('identifierId');
-            if (!emailInput) {{
-                emailInput = document.querySelector('input[type="email"]');
-            }}
-            if (emailInput) {{
-                // Focus vào input
-                emailInput.focus();
+        # === BƯỚC 1: ĐIỀN EMAIL ===
+        log("Finding email input...")
+        try:
+            # Tìm input email
+            email_input = driver.ele('#identifierId', timeout=5)
+            if not email_input:
+                email_input = driver.ele('input[type="email"]', timeout=3)
 
-                // Xóa giá trị cũ
-                emailInput.value = '';
+            if email_input:
+                log(f"Found email input, filling: {email}")
+                # Click để focus
+                email_input.click()
+                time.sleep(0.3)
 
-                // Điền email từng ký tự (giả lập typing)
-                var email = "{email}";
-                emailInput.value = email;
+                # Dùng JavaScript để set value và trigger events
+                js_set_email = f'''
+                    this.value = "{email}";
+                    this.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    this.dispatchEvent(new Event('change', {{bubbles: true}}));
+                '''
+                email_input.run_js(js_set_email)
+                log(f"Email filled via JS")
+                time.sleep(0.5)
 
-                // Trigger các events mà Google cần
-                emailInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                emailInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                emailInput.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true }}));
-                emailInput.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true }}));
+                # Nhấn Enter hoặc click Next
+                log("Clicking Next button...")
+                try:
+                    next_btn = driver.ele('button:contains("Next")', timeout=2) or \
+                               driver.ele('button:contains("Tiếp theo")', timeout=2) or \
+                               driver.ele('button:contains("Tiếp tục")', timeout=2)
+                    if next_btn:
+                        next_btn.click()
+                        log("Clicked Next button")
+                    else:
+                        # Fallback: nhấn Enter
+                        email_input.input('\n')
+                        log("Pressed Enter")
+                except:
+                    email_input.input('\n')
+                    log("Pressed Enter (fallback)")
 
-                return 'Email filled: ' + email;
-            }}
-            return 'Email input not found';
-        }})();
-        '''
+                time.sleep(3)
+            else:
+                log("Email input not found!", "WARN")
+        except Exception as e:
+            log(f"Email step error: {e}", "WARN")
 
-        result = driver.run_js(js_fill_email)
-        log(f"Email fill result: {result}")
-        time.sleep(1)
+        # === BƯỚC 2: ĐIỀN PASSWORD ===
+        log("Finding password input...")
+        try:
+            # Đợi trang password load
+            time.sleep(2)
 
-        # Click nút Next bằng JavaScript
-        log("Clicking Next button...")
-        js_click_next = '''
-        (function() {
-            // Tìm nút Next hoặc Tiếp theo
-            var buttons = document.querySelectorAll('button');
-            for (var btn of buttons) {
-                var text = btn.innerText || btn.textContent || '';
-                if (text.includes('Next') || text.includes('Tiếp theo') || text.includes('Tiếp tục')) {
-                    btn.click();
-                    return 'Clicked: ' + text;
-                }
-            }
-            // Fallback: submit form
-            var form = document.querySelector('form');
-            if (form) {
-                form.submit();
-                return 'Form submitted';
-            }
-            return 'Next button not found';
-        })();
-        '''
+            # Tìm input password
+            pass_input = driver.ele('input[type="password"]', timeout=5)
+            if not pass_input:
+                pass_input = driver.ele('input[name="Passwd"]', timeout=3)
 
-        result = driver.run_js(js_click_next)
-        log(f"Next click result: {result}")
-        time.sleep(3)
+            if pass_input:
+                log("Found password input, filling...")
+                # Click để focus
+                pass_input.click()
+                time.sleep(0.3)
 
-        # === BƯỚC 2: ĐIỀN PASSWORD BẰNG JAVASCRIPT ===
-        log("Entering password with JavaScript...")
-        js_fill_password = f'''
-        (function() {{
-            var passInput = document.querySelector('input[type="password"]');
-            if (!passInput) {{
-                passInput = document.querySelector('input[name="Passwd"]');
-            }}
-            if (passInput) {{
-                // Focus
-                passInput.focus();
+                # Dùng JavaScript để set value và trigger events
+                js_set_pass = f'''
+                    this.value = "{password}";
+                    this.dispatchEvent(new Event('input', {{bubbles: true}}));
+                    this.dispatchEvent(new Event('change', {{bubbles: true}}));
+                '''
+                pass_input.run_js(js_set_pass)
+                log("Password filled via JS")
+                time.sleep(0.5)
 
-                // Điền password
-                var password = "{password}";
-                passInput.value = password;
+                # Click Next
+                log("Clicking Next button for password...")
+                try:
+                    next_btn = driver.ele('button:contains("Next")', timeout=2) or \
+                               driver.ele('button:contains("Tiếp theo")', timeout=2) or \
+                               driver.ele('button:contains("Tiếp tục")', timeout=2)
+                    if next_btn:
+                        next_btn.click()
+                        log("Clicked Next button")
+                    else:
+                        pass_input.input('\n')
+                        log("Pressed Enter")
+                except:
+                    pass_input.input('\n')
+                    log("Pressed Enter (fallback)")
 
-                // Trigger events
-                passInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                passInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                passInput.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true }}));
-                passInput.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true }}));
-
-                return 'Password filled';
-            }}
-            return 'Password input not found';
-        }})();
-        '''
-
-        result = driver.run_js(js_fill_password)
-        log(f"Password fill result: {result}")
-        time.sleep(1)
-
-        # Click nút Next cho password
-        log("Clicking Next button for password...")
-        result = driver.run_js(js_click_next)
-        log(f"Password next click result: {result}")
-        time.sleep(3)
+                time.sleep(3)
+            else:
+                log("Password input not found!", "WARN")
+        except Exception as e:
+            log(f"Password step error: {e}", "WARN")
 
         # Kiểm tra kết quả
         time.sleep(2)
