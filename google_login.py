@@ -277,94 +277,34 @@ def login_google_chrome(account_info: dict) -> bool:
         except Exception as e:
             log(f"Email step error: {e}", "WARN")
 
-        # === BƯỚC 2: ĐIỀN PASSWORD ===
-        log("Finding password input...")
+        # === BƯỚC 2: ĐIỀN PASSWORD (Ctrl+V) ===
+        log("Entering password with Ctrl+V...")
         try:
-            # Đợi trang password load lâu hơn
+            # Đợi trang password load
             time.sleep(3)
 
-            # Thử nhiều selectors khác nhau
-            pass_input = None
-            selectors = [
-                'input[type="password"]',
-                'input[name="Passwd"]',
-                'input[autocomplete="current-password"]',
-                '.whsOnd[type="password"]',
-            ]
+            # Copy password vào clipboard
+            try:
+                import pyperclip
+                pyperclip.copy(password)
+                log("Password copied to clipboard")
+            except ImportError:
+                # Fallback nếu không có pyperclip - dùng Windows clipboard
+                import subprocess
+                subprocess.run(['clip'], input=password.encode(), check=True)
+                log("Password copied to clipboard (via clip)")
 
-            for sel in selectors:
-                log(f"Trying selector: {sel}")
-                try:
-                    pass_input = driver.ele(sel, timeout=3)
-                    if pass_input:
-                        log(f"Found with selector: {sel}")
-                        break
-                except:
-                    continue
+            # Gửi Ctrl+V để paste
+            from DrissionPage.common import Actions
+            actions = Actions(driver)
+            actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+            log("Sent Ctrl+V")
+            time.sleep(0.5)
 
-            # Nếu vẫn không tìm được, thử đợi thêm
-            if not pass_input:
-                log("Waiting more for password field...")
-                time.sleep(3)
-                pass_input = driver.ele('input[type="password"]', timeout=5)
-
-            if pass_input:
-                log("Found password input, filling...")
-                # Click để focus
-                pass_input.click()
-                time.sleep(0.3)
-
-                # Dùng JavaScript để set value và trigger events
-                js_set_pass = f'''
-                    this.value = "{password}";
-                    this.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    this.dispatchEvent(new Event('change', {{bubbles: true}}));
-                '''
-                pass_input.run_js(js_set_pass)
-                log("Password filled via JS")
-                time.sleep(0.5)
-
-                # Click Next
-                log("Clicking Next button for password...")
-                try:
-                    next_btn = driver.ele('button:contains("Next")', timeout=2) or \
-                               driver.ele('button:contains("Tiếp theo")', timeout=2) or \
-                               driver.ele('button:contains("Tiếp tục")', timeout=2)
-                    if next_btn:
-                        next_btn.click()
-                        log("Clicked Next button")
-                    else:
-                        pass_input.input('\n')
-                        log("Pressed Enter")
-                except:
-                    pass_input.input('\n')
-                    log("Pressed Enter (fallback)")
-
-                time.sleep(3)
-            else:
-                # === FALLBACK: Dùng Ctrl+V để paste password ===
-                log("Password input not found, trying Ctrl+V fallback...", "WARN")
-                try:
-                    import pyperclip
-                    pyperclip.copy(password)
-                    log("Password copied to clipboard")
-                except ImportError:
-                    # Fallback nếu không có pyperclip - dùng Windows clipboard
-                    import subprocess
-                    subprocess.run(['clip'], input=password.encode(), check=True)
-                    log("Password copied to clipboard (via clip)")
-
-                # Gửi Ctrl+V
-                from DrissionPage.common import Actions
-                actions = Actions(driver)
-                actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
-                log("Sent Ctrl+V")
-                time.sleep(0.5)
-
-                # Nhấn Enter để submit
-                actions.key_down('enter').key_up('enter')
-                log("Pressed Enter")
-                time.sleep(3)
+            # Nhấn Enter để submit
+            actions.key_down('enter').key_up('enter')
+            log("Pressed Enter")
+            time.sleep(3)
         except Exception as e:
             log(f"Password step error: {e}", "WARN")
 
@@ -388,16 +328,94 @@ def login_google_chrome(account_info: dict) -> bool:
         except Exception as e:
             log(f"Tab Tab Enter error: {e}", "WARN")
 
+        # === BƯỚC 4: VÀO FLOW VÀ CLICK "Create with Flow" ===
+        log("Navigating to Flow...")
+        try:
+            time.sleep(3)
+            driver.get("https://labs.google/fx/vi/tools/flow")
+            time.sleep(5)  # Đợi trang load
+
+            log("Looking for 'Create with Flow' button...")
+            from DrissionPage.common import Actions
+            actions = Actions(driver)
+
+            # Thử click button "Create with Flow"
+            try:
+                create_btn = driver.ele('button:contains("Create with Flow")', timeout=3)
+                if create_btn:
+                    create_btn.click()
+                    log("Clicked 'Create with Flow' button")
+                else:
+                    # Fallback: Tab 3 lần rồi Enter
+                    log("Button not found, trying Tab Tab Tab Enter...")
+                    for _ in range(3):
+                        actions.key_down('tab').key_up('tab')
+                        time.sleep(0.2)
+                    actions.key_down('enter').key_up('enter')
+                    log("Sent Tab Tab Tab Enter")
+            except:
+                # Fallback: Tab 3 lần rồi Enter
+                log("Fallback: Tab Tab Tab Enter...")
+                for _ in range(3):
+                    actions.key_down('tab').key_up('tab')
+                    time.sleep(0.2)
+                actions.key_down('enter').key_up('enter')
+                log("Sent Tab Tab Tab Enter")
+
+            time.sleep(3)
+        except Exception as e:
+            log(f"Create Flow error: {e}", "WARN")
+
+        # === BƯỚC 5: CLICK "Tiếp theo" (Chính sách) ===
+        log("Looking for 'Tiếp theo' button (Policy)...")
+        try:
+            time.sleep(2)
+            next_btn = driver.ele('button:contains("Tiếp theo")', timeout=5)
+            if next_btn:
+                next_btn.click()
+                log("Clicked 'Tiếp theo' button")
+            else:
+                log("'Tiếp theo' button not found", "WARN")
+            time.sleep(2)
+        except Exception as e:
+            log(f"Policy button error: {e}", "WARN")
+
+        # === BƯỚC 6: TAB + END để cuộn xuống cuối ===
+        log("Scrolling down with Tab + End...")
+        try:
+            time.sleep(2)
+            from DrissionPage.common import Actions
+            actions = Actions(driver)
+
+            # Tab để focus vào content
+            actions.key_down('tab').key_up('tab')
+            time.sleep(0.3)
+
+            # End để cuộn xuống cuối
+            actions.key_down('end').key_up('end')
+            log("Sent Tab + End")
+            time.sleep(1)
+        except Exception as e:
+            log(f"Scroll error: {e}", "WARN")
+
+        # === BƯỚC 7: CLICK "Tiếp tục" ===
+        log("Looking for 'Tiếp tục' button...")
+        try:
+            time.sleep(1)
+            continue_btn = driver.ele('button:contains("Tiếp tục")', timeout=5)
+            if continue_btn:
+                continue_btn.click()
+                log("Clicked 'Tiếp tục' button")
+            else:
+                log("'Tiếp tục' button not found", "WARN")
+            time.sleep(2)
+        except Exception as e:
+            log(f"Continue button error: {e}", "WARN")
+
         # Kiểm tra kết quả
         time.sleep(3)
-        if "myaccount.google.com" in driver.url or "google.com" in driver.url:
-            if "signin" not in driver.url and "challenge" not in driver.url:
-                log("Login successful!", "OK")
-                return True
-
-        # Nếu cần xác thực thêm
-        log("May need additional verification. Please complete manually.", "WARN")
-        log("Press Enter after completing login...")
+        log("Setup completed!", "OK")
+        log("Press Enter to close...")
         input()
 
         return True
