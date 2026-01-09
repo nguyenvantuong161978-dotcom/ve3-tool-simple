@@ -381,10 +381,27 @@ def process_project(code: str, callback=None) -> bool:
     if not local_dir:
         return False
 
-    # Step 3: Check Excel
-    if not has_excel_with_prompts(local_dir, code):
-        log(f"  ⏭️ Excel not ready (no prompts), skip!")
-        return False
+    # Step 3: Check Excel - nếu không có thì tạo bằng API
+    excel_path = local_dir / f"{code}_prompts.xlsx"
+    srt_path = local_dir / f"{code}.srt"
+
+    if not excel_path.exists():
+        # Không có Excel - tạo mới bằng API
+        if srt_path.exists():
+            log(f"  📋 No Excel found, creating with API...")
+            if not complete_excel_with_api(local_dir, code):
+                log(f"  ❌ Failed to create Excel, skip!")
+                return False
+        else:
+            log(f"  ⏭️ No Excel and no SRT, skip!")
+            return False
+    elif not has_excel_with_prompts(local_dir, code):
+        # Excel exists but empty/corrupt - recreate
+        log(f"  📋 Excel empty/corrupt, recreating with API...")
+        excel_path.unlink()  # Delete corrupt Excel
+        if not complete_excel_with_api(local_dir, code):
+            log(f"  ❌ Failed to recreate Excel, skip!")
+            return False
 
     # Step 3.5: Complete Excel with API if needed (fallback prompts)
     if needs_api_completion(local_dir, code):
