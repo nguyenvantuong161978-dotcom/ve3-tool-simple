@@ -2959,12 +2959,8 @@ class DrissionFlowAPI:
         except:
             pass
 
-        # Type prompt
-        try:
-            textarea.clear()
-            textarea.input(prompt[:500])
-        except Exception as e:
-            self.log(f"[I2V-FORCE] Không thể nhập prompt: {e}", "WARN")
+        # Type prompt with Ctrl+V
+        self._paste_prompt_ctrlv(textarea, prompt[:500])
 
         # Đợi reCAPTCHA chuẩn bị token
         time.sleep(2)
@@ -3114,12 +3110,8 @@ class DrissionFlowAPI:
         except:
             pass
 
-        # Type prompt
-        try:
-            textarea.clear()
-            textarea.input(prompt[:500])
-        except Exception as e:
-            self.log(f"[T2V→I2V] Không thể nhập prompt: {e}", "WARN")
+        # Type prompt with Ctrl+V
+        self._paste_prompt_ctrlv(textarea, prompt[:500])
 
         # Đợi reCAPTCHA chuẩn bị token
         time.sleep(2)
@@ -3304,12 +3296,8 @@ class DrissionFlowAPI:
         except:
             pass
 
-        # Type prompt
-        try:
-            textarea.clear()
-            textarea.input(prompt[:500])
-        except Exception as e:
-            self.log(f"[T2V-PURE] Không thể nhập prompt: {e}", "WARN")
+        # Type prompt with Ctrl+V
+        self._paste_prompt_ctrlv(textarea, prompt[:500])
 
         # Đợi reCAPTCHA chuẩn bị token
         time.sleep(2)
