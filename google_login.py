@@ -415,8 +415,13 @@ def login_google_chrome(account_info: dict) -> bool:
         # Kiểm tra kết quả
         time.sleep(3)
         log("Setup completed!", "OK")
-        log("Press Enter to close...")
-        input()
+
+        # Đóng Chrome (không đợi user nhấn Enter khi chạy tự động)
+        try:
+            driver.quit()
+            log("Chrome closed")
+        except:
+            pass
 
         return True
 

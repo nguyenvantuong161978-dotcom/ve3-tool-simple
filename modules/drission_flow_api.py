@@ -1134,6 +1134,93 @@ class DrissionFlowAPI:
         self.log("⚠️ Không phát hiện được ảnh, tiếp tục...", "WARN")
         return True  # Vẫn return True để tiếp tục
 
+    def _is_logged_out(self) -> bool:
+        """
+        Kiểm tra xem Chrome có bị logout khỏi Google không.
+        Dựa vào URL: nếu là accounts.google.com thì đã logout.
+        """
+        try:
+            current_url = self.driver.url
+            if current_url:
+                # Bị logout nếu URL là trang đăng nhập Google
+                logout_indicators = [
+                    "accounts.google.com/signin",
+                    "accounts.google.com/v3/signin",
+                    "accounts.google.com/ServiceLogin",
+                ]
+                for indicator in logout_indicators:
+                    if indicator in current_url:
+                        return True
+        except:
+            pass
+        return False
+
+    def _auto_login_google(self) -> bool:
+        """
+        Tự động đăng nhập Google khi bị logout.
+        Gọi hàm login từ google_login.py.
+
+        Returns:
+            True nếu login thành công
+        """
+        self.log("=" * 50)
+        self.log("⚠️ PHÁT HIỆN BỊ LOGOUT - TỰ ĐỘNG ĐĂNG NHẬP LẠI")
+        self.log("=" * 50)
+
+        try:
+            # Import hàm login từ google_login.py
+            import sys
+            tool_dir = Path(__file__).parent.parent
+            if str(tool_dir) not in sys.path:
+                sys.path.insert(0, str(tool_dir))
+
+            from google_login import detect_machine_code, get_account_info, login_google_chrome
+
+            # 1. Detect mã máy
+            machine_code = detect_machine_code()
+            if not machine_code:
+                self.log("✗ Không detect được mã máy", "ERROR")
+                return False
+
+            self.log(f"Mã máy: {machine_code}")
+
+            # 2. Lấy thông tin tài khoản từ Google Sheet
+            self.log("Đọc thông tin tài khoản từ Google Sheet...")
+            account_info = get_account_info(machine_code)
+            if not account_info:
+                self.log("✗ Không lấy được thông tin tài khoản", "ERROR")
+                return False
+
+            self.log(f"Tài khoản: {account_info['id']}")
+
+            # 3. Đóng Chrome hiện tại
+            self.log("Đóng Chrome để login lại...")
+            self._kill_chrome()
+            self.close()
+            time.sleep(2)
+
+            # 4. Chạy login
+            self.log("Bắt đầu đăng nhập Google...")
+            success = login_google_chrome(account_info)
+
+            if success:
+                self.log("✓ Đăng nhập thành công!")
+                # Đóng Chrome login để setup lại từ đầu
+                time.sleep(2)
+                return True
+            else:
+                self.log("✗ Đăng nhập thất bại", "ERROR")
+                return False
+
+        except ImportError as e:
+            self.log(f"✗ Không import được google_login: {e}", "ERROR")
+            return False
+        except Exception as e:
+            self.log(f"✗ Lỗi auto-login: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def _kill_chrome(self):
         """
         Close Chrome của tool này (không kill tất cả Chrome).
@@ -1494,6 +1581,27 @@ class DrissionFlowAPI:
                     raise Exception(f"Page không load được: {current_url}")
 
                 self.log(f"✓ URL: {current_url}")
+
+                # === KIỂM TRA BỊ LOGOUT ===
+                if self._is_logged_out():
+                    self.log("⚠️ Phát hiện bị LOGOUT khỏi Google!", "WARN")
+
+                    # Thử auto-login
+                    if self._auto_login_google():
+                        self.log("✓ Auto-login thành công!")
+                        self.log("🔄 Restart setup từ đầu...")
+                        time.sleep(3)
+
+                        # Gọi lại setup() từ đầu (đệ quy)
+                        return self.setup(
+                            wait_for_project=wait_for_project,
+                            timeout=timeout,
+                            warm_up=warm_up,
+                            project_url=project_url
+                        )
+                    else:
+                        self.log("✗ Auto-login thất bại", "ERROR")
+                        return False
 
                 # Lưu project_url để dùng khi retry
                 if "/project/" in current_url:
