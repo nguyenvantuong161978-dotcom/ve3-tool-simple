@@ -3,15 +3,20 @@
 IPv6 Rotator - Tự động đổi IPv6 khi bị 403
 ==========================================
 
-Sử dụng trên Windows với /56 subnet (256 IPv6 addresses).
-Khi Chrome bị 403 nhiều lần, tự động đổi sang IPv6 khác trong subnet.
+Sử dụng danh sách IPv6 từ file config/ipv6_list.txt
+Khi Chrome bị 403, tự động đổi sang IPv6 khác trong danh sách.
 
 Usage:
-    from modules.ipv6_rotator import IPv6Rotator
+    from modules.ipv6_rotator import IPv6Rotator, get_ipv6_rotator
 
-    rotator = IPv6Rotator(settings)
-    if rotator.enabled:
+    # Cách 1: Dùng singleton
+    rotator = get_ipv6_rotator(settings)
+    if rotator and rotator.enabled:
         new_ip = rotator.rotate()
+
+    # Cách 2: Tạo instance riêng
+    rotator = IPv6Rotator(settings)
+    rotator.rotate()
 """
 
 import subprocess
@@ -19,27 +24,31 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 class IPv6Rotator:
     """Quản lý việc đổi IPv6 khi bị block."""
 
-    def __init__(self, settings: Dict[str, Any]):
+    def __init__(self, settings: Dict[str, Any] = None):
         """
         Khởi tạo IPv6 Rotator.
 
         Args:
-            settings: Dict cấu hình từ settings.yaml
+            settings: Dict cấu hình từ settings.yaml (optional)
         """
+        settings = settings or {}
         ipv6_cfg = settings.get('ipv6_rotation', {})
 
         self.enabled = ipv6_cfg.get('enabled', False)
         self.interface_name = ipv6_cfg.get('interface_name', 'Ethernet')
-        self.subnet_prefix = ipv6_cfg.get('subnet_prefix', '')
-        self.prefix_length = ipv6_cfg.get('prefix_length', 56)
         self.max_403 = ipv6_cfg.get('max_403_before_rotate', 3)
         self.gateway = ipv6_cfg.get('gateway', '')
+
+        # Load IPv6 list from file
+        self.ipv6_list: List[str] = []
+        self.current_index = 0
+        self._load_ipv6_list()
 
         # State
         self.consecutive_403 = 0
@@ -48,6 +57,33 @@ class IPv6Rotator:
 
         # Log function (có thể override)
         self.log = print
+
+    def _load_ipv6_list(self):
+        """Load danh sách IPv6 từ file config/ipv6_list.txt"""
+        try:
+            # Tìm file ipv6_list.txt
+            base_dir = Path(__file__).parent.parent
+            ipv6_file = base_dir / "config" / "ipv6_list.txt"
+
+            if ipv6_file.exists():
+                with open(ipv6_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+
+                self.ipv6_list = [
+                    line.strip() for line in lines
+                    if line.strip() and not line.startswith('#')
+                ]
+
+                if self.ipv6_list:
+                    self.enabled = True  # Auto-enable nếu có danh sách
+                    print(f"[IPv6] Loaded {len(self.ipv6_list)} IPv6 addresses from {ipv6_file.name}")
+                else:
+                    print(f"[IPv6] No IPv6 addresses in {ipv6_file.name}")
+            else:
+                print(f"[IPv6] File not found: {ipv6_file}")
+
+        except Exception as e:
+            print(f"[IPv6] Error loading IPv6 list: {e}")
 
     def set_logger(self, log_func):
         """Set custom log function."""
@@ -75,7 +111,7 @@ class IPv6Rotator:
 
     def get_current_ipv6(self) -> Optional[str]:
         """
-        Lấy IPv6 hiện tại của interface.
+        Lấy IPv6 hiện tại của interface (Windows).
 
         Returns:
             IPv6 address hoặc None
@@ -93,54 +129,48 @@ class IPv6Rotator:
                 for line in lines:
                     # Tìm dòng chứa "Address" và IPv6
                     if 'Address' in line:
-                        match = re.search(r'([0-9a-fA-F:]+::[0-9a-fA-F:]+)', line)
+                        # Match IPv6 pattern
+                        match = re.search(r'(2[0-9a-fA-F]{3}:[0-9a-fA-F:]+)', line)
                         if match:
-                            ipv6 = match.group(1)
-                            # Bỏ qua link-local
-                            if not ipv6.startswith('fe80'):
-                                return ipv6
+                            return match.group(1)
             return None
         except Exception as e:
             self.log(f"[IPv6] Error getting current IP: {e}")
             return None
 
-    def generate_random_ipv6(self) -> str:
+    def get_next_ipv6(self) -> Optional[str]:
         """
-        Tạo IPv6 ngẫu nhiên trong subnet.
-
-        Với /56 subnet: prefix:XX:: (XX = 00-FF)
+        Lấy IPv6 tiếp theo trong danh sách.
 
         Returns:
-            IPv6 address string
+            IPv6 address hoặc None nếu hết danh sách
         """
-        if not self.subnet_prefix:
-            raise ValueError("subnet_prefix chưa được cấu hình")
+        if not self.ipv6_list:
+            return None
 
-        # Parse prefix
-        prefix = self.subnet_prefix.rstrip(':')
+        # Lấy IPv6 hiện tại để tránh trùng
+        current = self.get_current_ipv6()
 
-        if self.prefix_length == 56:
-            # /56 = có 8 bit để random (256 subnets)
-            # Format: prefix:XX::1
-            random_part = random.randint(0, 255)
-            new_ipv6 = f"{prefix}:{random_part:02x}::1"
-        elif self.prefix_length == 64:
-            # /64 = có 64 bit host để random
-            random_host = random.randint(1, 0xFFFFFFFF)
-            new_ipv6 = f"{prefix}::{random_host:x}"
-        else:
-            # Generic: random the remaining bits
-            random_suffix = random.randint(1, 0xFFFF)
-            new_ipv6 = f"{prefix}::{random_suffix:x}"
+        # Thử tìm IPv6 khác trong danh sách
+        for _ in range(len(self.ipv6_list)):
+            self.current_index = (self.current_index + 1) % len(self.ipv6_list)
+            next_ip = self.ipv6_list[self.current_index]
 
-        return new_ipv6
+            # Kiểm tra không trùng với IP hiện tại
+            if current and next_ip.lower() == current.lower():
+                continue
+
+            return next_ip
+
+        # Nếu tất cả đều trùng (không nên xảy ra), random 1 cái
+        return random.choice(self.ipv6_list)
 
     def set_ipv6(self, new_ipv6: str) -> bool:
         """
         Đặt IPv6 mới cho interface (Windows).
 
         Steps:
-        1. Xóa IPv6 cũ (nếu có)
+        1. Xóa tất cả IPv6 cũ (trong danh sách) khỏi interface
         2. Thêm IPv6 mới
         3. Đợi network adapter cập nhật
 
@@ -151,28 +181,27 @@ class IPv6Rotator:
             True nếu thành công
         """
         try:
-            # Bước 1: Lấy IPv6 cũ
-            old_ipv6 = self.get_current_ipv6()
+            self.log(f"[IPv6] 🔄 Changing to: {new_ipv6}")
 
-            # Bước 2: Xóa IPv6 cũ (nếu có và khác IPv6 mới)
-            if old_ipv6 and old_ipv6 != new_ipv6:
-                self.log(f"[IPv6] Removing old: {old_ipv6}")
-                delete_cmd = f'netsh interface ipv6 delete address "{self.interface_name}" {old_ipv6}'
-                subprocess.run(delete_cmd, shell=True, capture_output=True, timeout=10)
-                time.sleep(1)
+            # Bước 1: Xóa tất cả IPv6 cũ trong danh sách khỏi interface
+            for old_ip in self.ipv6_list:
+                if old_ip.lower() != new_ipv6.lower():
+                    delete_cmd = f'netsh interface ipv6 delete address "{self.interface_name}" {old_ip}'
+                    subprocess.run(delete_cmd, shell=True, capture_output=True, timeout=5)
 
-            # Bước 3: Thêm IPv6 mới
-            self.log(f"[IPv6] Adding new: {new_ipv6}")
+            time.sleep(1)
+
+            # Bước 2: Thêm IPv6 mới
             add_cmd = f'netsh interface ipv6 add address "{self.interface_name}" {new_ipv6}'
             result = subprocess.run(add_cmd, shell=True, capture_output=True, text=True, timeout=10)
 
-            if result.returncode != 0:
-                # Có thể cần chạy với admin
-                self.log(f"[IPv6] Warning: {result.stderr}")
+            if result.returncode != 0 and result.stderr:
+                # Có thể IP đã tồn tại
+                if "already exists" not in result.stderr.lower() and "đã tồn tại" not in result.stderr.lower():
+                    self.log(f"[IPv6] Warning: {result.stderr.strip()}")
 
-            # Bước 4: Set gateway nếu có
+            # Bước 3: Set gateway nếu có
             if self.gateway:
-                self.log(f"[IPv6] Setting gateway: {self.gateway}")
                 gw_cmd = f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {self.gateway}'
                 subprocess.run(gw_cmd, shell=True, capture_output=True, timeout=10)
 
@@ -182,7 +211,7 @@ class IPv6Rotator:
             # Verify
             current = self.get_current_ipv6()
             if current:
-                self.log(f"[IPv6] ✓ Current IP: {current}")
+                self.log(f"[IPv6] ✓ Now using: {current}")
                 self.current_ipv6 = current
                 return True
             else:
@@ -197,7 +226,7 @@ class IPv6Rotator:
         """
         Thực hiện rotate IPv6.
 
-        1. Generate IPv6 mới
+        1. Lấy IPv6 tiếp theo từ danh sách
         2. Set IPv6 mới
         3. Reset 403 counter
 
@@ -208,20 +237,17 @@ class IPv6Rotator:
             self.log("[IPv6] Rotation is disabled")
             return None
 
-        if not self.subnet_prefix:
-            self.log("[IPv6] subnet_prefix chưa được cấu hình!")
+        if not self.ipv6_list:
+            self.log("[IPv6] No IPv6 list available!")
             return None
 
         try:
-            # Generate IP mới (khác IP hiện tại)
             current = self.get_current_ipv6()
-            new_ipv6 = self.generate_random_ipv6()
+            new_ipv6 = self.get_next_ipv6()
 
-            # Đảm bảo IP mới khác IP cũ
-            attempts = 0
-            while new_ipv6 == current and attempts < 10:
-                new_ipv6 = self.generate_random_ipv6()
-                attempts += 1
+            if not new_ipv6:
+                self.log("[IPv6] No IPv6 available")
+                return None
 
             self.log(f"[IPv6] Rotating: {current} → {new_ipv6}")
 
@@ -243,7 +269,7 @@ class IPv6Rotator:
         Returns:
             True nếu cần rotate (403 >= max)
         """
-        return self.consecutive_403 >= self.max_403
+        return self.enabled and self.consecutive_403 >= self.max_403
 
 
 # Singleton instance
@@ -262,13 +288,13 @@ def get_ipv6_rotator(settings: Dict[str, Any] = None) -> Optional[IPv6Rotator]:
     """
     global _rotator_instance
 
-    if _rotator_instance is None and settings:
+    if _rotator_instance is None:
         _rotator_instance = IPv6Rotator(settings)
 
     return _rotator_instance
 
 
-def init_ipv6_rotator(settings: Dict[str, Any]) -> IPv6Rotator:
+def init_ipv6_rotator(settings: Dict[str, Any] = None) -> IPv6Rotator:
     """
     Khởi tạo IPv6Rotator singleton.
 
