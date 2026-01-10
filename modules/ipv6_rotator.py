@@ -23,8 +23,66 @@ import subprocess
 import random
 import re
 import time
+import sys
+import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+
+
+def _is_admin() -> bool:
+    """Check if running with admin privileges (Windows)."""
+    try:
+        import ctypes
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except:
+        return False
+
+
+def _run_netsh_admin(commands: List[str], log_func=print) -> bool:
+    """
+    Run netsh commands with admin privileges using PowerShell.
+
+    Args:
+        commands: List of netsh commands to run
+        log_func: Function to log messages
+
+    Returns:
+        True if successful
+    """
+    try:
+        # Create a batch script with all commands
+        script_path = Path(__file__).parent.parent / "config" / "ipv6_change.bat"
+
+        with open(script_path, 'w', encoding='utf-8') as f:
+            f.write("@echo off\n")
+            for cmd in commands:
+                f.write(f"{cmd}\n")
+            f.write("exit /b 0\n")
+
+        # Run batch file with admin privileges using PowerShell
+        ps_cmd = f'Start-Process -FilePath "{script_path}" -Verb RunAs -Wait -WindowStyle Hidden'
+
+        result = subprocess.run(
+            ['powershell', '-Command', ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # Clean up
+        try:
+            script_path.unlink()
+        except:
+            pass
+
+        return True
+
+    except subprocess.TimeoutExpired:
+        log_func("[IPv6] Admin command timeout")
+        return False
+    except Exception as e:
+        log_func(f"[IPv6] Admin command error: {e}")
+        return False
 
 
 class IPv6Rotator:
@@ -174,6 +232,8 @@ class IPv6Rotator:
         2. Thêm IPv6 mới
         3. Đợi network adapter cập nhật
 
+        Tự động yêu cầu quyền Admin nếu cần.
+
         Args:
             new_ipv6: IPv6 address mới
 
@@ -183,27 +243,33 @@ class IPv6Rotator:
         try:
             self.log(f"[IPv6] 🔄 Changing to: {new_ipv6}")
 
+            # Collect all netsh commands
+            commands = []
+
             # Bước 1: Xóa tất cả IPv6 cũ trong danh sách khỏi interface
             for old_ip in self.ipv6_list:
                 if old_ip.lower() != new_ipv6.lower():
-                    delete_cmd = f'netsh interface ipv6 delete address "{self.interface_name}" {old_ip}'
-                    subprocess.run(delete_cmd, shell=True, capture_output=True, timeout=5)
-
-            time.sleep(1)
+                    commands.append(f'netsh interface ipv6 delete address "{self.interface_name}" {old_ip}')
 
             # Bước 2: Thêm IPv6 mới
-            add_cmd = f'netsh interface ipv6 add address "{self.interface_name}" {new_ipv6}'
-            result = subprocess.run(add_cmd, shell=True, capture_output=True, text=True, timeout=10)
-
-            if result.returncode != 0 and result.stderr:
-                # Có thể IP đã tồn tại
-                if "already exists" not in result.stderr.lower() and "đã tồn tại" not in result.stderr.lower():
-                    self.log(f"[IPv6] Warning: {result.stderr.strip()}")
+            commands.append(f'netsh interface ipv6 add address "{self.interface_name}" {new_ipv6}')
 
             # Bước 3: Set gateway nếu có
             if self.gateway:
-                gw_cmd = f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {self.gateway}'
-                subprocess.run(gw_cmd, shell=True, capture_output=True, timeout=10)
+                commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {self.gateway}')
+
+            # Check admin và chạy commands
+            if _is_admin():
+                # Đã có quyền admin - chạy trực tiếp
+                self.log("[IPv6] Running with admin privileges...")
+                for cmd in commands:
+                    subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+            else:
+                # Cần yêu cầu quyền admin
+                self.log("[IPv6] Requesting admin privileges...")
+                if not _run_netsh_admin(commands, self.log):
+                    self.log("[IPv6] ✗ Failed to get admin privileges")
+                    return False
 
             # Đợi adapter cập nhật
             time.sleep(2)
