@@ -877,6 +877,10 @@ class DrissionFlowAPI:
         # Model fallback: khi quota exceeded (429), chuyển từ GEM_PIX_2 (Pro) sang GEM_PIX
         self._use_fallback_model = False  # True = dùng nano banana (GEM_PIX) thay vì pro (GEM_PIX_2)
 
+        # IPv6 rotation: đếm 403 liên tiếp, sau 3 lần thì đổi IPv6
+        self._consecutive_403 = 0
+        self._max_403_before_ipv6 = 3  # Số lần 403 liên tiếp trước khi đổi IPv6
+
     def log(self, msg: str, level: str = "INFO"):
         """Log message - chỉ dùng 1 trong 2: callback hoặc print."""
         if self.log_callback:
@@ -2285,7 +2289,9 @@ class DrissionFlowAPI:
 
                 # Nếu lỗi 403, RESET CHROME NGAY (không retry)
                 if "403" in error:
-                    self.log(f"⚠️ 403 error - RESET CHROME ngay!", "WARN")
+                    # Tăng counter 403 liên tiếp
+                    self._consecutive_403 += 1
+                    self.log(f"⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                     # Kill Chrome
                     self._kill_chrome()
@@ -2297,10 +2303,16 @@ class DrissionFlowAPI:
                         success, msg = self._webshare_proxy.rotate_ip(self.worker_id, "403 reCAPTCHA")
                         self.log(f"  → Webshare rotate: {msg}", "WARN")
 
-                    # Restart Chrome
-                    self.log("  → Restart Chrome...")
+                    # === IPv6 ROTATION: Sau 3 lần 403 liên tiếp, đổi IPv6 ===
+                    rotate_ipv6 = False
+                    if self._consecutive_403 >= self._max_403_before_ipv6:
+                        self.log(f"  → 🔄 Đã 403 {self._consecutive_403} lần liên tiếp - Đổi IPv6...")
+                        rotate_ipv6 = True
+                        self._consecutive_403 = 0  # Reset counter
+
+                    # Restart Chrome (có thể kèm IPv6 rotation)
                     project_url = getattr(self, '_current_project_url', None)
-                    if self.setup(project_url=project_url):
+                    if self.restart_chrome(rotate_ipv6=rotate_ipv6):
                         self.log("  → Chrome restarted, tiếp tục...")
                         continue  # Thử lại 1 lần sau khi reset
                     else:
@@ -2419,6 +2431,11 @@ class DrissionFlowAPI:
                 self.log("🔄 Refreshed + ready")
         except Exception as e:
             self.log(f"⚠️ Refresh warning: {e}", "WARN")
+
+        # Reset 403 counter khi thành công
+        if self._consecutive_403 > 0:
+            self.log(f"[IPv6] Reset 403 counter (was {self._consecutive_403})")
+            self._consecutive_403 = 0
 
         return True, images, None
 
@@ -2641,7 +2658,9 @@ class DrissionFlowAPI:
 
                     # === 403 error - RESET CHROME NGAY ===
                     if "403" in error:
-                        self.log(f"[I2V] ⚠️ 403 error - RESET CHROME ngay!", "WARN")
+                        # Tăng counter 403 liên tiếp
+                        self._consecutive_403 += 1
+                        self.log(f"[I2V] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                         # Kill Chrome
                         self._kill_chrome()
@@ -2653,9 +2672,15 @@ class DrissionFlowAPI:
                             success, msg = self._webshare_proxy.rotate_ip(self.worker_id, "I2V 403")
                             self.log(f"[I2V] → Webshare rotate: {msg}", "WARN")
 
-                        # Restart Chrome
-                        self.log("[I2V] → Restart Chrome...")
-                        if self.setup(project_url=retry_project_url):
+                        # === IPv6 ROTATION: Sau 3 lần 403 liên tiếp, đổi IPv6 ===
+                        rotate_ipv6 = False
+                        if self._consecutive_403 >= self._max_403_before_ipv6:
+                            self.log(f"[I2V] → 🔄 Đã 403 {self._consecutive_403} lần liên tiếp - Đổi IPv6...")
+                            rotate_ipv6 = True
+                            self._consecutive_403 = 0  # Reset counter
+
+                        # Restart Chrome (có thể kèm IPv6 rotation)
+                        if self.restart_chrome(rotate_ipv6=rotate_ipv6):
                             self.log("[I2V] → Chrome restarted, tiếp tục...")
                             continue  # Thử lại 1 lần sau khi reset
                         else:
@@ -2682,6 +2707,10 @@ class DrissionFlowAPI:
                         video_url = videos[0].get("video", {}).get("fifeUrl") or videos[0].get("fifeUrl")
                         if video_url:
                             self.log(f"[I2V] ✓ Video ready (no poll): {video_url[:60]}...")
+                            # Reset 403 counter khi thành công
+                            if self._consecutive_403 > 0:
+                                self.log(f"[IPv6] Reset 403 counter (was {self._consecutive_403})")
+                                self._consecutive_403 = 0
                             return True, video_url, None
 
                 operations = result.get("operations", [])
@@ -2702,6 +2731,10 @@ class DrissionFlowAPI:
 
                 if video_url:
                     self.log(f"[I2V] Video ready: {video_url[:60]}...")
+                    # Reset 403 counter khi thành công
+                    if self._consecutive_403 > 0:
+                        self.log(f"[IPv6] Reset 403 counter (was {self._consecutive_403})")
+                        self._consecutive_403 = 0
                     return True, video_url, None
                 else:
                     last_error = "Timeout waiting for video"
@@ -2930,6 +2963,11 @@ class DrissionFlowAPI:
             except Exception as e:
                 self.log(f"[I2V-Chrome] Download error: {e}", "ERROR")
                 return False, video_url, str(e)
+
+        # Reset 403 counter khi thành công
+        if self._consecutive_403 > 0:
+            self.log(f"[IPv6] Reset 403 counter (was {self._consecutive_403})")
+            self._consecutive_403 = 0
 
         return True, video_url, None
 
@@ -3825,15 +3863,33 @@ class DrissionFlowAPI:
             self.log(f"[!] Proxy auth error: {e}", "WARN")
             self.log("    → Whitelist IP: 14.224.157.134 trên Webshare")
 
-    def restart_chrome(self) -> bool:
+    def restart_chrome(self, rotate_ipv6: bool = False) -> bool:
         """
         Restart Chrome với proxy mới sau khi rotate.
         Proxy đã được rotate trước khi gọi hàm này.
         setup() sẽ lấy proxy mới từ manager.get_proxy_for_worker(worker_id).
 
+        Args:
+            rotate_ipv6: Nếu True, đổi IPv6 trước khi restart Chrome
+
         Returns:
             True nếu restart thành công
         """
+        # === IPv6 ROTATION (khi bị 403 nhiều lần) ===
+        if rotate_ipv6:
+            try:
+                from modules.ipv6_rotator import get_ipv6_rotator
+                rotator = get_ipv6_rotator()
+                if rotator and rotator.enabled:
+                    self.log("🔄 Rotating IPv6 before restart...")
+                    new_ip = rotator.rotate()
+                    if new_ip:
+                        self.log(f"✓ IPv6 changed to: {new_ip}")
+                    else:
+                        self.log("⚠️ IPv6 rotation failed, continuing anyway...")
+            except Exception as e:
+                self.log(f"⚠️ IPv6 rotation error: {e}")
+
         if self._use_webshare:
             # Lấy proxy mới để log
             from webshare_proxy import get_proxy_manager
@@ -3844,7 +3900,7 @@ class DrissionFlowAPI:
             else:
                 self.log(f"🔄 Restart Chrome [Worker {self.worker_id}]...")
         else:
-            self.log("🔄 Restart Chrome với proxy mới...")
+            self.log("🔄 Restart Chrome...")
 
         # Close Chrome và proxy bridge hiện tại
         self.close()
