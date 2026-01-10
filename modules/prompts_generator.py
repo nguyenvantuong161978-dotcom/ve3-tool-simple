@@ -1085,9 +1085,18 @@ class PromptGenerator:
                 self.logger.info("[V2 FLOW] ✓ Hoàn thành!")
                 return True
             else:
-                self.logger.warning("[V2 FLOW] ✗ Thất bại, fallback về flow cũ...")
-                # Continue với flow cũ nếu V2 thất bại
+                self.logger.error("[V2 FLOW] ✗ Thất bại!")
+                # KHÔNG fallback về flow cũ - flow cũ tạo scenes lỗi
+                # Nếu V2 fail, return False để retry hoặc dùng fallback_only
+                return False
 
+        # === OLD FLOW DISABLED ===
+        # Flow cũ đã bị disable vì tạo ra scenes lỗi với global_style
+        # Nếu cần fallback, dùng fallback_only mode thay vì flow cũ
+        self.logger.warning("[OLD FLOW] Đã bị disable - dùng V2 flow hoặc fallback_only")
+        return False
+
+        # Code bên dưới đã bị disable - giữ lại để tham khảo
         # === STEP 1.5: TẠO BACKUP SCENES BẰNG AI ===
         # Mục đích: Backup có chất lượng như prompts thật (AI-generated, không phải keyword matching)
         self.logger.info("=" * 50)
