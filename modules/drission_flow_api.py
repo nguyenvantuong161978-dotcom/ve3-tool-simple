@@ -1672,6 +1672,87 @@ class DrissionFlowAPI:
                 pass
         return None
 
+    def _wait_for_textarea_visible(self, timeout: int = 10, max_refresh: int = 2) -> bool:
+        """
+        Đợi textarea xuất hiện VÀ visible trước khi click.
+        Nếu đợi quá lâu → F5 refresh page và thử lại.
+
+        Args:
+            timeout: Timeout mỗi lần đợi (giây)
+            max_refresh: Số lần F5 refresh tối đa
+
+        Returns:
+            True nếu textarea visible, False nếu timeout
+        """
+        for refresh_count in range(max_refresh + 1):
+            self.log(f"[TEXTAREA] Đợi textarea visible... (lần {refresh_count + 1})")
+
+            for i in range(timeout):
+                try:
+                    # Kiểm tra textarea tồn tại VÀ visible
+                    result = self.driver.run_js("""
+                        (function() {
+                            var textarea = document.querySelector('textarea');
+                            if (!textarea) return 'not_found';
+
+                            // Kiểm tra visible
+                            var rect = textarea.getBoundingClientRect();
+                            var style = window.getComputedStyle(textarea);
+
+                            // Element phải có kích thước > 0 và không bị hidden
+                            if (rect.width <= 0 || rect.height <= 0) return 'no_size';
+                            if (style.display === 'none') return 'display_none';
+                            if (style.visibility === 'hidden') return 'visibility_hidden';
+                            if (style.opacity === '0') return 'opacity_0';
+
+                            // Kiểm tra có trong viewport không
+                            var inViewport = (
+                                rect.top >= 0 &&
+                                rect.left >= 0 &&
+                                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+                                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+                            );
+
+                            if (!inViewport) {
+                                // Scroll vào view
+                                textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+                                return 'scrolled';
+                            }
+
+                            return 'visible';
+                        })();
+                    """)
+
+                    if result == 'visible':
+                        self.log(f"[TEXTAREA] ✓ Textarea visible sau {i+1}s")
+                        return True
+                    elif result == 'scrolled':
+                        self.log("[TEXTAREA] Scrolled vào view, đợi thêm...")
+                        time.sleep(0.5)
+                        continue
+                    elif result == 'not_found':
+                        # Chưa có textarea, đợi tiếp
+                        pass
+                    else:
+                        self.log(f"[TEXTAREA] Chưa visible: {result}")
+
+                except Exception as e:
+                    self.log(f"[TEXTAREA] Check error: {e}")
+
+                time.sleep(1)
+
+            # Timeout - thử F5 refresh nếu còn lượt
+            if refresh_count < max_refresh:
+                self.log(f"[TEXTAREA] ⚠️ Timeout {timeout}s, F5 refresh page...")
+                try:
+                    self.driver.refresh()
+                    time.sleep(3)  # Đợi page load
+                except Exception as e:
+                    self.log(f"[TEXTAREA] Refresh error: {e}")
+
+        self.log("[TEXTAREA] ✗ Không thể tìm thấy textarea sau khi refresh", "ERROR")
+        return False
+
     def _wait_for_page_ready(self, timeout: int = 30) -> bool:
         """
         Đợi page load xong sau khi bị refresh.
@@ -1870,22 +1951,35 @@ class DrissionFlowAPI:
             except:
                 pass
 
-    def _click_textarea(self):
+    def _click_textarea(self, wait_visible: bool = True):
         """
         Click vào textarea để focus - QUAN TRỌNG để nhập prompt.
-        Dùng JavaScript với MouseEvent để đảm bảo click chính xác.
+        Đợi textarea visible trước khi click, nếu không thấy sẽ F5 refresh.
+
+        Args:
+            wait_visible: True = đợi textarea visible trước khi click
         """
         try:
+            # QUAN TRỌNG: Đợi textarea visible trước khi click
+            if wait_visible:
+                if not self._wait_for_textarea_visible(timeout=10, max_refresh=2):
+                    self.log("✗ Textarea không visible sau khi refresh", "ERROR")
+                    return False
+
             result = self.driver.run_js("""
                 (function() {
                     var textarea = document.querySelector('textarea');
                     if (!textarea) return 'not_found';
 
+                    // Kiểm tra visible lần cuối trước khi click
+                    var rect = textarea.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0) return 'not_visible';
+
                     // Scroll vào view
                     textarea.scrollIntoView({block: 'center', behavior: 'instant'});
 
                     // Lấy vị trí giữa textarea
-                    var rect = textarea.getBoundingClientRect();
+                    rect = textarea.getBoundingClientRect();
                     var centerX = rect.left + rect.width / 2;
                     var centerY = rect.top + rect.height / 2;
 
@@ -1923,6 +2017,8 @@ class DrissionFlowAPI:
                 return True
             elif result == 'not_found':
                 self.log("✗ Textarea not found", "ERROR")
+            elif result == 'not_visible':
+                self.log("✗ Textarea not visible", "ERROR")
             return False
         except Exception as e:
             self.log(f"⚠️ Click textarea error: {e}", "WARN")
