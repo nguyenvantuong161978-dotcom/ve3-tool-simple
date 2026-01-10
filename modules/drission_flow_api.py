@@ -1834,24 +1834,38 @@ class DrissionFlowAPI:
             pyperclip.copy(prompt)
             self.log(f"→ Copied to clipboard ({len(prompt)} chars)")
 
-            # 2. Tìm lại textarea sau khi đã visible (có thể bị stale)
-            textarea = self._find_textarea()
-            if not textarea:
-                self.log("⚠️ Textarea không tìm thấy, fallback to JS", "WARN")
-                raise Exception("Textarea not found")
+            # 2. Dùng JavaScript để focus và clear textarea (an toàn hơn Ctrl+A)
+            result = self.driver.run_js("""
+                (function() {
+                    var textarea = document.querySelector('textarea');
+                    if (!textarea) return 'not_found';
 
-            # 3. Click vào textarea
-            textarea.click()
+                    // Scroll vào view
+                    textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                    // Focus vào textarea
+                    textarea.focus();
+
+                    // Clear nội dung
+                    textarea.value = '';
+                    textarea.dispatchEvent(new Event('input', {bubbles: true}));
+
+                    return 'ready';
+                })();
+            """)
+
+            if result != 'ready':
+                self.log(f"⚠️ JS focus failed: {result}, fallback", "WARN")
+                raise Exception("JS focus failed")
+
             time.sleep(0.3)
 
-            # 4. Clear textarea (Ctrl+A rồi Delete)
-            from DrissionPage.common import Keys
-            textarea.input(Keys.CTRL_A)
-            time.sleep(0.1)
-            textarea.input(Keys.DELETE)
-            time.sleep(0.1)
+            # 3. Tìm lại textarea và paste bằng Ctrl+V
+            textarea = self._find_textarea()
+            if not textarea:
+                raise Exception("Textarea not found after focus")
 
-            # 5. Paste bằng Ctrl+V
+            from DrissionPage.common import Keys
             textarea.input(Keys.CTRL_V)
             time.sleep(0.3)
 
@@ -1861,26 +1875,36 @@ class DrissionFlowAPI:
         except ImportError as e:
             # pyperclip not installed, fallback to JS
             self.log(f"⚠️ Import error: {e}, fallback to JS input", "WARN")
-            textarea = self._find_textarea()
-            if textarea:
-                textarea.clear()
-                time.sleep(0.2)
-                textarea.input(prompt)
-            return True
+            return self._paste_prompt_js(prompt)
 
         except Exception as e:
             self.log(f"⚠️ Ctrl+V failed: {e}, fallback to JS", "WARN")
-            # Đợi và tìm lại textarea
+            return self._paste_prompt_js(prompt)
+
+    def _paste_prompt_js(self, prompt: str) -> bool:
+        """Fallback: Paste prompt bằng JavaScript."""
+        try:
             time.sleep(1)
-            textarea = self._find_textarea()
-            if textarea:
-                try:
-                    textarea.clear()
-                    time.sleep(0.2)
-                    textarea.input(prompt)
-                except:
-                    pass
-            return True
+            result = self.driver.run_js(f"""
+                (function() {{
+                    var textarea = document.querySelector('textarea');
+                    if (!textarea) return 'not_found';
+
+                    textarea.scrollIntoView({{block: 'center'}});
+                    textarea.focus();
+                    textarea.value = {repr(prompt)};
+                    textarea.dispatchEvent(new Event('input', {{bubbles: true}}));
+
+                    return 'ok';
+                }})();
+            """)
+            if result == 'ok':
+                self.log("→ Pasted with JS ✓")
+                return True
+            return False
+        except Exception as e:
+            self.log(f"⚠️ JS paste failed: {e}", "WARN")
+            return False
 
     def _setup_window_layout(self):
         """
