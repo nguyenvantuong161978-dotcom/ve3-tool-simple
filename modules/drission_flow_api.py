@@ -4076,11 +4076,17 @@ class DrissionFlowAPI:
                             if parts:
                                 pid = parts[-1]
                                 if pid.isdigit():
+                                    # QUAN TRỌNG: Dùng graceful shutdown (không /F)
+                                    # Để Chrome có thời gian lưu cookies/session
+                                    subprocess.run(['taskkill', '/PID', pid],
+                                                 capture_output=True, timeout=5)
+                                    time.sleep(2)  # Đợi Chrome lưu dữ liệu
+                                    # Nếu vẫn chưa tắt, mới force kill
                                     subprocess.run(['taskkill', '/F', '/PID', pid],
                                                  capture_output=True, timeout=5)
                                     self.log(f"  Đã tắt Chrome cũ (PID: {pid})")
             else:
-                # Linux/Mac: dùng pkill
+                # Linux/Mac: dùng SIGTERM trước (graceful), sau đó mới SIGKILL
                 result = subprocess.run(
                     ['pgrep', '-f', profile_path],
                     capture_output=True, text=True, timeout=10
@@ -4089,6 +4095,10 @@ class DrissionFlowAPI:
                     pids = result.stdout.strip().split('\n')
                     for pid in pids:
                         if pid.isdigit():
+                            # Graceful shutdown trước
+                            subprocess.run(['kill', '-15', pid], capture_output=True, timeout=5)
+                            time.sleep(2)  # Đợi Chrome lưu dữ liệu
+                            # Force kill nếu cần
                             subprocess.run(['kill', '-9', pid], capture_output=True, timeout=5)
                             self.log(f"  Đã tắt Chrome cũ (PID: {pid})")
 
