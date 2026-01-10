@@ -1765,12 +1765,26 @@ class DrissionFlowAPI:
                             self.log(f"[PAGE] ⚠️ Lỗi: {e}", "WARN")
                             break
 
-        # 5. Đợi textarea sẵn sàng - với xử lý ContextLostError
+        # 5. Đợi textarea sẵn sàng - với xử lý ContextLostError và LOGOUT
         self.log("Đợi project load...")
         textarea_ready = False
         for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
             try:
                 for i in range(30):
+                    # === KIỂM TRA LOGOUT MỖI 5 GIÂY ===
+                    if i % 5 == 0 and i > 0:
+                        if self._is_logged_out():
+                            self.log("[PROJECT] ⚠️ Phát hiện bị LOGOUT khi đợi project!")
+                            if self._auto_login_google():
+                                self.log("[PROJECT] ✓ Đã login lại, quay lại project...")
+                                # Navigate lại project
+                                self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
+                                time.sleep(3)
+                                continue
+                            else:
+                                self.log("[PROJECT] ✗ Login lại thất bại", "ERROR")
+                                return False
+
                     if self._find_textarea():
                         self.log("✓ Project đã sẵn sàng!")
                         textarea_ready = True
@@ -1779,6 +1793,14 @@ class DrissionFlowAPI:
                 if textarea_ready:
                     break
                 else:
+                    # Timeout: check logout lần cuối
+                    if self._is_logged_out():
+                        self.log("[PROJECT] ⚠️ Timeout do bị LOGOUT!")
+                        if self._auto_login_google():
+                            self.log("[PROJECT] ✓ Đã login lại, thử lại...")
+                            self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
+                            time.sleep(3)
+                            continue
                     self.log("✗ Timeout - không tìm thấy textarea", "ERROR")
                     return False
             except Exception as e:
@@ -1864,6 +1886,7 @@ class DrissionFlowAPI:
         """
         Đợi page load xong sau khi bị refresh.
         Kiểm tra document.readyState và có thể truy cập DOM.
+        Nếu phát hiện logout → tự động login lại.
 
         Args:
             timeout: Timeout tối đa (giây)
@@ -1874,6 +1897,17 @@ class DrissionFlowAPI:
         self.log("[PAGE] Đợi page load sau refresh...")
         for i in range(timeout):
             try:
+                # === KIỂM TRA LOGOUT TRƯỚC ===
+                if self._is_logged_out():
+                    self.log("[PAGE] ⚠️ Phát hiện bị LOGOUT!")
+                    if self._auto_login_google():
+                        self.log("[PAGE] ✓ Đã login lại thành công!")
+                        # Sau khi login, cần navigate lại trang project
+                        return False  # Return False để trigger retry từ setup()
+                    else:
+                        self.log("[PAGE] ✗ Login lại thất bại", "ERROR")
+                        return False
+
                 # Kiểm tra page ready state
                 ready_state = self.driver.run_js("return document.readyState")
                 if ready_state == "complete":
@@ -1886,6 +1920,16 @@ class DrissionFlowAPI:
             except Exception as e:
                 # Page vẫn đang load, đợi tiếp
                 time.sleep(1)
+
+        # === TIMEOUT: Kiểm tra logout lần cuối ===
+        if self._is_logged_out():
+            self.log("[PAGE] ⚠️ Timeout do bị LOGOUT!")
+            if self._auto_login_google():
+                self.log("[PAGE] ✓ Đã login lại!")
+                return False  # Return False để trigger retry
+            else:
+                self.log("[PAGE] ✗ Login lại thất bại", "ERROR")
+
         self.log("[PAGE] ⚠️ Timeout đợi page load", "WARN")
         return False
 
