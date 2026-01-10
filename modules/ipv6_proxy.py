@@ -191,33 +191,24 @@ class IPv6SocksProxy:
             return None
 
     def _connect_via_ipv6(self, host: str, port: int) -> Optional[socket.socket]:
-        """Connect to target - prefer IPv6 if available."""
+        """Connect to target - CHỈ dùng IPv6, KHÔNG fallback IPv4."""
         try:
-            # Prefer IPv6 - Windows prefix policy should make this the default
-            # Try IPv6 first
-            try:
-                addrinfo = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM)
-                if addrinfo:
-                    family, socktype, proto, canonname, sockaddr = addrinfo[0]
-                    sock = socket.socket(family, socktype, proto)
-                    sock.settimeout(30)
-                    sock.connect(sockaddr)
-                    return sock
-            except:
-                pass
+            # CHỈ dùng IPv6 - ÉP BUỘC
+            addrinfo = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM)
 
-            # Fallback to IPv4
-            addrinfo = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
             if not addrinfo:
+                self.log(f"[IPv6-Proxy] No IPv6 address for {host}")
                 return None
 
             family, socktype, proto, canonname, sockaddr = addrinfo[0]
             sock = socket.socket(family, socktype, proto)
             sock.settimeout(30)
             sock.connect(sockaddr)
+            self.log(f"[IPv6-Proxy] ✓ Connected via IPv6: {host}")
             return sock
 
         except Exception as e:
+            self.log(f"[IPv6-Proxy] IPv6 connect failed: {e}")
             return None
 
     def _relay(self, client: socket.socket, remote: socket.socket):
