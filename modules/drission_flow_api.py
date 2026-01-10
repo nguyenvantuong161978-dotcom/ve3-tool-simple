@@ -25,8 +25,10 @@ from datetime import datetime
 
 # Optional DrissionPage import
 DRISSION_AVAILABLE = False
+ContextLostError = None
 try:
     from DrissionPage import ChromiumPage, ChromiumOptions
+    from DrissionPage.errors import ContextLostError
     DRISSION_AVAILABLE = True
 except ImportError:
     ChromiumPage = None
@@ -1578,25 +1580,60 @@ class DrissionFlowAPI:
                         self.log(f"  → New project URL saved")
             else:
                 self.log("✓ Đã ở trong project!")
-                # Chọn "Tạo hình ảnh" từ dropdown
+                # Chọn "Tạo hình ảnh" từ dropdown - với retry khi page refresh
                 time.sleep(1)
-                for j in range(10):
-                    result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
-                    if result == 'CLICKED':
-                        self.log("✓ Chọn 'Tạo hình ảnh'")
-                        time.sleep(1)
-                        break
-                    time.sleep(0.5)
+                select_success = False
+                for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
+                    try:
+                        for j in range(10):
+                            result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
+                            if result == 'CLICKED':
+                                self.log("✓ Chọn 'Tạo hình ảnh'")
+                                time.sleep(1)
+                                select_success = True
+                                break
+                            time.sleep(0.5)
+                        if select_success:
+                            break
+                    except Exception as e:
+                        if ContextLostError and isinstance(e, ContextLostError):
+                            self.log(f"[PAGE] ⚠️ Page bị refresh, đợi load lại... (retry {retry_count + 1}/3)")
+                            if self._wait_for_page_ready(timeout=30):
+                                continue  # Retry sau khi page load xong
+                            else:
+                                self.log("[PAGE] ✗ Timeout đợi page, thử lại...", "WARN")
+                                continue
+                        else:
+                            self.log(f"[PAGE] ⚠️ Lỗi: {e}", "WARN")
+                            break
 
-        # 5. Đợi textarea sẵn sàng
+        # 5. Đợi textarea sẵn sàng - với xử lý ContextLostError
         self.log("Đợi project load...")
-        for i in range(30):
-            if self._find_textarea():
-                self.log("✓ Project đã sẵn sàng!")
-                break
-            time.sleep(1)
-        else:
-            self.log("✗ Timeout - không tìm thấy textarea", "ERROR")
+        textarea_ready = False
+        for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
+            try:
+                for i in range(30):
+                    if self._find_textarea():
+                        self.log("✓ Project đã sẵn sàng!")
+                        textarea_ready = True
+                        break
+                    time.sleep(1)
+                if textarea_ready:
+                    break
+                else:
+                    self.log("✗ Timeout - không tìm thấy textarea", "ERROR")
+                    return False
+            except Exception as e:
+                if ContextLostError and isinstance(e, ContextLostError):
+                    self.log(f"[PAGE] ⚠️ Page bị refresh khi đợi textarea (retry {retry_count + 1}/3)")
+                    if self._wait_for_page_ready(timeout=30):
+                        continue
+                else:
+                    self.log(f"[PAGE] Lỗi: {e}", "WARN")
+                    break
+
+        if not textarea_ready:
+            self.log("✗ Không thể tìm textarea sau khi retry", "ERROR")
             return False
 
         # 6. Warm up session (tạo 1 ảnh trong Chrome để activate)
@@ -1604,11 +1641,22 @@ class DrissionFlowAPI:
             if not self._warm_up_session():
                 self.log("⚠️ Warm up không thành công, tiếp tục...", "WARN")
 
-        # 7. Inject interceptor (SAU khi warm up)
+        # 7. Inject interceptor (SAU khi warm up) - với xử lý ContextLostError
         self.log("Inject interceptor...")
         self._reset_tokens()
-        result = self.driver.run_js(JS_INTERCEPTOR)
-        self.log(f"✓ Interceptor: {result}")
+        for retry_count in range(3):
+            try:
+                result = self.driver.run_js(JS_INTERCEPTOR)
+                self.log(f"✓ Interceptor: {result}")
+                break
+            except Exception as e:
+                if ContextLostError and isinstance(e, ContextLostError):
+                    self.log(f"[PAGE] ⚠️ Page bị refresh khi inject interceptor (retry {retry_count + 1}/3)")
+                    if self._wait_for_page_ready(timeout=30):
+                        continue
+                else:
+                    self.log(f"[PAGE] Lỗi inject: {e}", "WARN")
+                    break
 
         self._ready = True
         return True
@@ -1623,6 +1671,62 @@ class DrissionFlowAPI:
             except:
                 pass
         return None
+
+    def _wait_for_page_ready(self, timeout: int = 30) -> bool:
+        """
+        Đợi page load xong sau khi bị refresh.
+        Kiểm tra document.readyState và có thể truy cập DOM.
+
+        Args:
+            timeout: Timeout tối đa (giây)
+
+        Returns:
+            True nếu page đã sẵn sàng
+        """
+        self.log("[PAGE] Đợi page load sau refresh...")
+        for i in range(timeout):
+            try:
+                # Kiểm tra page ready state
+                ready_state = self.driver.run_js("return document.readyState")
+                if ready_state == "complete":
+                    # Thử tìm element cơ bản để đảm bảo DOM sẵn sàng
+                    if self._find_textarea():
+                        self.log("[PAGE] ✓ Page đã sẵn sàng!")
+                        return True
+                    # Nếu không có textarea, đợi thêm
+                    time.sleep(1)
+            except Exception as e:
+                # Page vẫn đang load, đợi tiếp
+                time.sleep(1)
+        self.log("[PAGE] ⚠️ Timeout đợi page load", "WARN")
+        return False
+
+    def _safe_run_js(self, script: str, max_retries: int = 3, default=None):
+        """
+        Wrapper an toàn cho run_js() với retry khi page bị refresh.
+
+        Args:
+            script: JavaScript code cần chạy
+            max_retries: Số lần retry tối đa khi gặp ContextLostError
+            default: Giá trị trả về mặc định nếu thất bại
+
+        Returns:
+            Kết quả từ JavaScript hoặc default nếu lỗi
+        """
+        for attempt in range(max_retries):
+            try:
+                return self.driver.run_js(script)
+            except Exception as e:
+                if ContextLostError and isinstance(e, ContextLostError):
+                    if attempt < max_retries - 1:
+                        self.log(f"[JS] Page refresh, đợi load... (retry {attempt + 1}/{max_retries})")
+                        if self._wait_for_page_ready(timeout=15):
+                            continue
+                    self.log(f"[JS] ContextLostError sau {max_retries} lần retry", "WARN")
+                else:
+                    self.log(f"[JS] Lỗi: {e}", "WARN")
+                return default
+        return default
 
     def _paste_prompt_ctrlv(self, textarea, prompt: str) -> bool:
         """
