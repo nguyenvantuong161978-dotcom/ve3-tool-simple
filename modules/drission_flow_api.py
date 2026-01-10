@@ -1724,88 +1724,32 @@ class DrissionFlowAPI:
 
     def _wait_for_textarea_visible(self, timeout: int = 10, max_refresh: int = 2) -> bool:
         """
-        Đợi textarea xuất hiện VÀ visible trước khi click.
-        Nếu đợi quá lâu → F5 refresh page và thử lại.
-
-        Args:
-            timeout: Timeout mỗi lần đợi (giây)
-            max_refresh: Số lần F5 refresh tối đa
-
-        Returns:
-            True nếu textarea visible, False nếu timeout
+        Đợi textarea xuất hiện trước khi click.
+        Cách đơn giản: dùng DrissionPage ele() với timeout.
         """
         for refresh_count in range(max_refresh + 1):
-            self.log(f"[TEXTAREA] Đợi textarea visible... (lần {refresh_count + 1})")
+            self.log(f"[TEXTAREA] Đợi textarea... (lần {refresh_count + 1})")
 
-            for i in range(timeout):
-                try:
-                    # === PHƯƠNG PHÁP 1: Dùng DrissionPage element ===
-                    textarea = self.driver.ele('tag:textarea', timeout=1)
-                    if textarea:
-                        # Kiểm tra có location/size không
-                        try:
-                            loc = textarea.rect.location
-                            size = textarea.rect.size
-                            if loc and size and size.get('width', 0) > 0 and size.get('height', 0) > 0:
-                                self.log(f"[TEXTAREA] ✓ Found via DrissionPage sau {i+1}s")
-                                # Scroll vào view
-                                try:
-                                    textarea.scroll.to_see()
-                                except:
-                                    pass
-                                return True
-                        except:
-                            pass
-
-                    # === PHƯƠNG PHÁP 2: Dùng JavaScript (fallback) ===
-                    result = self.driver.run_js("""
-                        (function() {
-                            var textarea = document.querySelector('textarea');
-                            if (!textarea) return 'not_found';
-
-                            // Kiểm tra visible
-                            var rect = textarea.getBoundingClientRect();
-                            var style = window.getComputedStyle(textarea);
-
-                            // Element phải có kích thước > 0 và không bị hidden
-                            if (rect.width <= 0 || rect.height <= 0) return 'no_size';
-                            if (style.display === 'none') return 'display_none';
-                            if (style.visibility === 'hidden') return 'visibility_hidden';
-                            if (style.opacity === '0') return 'opacity_0';
-
-                            // Scroll vào view và trả về visible
-                            textarea.scrollIntoView({block: 'center', behavior: 'instant'});
-                            return 'visible';
-                        })();
-                    """)
-
-                    if result == 'visible':
-                        self.log(f"[TEXTAREA] ✓ Textarea visible (JS) sau {i+1}s")
-                        return True
-                    elif result == 'not_found':
-                        # Chưa có textarea, đợi tiếp
-                        self.log(f"[TEXTAREA] Chưa tìm thấy textarea... ({i+1}s)")
-                    elif result is None:
-                        # JS không chạy được - có thể page đang load
-                        self.log(f"[TEXTAREA] Page đang load... ({i+1}s)")
-                    else:
-                        self.log(f"[TEXTAREA] Chưa visible: {result}")
-
-                except Exception as e:
-                    self.log(f"[TEXTAREA] Check error: {e}")
-
-                time.sleep(1)
+            try:
+                # Cách đơn giản: dùng DrissionPage tìm textarea
+                textarea = self.driver.ele('tag:textarea', timeout=timeout)
+                if textarea:
+                    self.log(f"[TEXTAREA] ✓ Tìm thấy textarea")
+                    time.sleep(0.5)  # Đợi thêm để chắc chắn ready
+                    return True
+            except Exception as e:
+                self.log(f"[TEXTAREA] Chưa thấy: {e}")
 
             # Timeout - thử F5 refresh nếu còn lượt
             if refresh_count < max_refresh:
-                self.log(f"[TEXTAREA] ⚠️ Timeout {timeout}s, F5 refresh page...")
+                self.log(f"[TEXTAREA] ⚠️ Không thấy textarea, F5 refresh...")
                 try:
                     self.driver.refresh()
-                    time.sleep(3)  # Đợi page load
+                    time.sleep(3)
                 except Exception as e:
                     self.log(f"[TEXTAREA] Refresh error: {e}")
 
-        self.log("[TEXTAREA] ✗ Không thể tìm thấy textarea sau khi refresh", "ERROR")
+        self.log("[TEXTAREA] ✗ Không tìm thấy textarea", "ERROR")
         return False
 
     def _wait_for_page_ready(self, timeout: int = 30) -> bool:
