@@ -5497,6 +5497,19 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         secs = seconds % 60
         return f"{hours:02d}:{minutes:02d}:{secs:06.3f}".replace(".", ",")
 
+    def _timestamp_to_seconds_v2(self, timestamp: str) -> float:
+        """Chuyển timestamp HH:MM:SS,mmm thành seconds"""
+        try:
+            ts = timestamp.replace(",", ".")
+            parts = ts.split(":")
+            if len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+            elif len(parts) == 2:
+                return int(parts[0]) * 60 + float(parts[1])
+            return float(ts)
+        except:
+            return 0
+
     def generate_prompts_v2(
         self,
         srt_entries: list,
@@ -5535,18 +5548,78 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             scenes = self._group_srt_entries_v2(srt_entries, characters, locations)
             self.logger.info(f"[V2 BƯỚC 2] ✓ Tạo được {len(scenes)} scenes")
 
-            # BƯỚC 3: Tạo shots cho mỗi scene
-            self.logger.info("\n[V2 BƯỚC 3] Tạo shots cho mỗi scene...")
+            # BƯỚC 3: Tạo shots cho mỗi scene - XỬ LÝ THEO BATCH ĐỂ TRÁNH LỖI TOKEN
+            self.logger.info("\n[V2 BƯỚC 3] Tạo shots cho mỗi scene (batch mode)...")
             all_shots = []
-            for scene in scenes:
-                shots = self._create_shots_for_scene_v2(scene, characters, locations, global_style)
-                all_shots.extend(shots)
-                self.logger.info(f"  Scene {scene['scene_id']}: {len(shots)} shots ({scene['srt_start']} - {scene['srt_end']})")
+            BATCH_SIZE = 5  # Xử lý 5 scenes mỗi batch để tránh lỗi token
+            total_batches = (len(scenes) + BATCH_SIZE - 1) // BATCH_SIZE
 
-            self.logger.info(f"[V2 BƯỚC 3] ✓ Tạo được {len(all_shots)} shots tổng cộng")
+            for batch_idx in range(total_batches):
+                batch_start = batch_idx * BATCH_SIZE
+                batch_end = min(batch_start + BATCH_SIZE, len(scenes))
+                batch_scenes = scenes[batch_start:batch_end]
 
-            # === SẮP XẾP SHOTS THEO TIMESTAMP ===
-            # Đảm bảo thứ tự đúng trước khi lưu
+                self.logger.info(f"\n  [Batch {batch_idx + 1}/{total_batches}] Scenes {batch_start + 1}-{batch_end}...")
+
+                for scene in batch_scenes:
+                    try:
+                        shots = self._create_shots_for_scene_v2(scene, characters, locations, global_style)
+
+                        # === VALIDATE MỖI SHOT ===
+                        validated_shots = []
+                        for shot in shots:
+                            # Validate timestamp
+                            if not shot.get("srt_start") or not shot.get("srt_end"):
+                                self.logger.warning(f"    ⚠️ Shot thiếu timestamp, dùng fallback")
+                                continue
+
+                            # Validate prompt
+                            if not shot.get("img_prompt") or len(shot.get("img_prompt", "")) < 20:
+                                self.logger.warning(f"    ⚠️ Shot thiếu prompt, dùng fallback")
+                                continue
+
+                            # Validate references - đảm bảo luôn có
+                            main_char = shot.get("main_character", "nvc")
+                            if not shot.get("reference_files"):
+                                shot["reference_files"] = [f"{main_char}.png"]
+                                if shot.get("location"):
+                                    shot["reference_files"].append(f"{shot['location']}.png")
+
+                            validated_shots.append(shot)
+
+                        # Nếu không có shot valid, dùng fallback cho scene
+                        if not validated_shots:
+                            self.logger.warning(f"    ⚠️ Scene {scene['scene_id']} không có shot valid, tạo fallback...")
+                            num_shots = max(1, int(scene.get("duration_seconds", 5) / 8) + 1)
+                            start_secs = self._timestamp_to_seconds_v2(scene.get("srt_start", "00:00:00,000"))
+                            validated_shots = self._create_fallback_shots_v2(
+                                scene, num_shots, scene.get("duration_seconds", 5) / num_shots,
+                                start_secs, global_style
+                            )
+
+                        all_shots.extend(validated_shots)
+                        self.logger.info(f"    Scene {scene['scene_id']}: {len(validated_shots)} shots ({scene['srt_start']} - {scene['srt_end']})")
+
+                    except Exception as scene_err:
+                        self.logger.error(f"    ❌ Scene {scene['scene_id']} lỗi: {scene_err}, tạo fallback...")
+                        # Tạo fallback cho scene lỗi
+                        num_shots = max(1, int(scene.get("duration_seconds", 5) / 8) + 1)
+                        start_secs = self._timestamp_to_seconds_v2(scene.get("srt_start", "00:00:00,000"))
+                        fallback_shots = self._create_fallback_shots_v2(
+                            scene, num_shots, scene.get("duration_seconds", 5) / num_shots,
+                            start_secs, global_style
+                        )
+                        all_shots.extend(fallback_shots)
+
+                # Nghỉ giữa các batch để tránh rate limit
+                if batch_idx < total_batches - 1:
+                    import time
+                    time.sleep(1)
+
+            self.logger.info(f"\n[V2 BƯỚC 3] ✓ Tạo được {len(all_shots)} shots tổng cộng")
+
+            # === SẮP XẾP VÀ VALIDATE TIMESTAMPS ===
+            # Đảm bảo thứ tự đúng và không có timestamp nhảy bất thường
             def get_start_seconds(shot):
                 try:
                     parts = shot["srt_start"].replace(",", ".").split(":")
@@ -5556,6 +5629,37 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
             all_shots.sort(key=get_start_seconds)
             self.logger.info("[V2] ✓ Đã sắp xếp shots theo timestamp")
+
+            # === VALIDATE: Kiểm tra timestamp không nhảy bất thường ===
+            # Nếu shot N có start_time > shot N-1 end_time + 10s → cảnh báo
+            validated_shots = []
+            prev_end_seconds = 0
+            MAX_GAP_SECONDS = 15  # Cho phép gap tối đa 15 giây
+
+            for shot in all_shots:
+                shot_start = get_start_seconds(shot)
+                shot_end_str = shot.get("srt_end", "")
+                try:
+                    end_parts = shot_end_str.replace(",", ".").split(":")
+                    shot_end = int(end_parts[0]) * 3600 + int(end_parts[1]) * 60 + float(end_parts[2])
+                except:
+                    shot_end = shot_start + 5
+
+                # Kiểm tra gap bất thường
+                gap = shot_start - prev_end_seconds
+                if prev_end_seconds > 0 and gap > MAX_GAP_SECONDS:
+                    self.logger.warning(f"  ⚠️ Gap bất thường {gap:.1f}s tại {shot['srt_start']}, điều chỉnh...")
+                    # Điều chỉnh timestamp để liên tục
+                    duration = shot_end - shot_start
+                    shot["srt_start"] = self._seconds_to_timestamp(prev_end_seconds)
+                    shot["srt_end"] = self._seconds_to_timestamp(prev_end_seconds + duration)
+                    shot_end = prev_end_seconds + duration
+
+                validated_shots.append(shot)
+                prev_end_seconds = shot_end
+
+            all_shots = validated_shots
+            self.logger.info(f"[V2] ✓ Validated {len(all_shots)} shots với timestamps liên tục")
 
             # BƯỚC 4: Lưu vào Excel
             self.logger.info("\n[V2 BƯỚC 4] Lưu vào Excel...")
@@ -5570,16 +5674,30 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
             # Đánh số scene_id mới theo thứ tự
             for idx, shot in enumerate(all_shots):
-                # Chuyển reference_files thành JSON string
+                # === VALIDATE VÀ ĐẢM BẢO REFERENCE ĐẦY ĐỦ ===
+                main_char = shot.get("main_character", "nvc") or "nvc"
+                location = shot.get("location", "")
+
+                # Đảm bảo reference_files luôn có ít nhất character
                 ref_files = shot.get("reference_files", [])
+                if not ref_files or not isinstance(ref_files, list):
+                    ref_files = []
+
+                # Đảm bảo character file trong reference
+                char_file = f"{main_char}.png"
+                if char_file not in ref_files:
+                    ref_files.insert(0, char_file)
+
+                # Đảm bảo location file trong reference nếu có location
+                if location:
+                    loc_file = f"{location}.png"
+                    if loc_file not in ref_files:
+                        ref_files.append(loc_file)
+
                 # Chuyển reference_files thành JSON string
-                if isinstance(ref_files, list):
-                    ref_files_str = json.dumps(ref_files)
-                else:
-                    ref_files_str = str(ref_files)
+                ref_files_str = json.dumps(ref_files)
 
                 # Chuyển characters_used thành JSON list
-                main_char = shot.get("main_character", "nvc")
                 if isinstance(main_char, list):
                     chars_used_str = json.dumps(main_char)
                 else:
