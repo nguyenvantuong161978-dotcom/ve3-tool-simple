@@ -191,30 +191,29 @@ class IPv6SocksProxy:
             return None
 
     def _connect_via_ipv6(self, host: str, port: int) -> Optional[socket.socket]:
-        """Connect to target using IPv6 source address."""
+        """Connect to target - prefer IPv6 if available."""
         try:
-            # Resolve host to IPv6 if possible
-            addrinfo = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM)
+            # Prefer IPv6 - Windows prefix policy should make this the default
+            # Try IPv6 first
+            try:
+                addrinfo = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM)
+                if addrinfo:
+                    family, socktype, proto, canonname, sockaddr = addrinfo[0]
+                    sock = socket.socket(family, socktype, proto)
+                    sock.settimeout(30)
+                    sock.connect(sockaddr)
+                    return sock
+            except:
+                pass
 
-            if not addrinfo:
-                # Fallback to IPv4 if no IPv6 available
-                addrinfo = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-
+            # Fallback to IPv4
+            addrinfo = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
             if not addrinfo:
                 return None
 
             family, socktype, proto, canonname, sockaddr = addrinfo[0]
-
             sock = socket.socket(family, socktype, proto)
             sock.settimeout(30)
-
-            # Bind to our IPv6 address if specified and connecting via IPv6
-            if self.ipv6_address and family == socket.AF_INET6:
-                try:
-                    sock.bind((self.ipv6_address, 0))
-                except Exception as e:
-                    self.log(f"[IPv6-Proxy] Bind warning: {e}")
-
             sock.connect(sockaddr)
             return sock
 

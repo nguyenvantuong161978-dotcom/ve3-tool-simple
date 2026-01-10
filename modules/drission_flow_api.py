@@ -1250,28 +1250,32 @@ class DrissionFlowAPI:
             else:
                 self.log("👁️ Headless mode: OFF (Chrome hiển thị)")
 
-            # === IPv6 PROXY - ƯU TIÊN CAO NHẤT ===
-            # Nếu bật IPv6 rotation, Chrome sẽ dùng local proxy để đi qua IPv6
-            _using_ipv6_proxy = False
+            # === IPv6 MODE - ƯU TIÊN CAO NHẤT ===
+            # Nếu bật IPv6 rotation, set IPv6 trên interface + prefix policy
+            # Chrome sẽ tự động dùng IPv6 (không cần proxy)
+            _using_ipv6 = False
             try:
                 from modules.ipv6_rotator import get_ipv6_rotator
                 rotator = get_ipv6_rotator()
-                if rotator and rotator.enabled and rotator.use_local_proxy:
+                if rotator and rotator.enabled:
                     # Lấy IPv6 hiện tại hoặc dùng cái đầu tiên trong danh sách
                     current_ipv6 = rotator.get_current_ipv6()
                     if not current_ipv6 and rotator.ipv6_list:
                         current_ipv6 = rotator.ipv6_list[0]
 
                     if current_ipv6:
-                        # Start local proxy với IPv6 hiện tại
-                        rotator._start_local_proxy(current_ipv6)
-                        proxy_url = rotator.get_proxy_url()
-                        if proxy_url:
-                            options.set_argument(f'--proxy-server={proxy_url}')
-                            self.log(f"🌐 IPv6 MODE: Chrome → {proxy_url} → {current_ipv6}")
-                            _using_ipv6_proxy = True
+                        # Set IPv6 trên interface + prefix policy
+                        self.log(f"🌐 IPv6 MODE: Setting up {current_ipv6}...")
+                        if rotator.set_ipv6(current_ipv6):
+                            self.log(f"🌐 IPv6 MODE: Chrome sẽ dùng IPv6: {current_ipv6}")
+                            self.log(f"   (Windows prefix policy đã set prefer IPv6)")
+                            _using_ipv6 = True
+                        else:
+                            self.log("⚠️ IPv6 setup failed", "WARN")
             except Exception as e:
-                self.log(f"⚠️ IPv6 proxy init error: {e}", "WARN")
+                self.log(f"⚠️ IPv6 init error: {e}", "WARN")
+
+            _using_ipv6_proxy = False  # Không dùng proxy nữa
 
             if not _using_ipv6_proxy and self._use_webshare and self._webshare_proxy:
                 from webshare_proxy import get_proxy_manager

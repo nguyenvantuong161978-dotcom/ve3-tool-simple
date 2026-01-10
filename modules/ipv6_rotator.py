@@ -103,7 +103,7 @@ class IPv6Rotator:
         self.max_403 = ipv6_cfg.get('max_403_before_rotate', 3)
         self.gateway = ipv6_cfg.get('gateway', '')
         self.disable_ipv4 = ipv6_cfg.get('disable_ipv4', False)  # False = giữ IPv4 cho RDP
-        self.use_local_proxy = ipv6_cfg.get('use_local_proxy', True)  # Dùng local proxy thay vì tắt IPv4
+        self.use_local_proxy = ipv6_cfg.get('use_local_proxy', False)  # False = Chrome chạy trực tiếp, không qua proxy
         self.local_proxy_port = ipv6_cfg.get('local_proxy_port', 1088)
 
         # Load IPv6 list from file
@@ -252,7 +252,7 @@ class IPv6Rotator:
             # Collect all netsh commands
             commands = []
 
-            # Bước 0: Tắt IPv4 để Chrome phải dùng IPv6
+            # Bước 0: Tắt IPv4 để Chrome phải dùng IPv6 (nếu bật)
             if self.disable_ipv4 and not self._ipv4_disabled:
                 self.log("[IPv6] 🔌 Disabling IPv4 to force IPv6...")
                 commands.append(f'netsh interface ipv4 set interface "{self.interface_name}" admin=disabled')
@@ -268,6 +268,13 @@ class IPv6Rotator:
             # Bước 3: Set gateway nếu có
             if self.gateway:
                 commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {self.gateway}')
+
+            # Bước 4: Set Windows prefer IPv6 over IPv4 (quan trọng!)
+            # Đây là cách ép Windows dùng IPv6 cho outgoing connections
+            commands.append('netsh interface ipv6 set prefixpolicy ::1/128 50 0')
+            commands.append('netsh interface ipv6 set prefixpolicy ::/0 40 1')
+            commands.append('netsh interface ipv6 set prefixpolicy 2002::/16 30 2')
+            commands.append('netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 10 4')
 
             # Check admin và chạy commands
             if _is_admin():
