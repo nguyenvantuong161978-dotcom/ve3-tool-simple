@@ -5293,6 +5293,24 @@ OUTPUT FORMAT (JSON only):
                 for i, api_shot in enumerate(api_shots):
                     shot_end = current_time + shot_duration
 
+                    # Build reference_files list
+                    ref_files = api_shot.get("reference_files", [f"{main_char}.png"])
+                    # Đảm bảo location cũng có trong reference_files nếu có
+                    if location and f"{location}.png" not in ref_files:
+                        ref_files.append(f"{location}.png")
+
+                    # Lấy img_prompt từ API
+                    img_prompt = api_shot.get("img_prompt", "")
+
+                    # QUAN TRỌNG: Thêm annotations (nvc.png) vào prompt nếu chưa có
+                    if img_prompt and ref_files:
+                        img_prompt = self._add_filename_annotations_to_prompt(
+                            img_prompt,
+                            ref_files,
+                            characters,
+                            locations
+                        )
+
                     shot = {
                         "scene_id": scene_id,
                         "shot_number": i + 1,
@@ -5300,9 +5318,12 @@ OUTPUT FORMAT (JSON only):
                         "srt_end": self._seconds_to_timestamp(shot_end),
                         "duration": shot_duration,
                         "shot_type": api_shot.get("shot_type", "MEDIUM"),
-                        "img_prompt": api_shot.get("img_prompt", ""),
-                        "reference_files": api_shot.get("reference_files", [f"{main_char}.png"]),
-                        "srt_text": srt_text[:200]
+                        "img_prompt": img_prompt,
+                        "reference_files": ref_files,
+                        "srt_text": srt_text[:200],
+                        # QUAN TRỌNG: Thêm main_character và location để lưu vào Excel
+                        "main_character": main_char,
+                        "location": location
                     }
                     shots.append(shot)
                     current_time = shot_end
@@ -5328,6 +5349,7 @@ OUTPUT FORMAT (JSON only):
         """Tạo shots fallback không cần API."""
         shots = []
         main_char = scene.get("main_character", "nvc")
+        location = scene.get("location", "")
         srt_text = scene.get("srt_text", "")
         emotion = scene.get("emotion", "neutral")
 
@@ -5343,13 +5365,19 @@ OUTPUT FORMAT (JSON only):
         }
         visual_cue = emotion_map.get(emotion, emotion_map["neutral"])
 
+        # Build reference_files với cả character và location
+        ref_files = [f"{main_char}.png"]
+        if location:
+            ref_files.append(f"{location}.png")
+
         current_time = start_seconds
         for i in range(num_shots):
             shot_type = shot_types[i % len(shot_types)]
             shot_end = current_time + shot_duration
 
-            # Tạo prompt đơn giản
-            img_prompt = f"{global_style}, {shot_type.lower()}, {visual_cue}, cinematic lighting. Illustrating: [{srt_text[:100]}] (reference: {main_char}.png)"
+            # Tạo prompt với annotation cho cả character và location
+            loc_annotation = f" ({location}.png)" if location else ""
+            img_prompt = f"{global_style}, {shot_type.lower()}, {visual_cue}, cinematic lighting. Character ({main_char}.png){loc_annotation}. Illustrating: {srt_text[:100]}"
 
             shot = {
                 "scene_id": scene["scene_id"],
@@ -5359,8 +5387,11 @@ OUTPUT FORMAT (JSON only):
                 "duration": shot_duration,
                 "shot_type": shot_type,
                 "img_prompt": img_prompt,
-                "reference_files": [f"{main_char}.png"],
-                "srt_text": srt_text[:200]
+                "reference_files": ref_files,
+                "srt_text": srt_text[:200],
+                # QUAN TRỌNG: Thêm main_character và location để lưu vào Excel
+                "main_character": main_char,
+                "location": location
             }
             shots.append(shot)
             current_time = shot_end
