@@ -246,6 +246,27 @@ class IPv6Rotator:
         # Nếu tất cả đều trùng (không nên xảy ra), random 1 cái
         return random.choice(self.ipv6_list)
 
+    def test_ipv6_connectivity(self, ipv6: str = None, timeout: int = 3) -> bool:
+        """
+        Test xem IPv6 có kết nối được internet không.
+
+        Args:
+            ipv6: IPv6 để test (None = test IP hiện tại)
+            timeout: Timeout ping (giây)
+
+        Returns:
+            True nếu ping thành công
+        """
+        try:
+            # Ping Google DNS IPv6
+            cmd = f'ping -n 1 -w {timeout * 1000} 2001:4860:4860::8888'
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=timeout + 2
+            )
+            return result.returncode == 0 and 'Reply from' in result.stdout
+        except:
+            return False
+
     def set_ipv6(self, new_ipv6: str) -> bool:
         """
         Đặt IPv6 mới cho interface (Windows).
@@ -358,14 +379,18 @@ class IPv6Rotator:
             self.log(f"[IPv6] Error enabling IPv4: {e}")
             return False
 
-    def rotate(self) -> Optional[str]:
+    def rotate(self, max_retries: int = 5) -> Optional[str]:
         """
         Thực hiện rotate IPv6.
 
         1. Lấy IPv6 tiếp theo từ danh sách
         2. Set IPv6 mới
-        3. Start/update local proxy (nếu bật)
-        4. Reset 403 counter
+        3. Test connectivity - nếu fail thì thử IP tiếp theo
+        4. Start/update local proxy (nếu bật)
+        5. Reset 403 counter
+
+        Args:
+            max_retries: Số lần thử tối đa nếu IP không hoạt động
 
         Returns:
             IPv6 mới nếu thành công, None nếu thất bại
@@ -378,30 +403,42 @@ class IPv6Rotator:
             self.log("[IPv6] No IPv6 list available!")
             return None
 
-        try:
-            current = self.get_current_ipv6()
-            new_ipv6 = self.get_next_ipv6()
+        tried_ips = set()
+        current = self.get_current_ipv6()
 
-            if not new_ipv6:
-                self.log("[IPv6] No IPv6 available")
-                return None
+        for attempt in range(max_retries):
+            try:
+                new_ipv6 = self.get_next_ipv6()
 
-            self.log(f"[IPv6] Rotating: {current} → {new_ipv6}")
+                if not new_ipv6 or new_ipv6 in tried_ips:
+                    self.log("[IPv6] No more untried IPs available")
+                    break
 
-            if self.set_ipv6(new_ipv6):
-                # Start/update local proxy nếu bật
-                if self.use_local_proxy:
-                    self._start_local_proxy(new_ipv6)
+                tried_ips.add(new_ipv6)
+                self.log(f"[IPv6] Rotating: {current} → {new_ipv6} (attempt {attempt + 1}/{max_retries})")
 
-                self.reset_403()
-                self.last_rotated = time.time()
-                return new_ipv6
-            else:
-                return None
+                if self.set_ipv6(new_ipv6):
+                    # Test connectivity
+                    if self.test_ipv6_connectivity():
+                        self.log(f"[IPv6] ✓ Connectivity OK: {new_ipv6}")
 
-        except Exception as e:
-            self.log(f"[IPv6] Rotation error: {e}")
-            return None
+                        # Start/update local proxy nếu bật
+                        if self.use_local_proxy:
+                            self._start_local_proxy(new_ipv6)
+
+                        self.reset_403()
+                        self.last_rotated = time.time()
+                        return new_ipv6
+                    else:
+                        self.log(f"[IPv6] ✗ No connectivity, trying next IP...")
+                        continue
+
+            except Exception as e:
+                self.log(f"[IPv6] Rotation error: {e}")
+                continue
+
+        self.log("[IPv6] ✗ All rotation attempts failed")
+        return None
 
     def _start_local_proxy(self, ipv6_address: str):
         """Start or update local SOCKS5 proxy với IPv6 mới."""
