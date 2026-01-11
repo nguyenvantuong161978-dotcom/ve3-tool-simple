@@ -3420,36 +3420,16 @@ class DrissionFlowAPI:
             try:
                 self.log(f"[Mode] Chuyển sang Video mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
-                # Bước 1: Click dropdown lần 1 (đóng menu nếu đang mở)
+                # Click dropdown để mở menu
                 self.driver.run_js('''
                 (function() {
                     var dropdown = document.querySelector('button[role="combobox"]');
                     if (dropdown) dropdown.click();
                 })();
                 ''')
-                time.sleep(0.3)
-
-                # Bước 2: Click dropdown lần 2 để mở menu
-                dropdown_clicked = self.driver.run_js('''
-                (function() {
-                    var dropdown = document.querySelector('button[role="combobox"]');
-                    if (!dropdown) {
-                        return 'NO_DROPDOWN';
-                    }
-                    dropdown.click();
-                    return 'CLICKED';
-                })();
-                ''')
-
-                if not dropdown_clicked or dropdown_clicked == 'NO_DROPDOWN':
-                    self.log("[Mode] Dropdown not found, retrying...", "WARN")
-                    time.sleep(1)
-                    continue
-
-                # Đợi menu mở
                 time.sleep(0.5)
 
-                # Bước 3: Tìm và click option - dùng span như code cũ
+                # Tìm và click option
                 option_clicked = self.driver.run_js('''
                 (function() {
                     var allSpans = document.querySelectorAll('span');
@@ -3830,36 +3810,16 @@ class DrissionFlowAPI:
             try:
                 self.log(f"[Mode] Chuyển sang T2V mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
-                # Bước 1: Click dropdown lần 1 (có thể đang mở menu khác, cần đóng)
+                # Click dropdown để mở menu
                 self.driver.run_js('''
                 (function() {
                     var dropdown = document.querySelector('button[role="combobox"]');
                     if (dropdown) dropdown.click();
                 })();
                 ''')
-                time.sleep(0.3)
-
-                # Bước 2: Click dropdown lần 2 để mở menu
-                dropdown_clicked = self.driver.run_js('''
-                (function() {
-                    var dropdown = document.querySelector('button[role="combobox"]');
-                    if (!dropdown) {
-                        return 'NO_DROPDOWN';
-                    }
-                    dropdown.click();
-                    return 'CLICKED';
-                })();
-                ''')
-
-                if not dropdown_clicked or dropdown_clicked == 'NO_DROPDOWN':
-                    self.log("[Mode] Dropdown not found, retrying...", "WARN")
-                    time.sleep(1)
-                    continue
-
-                # Đợi menu mở
                 time.sleep(0.5)
 
-                # Bước 3: Tìm và click option - dùng span như code cũ
+                # Tìm và click option
                 option_clicked = self.driver.run_js('''
                 (function() {
                     var allSpans = document.querySelectorAll('span');
