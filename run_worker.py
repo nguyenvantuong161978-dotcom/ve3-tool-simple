@@ -611,13 +611,14 @@ def process_project(code: str, callback=None) -> bool:
 
 def scan_incomplete_local_projects() -> list:
     """
-    Scan local PROJECTS for incomplete projects (có Excel nhưng chưa có ảnh).
-    Đây là các project đã copy về nhưng chưa xử lý xong.
+    Scan local PROJECTS for projects that need processing.
+    Bao gồm CẢ project chưa có ảnh VÀ project có ảnh nhưng chưa đủ.
+    Engine sẽ chạy và hoàn thành project trước khi sync VISUAL.
     """
-    incomplete = []
+    need_processing = []
 
     if not LOCAL_PROJECTS.exists():
-        return incomplete
+        return need_processing
 
     for item in LOCAL_PROJECTS.iterdir():
         if not item.is_dir():
@@ -629,25 +630,32 @@ def scan_incomplete_local_projects() -> list:
         if not matches_channel(code):
             continue
 
-        # Skip if already in VISUAL
+        # Skip if already in VISUAL (đã hoàn thành)
         if is_project_complete_on_master(code):
-            continue
-
-        # Skip if already has images (complete)
-        if is_local_complete(item, code):
             continue
 
         # Check if has Excel with prompts OR has SRT (can create Excel)
         srt_path = item / f"{code}.srt"
-        if has_excel_with_prompts(item, code):
-            print(f"    - {code}: incomplete (has Excel, no images) → will continue")
-            incomplete.append(code)
-        elif srt_path.exists():
-            # Có SRT nhưng không có Excel - worker sẽ tự tạo
-            print(f"    - {code}: has SRT, no Excel → will create with API")
-            incomplete.append(code)
+        has_excel = has_excel_with_prompts(item, code)
+        has_srt = srt_path.exists()
 
-    return sorted(incomplete)
+        if not has_excel and not has_srt:
+            continue  # Không có gì để xử lý
+
+        # Check trạng thái hiện tại
+        if is_local_complete(item, code):
+            # Đã có đủ ảnh/video - nhưng VẪN chạy engine để verify
+            # Engine sẽ skip các ảnh đã tạo và chỉ tạo thiếu (nếu có)
+            print(f"    - {code}: appears complete, will verify via engine")
+            need_processing.append(code)
+        elif has_excel:
+            print(f"    - {code}: incomplete (has Excel) → will process")
+            need_processing.append(code)
+        elif has_srt:
+            print(f"    - {code}: has SRT, no Excel → will create with API")
+            need_processing.append(code)
+
+    return sorted(need_processing)
 
 
 def scan_master_projects() -> list:
@@ -698,12 +706,13 @@ def scan_master_projects() -> list:
 
 def sync_local_to_visual() -> int:
     """
-    Scan local PROJECTS và copy các project đã có ảnh sang VISUAL.
-    Chạy khi bắt đầu để sync các project đã hoàn thành trước đó.
+    Scan local PROJECTS và CLEANUP các project đã sync.
+    KHÔNG copy sang VISUAL ở đây - để process_project() chạy engine trước rồi mới sync.
 
     Returns:
-        Số lượng projects đã copy
+        Số lượng projects đã cleanup
     """
+    print(f"[SYNC] Checking local projects to sync to VISUAL...")
     print(f"  [DEBUG] Checking local: {LOCAL_PROJECTS}")
 
     if not LOCAL_PROJECTS.exists():
@@ -714,7 +723,7 @@ def sync_local_to_visual() -> int:
     all_folders = [item for item in LOCAL_PROJECTS.iterdir() if item.is_dir()]
     print(f"  [DEBUG] Found {len(all_folders)} local project folders")
 
-    copied = 0
+    cleaned = 0
 
     for item in all_folders:
         code = item.name
@@ -727,17 +736,23 @@ def sync_local_to_visual() -> int:
         if is_project_complete_on_master(code):
             print(f"    - {code}: already in VISUAL, cleaning up local...")
             delete_local_project(code)
+            cleaned += 1
             continue
 
-        # Check local có ảnh không
+        # KHÔNG copy sang VISUAL ở đây!
+        # Để scan_incomplete_local_projects() và process_project() xử lý
+        # Engine sẽ chạy và hoàn thành project trước khi sync
         if is_local_complete(item, code):
-            print(f"  📤 Found local project with images: {code}")
-            if copy_to_visual(code, item):
-                copied += 1
+            print(f"    - {code}: has images, will process via engine")
         else:
-            print(f"    - {code}: no images yet")
+            print(f"    - {code}: incomplete, will process via engine")
 
-    return copied
+    if cleaned > 0:
+        print(f"  Cleaned up {cleaned} projects already in VISUAL")
+    else:
+        print(f"  No local projects to sync")
+
+    return cleaned
 
 
 def run_scan_loop():
