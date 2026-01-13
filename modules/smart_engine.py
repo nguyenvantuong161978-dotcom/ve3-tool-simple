@@ -4721,14 +4721,47 @@ class SmartEngine:
                 self._parallel_video_running = False
                 return
 
-            # NOTE: KHÔNG chuyển sang T2V mode!
-            # generate_video_force_mode() hoạt động ở IMAGE mode:
-            # - Chrome ở IMAGE mode → gửi batchGenerateImages request
-            # - Interceptor catch request → đổi thành VIDEO request với media_id
-            # Nếu chuyển T2V mode → Chrome gửi batchAsyncGenerateVideoText → Interceptor không catch được!
+            # === CHUYỂN SANG T2V MODE NGAY SAU KHI LOAD ===
+            # Chạy JS để click dropdown và chọn "Từ văn bản sang video"
+            self.log("[PARALLEL-VIDEO] Chuyển sang mode 'Từ văn bản sang video'...")
+            time.sleep(2)  # Đợi page ổn định
 
-            self.log("[PARALLEL-VIDEO] Chrome 2 ready - GIỮ IMAGE mode để FORCE-VIDEO hoạt động")
-            self.log("[PARALLEL-VIDEO] Bắt đầu theo dõi Excel...")
+            t2v_js = '''
+// Tìm bằng video + length 22 ("Từ văn bản sang video")
+var btn = document.querySelector('button[role="combobox"]');
+if (btn) {
+    btn.click();
+    setTimeout(() => {
+        btn.click();
+        setTimeout(() => {
+            var spans = document.querySelectorAll('span');
+            for (var el of spans) {
+                var text = el.textContent.trim();
+                if (text.includes('video') && text.length === 22) {
+                    console.log('[T2V] FOUND:', text);
+                    el.click();
+                    window._t2vResult = 'CLICKED';
+                    return;
+                }
+            }
+            console.log('[T2V] NOT FOUND');
+            window._t2vResult = 'NOT_FOUND';
+        }, 300);
+    }, 100);
+} else {
+    window._t2vResult = 'NO_DROPDOWN';
+}
+'''
+            drission_api.driver.run_js(t2v_js)
+            time.sleep(1.5)  # Đợi dropdown animation
+
+            result = drission_api.driver.run_js("return window._t2vResult || 'PENDING'")
+            if result == 'CLICKED':
+                self.log("[PARALLEL-VIDEO] ✓ Đã chuyển sang T2V mode!")
+            else:
+                self.log(f"[PARALLEL-VIDEO] ⚠️ T2V switch result: {result}", "WARN")
+
+            self.log("[PARALLEL-VIDEO] Chrome 2 ready - Bắt đầu theo dõi Excel...")
 
         except Exception as e:
             self.log(f"[PARALLEL-VIDEO] Failed to setup Chrome 2: {e}", "ERROR")
@@ -4777,8 +4810,9 @@ class SmartEngine:
                             video_prompt = scene.video_prompt or video_prompt
                             break
 
-                    # Tạo video
-                    ok, result_path, error = drission_api.generate_video_force_mode(
+                    # Tạo video bằng T2V mode (Chrome đã ở T2V mode)
+                    # Interceptor sẽ convert T2V → I2V với media_id
+                    ok, result_path, error = drission_api.generate_video_t2v_mode(
                         media_id=media_id,
                         prompt=video_prompt,
                         save_path=mp4_path

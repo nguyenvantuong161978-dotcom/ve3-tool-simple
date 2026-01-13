@@ -4153,28 +4153,11 @@ class DrissionFlowAPI:
 
                     if response.get('operations'):
                         operation = response['operations'][0]
-                        self.log(f"[T2V→I2V] ✓ Video operation started")
+                        operation_name = operation.get('name', '')
+                        self.log(f"[T2V→I2V] ✓ Video operation started: {operation_name[-30:]}...")
 
-                        fresh_token = self.driver.run_js("return window._tk;")
-                        if fresh_token:
-                            self.bearer_token = f"Bearer {fresh_token}"
-                            self.log(f"[T2V→I2V] ✓ Refreshed bearer token")
-
-                        headers = {
-                            "Authorization": self.bearer_token,
-                            "Content-Type": "application/json",
-                            "Origin": "https://labs.google",
-                            "Referer": "https://labs.google/",
-                        }
-                        if self.x_browser_validation:
-                            headers["x-browser-validation"] = self.x_browser_validation
-
-                        proxies = None
-                        if self._use_webshare and hasattr(self, '_bridge_port') and self._bridge_port:
-                            bridge_url = f"http://127.0.0.1:{self._bridge_port}"
-                            proxies = {"http": bridge_url, "https": bridge_url}
-
-                        video_url = self._poll_video_operation(operation, headers, proxies, max_wait)
+                        # Poll qua Browser (dùng Chrome's auth)
+                        video_url = self._poll_video_operation_browser(operation, max_wait)
 
                         if video_url:
                             self.log(f"[T2V→I2V] ✓ Video ready: {video_url[:60]}...")
