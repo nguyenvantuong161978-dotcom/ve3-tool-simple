@@ -58,3 +58,6 @@ Thumbs.db
 # Logs
 *.log
 config/blocked_proxies.json
+
+# IPv6 list (different per machine)
+ipv6_list.txt
