@@ -2986,16 +2986,64 @@ class DrissionFlowAPI:
                     img.local_path = img_path
                     self.log(f"✓ Saved: {img_path.name}")
                 elif img.url:
-                    # Download from URL - thử qua Chrome trước (nhanh hơn), fallback sang requests
+                    # Download image - thử nhiều cách từ nhanh đến chậm
                     dl_start = time.time()
-                    self.log(f"→ Downloading from: {img.url[:80]}...")
+                    self.log(f"→ Getting image...")
                     downloaded = False
 
-                    # Method 1: Download qua Chrome (dùng session của Chrome - nhanh hơn)
-                    if self.driver:
+                    # Method 1: Lấy ảnh từ DOM (ảnh đã được Chrome tải và hiển thị)
+                    # Đây là cách NHANH NHẤT - không cần request mới
+                    if self.driver and not downloaded:
+                        try:
+                            dom_start = time.time()
+                            # Tìm <img> element có src chứa fifeUrl và convert sang base64
+                            js_code = '''
+                            (function() {
+                                // Tìm tất cả img elements có src là storage.googleapis.com
+                                const imgs = document.querySelectorAll('img[src*="storage.googleapis.com"]');
+                                if (imgs.length === 0) return { error: "No images found in DOM" };
+
+                                // Lấy ảnh cuối cùng (ảnh vừa tạo)
+                                const img = imgs[imgs.length - 1];
+                                if (!img.complete || img.naturalWidth === 0) {
+                                    return { error: "Image not loaded yet" };
+                                }
+
+                                // Dùng canvas để convert sang base64
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+
+                                try {
+                                    const dataUrl = canvas.toDataURL('image/png');
+                                    return { base64: dataUrl.split(',')[1], width: img.naturalWidth, height: img.naturalHeight };
+                                } catch(e) {
+                                    return { error: "Canvas toDataURL failed: " + e.toString() };
+                                }
+                            })()
+                            '''
+                            result = self.driver.run_js(js_code)
+                            dom_time = time.time() - dom_start
+
+                            if result and result.get('base64'):
+                                img.base64_data = result['base64']
+                                img_path = save_dir / f"{fname}.png"
+                                img_path.write_bytes(base64.b64decode(img.base64_data))
+                                img.local_path = img_path
+                                w, h = result.get('width', 0), result.get('height', 0)
+                                self.log(f"✓ Got from DOM: {img_path.name} ({w}x{h}, {dom_time:.2f}s)")
+                                downloaded = True
+                            elif result and result.get('error'):
+                                self.log(f"   [DEBUG] DOM extract failed: {result['error']}")
+                        except Exception as e:
+                            self.log(f"   [DEBUG] DOM extract error: {e}")
+
+                    # Method 2: Fetch qua Chrome (nếu DOM không có)
+                    if self.driver and not downloaded:
                         try:
                             chrome_start = time.time()
-                            # Fetch qua Chrome's fetch API - dùng session/cookie của Chrome
                             js_code = f'''
                             (async () => {{
                                 try {{
@@ -3020,14 +3068,14 @@ class DrissionFlowAPI:
                                 img_path = save_dir / f"{fname}.png"
                                 img_path.write_bytes(base64.b64decode(img.base64_data))
                                 img.local_path = img_path
-                                self.log(f"✓ Downloaded via Chrome: {img_path.name} ({chrome_time:.2f}s)")
+                                self.log(f"✓ Downloaded via Chrome fetch: {img_path.name} ({chrome_time:.2f}s)")
                                 downloaded = True
                             elif result and result.get('error'):
-                                self.log(f"   [DEBUG] Chrome download failed: {result['error']}, trying requests...")
+                                self.log(f"   [DEBUG] Chrome fetch failed: {result['error']}")
                         except Exception as e:
-                            self.log(f"   [DEBUG] Chrome download error: {e}, trying requests...")
+                            self.log(f"   [DEBUG] Chrome fetch error: {e}")
 
-                    # Method 2: Fallback sang requests.get() nếu Chrome thất bại
+                    # Method 3: Fallback sang requests.get()
                     if not downloaded:
                         try:
                             proxies = None
