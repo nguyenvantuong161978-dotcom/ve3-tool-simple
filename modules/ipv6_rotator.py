@@ -135,12 +135,19 @@ class IPv6Rotator:
         self.last_rotated = None
         self._ipv4_disabled = False  # Track trạng thái IPv4
         self._local_proxy = None  # Local SOCKS5 proxy
+        self.ipv6_gateways = {}  # Map IP -> custom gateway (loaded from file)
 
         # Log function (có thể override)
         self.log = print
 
     def _load_ipv6_list(self):
-        """Load danh sách IPv6 từ file config/ipv6_list.txt"""
+        """
+        Load danh sách IPv6 từ file config/ipv6_list.txt
+
+        Format hỗ trợ:
+        1. Chỉ IP: 2001:ee0:b004:3f01::2  (gateway tự tính = prefix::1)
+        2. IP,GATEWAY: 2001:ee0:b004:3f01::2,2001:ee0:b004:3f01::1
+        """
         try:
             # Tìm file ipv6_list.txt
             base_dir = Path(__file__).parent.parent
@@ -150,14 +157,33 @@ class IPv6Rotator:
                 with open(ipv6_file, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
 
-                self.ipv6_list = [
-                    line.strip() for line in lines
-                    if line.strip() and not line.startswith('#')
-                ]
+                self.ipv6_list = []
+                self.ipv6_gateways = {}  # Map IP -> custom gateway
+
+                for line in lines:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+
+                    # Check format: IP,GATEWAY or just IP
+                    if ',' in line:
+                        parts = line.split(',')
+                        ip = parts[0].strip()
+                        gateway = parts[1].strip() if len(parts) > 1 else None
+                        self.ipv6_list.append(ip)
+                        if gateway:
+                            self.ipv6_gateways[ip] = gateway
+                    else:
+                        self.ipv6_list.append(line)
 
                 if self.ipv6_list:
-                    self.enabled = True  # Auto-enable nếu có danh sách
+                    # KHÔNG tự động bật - chỉ load danh sách
+                    # self.enabled giữ nguyên từ settings.yaml
                     print(f"[IPv6] Loaded {len(self.ipv6_list)} IPv6 addresses from {ipv6_file.name}")
+                    if not self.enabled:
+                        print(f"[IPv6] Status: DISABLED (set enabled: true in settings.yaml to enable)")
+                    if self.ipv6_gateways:
+                        print(f"[IPv6] Custom gateways: {len(self.ipv6_gateways)} entries")
                 else:
                     print(f"[IPv6] No IPv6 addresses in {ipv6_file.name}")
             else:
@@ -397,11 +423,16 @@ class IPv6Rotator:
             # Bước 2: Thêm IPv6 mới
             commands.append(f'netsh interface ipv6 add address "{self.interface_name}" {new_ipv6}')
 
-            # Bước 3: Set gateway - TỰ ĐỘNG tính từ IPv6 address
-            # Gateway phải cùng subnet với IP (VD: 1f00::2 → gateway 1f00::1)
-            auto_gateway = _get_gateway_for_ipv6(new_ipv6)
+            # Bước 3: Set gateway
+            # Ưu tiên custom gateway từ file, nếu không có thì tự tính
+            if new_ipv6 in self.ipv6_gateways:
+                auto_gateway = self.ipv6_gateways[new_ipv6]
+                self.log(f"[IPv6] Using custom gateway: {auto_gateway}")
+            else:
+                auto_gateway = _get_gateway_for_ipv6(new_ipv6)
+                self.log(f"[IPv6] Auto gateway: {auto_gateway}")
+
             if auto_gateway:
-                self.log(f"[IPv6] Setting gateway: {auto_gateway}")
                 # Xóa route cũ trước (ignore error nếu không có)
                 commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}"')
                 # Thêm route mới
