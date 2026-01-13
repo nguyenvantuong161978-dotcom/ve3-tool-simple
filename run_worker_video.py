@@ -241,15 +241,13 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             chrome_portable=chrome_portable_2
         )
 
-        # Setup Chrome
+        # Setup Chrome - skip mode selection, sẽ chuyển T2V mode sau
         if not api.setup(project_url=project_url, skip_mode_selection=True):
             log(f"  ❌ Failed to setup Chrome for video!")
             return False
 
-        # FORCE MODE: Stay in IMAGE mode (don't switch to T2V)
-        # FORCE mode intercepts IMAGE requests to get valid reCAPTCHA tokens
-        # T2V mode's reCAPTCHA gets 403 errors
-        log(f"  🎬 Using FORCE MODE (stay in IMAGE mode for reCAPTCHA)")
+        # Chuyển sang T2V mode (Từ văn bản sang video)
+        log(f"  🎬 Switching to T2V mode...")
         time.sleep(1)
 
         # Create videos
@@ -268,9 +266,11 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             log(f"     Prompt: {video_prompt[:50]}...")
 
             try:
-                # Use FORCE MODE (intercepts IMAGE request for reCAPTCHA)
-                # T2V mode's reCAPTCHA gets 403 errors, FORCE mode works
-                ok, result_path, error = api.generate_video_force_mode(
+                # Use T2V→I2V MODE (đã hoạt động trước đây):
+                # - UI ở "Từ văn bản sang video" (T2V)
+                # - Interceptor convert: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
+                # - Interceptor thêm referenceImages với mediaId
+                ok, result_path, error = api.generate_video_t2v_mode(
                     media_id=media_id,
                     prompt=video_prompt,
                     save_path=mp4_path

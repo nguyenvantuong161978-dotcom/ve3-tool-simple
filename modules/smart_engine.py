@@ -4752,7 +4752,9 @@ if (btn) {
             var spans = document.querySelectorAll('span');
             for (var el of spans) {
                 var text = el.textContent.trim();
-                if (text.includes('video') && text.length === 22) {
+                // Vietnamese: "Từ văn bản sang video" = 22 ký tự
+                // English: "Text to video" = 13 ký tự
+                if (text.includes('video') && (text.length === 22 || text.length === 13)) {
                     console.log('[T2V] FOUND:', text);
                     el.click();
                     window._t2vResult = 'CLICKED';
