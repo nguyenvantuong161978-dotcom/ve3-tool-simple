@@ -2982,31 +2982,23 @@ class DrissionFlowAPI:
                     img.local_path = img_path
                     self.log(f"✓ Saved: {img_path.name}")
                 elif img.url:
-                    # Download from URL với retry (fifeUrl có thể chưa ready ngay)
-                    max_dl_retries = 30  # Retry tối đa 30 lần (60 giây)
-                    for dl_attempt in range(max_dl_retries):
-                        try:
-                            proxies = None
-                            if self._use_webshare and self._webshare_proxy:
-                                proxies = self._webshare_proxy.get_proxies()
-                            resp = requests.get(img.url, timeout=30, proxies=proxies)
-                            if resp.status_code == 200:
-                                img_path = save_dir / f"{fname}.png"
-                                img_path.write_bytes(resp.content)
-                                img.local_path = img_path
-                                img.base64_data = base64.b64encode(resp.content).decode()
-                                self.log(f"✓ Downloaded: {img_path.name}")
-                                break
-                            else:
-                                if dl_attempt < max_dl_retries - 1:
-                                    time.sleep(2)  # Đợi 2 giây rồi retry
-                                else:
-                                    self.log(f"✗ Download failed after {max_dl_retries} retries: HTTP {resp.status_code}", "WARN")
-                        except Exception as e:
-                            if dl_attempt < max_dl_retries - 1:
-                                time.sleep(2)
-                            else:
-                                self.log(f"✗ Download error: {e}", "WARN")
+                    # Download from URL - thử ngay, không retry nhiều
+                    self.log(f"→ Downloading...")
+                    try:
+                        proxies = None
+                        if self._use_webshare and self._webshare_proxy:
+                            proxies = self._webshare_proxy.get_proxies()
+                        resp = requests.get(img.url, timeout=60, proxies=proxies)
+                        if resp.status_code == 200:
+                            img_path = save_dir / f"{fname}.png"
+                            img_path.write_bytes(resp.content)
+                            img.local_path = img_path
+                            img.base64_data = base64.b64encode(resp.content).decode()
+                            self.log(f"✓ Downloaded: {img_path.name}")
+                        else:
+                            self.log(f"✗ Download failed: HTTP {resp.status_code}", "WARN")
+                    except Exception as e:
+                        self.log(f"✗ Download error: {e}", "WARN")
 
         # F5 refresh sau mỗi ảnh thành công để tránh 403 cho prompt tiếp theo
         try:
