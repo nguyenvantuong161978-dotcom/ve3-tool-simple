@@ -156,18 +156,48 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
         # Get project URL from Excel metadata or cache
         project_url = None
 
-        # Method 1: Read from Excel metadata rows
+        # Method 1: Read from Excel sheet 'config' (same as BrowserFlowGenerator)
         try:
             import openpyxl
             wb_xl = openpyxl.load_workbook(excel_path, data_only=True)
-            ws = wb_xl.active
-            for row in ws.iter_rows(min_row=1, max_row=20, values_only=True):
-                if row and len(row) >= 2:
-                    key = str(row[0]).strip().lower() if row[0] else ''
-                    val = str(row[1]).strip() if row[1] else ''
+
+            # Try sheet 'config' first
+            if 'config' in wb_xl.sheetnames:
+                ws = wb_xl['config']
+                log(f"  📋 Reading from sheet 'config'...")
+            else:
+                ws = wb_xl.active
+                log(f"  📋 No 'config' sheet, using active sheet...")
+
+            for row in ws.iter_rows(min_row=1, max_row=30, values_only=True):
+                if not row:
+                    continue
+
+                # Method 1a: Find URL directly in any cell
+                for cell_val in row:
+                    if cell_val and isinstance(cell_val, str):
+                        cell_str = str(cell_val).strip()
+                        if '/project/' in cell_str and cell_str.startswith('http'):
+                            project_url = cell_str
+                            log(f"  📋 Found project URL in Excel!")
+                            break
+
+                if project_url:
+                    break
+
+                # Method 1b: Key-value format (column A = key, column B = value)
+                if len(row) >= 2 and row[0]:
+                    key = str(row[0]).strip().lower()
+                    val = str(row[1] or '').strip()
                     if key == 'flow_project_url' and '/project/' in val:
                         project_url = val
+                        log(f"  📋 Found project URL from key 'flow_project_url'!")
                         break
+                    elif key == 'flow_project_id' and val:
+                        project_url = f"https://labs.google/fx/vi/tools/flow/project/{val}"
+                        log(f"  📋 Built project URL from project_id!")
+                        break
+
             wb_xl.close()
         except Exception as e:
             log(f"  ⚠️ Error reading Excel: {e}")
