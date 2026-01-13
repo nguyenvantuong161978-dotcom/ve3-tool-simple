@@ -3075,17 +3075,33 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"   [DEBUG] Chrome fetch error: {e}")
 
-                    # Method 3: Fallback sang requests.get()
+                    # Method 3: Fallback sang requests.get() với Chrome headers
                     if not downloaded:
                         try:
                             proxies = None
                             if self._use_webshare and self._webshare_proxy:
                                 proxies = self._webshare_proxy.get_proxies()
 
+                            # Headers giống Chrome để tránh bị throttle
+                            chrome_headers = {
+                                'accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                                'accept-encoding': 'gzip, deflate, br',
+                                'accept-language': 'en-US,en;q=0.9',
+                                'referer': 'https://labs.google/',
+                                'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                                'sec-ch-ua-mobile': '?0',
+                                'sec-ch-ua-platform': '"Windows"',
+                                'sec-fetch-dest': 'image',
+                                'sec-fetch-mode': 'no-cors',
+                                'sec-fetch-site': 'cross-site',
+                                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                            }
+
+                            # Thử KHÔNG proxy trước (URL đã có signature, không cần auth)
                             req_start = time.time()
-                            resp = requests.get(img.url, timeout=(30, 60), proxies=proxies)
+                            resp = requests.get(img.url, timeout=(15, 30), headers=chrome_headers)
                             req_time = time.time() - req_start
-                            self.log(f"   [DEBUG] requests.get took {req_time:.2f}s, status={resp.status_code}")
+                            self.log(f"   [DEBUG] requests.get (no proxy) took {req_time:.2f}s, status={resp.status_code}")
 
                             if resp.status_code == 200:
                                 img_path = save_dir / f"{fname}.png"
