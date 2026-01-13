@@ -152,18 +152,18 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                             }
                         }
 
-                        // ĐỔI URL: /projects/xxx/flowMedia:batchGenerateImages -> /video:batchAsyncGenerateVideoReferenceImages
-                        // QUAN TRỌNG: Phải gửi đến I2V endpoint (ReferenceImages) vì payload có referenceImages
+                        // ĐỔI URL: /projects/xxx/flowMedia:batchGenerateImages -> /video:batchAsyncGenerateVideoText
+                        // Gửi đến T2V endpoint với referenceImages (Google API hỗ trợ cả 2 cách)
                         // Video endpoint KHÔNG có /projects/xxx/ prefix
                         var projectsIdx = urlStr.indexOf('/projects/');
                         var newUrl;
                         if (projectsIdx !== -1) {
                             // Lấy base URL trước /projects/
                             var baseUrl = urlStr.substring(0, projectsIdx);
-                            newUrl = baseUrl + '/video:batchAsyncGenerateVideoReferenceImages';
+                            newUrl = baseUrl + '/video:batchAsyncGenerateVideoText';
                         } else {
                             // Fallback: simple replace
-                            newUrl = urlStr.replace('flowMedia:batchGenerateImages', 'video:batchAsyncGenerateVideoReferenceImages');
+                            newUrl = urlStr.replace('flowMedia:batchGenerateImages', 'video:batchAsyncGenerateVideoText');
                         }
                         console.log('[FORCE-VIDEO] Original URL:', urlStr);
                         console.log('[FORCE-VIDEO] New URL:', newUrl);

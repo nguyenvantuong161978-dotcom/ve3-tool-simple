@@ -241,16 +241,13 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             chrome_portable=chrome_portable_2
         )
 
-        # Setup Chrome - PHẢI chọn IMAGE mode để FORCE MODE hoạt động!
-        # FORCE MODE intercepts batchGenerateImages request và convert sang video
-        # Nếu skip_mode_selection=True, mode có thể không phải IMAGE → interceptor không bắt được
-        if not api.setup(project_url=project_url, skip_mode_selection=False):
+        # Setup Chrome - skip mode selection, sẽ chuyển T2V mode sau
+        if not api.setup(project_url=project_url, skip_mode_selection=True):
             log(f"  ❌ Failed to setup Chrome for video!")
             return False
 
-        # FORCE MODE: Ở IMAGE mode, interceptor convert IMAGE request → VIDEO request
-        # Đây là cách duy nhất để có fresh reCAPTCHA token (T2V mode bị 403)
-        log(f"  🎬 Using FORCE MODE (IMAGE mode → interceptor convert → VIDEO)")
+        # Chuyển sang T2V mode (Từ văn bản sang video)
+        log(f"  🎬 Switching to T2V mode...")
         time.sleep(1)
 
         # Create videos
@@ -269,9 +266,9 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             log(f"     Prompt: {video_prompt[:50]}...")
 
             try:
-                # Use FORCE MODE (intercepts IMAGE request for reCAPTCHA)
-                # T2V mode's reCAPTCHA gets 403 errors, FORCE mode works
-                ok, result_path, error = api.generate_video_force_mode(
+                # Use T2V MODE: Ở T2V mode, interceptor convert T2V→I2V với media_id
+                # T2V mode + fresh reCAPTCHA + referenceImages = video từ ảnh
+                ok, result_path, error = api.generate_video_t2v_mode(
                     media_id=media_id,
                     prompt=video_prompt,
                     save_path=mp4_path
