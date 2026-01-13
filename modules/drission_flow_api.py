@@ -347,16 +347,31 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
 
                 try {
                     var data = await cloned.json();
-                    window._response = data;
                     console.log('[RESPONSE] Status:', response.status);
-                    if (data.media) {
-                        console.log('[RESPONSE] Got ' + data.media.length + ' images');
+
+                    // Chỉ set response nếu có media với fifeUrl (ảnh đã tạo xong)
+                    // Nếu chỉ có workflow ID → đợi getProject poll
+                    var hasReadyMedia = data.media && data.media.some(function(m) {
+                        return m.image && m.image.generatedImage && m.image.generatedImage.fifeUrl;
+                    });
+
+                    if (hasReadyMedia) {
+                        console.log('[RESPONSE] ✓ Got ' + data.media.length + ' images with fifeUrl!');
+                        window._response = data;
+                        window._requestPending = false;
+                    } else if (data.media) {
+                        console.log('[RESPONSE] Got media but no fifeUrl yet, waiting for getProject poll...');
+                        // KHÔNG set _response, KHÔNG set _requestPending = false
+                        // Để getProject poll có thể cập nhật sau
+                    } else {
+                        console.log('[RESPONSE] No media in response (workflow started), waiting for getProject poll...');
+                        // Có thể là workflow response - đợi getProject poll
                     }
                 } catch(e) {
                     window._response = {status: response.status, error: 'parse_failed'};
+                    window._requestPending = false;
                 }
 
-                window._requestPending = false;
                 return response;
             } catch(e) {
                 console.log('[ERROR] Request failed:', e);
