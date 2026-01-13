@@ -2986,34 +2986,71 @@ class DrissionFlowAPI:
                     img.local_path = img_path
                     self.log(f"✓ Saved: {img_path.name}")
                 elif img.url:
-                    # Download from URL - thử ngay, không retry nhiều
+                    # Download from URL - thử qua Chrome trước (nhanh hơn), fallback sang requests
                     dl_start = time.time()
                     self.log(f"→ Downloading from: {img.url[:80]}...")
-                    try:
-                        proxies = None
-                        if self._use_webshare and self._webshare_proxy:
-                            proxies = self._webshare_proxy.get_proxies()
-                            self.log(f"   [DEBUG] Using proxy, get_proxies took {time.time()-dl_start:.2f}s")
+                    downloaded = False
 
-                        req_start = time.time()
-                        # Dùng timeout tuple (connect, read) để chắc chắn không bị block lâu
-                        resp = requests.get(img.url, timeout=(30, 60), proxies=proxies)
-                        req_time = time.time() - req_start
-                        self.log(f"   [DEBUG] requests.get took {req_time:.2f}s, status={resp.status_code}")
+                    # Method 1: Download qua Chrome (dùng session của Chrome - nhanh hơn)
+                    if self.driver:
+                        try:
+                            chrome_start = time.time()
+                            # Fetch qua Chrome's fetch API - dùng session/cookie của Chrome
+                            js_code = f'''
+                            (async () => {{
+                                try {{
+                                    const resp = await fetch("{img.url}");
+                                    if (!resp.ok) return {{ error: "HTTP " + resp.status }};
+                                    const blob = await resp.blob();
+                                    return new Promise((resolve) => {{
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => resolve({{ base64: reader.result.split(',')[1] }});
+                                        reader.readAsDataURL(blob);
+                                    }});
+                                }} catch(e) {{
+                                    return {{ error: e.toString() }};
+                                }}
+                            }})()
+                            '''
+                            result = self.driver.run_js(js_code)
+                            chrome_time = time.time() - chrome_start
 
-                        if resp.status_code == 200:
-                            img_path = save_dir / f"{fname}.png"
-                            write_start = time.time()
-                            img_path.write_bytes(resp.content)
-                            self.log(f"   [DEBUG] write_bytes took {time.time()-write_start:.2f}s ({len(resp.content)} bytes)")
-                            img.local_path = img_path
-                            img.base64_data = base64.b64encode(resp.content).decode()
-                            total_time = time.time() - dl_start
-                            self.log(f"✓ Downloaded: {img_path.name} (total {total_time:.2f}s)")
-                        else:
-                            self.log(f"✗ Download failed: HTTP {resp.status_code}", "WARN")
-                    except Exception as e:
-                        self.log(f"✗ Download error after {time.time()-dl_start:.2f}s: {e}", "WARN")
+                            if result and result.get('base64'):
+                                img.base64_data = result['base64']
+                                img_path = save_dir / f"{fname}.png"
+                                img_path.write_bytes(base64.b64decode(img.base64_data))
+                                img.local_path = img_path
+                                self.log(f"✓ Downloaded via Chrome: {img_path.name} ({chrome_time:.2f}s)")
+                                downloaded = True
+                            elif result and result.get('error'):
+                                self.log(f"   [DEBUG] Chrome download failed: {result['error']}, trying requests...")
+                        except Exception as e:
+                            self.log(f"   [DEBUG] Chrome download error: {e}, trying requests...")
+
+                    # Method 2: Fallback sang requests.get() nếu Chrome thất bại
+                    if not downloaded:
+                        try:
+                            proxies = None
+                            if self._use_webshare and self._webshare_proxy:
+                                proxies = self._webshare_proxy.get_proxies()
+
+                            req_start = time.time()
+                            resp = requests.get(img.url, timeout=(30, 60), proxies=proxies)
+                            req_time = time.time() - req_start
+                            self.log(f"   [DEBUG] requests.get took {req_time:.2f}s, status={resp.status_code}")
+
+                            if resp.status_code == 200:
+                                img_path = save_dir / f"{fname}.png"
+                                img_path.write_bytes(resp.content)
+                                img.local_path = img_path
+                                img.base64_data = base64.b64encode(resp.content).decode()
+                                total_time = time.time() - dl_start
+                                self.log(f"✓ Downloaded via requests: {img_path.name} (total {total_time:.2f}s)")
+                                downloaded = True
+                            else:
+                                self.log(f"✗ Download failed: HTTP {resp.status_code}", "WARN")
+                        except Exception as e:
+                            self.log(f"✗ Download error after {time.time()-dl_start:.2f}s: {e}", "WARN")
 
         # F5 refresh sau mỗi ảnh thành công để tránh 403 cho prompt tiếp theo
         try:
