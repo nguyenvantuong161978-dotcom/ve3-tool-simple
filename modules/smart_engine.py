@@ -4700,9 +4700,11 @@ class SmartEngine:
 
         # === MỞ CHROME 2 (bên phải màn hình) ===
         # Chrome 2 dùng Chrome Portable riêng biệt (GoogleChromePortable - Copy)
+        # QUAN TRỌNG: Dùng profile_dir riêng để tránh kill nhầm Chrome 1 khi logout/reset
         drission_api = None
         try:
             drission_api = DrissionFlowAPI(
+                profile_dir="./chrome_profiles/video",  # Profile RIÊNG cho Chrome 2 (tránh kill nhầm Chrome 1)
                 verbose=True,
                 log_callback=lambda msg, lvl="INFO": self.log(f"[PARALLEL-VIDEO] {msg}", lvl),
                 webshare_enabled=use_webshare,
