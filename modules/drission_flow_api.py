@@ -4091,12 +4091,11 @@ class DrissionFlowAPI:
         self.log(f"[T2V→I2V] Tạo video từ media: {media_id[:50]}...")
         self.log(f"[T2V→I2V] Prompt: {prompt[:60]}...")
 
-        # 1. Chuyển sang T2V mode
-        self.log("[T2V→I2V] Chuyển sang mode 'Từ văn bản sang video'...")
-        if not self.switch_to_t2v_mode():
-            self.log("[T2V→I2V] ⚠️ Không chuyển được T2V mode, thử tiếp...", "WARN")
+        # NOTE: Không cần switch_to_t2v_mode() ở đây
+        # Chrome đã được switch sang T2V mode 1 LẦN sau khi load page
+        # Việc switch lại mỗi lần là THỪA
 
-        # 2. Reset video state
+        # 1. Reset video state
         self.driver.run_js("""
             window._videoResponse = null;
             window._videoError = null;
@@ -4104,16 +4103,15 @@ class DrissionFlowAPI:
             window._t2vToI2vConfig = null;
         """)
 
-        # 3. Set T2V→I2V config
+        # 2. Set T2V→I2V config
         t2v_config = {
             "mediaId": media_id,
             "videoModelKey": video_model
         }
         self.driver.run_js(f"window._t2vToI2vConfig = {json.dumps(t2v_config)};")
         self.log(f"[T2V→I2V] ✓ Config ready (mediaId: {media_id[:40]}...)")
-        self.log(f"[T2V→I2V] Interceptor sẽ convert T2V → I2V khi Chrome gửi request")
 
-        # 4. Tìm textarea và nhập prompt
+        # 3. Tìm textarea và nhập prompt
         textarea = self._find_textarea()
         if not textarea:
             return False, None, "Không tìm thấy textarea"
