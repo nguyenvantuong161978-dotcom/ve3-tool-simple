@@ -4115,6 +4115,13 @@ class DrissionFlowAPI:
         else:
             self.log(f"[T2V→I2V] ⚠️ T2V mode result: {t2v_result}", "WARN")
 
+        # 1.5. Re-inject interceptor (có thể bị mất sau khi chuyển mode)
+        interceptor_ready = self.driver.run_js("return window.__interceptReady;")
+        if not interceptor_ready:
+            self.log("[T2V→I2V] Re-inject interceptor...")
+            self.driver.run_js(JS_INTERCEPTOR)
+            time.sleep(0.3)
+
         # 2. Reset video state
         self.driver.run_js("""
             window._videoResponse = null;
