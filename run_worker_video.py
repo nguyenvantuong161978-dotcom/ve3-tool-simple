@@ -278,6 +278,18 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
                 if ok:
                     video_created += 1
                     log(f"     ✓ Video created: {scene_id}.mp4")
+
+                    # Di chuyển ảnh gốc sang thư mục img_src để tránh nhầm lẫn khi edit
+                    png_path = img_dir / f"{scene_id}.png"
+                    if png_path.exists():
+                        img_src_dir = local_dir / "img_src"
+                        img_src_dir.mkdir(exist_ok=True)
+                        dst_path = img_src_dir / f"{scene_id}.png"
+                        try:
+                            shutil.move(str(png_path), str(dst_path))
+                            log(f"     📦 Moved image to img_src/")
+                        except Exception as e:
+                            log(f"     ⚠️ Cannot move image: {e}", "WARN")
                 else:
                     log(f"     ✗ Failed: {error}", "WARN")
 
