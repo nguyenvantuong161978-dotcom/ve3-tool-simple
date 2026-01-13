@@ -3978,7 +3978,7 @@ class DrissionFlowAPI:
         media_id: str,
         prompt: str,
         save_path: Optional[Path] = None,
-        video_model: str = "veo_3_0_r2v_fast",
+        video_model: str = "veo_3_0_r2v_fast_ultra",
         max_wait: int = 300,
         timeout: int = 60,
         max_retries: int = 3
@@ -3994,14 +3994,14 @@ class DrissionFlowAPI:
         4. Interceptor catch T2V request và convert sang I2V:
            - Đổi URL: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
            - Thêm referenceImages với mediaId
-           - Đổi model: veo_3_1_t2v_fast → veo_3_0_r2v_fast
+           - Đổi model: veo_3_1_t2v → veo_3_0_r2v (giữ suffix _fast_ultra)
         5. Chrome gửi I2V request với fresh reCAPTCHA!
 
         Args:
             media_id: Media ID của ảnh (từ generate_image)
             prompt: Video prompt (mô tả chuyển động)
             save_path: Đường dẫn lưu video
-            video_model: Model video I2V (default: veo_3_0_r2v_fast)
+            video_model: Model video I2V (default: veo_3_0_r2v_fast_ultra)
             max_wait: Thời gian poll tối đa (giây)
             timeout: Timeout đợi response đầu tiên
             max_retries: Số lần retry khi gặp 403
