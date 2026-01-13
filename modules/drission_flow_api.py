@@ -2986,50 +2986,78 @@ class DrissionFlowAPI:
                     img.local_path = img_path
                     self.log(f"✓ Saved: {img_path.name}")
                 elif img.url:
-                    # Download image qua Chrome (Chrome tải nhanh hơn requests)
+                    # Download image bằng cách mở tab mới trong Chrome
                     dl_start = time.time()
-                    self.log(f"→ Downloading via Chrome...")
+                    self.log(f"→ Opening image in new tab...")
                     downloaded = False
 
-                    # Dùng Chrome fetch API - Chrome đã có session, tải nhanh
                     if self.driver and not downloaded:
                         try:
-                            # Escape URL cho JavaScript
-                            safe_url = img.url.replace("'", "\\'").replace('"', '\\"')
-                            js_code = f'''
-                            (async () => {{
-                                try {{
-                                    const resp = await fetch("{safe_url}");
-                                    if (!resp.ok) return {{ error: "HTTP " + resp.status }};
-                                    const blob = await resp.blob();
-                                    return new Promise((resolve) => {{
-                                        const reader = new FileReader();
-                                        reader.onloadend = () => resolve({{
-                                            base64: reader.result.split(',')[1],
-                                            size: blob.size
-                                        }});
-                                        reader.readAsDataURL(blob);
-                                    }});
-                                }} catch(e) {{
-                                    return {{ error: e.toString() }};
-                                }}
-                            }})()
-                            '''
-                            result = self.driver.run_js(js_code)
+                            # Lưu tab hiện tại
+                            original_tab = self.driver.tab_ids[0] if self.driver.tab_ids else None
+
+                            # Mở tab mới với URL ảnh
+                            new_tab = self.driver.new_tab(img.url)
+                            time.sleep(2)  # Đợi ảnh load
+
+                            # Đợi ảnh load xong (tối đa 10s)
+                            for _ in range(20):
+                                img_loaded = self.driver.run_js('''
+                                    const img = document.querySelector('img');
+                                    return img && img.complete && img.naturalWidth > 0;
+                                ''')
+                                if img_loaded:
+                                    break
+                                time.sleep(0.5)
+
+                            # Convert ảnh sang base64 qua canvas
+                            result = self.driver.run_js('''
+                                const img = document.querySelector('img');
+                                if (!img || !img.complete) return { error: "Image not found or not loaded" };
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+
+                                try {
+                                    const dataUrl = canvas.toDataURL('image/png');
+                                    return {
+                                        base64: dataUrl.split(',')[1],
+                                        width: img.naturalWidth,
+                                        height: img.naturalHeight
+                                    };
+                                } catch(e) {
+                                    return { error: e.toString() };
+                                }
+                            ''')
+
                             chrome_time = time.time() - dl_start
+
+                            # Đóng tab mới, quay về tab cũ
+                            if original_tab:
+                                self.driver.close()  # Đóng tab hiện tại (tab ảnh)
+                                self.driver.to_tab(original_tab)
 
                             if result and result.get('base64'):
                                 img.base64_data = result['base64']
                                 img_path = save_dir / f"{fname}.png"
                                 img_path.write_bytes(base64.b64decode(img.base64_data))
                                 img.local_path = img_path
-                                size = result.get('size', len(img.base64_data))
-                                self.log(f"✓ Downloaded: {img_path.name} ({size} bytes, {chrome_time:.2f}s)")
+                                w, h = result.get('width', 0), result.get('height', 0)
+                                self.log(f"✓ Downloaded: {img_path.name} ({w}x{h}, {chrome_time:.2f}s)")
                                 downloaded = True
                             elif result and result.get('error'):
-                                self.log(f"   [DEBUG] Chrome fetch error: {result['error']}")
+                                self.log(f"   [DEBUG] Chrome tab error: {result['error']}")
                         except Exception as e:
-                            self.log(f"   [DEBUG] Chrome fetch exception: {e}")
+                            self.log(f"   [DEBUG] Chrome tab exception: {e}")
+                            # Đảm bảo quay về tab gốc nếu có lỗi
+                            try:
+                                if original_tab and self.driver:
+                                    self.driver.to_tab(original_tab)
+                            except:
+                                pass
 
                     # Fallback to requests nếu Chrome fail
                     if not downloaded:
