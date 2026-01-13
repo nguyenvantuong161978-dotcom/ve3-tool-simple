@@ -4721,45 +4721,14 @@ class SmartEngine:
                 self._parallel_video_running = False
                 return
 
-            # === CHUYỂN SANG T2V MODE (Từ văn bản sang video) ===
-            # QUAN TRỌNG: Phải chạy JS này NGAY SAU KHI load page để chuyển đúng mode
-            self.log("[PARALLEL-VIDEO] Chuyển sang mode 'Từ văn bản sang video'...")
-            try:
-                t2v_js = '''
-// Tìm bằng video + length 22
-var btn = document.querySelector('button[role="combobox"]');
-btn.click();
-setTimeout(() => {
-    btn.click();
-    setTimeout(() => {
-        var spans = document.querySelectorAll('span');
-        for (var el of spans) {
-            var text = el.textContent.trim();
-            if (text.includes('video') && text.length === 22) {
-                console.log('FOUND:', text);
-                el.click();
-                window._t2vResult = 'CLICKED';
-                return;
-            }
-        }
-        console.log('NOT FOUND');
-        window._t2vResult = 'NOT_FOUND';
-    }, 300);
-}, 100);
-'''
-                drission_api.driver.run_js(t2v_js)
-                time.sleep(1)  # Đợi dropdown animation
+            # NOTE: KHÔNG chuyển sang T2V mode!
+            # generate_video_force_mode() hoạt động ở IMAGE mode:
+            # - Chrome ở IMAGE mode → gửi batchGenerateImages request
+            # - Interceptor catch request → đổi thành VIDEO request với media_id
+            # Nếu chuyển T2V mode → Chrome gửi batchAsyncGenerateVideoText → Interceptor không catch được!
 
-                # Check kết quả
-                result = drission_api.driver.run_js("return window._t2vResult || 'PENDING'")
-                if result == 'CLICKED':
-                    self.log("[PARALLEL-VIDEO] ✓ Đã chuyển sang T2V mode!")
-                else:
-                    self.log(f"[PARALLEL-VIDEO] ⚠️ T2V mode result: {result}", "WARN")
-            except Exception as e:
-                self.log(f"[PARALLEL-VIDEO] ⚠️ Lỗi chuyển T2V mode: {e}", "WARN")
-
-            self.log("[PARALLEL-VIDEO] Chrome 2 ready - Bắt đầu theo dõi Excel...")
+            self.log("[PARALLEL-VIDEO] Chrome 2 ready - GIỮ IMAGE mode để FORCE-VIDEO hoạt động")
+            self.log("[PARALLEL-VIDEO] Bắt đầu theo dõi Excel...")
 
         except Exception as e:
             self.log(f"[PARALLEL-VIDEO] Failed to setup Chrome 2: {e}", "ERROR")
