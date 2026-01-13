@@ -172,7 +172,7 @@ def get_account_info(machine_code: str) -> dict:
         return None
 
 
-def login_google_chrome(account_info: dict) -> bool:
+def login_google_chrome(account_info: dict, chrome_portable: str = None) -> bool:
     """
     Mở Chrome và đăng nhập Google bằng JavaScript.
 
@@ -180,6 +180,11 @@ def login_google_chrome(account_info: dict) -> bool:
     1. Mở Chrome đến trang đăng nhập
     2. Dùng JavaScript để điền email/password và trigger events
     3. Để user xác thực nếu cần
+
+    Args:
+        account_info: Dict với 'id' (email) và 'password'
+        chrome_portable: Đường dẫn Chrome Portable cụ thể (nếu có).
+                        Quan trọng khi có nhiều Chrome chạy song song.
     """
     try:
         from DrissionPage import ChromiumPage, ChromiumOptions
@@ -196,17 +201,21 @@ def login_google_chrome(account_info: dict) -> bool:
         # Setup Chrome options
         options = ChromiumOptions()
 
-        # Tìm Chrome Portable
-        chrome_paths = [
-            TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe",
-            Path.home() / "Documents" / "GoogleChromePortable" / "GoogleChromePortable.exe",
-        ]
-
+        # Ưu tiên chrome_portable được truyền vào (cho Chrome 2 song song)
         chrome_exe = None
-        for cp in chrome_paths:
-            if cp.exists():
-                chrome_exe = str(cp)
-                break
+        if chrome_portable and Path(chrome_portable).exists():
+            chrome_exe = chrome_portable
+            log(f"Using specified Chrome: {chrome_exe}")
+        else:
+            # Fallback: Tìm Chrome Portable mặc định
+            chrome_paths = [
+                TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe",
+                Path.home() / "Documents" / "GoogleChromePortable" / "GoogleChromePortable.exe",
+            ]
+            for cp in chrome_paths:
+                if cp.exists():
+                    chrome_exe = str(cp)
+                    break
 
         if chrome_exe:
             options.set_browser_path(chrome_exe)

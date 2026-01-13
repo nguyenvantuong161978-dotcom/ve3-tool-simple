@@ -152,17 +152,18 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                             }
                         }
 
-                        // ĐỔI URL: /projects/xxx/flowMedia:batchGenerateImages -> /video:batchAsyncGenerateVideoText
+                        // ĐỔI URL: /projects/xxx/flowMedia:batchGenerateImages -> /video:batchAsyncGenerateVideoReferenceImages
+                        // QUAN TRỌNG: Phải gửi đến I2V endpoint (ReferenceImages) vì payload có referenceImages
                         // Video endpoint KHÔNG có /projects/xxx/ prefix
                         var projectsIdx = urlStr.indexOf('/projects/');
                         var newUrl;
                         if (projectsIdx !== -1) {
                             // Lấy base URL trước /projects/
                             var baseUrl = urlStr.substring(0, projectsIdx);
-                            newUrl = baseUrl + '/video:batchAsyncGenerateVideoText';
+                            newUrl = baseUrl + '/video:batchAsyncGenerateVideoReferenceImages';
                         } else {
                             // Fallback: simple replace
-                            newUrl = urlStr.replace('flowMedia:batchGenerateImages', 'video:batchAsyncGenerateVideoText');
+                            newUrl = urlStr.replace('flowMedia:batchGenerateImages', 'video:batchAsyncGenerateVideoReferenceImages');
                         }
                         console.log('[FORCE-VIDEO] Original URL:', urlStr);
                         console.log('[FORCE-VIDEO] New URL:', newUrl);
@@ -408,6 +409,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                     var t2vConfig = window._t2vToI2vConfig;
                     console.log('[T2V→I2V] Converting Text-to-Video request to Image-to-Video...');
                     console.log('[T2V→I2V] Original URL:', urlStr);
+                    console.log('[T2V→I2V] Chrome original payload:', JSON.stringify(chromeVideoBody, null, 2));
 
                     // 1. Đổi URL: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
                     var newUrl = urlStr.replace('batchAsyncGenerateVideoText', 'batchAsyncGenerateVideoReferenceImages');
@@ -444,6 +446,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                     // Update body với payload đã convert
                     opts.body = JSON.stringify(chromeVideoBody);
                     console.log('[T2V→I2V] Conversion complete, sending I2V request...');
+                    console.log('[T2V→I2V] Final payload:', JSON.stringify(chromeVideoBody, null, 2));
 
                     // Clear config
                     window._t2vToI2vConfig = null;
@@ -672,32 +675,26 @@ JS_SELECT_VIDEO_MODE = JS_SELECT_VIDEO_MODE_STEP1
 # T2V Mode - JS ALL-IN-ONE với setTimeout (đợi dropdown mở)
 # Vietnamese: "Từ văn bản sang video" = 22 ký tự
 JS_SELECT_T2V_MODE_ALL = '''
-(function() {
-    window._t2vResult = 'PENDING';
-    var btn = document.querySelector('button[role="combobox"]');
-    if (!btn) {
-        window._t2vResult = 'NO_DROPDOWN';
-        return;
-    }
+// Tìm bằng video + length 22
+var btn = document.querySelector('button[role="combobox"]');
+btn.click();
+setTimeout(() => {
     btn.click();
-    setTimeout(function() {
-        btn.click();
-        setTimeout(function() {
-            var spans = document.querySelectorAll('span');
-            for (var el of spans) {
-                var text = el.textContent.trim();
-                if (text.includes('video') && text.length === 22) {
-                    console.log('FOUND:', text);
-                    el.click();
-                    window._t2vResult = 'CLICKED';
-                    return;
-                }
+    setTimeout(() => {
+        var spans = document.querySelectorAll('span');
+        for (var el of spans) {
+            var text = el.textContent.trim();
+            if (text.includes('video') && text.length === 22) {
+                console.log('FOUND:', text);
+                el.click();
+                window._t2vResult = 'CLICKED';
+                return;
             }
-            console.log('NOT FOUND');
-            window._t2vResult = 'NOT_FOUND';
-        }, 300);
-    }, 100);
-})();
+        }
+        console.log('NOT FOUND');
+        window._t2vResult = 'NOT_FOUND';
+    }, 300);
+}, 100);
 '''
 
 # Legacy: Các bước riêng lẻ (backup)
@@ -1222,9 +1219,12 @@ class DrissionFlowAPI:
             self.close()
             time.sleep(2)
 
-            # 4. Chạy login
+            # 4. Chạy login - QUAN TRỌNG: Truyền chrome_portable để login đúng Chrome
+            # Khi có 2 Chrome song song (Chrome 1 tạo ảnh, Chrome 2 tạo video),
+            # cần login đúng Chrome bị logout, không phải Chrome kia
             self.log("Bắt đầu đăng nhập Google...")
-            success = login_google_chrome(account_info)
+            self.log(f"  Chrome: {self._chrome_portable or 'default'}")
+            success = login_google_chrome(account_info, chrome_portable=self._chrome_portable)
 
             if success:
                 self.log("✓ Đăng nhập thành công!")
@@ -1277,7 +1277,8 @@ class DrissionFlowAPI:
         wait_for_project: bool = True,
         timeout: int = 120,
         warm_up: bool = False,
-        project_url: str = None
+        project_url: str = None,
+        skip_mode_selection: bool = False  # True = không click chọn mode (cho Chrome 2 video)
     ) -> bool:
         """
         Setup Chrome và inject interceptor.
@@ -1288,10 +1289,14 @@ class DrissionFlowAPI:
             timeout: Timeout đợi project (giây)
             warm_up: Tạo 1 ảnh trong Chrome trước (default False - không cần)
             project_url: URL project cố định (nếu có, sẽ vào thẳng project này)
+            skip_mode_selection: Bỏ qua việc click chọn "Tạo hình ảnh" (cho video mode)
 
         Returns:
             True nếu thành công
         """
+        # Lưu skip_mode_selection để dùng khi restart_chrome()
+        self._skip_mode_selection = skip_mode_selection
+
         if not DRISSION_AVAILABLE:
             self.log("DrissionPage không được cài đặt! pip install DrissionPage", "ERROR")
             return False
@@ -1768,31 +1773,36 @@ class DrissionFlowAPI:
             else:
                 self.log("✓ Đã ở trong project!")
                 # Chọn "Tạo hình ảnh" từ dropdown - với retry khi page refresh
-                time.sleep(1)
-                select_success = False
-                for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
-                    try:
-                        for j in range(10):
-                            result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
-                            if result == 'CLICKED':
-                                self.log("✓ Chọn 'Tạo hình ảnh'")
-                                time.sleep(1)
-                                select_success = True
+                # SKIP nếu skip_mode_selection=True (cho Chrome 2 video - sẽ switch T2V mode sau)
+                if not skip_mode_selection:
+                    time.sleep(1)
+                    select_success = False
+                    for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
+                        try:
+                            for j in range(10):
+                                result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
+                                if result == 'CLICKED':
+                                    self.log("✓ Chọn 'Tạo hình ảnh'")
+                                    time.sleep(1)
+                                    select_success = True
+                                    break
+                                time.sleep(0.5)
+                            if select_success:
                                 break
-                            time.sleep(0.5)
-                        if select_success:
-                            break
-                    except Exception as e:
-                        if ContextLostError and isinstance(e, ContextLostError):
-                            self.log(f"[PAGE] ⚠️ Page bị refresh, đợi load lại... (retry {retry_count + 1}/3)")
-                            if self._wait_for_page_ready(timeout=30):
-                                continue  # Retry sau khi page load xong
+                        except Exception as e:
+                            if ContextLostError and isinstance(e, ContextLostError):
+                                self.log(f"[PAGE] ⚠️ Page bị refresh, đợi load lại... (retry {retry_count + 1}/3)")
+                                if self._wait_for_page_ready(timeout=30):
+                                    continue  # Retry sau khi page load xong
+                                else:
+                                    self.log("[PAGE] ✗ Timeout đợi page, thử lại...", "WARN")
+                                    continue
                             else:
-                                self.log("[PAGE] ✗ Timeout đợi page, thử lại...", "WARN")
-                                continue
-                        else:
-                            self.log(f"[PAGE] ⚠️ Lỗi: {e}", "WARN")
-                            break
+                                self.log(f"[PAGE] ⚠️ Lỗi: {e}", "WARN")
+                                break
+                else:
+                    self.log("⏭️ Skip mode selection (video mode)")
+                    time.sleep(1)
 
         # 5. Đợi textarea sẵn sàng - với xử lý ContextLostError và LOGOUT
         self.log("Đợi project load...")
@@ -3820,11 +3830,11 @@ class DrissionFlowAPI:
                     # Check for operations (async video)
                     if response.get('operations'):
                         operation = response['operations'][0]
-                        operation_id = operation.get('name', '').split('/')[-1]
-                        self.log(f"[I2V-FORCE] ✓ Video operation started: {operation_id[:30]}...")
+                        operation_name = operation.get('name', '')
+                        self.log(f"[I2V-FORCE] ✓ Video operation started: {operation_name[-30:]}...")
 
-                        # Poll cho video hoàn thành
-                        video_url = self._poll_video_operation(operation_id, max_wait)
+                        # Poll cho video hoàn thành qua Browser
+                        video_url = self._poll_video_operation_browser(operation, max_wait)
                         if video_url:
                             self.log(f"[I2V-FORCE] ✓ Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
@@ -3845,6 +3855,123 @@ class DrissionFlowAPI:
 
         self.log("[I2V-FORCE] ✗ Timeout đợi video response", "ERROR")
         return False, None, "Timeout waiting for video response"
+
+    def _poll_video_operation_browser(self, operation: Dict, max_wait: int = 300) -> Optional[str]:
+        """
+        Poll video operation qua Browser (dùng fetch trong browser).
+        Không cần gọi API trực tiếp, dùng Chrome's session/cookies.
+
+        Args:
+            operation: Operation dict từ response (chứa 'name', 'metadata', etc.)
+            max_wait: Thời gian poll tối đa (giây)
+
+        Returns:
+            Video URL nếu thành công, None nếu timeout/lỗi
+        """
+        poll_url = "https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus"
+
+        # Chuẩn bị payload poll
+        poll_payload = json.dumps({"operations": [operation]})
+
+        # JS để poll qua browser's fetch (với auth từ interceptor)
+        poll_js = f'''
+(async function() {{
+    window._videoPollResult = null;
+    window._videoPollError = null;
+    window._videoPollDone = false;
+
+    try {{
+        // Lấy auth headers từ interceptor (đã capture khi gửi request)
+        var headers = {{
+            "Content-Type": "application/json"
+        }};
+
+        // Add Bearer token nếu có (captured bởi interceptor)
+        if (window._tk) {{
+            headers["Authorization"] = "Bearer " + window._tk;
+        }}
+
+        // Add x-browser-validation nếu có
+        if (window._xbv) {{
+            headers["x-browser-validation"] = window._xbv;
+        }}
+
+        const response = await fetch("{poll_url}", {{
+            method: "POST",
+            headers: headers,
+            credentials: "include",
+            body: {poll_payload!r}
+        }});
+
+        const data = await response.json();
+        window._videoPollResult = data;
+        window._videoPollDone = true;
+        console.log('[POLL] Status:', response.status, 'Data:', JSON.stringify(data).substring(0, 200));
+    }} catch(e) {{
+        window._videoPollError = e.toString();
+        window._videoPollDone = true;
+        console.log('[POLL] Error:', e);
+    }}
+}})();
+'''
+
+        start_time = time.time()
+        poll_interval = 5  # Poll mỗi 5 giây
+        poll_count = 0
+
+        while time.time() - start_time < max_wait:
+            poll_count += 1
+            self.log(f"[I2V-FORCE] Polling video... ({poll_count}, {int(time.time() - start_time)}s)")
+
+            # Run poll JS
+            self.driver.run_js(poll_js)
+
+            # Đợi kết quả
+            for _ in range(30):  # Max 3s đợi response
+                done = self.driver.run_js("return window._videoPollDone;")
+                if done:
+                    break
+                time.sleep(0.1)
+
+            # Check kết quả
+            error = self.driver.run_js("return window._videoPollError;")
+            if error:
+                self.log(f"[I2V-FORCE] Poll error: {error}", "WARN")
+                time.sleep(poll_interval)
+                continue
+
+            result = self.driver.run_js("return window._videoPollResult;")
+            if not result:
+                time.sleep(poll_interval)
+                continue
+
+            # Check operations status
+            if result.get('operations'):
+                op = result['operations'][0]
+                op_done = op.get('done', False)
+                progress = op.get('metadata', {}).get('progressPercent', 0)
+
+                self.log(f"[I2V-FORCE] Progress: {progress}%, Done: {op_done}")
+
+                if op_done:
+                    # Lấy video URL từ response
+                    if op.get('response', {}).get('videos'):
+                        video = op['response']['videos'][0]
+                        video_url = video.get('videoUri') or video.get('uri')
+                        if video_url:
+                            self.log(f"[I2V-FORCE] ✓ Video completed!")
+                            return video_url
+
+                    # Check error
+                    if op.get('error'):
+                        err_msg = op['error'].get('message', 'Unknown error')
+                        self.log(f"[I2V-FORCE] ✗ Video error: {err_msg}", "ERROR")
+                        return None
+
+            time.sleep(poll_interval)
+
+        self.log(f"[I2V-FORCE] ✗ Timeout sau {max_wait}s", "ERROR")
+        return None
 
     def generate_video_t2v_mode(
         self,
@@ -3977,10 +4104,16 @@ class DrissionFlowAPI:
         self.log(f"[T2V→I2V] Tạo video từ media: {media_id[:50]}...")
         self.log(f"[T2V→I2V] Prompt: {prompt[:60]}...")
 
-        # 1. Chuyển sang T2V mode
+        # 1. Chuyển sang T2V mode (CẦN THIẾT - phải switch mỗi lần như cleanup branch)
         self.log("[T2V→I2V] Chuyển sang mode 'Từ văn bản sang video'...")
-        if not self.switch_to_t2v_mode():
-            self.log("[T2V→I2V] ⚠️ Không chuyển được T2V mode, thử tiếp...", "WARN")
+        result = self.driver.run_js(JS_SELECT_T2V_MODE_ALL)
+        time.sleep(0.8)  # Đợi dropdown animation
+        t2v_result = self.driver.run_js("return window._t2vResult;")
+        if t2v_result == 'CLICKED':
+            self.log("[T2V→I2V] ✓ Đã chuyển sang T2V mode")
+            time.sleep(0.5)
+        else:
+            self.log(f"[T2V→I2V] ⚠️ T2V mode result: {t2v_result}", "WARN")
 
         # 2. Reset video state
         self.driver.run_js("""
@@ -3990,16 +4123,15 @@ class DrissionFlowAPI:
             window._t2vToI2vConfig = null;
         """)
 
-        # 3. Set T2V→I2V config
+        # 2. Set T2V→I2V config
         t2v_config = {
             "mediaId": media_id,
             "videoModelKey": video_model
         }
         self.driver.run_js(f"window._t2vToI2vConfig = {json.dumps(t2v_config)};")
         self.log(f"[T2V→I2V] ✓ Config ready (mediaId: {media_id[:40]}...)")
-        self.log(f"[T2V→I2V] Interceptor sẽ convert T2V → I2V khi Chrome gửi request")
 
-        # 4. Tìm textarea và nhập prompt
+        # 3. Tìm textarea và nhập prompt
         textarea = self._find_textarea()
         if not textarea:
             return False, None, "Không tìm thấy textarea"
@@ -4039,28 +4171,11 @@ class DrissionFlowAPI:
 
                     if response.get('operations'):
                         operation = response['operations'][0]
-                        self.log(f"[T2V→I2V] ✓ Video operation started")
+                        operation_name = operation.get('name', '')
+                        self.log(f"[T2V→I2V] ✓ Video operation started: {operation_name[-30:]}...")
 
-                        fresh_token = self.driver.run_js("return window._tk;")
-                        if fresh_token:
-                            self.bearer_token = f"Bearer {fresh_token}"
-                            self.log(f"[T2V→I2V] ✓ Refreshed bearer token")
-
-                        headers = {
-                            "Authorization": self.bearer_token,
-                            "Content-Type": "application/json",
-                            "Origin": "https://labs.google",
-                            "Referer": "https://labs.google/",
-                        }
-                        if self.x_browser_validation:
-                            headers["x-browser-validation"] = self.x_browser_validation
-
-                        proxies = None
-                        if self._use_webshare and hasattr(self, '_bridge_port') and self._bridge_port:
-                            bridge_url = f"http://127.0.0.1:{self._bridge_port}"
-                            proxies = {"http": bridge_url, "https": bridge_url}
-
-                        video_url = self._poll_video_operation(operation, headers, proxies, max_wait)
+                        # Poll qua Browser (dùng Chrome's auth)
+                        video_url = self._poll_video_operation_browser(operation, max_wait)
 
                         if video_url:
                             self.log(f"[T2V→I2V] ✓ Video ready: {video_url[:60]}...")
@@ -4467,11 +4582,10 @@ class DrissionFlowAPI:
         self.log(f"[I2V] Tạo video từ media: {media_id[:50]}...")
         self.log(f"[I2V] Prompt: {prompt[:60]}...")
 
-        # 1. Chuyển sang video mode
-        if not self.switch_to_video_mode():
-            self.log("[I2V] ⚠️ Không chuyển được video mode, thử tiếp...", "WARN")
+        # NOTE: Không cần switch_to_video_mode() ở đây
+        # Chrome đã được switch sang I2V mode 1 LẦN sau khi load page
 
-        # 2. Reset video state
+        # 1. Reset video state
         self.driver.run_js("""
             window._videoResponse = null;
             window._videoError = null;
@@ -4539,24 +4653,12 @@ class DrissionFlowAPI:
 
                     operations = response_data.get("operations", [])
                     if operations:
-                        self.log(f"[I2V] Got {len(operations)} operations, polling...")
                         op = operations[0]
+                        op_name = op.get('name', '')
+                        self.log(f"[I2V] ✓ Video operation started: {op_name[-30:]}...")
 
-                        headers = {
-                            "Authorization": self.bearer_token,
-                            "Content-Type": "application/json",
-                            "Origin": "https://labs.google",
-                            "Referer": "https://labs.google/",
-                        }
-                        if self.x_browser_validation:
-                            headers["x-browser-validation"] = self.x_browser_validation
-
-                        proxies = None
-                        if self._use_webshare and hasattr(self, '_bridge_port') and self._bridge_port:
-                            bridge_url = f"http://127.0.0.1:{self._bridge_port}"
-                            proxies = {"http": bridge_url, "https": bridge_url}
-
-                        video_url = self._poll_video_operation(op, headers, proxies, max_wait)
+                        # Poll qua Browser (dùng Chrome's auth)
+                        video_url = self._poll_video_operation_browser(op, max_wait)
 
                         if video_url:
                             self.log(f"[I2V] ✓ Video ready: {video_url[:60]}...")
@@ -4808,7 +4910,13 @@ class DrissionFlowAPI:
         if saved_project_url:
             self.log(f"  → Reusing project: {saved_project_url[:50]}...")
 
-        if self.setup(project_url=saved_project_url):
+        # GIỮ NGUYÊN skip_mode_selection từ lần setup đầu tiên
+        # Nếu Chrome 2 (video) đã skip mode selection, thì khi restart cũng skip
+        skip_mode = getattr(self, '_skip_mode_selection', False)
+        if skip_mode:
+            self.log("  → Skip mode selection (video mode đã được set)")
+
+        if self.setup(project_url=saved_project_url, skip_mode_selection=skip_mode):
             self.log("✓ Chrome restarted thành công!")
             return True
         else:

@@ -1647,14 +1647,14 @@ class SmartEngine:
 
         # Load settings
         import yaml
-        headless = True
+        headless = False  # Mặc định False để bật Parallel Video
         settings = {}
         try:
             config_path = self.config_dir / "settings.yaml"
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
                     settings = yaml.safe_load(f) or {}
-                headless = settings.get('browser_headless', True)
+                headless = settings.get('browser_headless', False)  # Mặc định False
         except:
             pass
 
@@ -1664,9 +1664,11 @@ class SmartEngine:
         # Chrome 2 (bên phải): Theo dõi Excel và tạo video
         # Ảnh xong = project xong, video chạy nền được bao nhiêu thì được
         # =====================================================================
-        video_parallel_enabled = not headless  # Luôn bật khi không headless
+        video_parallel_enabled = not getattr(self, '_skip_video', False)  # Tắt nếu skip_video=True
 
-        if video_parallel_enabled:
+        if getattr(self, '_skip_video', False):
+            self.log("[MODE] IMAGE ONLY - Bỏ qua tạo video")
+        elif video_parallel_enabled:
             self.log("[PARALLEL-VIDEO] Chrome 2 sẽ tạo video SONG SONG")
             self.log("[PARALLEL-VIDEO] Ảnh xong = xong, video chạy nền")
 
@@ -1846,7 +1848,7 @@ class SmartEngine:
         self.log(f"Da sap xep: {[p.get('id') for p in prompts[:5]]}... (nv/loc truoc, scene sau)")
 
         # Load settings
-        headless = True
+        headless = False  # Mặc định False để bật Parallel Video
         parallel_browsers = 1
         try:
             import yaml
@@ -1854,7 +1856,7 @@ class SmartEngine:
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
                     settings = yaml.safe_load(f) or {}
-                headless = settings.get('browser_headless', True)
+                headless = settings.get('browser_headless', False)  # Mặc định False
                 parallel_browsers = max(1, min(5, settings.get('parallel_browsers', 1)))
         except:
             pass
@@ -1873,9 +1875,11 @@ class SmartEngine:
         # Chrome 2 (bên phải): Theo dõi Excel và tạo video
         # Ảnh xong = project xong, video chạy nền được bao nhiêu thì được
         # =====================================================================
-        video_parallel_enabled = not headless  # Luôn bật khi không headless
+        video_parallel_enabled = not getattr(self, '_skip_video', False)  # Tắt nếu skip_video=True
 
-        if video_parallel_enabled:
+        if getattr(self, '_skip_video', False):
+            self.log("[MODE] IMAGE ONLY - Bỏ qua tạo video")
+        elif video_parallel_enabled:
             self.log("[PARALLEL-VIDEO] Chrome 2 sẽ tạo video SONG SONG")
             self.log("[PARALLEL-VIDEO] Ảnh xong = xong, video chạy nền")
 
@@ -2210,7 +2214,8 @@ class SmartEngine:
         input_path: str,
         output_dir: str = None,
         callback: Callable = None,
-        skip_compose: bool = False
+        skip_compose: bool = False,
+        skip_video: bool = False
     ) -> Dict:
         """
         BROWSER MODE PIPELINE - Tao anh bang JS automation.
@@ -2226,12 +2231,14 @@ class SmartEngine:
             input_path: Voice file (.mp3, .wav) hoac Excel (.xlsx)
             output_dir: Thu muc output (optional)
             callback: Ham log callback
+            skip_video: If True, skip video generation (image only mode)
 
         Returns:
             Dict with success/failed counts
         """
         self.callback = callback
         self.stop_flag = False
+        self._skip_video = skip_video  # Flag to skip video generation
 
         inp = Path(input_path)
         ext = inp.suffix.lower()
@@ -4700,9 +4707,11 @@ class SmartEngine:
 
         # === MỞ CHROME 2 (bên phải màn hình) ===
         # Chrome 2 dùng Chrome Portable riêng biệt (GoogleChromePortable - Copy)
+        # QUAN TRỌNG: Dùng profile_dir riêng để tránh kill nhầm Chrome 1 khi logout/reset
         drission_api = None
         try:
             drission_api = DrissionFlowAPI(
+                profile_dir="./chrome_profiles/video",  # Profile RIÊNG cho Chrome 2 (tránh kill nhầm Chrome 1)
                 verbose=True,
                 log_callback=lambda msg, lvl="INFO": self.log(f"[PARALLEL-VIDEO] {msg}", lvl),
                 webshare_enabled=use_webshare,
@@ -4714,10 +4723,52 @@ class SmartEngine:
             )
 
             # Mở đúng project URL từ Excel
-            if not drission_api.setup(project_url=project_url):
+            # skip_mode_selection=True để KHÔNG click "Tạo hình ảnh" - sẽ switch T2V mode sau
+            if not drission_api.setup(project_url=project_url, skip_mode_selection=True):
                 self.log("[PARALLEL-VIDEO] Không setup được Chrome 2!", "ERROR")
                 self._parallel_video_running = False
                 return
+
+            # === CHUYỂN SANG T2V MODE (Từ văn bản sang video) ===
+            # UI: T2V mode, interceptor convert thành I2V API với media_id
+            # NOTE: _execute_video_t2v_mode() cũng sẽ switch mode mỗi lần, đây chỉ là lần đầu
+            self.log("[PARALLEL-VIDEO] Chuyển sang mode 'Từ văn bản sang video'...")
+            time.sleep(2)  # Đợi page ổn định
+
+            t2v_js = '''
+// Tìm "Từ văn bản sang video" (length 22)
+var btn = document.querySelector('button[role="combobox"]');
+if (btn) {
+    btn.click();
+    setTimeout(() => {
+        btn.click();
+        setTimeout(() => {
+            var spans = document.querySelectorAll('span');
+            for (var el of spans) {
+                var text = el.textContent.trim();
+                if (text.includes('video') && text.length === 22) {
+                    console.log('[T2V] FOUND:', text);
+                    el.click();
+                    window._t2vResult = 'CLICKED';
+                    return;
+                }
+            }
+            console.log('[T2V] NOT FOUND');
+            window._t2vResult = 'NOT_FOUND';
+        }, 300);
+    }, 100);
+} else {
+    window._t2vResult = 'NO_DROPDOWN';
+}
+'''
+            drission_api.driver.run_js(t2v_js)
+            time.sleep(1.5)  # Đợi dropdown animation
+
+            result = drission_api.driver.run_js("return window._t2vResult || 'PENDING'")
+            if result == 'CLICKED':
+                self.log("[PARALLEL-VIDEO] ✓ Đã chuyển sang T2V mode!")
+            else:
+                self.log(f"[PARALLEL-VIDEO] ⚠️ T2V switch result: {result}", "WARN")
 
             self.log("[PARALLEL-VIDEO] Chrome 2 ready - Bắt đầu theo dõi Excel...")
 
@@ -4768,8 +4819,9 @@ class SmartEngine:
                             video_prompt = scene.video_prompt or video_prompt
                             break
 
-                    # Tạo video
-                    ok, result_path, error = drission_api.generate_video_force_mode(
+                    # Tạo video bằng T2V mode (Chrome ở "Từ văn bản sang video")
+                    # Interceptor convert T2V request → I2V API với media_id
+                    ok, result_path, error = drission_api.generate_video_t2v_mode(
                         media_id=media_id,
                         prompt=video_prompt,
                         save_path=mp4_path

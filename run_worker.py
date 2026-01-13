@@ -164,42 +164,132 @@ def needs_api_completion(project_dir: Path, name: str) -> bool:
         return False
 
 
-def complete_excel_with_api(project_dir: Path, name: str) -> bool:
+def create_excel_with_api(project_dir: Path, name: str) -> bool:
     """
-    Complete Excel prompts using API (V2 flow).
-    Called when Excel has [FALLBACK] prompts from run_srt.py.
+    Tạo Excel từ SRT bằng Progressive API (từng step, lưu ngay).
 
-    QUAN TRỌNG: Nếu API fails, sẽ dùng backup prompts từ director_plan sheet.
+    Flow mới (Progressive - mỗi step lưu vào Excel):
+    1. Step 1: Phân tích story → Lưu Excel
+    2. Step 2: Tạo characters → Lưu Excel
+    3. Step 3: Tạo locations → Lưu Excel
+    4. Step 4: Tạo director_plan → Lưu Excel
+    5. Step 5: Tạo scene prompts → Lưu Excel
+
+    Lợi ích:
+    - Nếu fail giữa chừng: Không mất progress
+    - Có thể resume từ step bị fail
+    - API đọc context từ Excel → chất lượng tốt hơn
+
+    Fallback: Nếu không có API keys → tạo fallback Excel
+
+    Returns True nếu có Excel (API hoặc fallback).
     """
     import yaml
 
-    print(f"  🤖 Completing Excel with API (V2 flow)...")
-
     excel_path = project_dir / f"{name}_prompts.xlsx"
-    director_plan_backup = []
-    original_excel_backup = None  # Backup toàn bộ Excel để khôi phục khi fail
+    srt_path = project_dir / f"{name}.srt"
+
+    # Check SRT exists
+    if not srt_path.exists():
+        print(f"  ❌ No SRT file found!")
+        return False
+
+    print(f"  🤖 Creating Excel from SRT (Progressive API)...")
+
+    # Load config
+    cfg = {}
+    cfg_file = TOOL_DIR / "config" / "settings.yaml"
+    if cfg_file.exists():
+        with open(cfg_file, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+    # Collect API keys
+    deepseek_key = cfg.get('deepseek_api_key', '')
+    groq_keys = cfg.get('groq_api_keys', [])
+    gemini_keys = cfg.get('gemini_api_keys', [])
+
+    if deepseek_key:
+        cfg['deepseek_api_keys'] = [deepseek_key]
+
+    has_api_keys = bool(groq_keys or gemini_keys or deepseek_key)
+
+    # === PHƯƠNG ÁN 1: Progressive API (từng step, lưu ngay) ===
+    if has_api_keys:
+        print(f"  🌐 Using Progressive API (step-by-step, save immediately)...")
+
+        try:
+            from modules.progressive_prompts import ProgressivePromptsGenerator
+
+            gen = ProgressivePromptsGenerator(cfg)
+
+            # Chạy tất cả steps (mỗi step tự lưu vào Excel)
+            api_success = gen.run_all_steps(project_dir, name, log_callback=print)
+
+            if api_success and excel_path.exists():
+                print(f"  ✅ Excel created with Progressive API")
+                return True
+            else:
+                print(f"  ⚠️ Progressive API incomplete, trying fallback...")
+
+        except Exception as api_err:
+            print(f"  ⚠️ Progressive API error: {api_err}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"  ⚠️ No API keys configured")
+
+    # === PHƯƠNG ÁN 2: Fallback (không cần API) ===
+    print(f"  📋 Creating fallback Excel from SRT...")
 
     try:
-        # === BƯỚC 1: Backup director_plan VÀ toàn bộ Excel trước khi làm gì ===
+        cfg['fallback_only'] = True
+
+        from modules.prompts_generator import PromptGenerator
+        gen = PromptGenerator(cfg)
+
+        if gen.generate_for_project(project_dir, name, fallback_only=True):
+            print(f"  ✅ Fallback Excel created")
+            return True
+        else:
+            print(f"  ❌ Failed to create fallback Excel")
+            return False
+
+    except Exception as e:
+        print(f"  ❌ Fallback error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def complete_excel_with_api(project_dir: Path, name: str) -> bool:
+    """
+    Hoàn thiện Excel có sẵn bằng API (nếu có [FALLBACK] prompts).
+
+    Flow:
+    1. Backup Excel hiện tại
+    2. Thử hoàn thiện bằng API
+    3. Nếu API fail → khôi phục từ backup (giữ nguyên fallback prompts)
+
+    Returns True nếu có Excel (API hoặc giữ nguyên fallback).
+    """
+    import yaml
+
+    print(f"  🤖 Completing Excel with API...")
+
+    excel_path = project_dir / f"{name}_prompts.xlsx"
+    original_excel_backup = None
+
+    try:
+        # === BƯỚC 1: Backup Excel trước khi làm gì ===
         if excel_path.exists():
-            # Backup toàn bộ file Excel
             import shutil
             backup_path = excel_path.with_suffix('.xlsx.backup')
             shutil.copy2(excel_path, backup_path)
             original_excel_backup = backup_path
             print(f"  📋 Backed up Excel to {backup_path.name}")
-
-            from modules.excel_manager import PromptWorkbook
-            try:
-                wb = PromptWorkbook(str(excel_path))
-                wb.load_or_create()
-                director_plan_backup = wb.get_director_plan()
-                if director_plan_backup:
-                    print(f"  📋 Backed up {len(director_plan_backup)} scenes from director_plan")
-                else:
-                    print(f"  ⚠️ director_plan is empty!")
-            except Exception as e:
-                print(f"  ⚠️ Could not backup director_plan: {e}")
+        else:
+            # Không có Excel → dùng create_excel_with_api
+            return create_excel_with_api(project_dir, name)
 
         # Load config
         cfg = {}
@@ -216,25 +306,21 @@ def complete_excel_with_api(project_dir: Path, name: str) -> bool:
         if deepseek_key:
             cfg['deepseek_api_keys'] = [deepseek_key]
 
-        # === KIỂM TRA: Nếu không có API keys → dùng fallback ngay ===
+        # === KIỂM TRA: Nếu không có API keys → giữ nguyên fallback ===
         if not groq_keys and not gemini_keys and not deepseek_key:
-            print(f"  ⚠️ No API keys configured, using existing fallback prompts")
-            # KHÔNG xóa Excel, giữ nguyên fallback prompts
+            print(f"  ⚠️ No API keys, keeping existing fallback prompts")
             if original_excel_backup and original_excel_backup.exists():
-                original_excel_backup.unlink()  # Xóa backup vì không cần
-            return True  # Continue with existing fallback
+                original_excel_backup.unlink()
+            return True
 
         # Prefer DeepSeek for prompts
         cfg['preferred_provider'] = 'deepseek' if deepseek_key else ('groq' if groq_keys else 'gemini')
-
-        # Force V2 flow
         cfg['use_v2_flow'] = True
 
-        # === THẬN TRỌNG: Xóa Excel để regenerate ===
-        # Chỉ xóa sau khi đã backup
+        # Xóa Excel để regenerate
         if excel_path.exists():
             excel_path.unlink()
-            print(f"  🗑️ Deleted fallback Excel, regenerating with API...")
+            print(f"  🔄 Regenerating with API...")
 
         # Generate prompts with API
         from modules.prompts_generator import PromptGenerator
@@ -249,161 +335,29 @@ def complete_excel_with_api(project_dir: Path, name: str) -> bool:
 
         if api_success:
             print(f"  ✅ Excel completed with API prompts")
-            # Xóa backup vì không cần nữa
             if original_excel_backup and original_excel_backup.exists():
                 original_excel_backup.unlink()
             return True
         else:
-            print(f"  ❌ API failed (có thể hết tiền), restoring backup...")
-            # === API FAILED: Khôi phục từ backup ===
-            return _restore_from_backup(excel_path, original_excel_backup, director_plan_backup)
+            print(f"  ⚠️ API failed, restoring backup...")
+            # Khôi phục từ backup
+            if original_excel_backup and original_excel_backup.exists():
+                import shutil
+                shutil.copy2(original_excel_backup, excel_path)
+                original_excel_backup.unlink()
+                print(f"  ✅ Restored fallback Excel")
+            return True  # Tiếp tục với fallback prompts
 
     except Exception as e:
-        print(f"  ❌ API completion error: {e}")
+        print(f"  ❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        # === ERROR: Khôi phục từ backup ===
-        return _restore_from_backup(excel_path, original_excel_backup, director_plan_backup)
-
-
-def _restore_from_backup(excel_path: Path, original_excel_backup: Path, director_plan_backup: list) -> bool:
-    """
-    Khôi phục Excel từ backup khi API fail.
-    Ưu tiên: 1. Original Excel backup → 2. director_plan backup → 3. Fail
-    """
-    import shutil
-
-    # Ưu tiên 1: Khôi phục từ file backup gốc
-    if original_excel_backup and original_excel_backup.exists():
-        try:
+        # Khôi phục từ backup
+        if original_excel_backup and original_excel_backup.exists():
+            import shutil
             shutil.copy2(original_excel_backup, excel_path)
-            original_excel_backup.unlink()  # Xóa backup
-            print(f"  ✅ Restored original Excel with fallback prompts")
-            return True
-        except Exception as e:
-            print(f"  ⚠️ Could not restore from file backup: {e}")
-
-    # Ưu tiên 2: Rebuild từ director_plan
-    if director_plan_backup:
-        print(f"  🔄 Rebuilding from director_plan backup ({len(director_plan_backup)} scenes)...")
-        try:
-            _restore_scenes_from_director_plan(excel_path, director_plan_backup)
-            print(f"  ✅ Restored {len(director_plan_backup)} scenes from director_plan")
-            return True
-        except Exception as restore_err:
-            print(f"  ❌ Failed to restore from director_plan: {restore_err}")
-
-    print(f"  ❌ No backup available!")
-    return False
-
-
-def _restore_scenes_from_director_plan(excel_path: Path, director_plan: list) -> bool:
-    """
-    Khôi phục scenes từ director_plan backup.
-    Tạo lại Excel với scenes từ backup prompts.
-    Sử dụng backup_characters và backup_locations nếu có.
-    """
-    from modules.excel_manager import PromptWorkbook, Scene, Character
-
-    print(f"  🔄 Restoring {len(director_plan)} scenes from director_plan backup...")
-
-    # Create new workbook
-    wb = PromptWorkbook(str(excel_path))
-    wb.load_or_create()
-
-    # Clear existing scenes if any
-    try:
-        wb.clear_scenes()
-    except:
-        pass
-
-    # === Lấy thông tin từ backup_characters nếu có ===
-    backup_chars = []
-    try:
-        backup_chars = wb.get_backup_characters()
-        if backup_chars:
-            print(f"  📋 Found {len(backup_chars)} backup characters with locks")
-    except:
-        pass
-
-    # === Lấy thông tin từ backup_locations nếu có ===
-    backup_locs = []
-    try:
-        backup_locs = wb.get_backup_locations()
-        if backup_locs:
-            print(f"  📋 Found {len(backup_locs)} backup locations with locks")
-    except:
-        pass
-
-    # === Tạo character từ backup_characters (có đầy đủ locks) ===
-    chars = wb.get_characters()
-    if not chars:
-        if backup_chars:
-            # Dùng thông tin từ backup_characters (có character_lock + costume_lock)
-            for bc in backup_chars:
-                char_lock = bc.get("character_lock", "")
-                costume_lock = bc.get("costume_lock", "")
-                full_prompt = f"{char_lock}, {costume_lock}" if costume_lock else char_lock
-
-                default_char = Character(
-                    id=bc.get("id", "nvc"),
-                    name=bc.get("name", "Narrator"),
-                    role="narrator",
-                    vietnamese_prompt="Người kể chuyện hồi tưởng",
-                    english_prompt=full_prompt,
-                    character_lock=char_lock,
-                    image_file=bc.get("image_file", "nvc.png"),
-                    status="pending"
-                )
-                wb.add_character(default_char)
-                print(f"  ✓ Restored character '{bc.get('id')}' with character_lock")
-        else:
-            # Fallback: tạo character mặc định
-            default_char = Character(
-                id="nvc",
-                name="Narrator",
-                role="narrator",
-                vietnamese_prompt="Người kể chuyện",
-                english_prompt="A storyteller narrating the video",
-                image_file="nvc.png",
-                status="pending"
-            )
-            wb.add_character(default_char)
-
-    # Restore scenes from backup
-    for plan in director_plan:
-        scene = Scene(
-            scene_id=plan.get("plan_id", 0),
-            srt_start=plan.get("srt_start", ""),
-            srt_end=plan.get("srt_end", ""),
-            duration=plan.get("duration", 0),
-            planned_duration=plan.get("duration", 0),
-            srt_text=plan.get("srt_text", ""),
-            img_prompt=plan.get("img_prompt", ""),
-            video_prompt=plan.get("img_prompt", ""),  # Use same for video
-            status_img="pending",
-            status_vid="pending",
-            characters_used=plan.get("characters_used", ""),
-            location_used=plan.get("location_used", ""),
-            reference_files=plan.get("reference_files", "")
-        )
-        wb.add_scene(scene)
-
-    # Restore director_plan data
-    wb.save_director_plan(director_plan)
-
-    wb.save()
-
-    # Thống kê
-    narrator_count = len([p for p in director_plan if "[FALLBACK-NARRATOR]" in p.get("img_prompt", "")])
-    flashback_count = len([p for p in director_plan if "[FALLBACK-FLASHBACK]" in p.get("img_prompt", "")])
-
-    if narrator_count > 0 or flashback_count > 0:
-        print(f"  ✅ Restored: {narrator_count} narrator + {flashback_count} flashback scenes")
-    else:
-        print(f"  ✅ Restored Excel with {len(director_plan)} backup scenes")
-
-    return True
+            original_excel_backup.unlink()
+        return True  # Tiếp tục với fallback prompts
 
 
 def delete_master_source(code: str):
@@ -565,15 +519,15 @@ def process_project(code: str, callback=None) -> bool:
     if not local_dir:
         return False
 
-    # Step 3: Check Excel - nếu không có thì tạo bằng API
+    # Step 3: Check Excel - nếu không có thì tạo từ SRT (API trước, fallback sau)
     excel_path = local_dir / f"{code}_prompts.xlsx"
     srt_path = local_dir / f"{code}.srt"
 
     if not excel_path.exists():
-        # Không có Excel - tạo mới bằng API
+        # Không có Excel - tạo mới từ SRT
         if srt_path.exists():
-            log(f"  📋 No Excel found, creating with API...")
-            if not complete_excel_with_api(local_dir, code):
+            log(f"  📋 No Excel found, creating from SRT (API first, fallback if fail)...")
+            if not create_excel_with_api(local_dir, code):
                 log(f"  ❌ Failed to create Excel, skip!")
                 return False
         else:
@@ -581,18 +535,16 @@ def process_project(code: str, callback=None) -> bool:
             return False
     elif not has_excel_with_prompts(local_dir, code):
         # Excel exists but empty/corrupt - recreate
-        log(f"  📋 Excel empty/corrupt, recreating with API...")
+        log(f"  📋 Excel empty/corrupt, recreating...")
         excel_path.unlink()  # Delete corrupt Excel
-        if not complete_excel_with_api(local_dir, code):
+        if not create_excel_with_api(local_dir, code):
             log(f"  ❌ Failed to recreate Excel, skip!")
             return False
-
-    # Step 3.5: Complete Excel with API if needed (fallback prompts)
-    if needs_api_completion(local_dir, code):
-        log(f"  📋 Excel has [FALLBACK] prompts, completing with API...")
-        if not complete_excel_with_api(local_dir, code):
-            log(f"  ⚠️ API completion failed, using fallback prompts", "WARN")
-            # Continue with fallback prompts if API fails
+    elif needs_api_completion(local_dir, code):
+        # Excel has [FALLBACK] prompts - try to complete with API
+        log(f"  📋 Excel has [FALLBACK] prompts, trying API...")
+        complete_excel_with_api(local_dir, code)
+        # Continue even if API fails (fallback prompts will be used)
 
     # Step 4: Create images/videos
     try:
@@ -883,6 +835,74 @@ def run_single_project(code: str):
     process_project(code)
 
 
+def run_parallel_mode(project: str = None):
+    """
+    Run PIC and VIDEO workers in parallel.
+    Main process finishes when PIC is done.
+    VIDEO continues in background.
+    """
+    import threading
+    import subprocess
+
+    print(f"\n{'='*60}")
+    print(f"  VE3 TOOL - PARALLEL MODE (PIC + VIDEO)")
+    print(f"{'='*60}")
+    print(f"  PIC worker:   Image generation (main)")
+    print(f"  VIDEO worker: Video generation (background)")
+    print(f"{'='*60}")
+
+    # Start VIDEO worker in background process
+    video_cmd = [sys.executable, str(TOOL_DIR / "run_worker_video.py")]
+    if project:
+        video_cmd.append(project)
+    video_cmd.extend(["--worker-id", str(WORKER_ID), "--total-workers", str(TOTAL_WORKERS)])
+
+    print(f"\n[PARALLEL] Starting VIDEO worker in background...")
+    video_process = subprocess.Popen(
+        video_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+
+    # Thread to print VIDEO output
+    def print_video_output():
+        try:
+            for line in video_process.stdout:
+                print(f"[VIDEO] {line.rstrip()}")
+        except:
+            pass
+
+    video_thread = threading.Thread(target=print_video_output, daemon=True)
+    video_thread.start()
+
+    # Run PIC worker in main thread
+    print(f"\n[PARALLEL] Starting PIC worker (main)...")
+
+    try:
+        from run_worker_pic import run_scan_loop as pic_scan_loop, process_project_pic
+
+        if project:
+            process_project_pic(project)
+        else:
+            pic_scan_loop()
+
+    except KeyboardInterrupt:
+        print("\n\n[PARALLEL] Stopped by user.")
+
+    finally:
+        # Terminate VIDEO worker when PIC is done
+        print(f"\n[PARALLEL] PIC worker finished. Stopping VIDEO worker...")
+        try:
+            video_process.terminate()
+            video_process.wait(timeout=5)
+        except:
+            video_process.kill()
+
+    print(f"[PARALLEL] Done!")
+
+
 # Global worker settings (set from command line)
 WORKER_ID = 0
 TOTAL_WORKERS = 1
@@ -896,6 +916,8 @@ def main():
     parser.add_argument('project', nargs='?', default=None, help='Project code to process')
     parser.add_argument('--worker-id', type=int, default=0, help='Worker ID (0-based, for window layout)')
     parser.add_argument('--total-workers', type=int, default=1, help='Total number of workers (1=full, 2=split, ...)')
+    parser.add_argument('--mode', choices=['all', 'pic', 'video', 'parallel'], default='all',
+                        help='Mode: all (default), pic (image only), video (video only), parallel (pic+video separate)')
     args = parser.parse_args()
 
     # Set global worker settings
@@ -906,12 +928,29 @@ def main():
         pos_name = ["FULL", "LEFT", "RIGHT", "TOP-LEFT", "TOP-RIGHT", "BOTTOM"][min(WORKER_ID, 5)]
         print(f"[WORKER {WORKER_ID}/{TOTAL_WORKERS}] Window: {pos_name}")
 
-    if args.project:
-        # Single project mode
-        run_single_project(args.project)
-    else:
-        # Scan loop mode
-        run_scan_loop()
+    # Route to appropriate mode
+    if args.mode == 'pic':
+        from run_worker_pic import run_scan_loop as pic_loop, process_project_pic
+        if args.project:
+            process_project_pic(args.project)
+        else:
+            pic_loop()
+
+    elif args.mode == 'video':
+        from run_worker_video import run_scan_loop as video_loop, process_project_video
+        if args.project:
+            process_project_video(args.project)
+        else:
+            video_loop()
+
+    elif args.mode == 'parallel':
+        run_parallel_mode(args.project)
+
+    else:  # 'all' - default behavior (combined)
+        if args.project:
+            run_single_project(args.project)
+        else:
+            run_scan_loop()
 
 
 if __name__ == "__main__":
