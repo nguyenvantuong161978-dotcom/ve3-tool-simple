@@ -110,6 +110,17 @@ def matches_channel(code: str) -> bool:
 
 def is_project_complete_on_master(code: str) -> bool:
     """Check if project already exists in VISUAL folder on master."""
+    # SAFETY: Kiểm tra master có thực sự accessible không
+    # Nếu không accessible, return False để không xóa local project
+    try:
+        if not MASTER_VISUAL.exists():
+            return False
+        # Thử list thư mục để verify thực sự accessible (không phải cache)
+        _ = list(MASTER_VISUAL.iterdir())
+    except (OSError, PermissionError):
+        # Master không accessible - return False để giữ local an toàn
+        return False
+
     visual_dir = MASTER_VISUAL / code
     if not visual_dir.exists():
         return False
@@ -117,8 +128,11 @@ def is_project_complete_on_master(code: str) -> bool:
     # Check if has ANY images (*.png, *.mp4, *.jpg)
     img_dir = visual_dir / "img"
     if img_dir.exists():
-        img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.mp4")) + list(img_dir.glob("*.jpg"))
-        return len(img_files) > 0
+        try:
+            img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.mp4")) + list(img_dir.glob("*.jpg"))
+            return len(img_files) > 0
+        except (OSError, PermissionError):
+            return False
 
     return False
 
@@ -717,6 +731,20 @@ def sync_local_to_visual() -> int:
 
     if not LOCAL_PROJECTS.exists():
         print(f"  [DEBUG] Local PROJECTS folder does not exist")
+        return 0
+
+    # SAFETY CHECK: Kiểm tra master VISUAL có thực sự accessible không
+    # Nếu không accessible, KHÔNG xóa bất kỳ local project nào
+    master_accessible = False
+    try:
+        if MASTER_VISUAL.exists():
+            _ = list(MASTER_VISUAL.iterdir())  # Thử list để verify
+            master_accessible = True
+    except (OSError, PermissionError):
+        pass
+
+    if not master_accessible:
+        print(f"  ⚠️ Master VISUAL not accessible - skipping cleanup to protect local data")
         return 0
 
     # List all folders
