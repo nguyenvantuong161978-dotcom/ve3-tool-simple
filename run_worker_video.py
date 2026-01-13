@@ -172,9 +172,9 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
         except Exception as e:
             log(f"  ⚠️ Error reading Excel: {e}")
 
-        # Method 2: Read from cache file
+        # Method 2: Read from .media_cache.json (same as SmartEngine uses)
         if not project_url:
-            cache_file = local_dir / f".cache_{code}.json"
+            cache_file = local_dir / ".media_cache.json"
             if cache_file.exists():
                 try:
                     import json
@@ -185,11 +185,14 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
                         project_id = cache_data.get('_project_id', '')
                         if project_id:
                             project_url = f"https://labs.google/fx/vi/tools/flow/project/{project_id}"
-                except:
-                    pass
+                    if project_url:
+                        log(f"  📦 Found project URL from cache")
+                except Exception as e:
+                    log(f"  ⚠️ Error reading cache: {e}")
 
         if not project_url:
             log(f"  ❌ No project URL in Excel or cache!")
+            log(f"  💡 Run run_worker_pic first to create images and save project URL")
             return False
 
         log(f"  📋 Project URL: {project_url[:50]}...")
