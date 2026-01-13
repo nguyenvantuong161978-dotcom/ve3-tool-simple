@@ -266,11 +266,11 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             log(f"     Prompt: {video_prompt[:50]}...")
 
             try:
-                # Use I2V MODIFY MODE:
-                # - UI ở "Tạo video từ các thành phần" (I2V)
-                # - Chrome gửi batchAsyncGenerateVideoReferenceImages với fresh reCAPTCHA
-                # - Interceptor thêm referenceImages với mediaId của ảnh
-                ok, result_path, error = api.generate_video_modify_mode(
+                # Use T2V→I2V MODE (đã hoạt động trước đây):
+                # - UI ở "Từ văn bản sang video" (T2V)
+                # - Interceptor convert: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
+                # - Interceptor thêm referenceImages với mediaId
+                ok, result_path, error = api.generate_video_t2v_mode(
                     media_id=media_id,
                     prompt=video_prompt,
                     save_path=mp4_path
