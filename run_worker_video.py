@@ -246,41 +246,11 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             log(f"  ❌ Failed to setup Chrome for video!")
             return False
 
-        # Switch to T2V mode
-        log(f"  🎬 Switching to T2V mode...")
-        time.sleep(2)
-
-        t2v_js = '''
-var btn = document.querySelector('button[role="combobox"]');
-if (btn) {
-    btn.click();
-    setTimeout(() => {
-        btn.click();
-        setTimeout(() => {
-            var spans = document.querySelectorAll('span');
-            for (var el of spans) {
-                var text = el.textContent.trim();
-                if (text.includes('video') && text.length === 22) {
-                    el.click();
-                    window._t2vResult = 'CLICKED';
-                    return;
-                }
-            }
-            window._t2vResult = 'NOT_FOUND';
-        }, 300);
-    }, 100);
-} else {
-    window._t2vResult = 'NO_DROPDOWN';
-}
-'''
-        api.driver.run_js(t2v_js)
-        time.sleep(1.5)
-
-        result = api.driver.run_js("return window._t2vResult || 'PENDING'")
-        if result == 'CLICKED':
-            log(f"  ✓ T2V mode ready!")
-        else:
-            log(f"  ⚠️ T2V switch result: {result}", "WARN")
+        # FORCE MODE: Stay in IMAGE mode (don't switch to T2V)
+        # FORCE mode intercepts IMAGE requests to get valid reCAPTCHA tokens
+        # T2V mode's reCAPTCHA gets 403 errors
+        log(f"  🎬 Using FORCE MODE (stay in IMAGE mode for reCAPTCHA)")
+        time.sleep(1)
 
         # Create videos
         img_dir = local_dir / "img"
@@ -298,7 +268,9 @@ if (btn) {
             log(f"     Prompt: {video_prompt[:50]}...")
 
             try:
-                ok, result_path, error = api.generate_video_t2v_mode(
+                # Use FORCE MODE (intercepts IMAGE request for reCAPTCHA)
+                # T2V mode's reCAPTCHA gets 403 errors, FORCE mode works
+                ok, result_path, error = api.generate_video_force_mode(
                     media_id=media_id,
                     prompt=video_prompt,
                     save_path=mp4_path
