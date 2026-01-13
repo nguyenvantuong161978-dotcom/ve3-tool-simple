@@ -3860,7 +3860,7 @@ class DrissionFlowAPI:
         # Chuẩn bị payload poll
         poll_payload = json.dumps({"operations": [operation]})
 
-        # JS để poll qua browser's fetch
+        # JS để poll qua browser's fetch (với auth từ interceptor)
         poll_js = f'''
 (async function() {{
     window._videoPollResult = null;
@@ -3868,20 +3868,36 @@ class DrissionFlowAPI:
     window._videoPollDone = false;
 
     try {{
+        // Lấy auth headers từ interceptor (đã capture khi gửi request)
+        var headers = {{
+            "Content-Type": "application/json"
+        }};
+
+        // Add Bearer token nếu có (captured bởi interceptor)
+        if (window._tk) {{
+            headers["Authorization"] = "Bearer " + window._tk;
+        }}
+
+        // Add x-browser-validation nếu có
+        if (window._xbv) {{
+            headers["x-browser-validation"] = window._xbv;
+        }}
+
         const response = await fetch("{poll_url}", {{
             method: "POST",
-            headers: {{
-                "Content-Type": "application/json"
-            }},
+            headers: headers,
+            credentials: "include",
             body: {poll_payload!r}
         }});
 
         const data = await response.json();
         window._videoPollResult = data;
         window._videoPollDone = true;
+        console.log('[POLL] Status:', response.status, 'Data:', JSON.stringify(data).substring(0, 200));
     }} catch(e) {{
         window._videoPollError = e.toString();
         window._videoPollDone = true;
+        console.log('[POLL] Error:', e);
     }}
 }})();
 '''
