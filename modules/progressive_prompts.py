@@ -550,7 +550,7 @@ Return JSON only:
         # Format SRT entries
         srt_text = ""
         for i, entry in enumerate(srt_entries):
-            srt_text += f"[{i+1}] {entry.start} --> {entry.end}\n{entry.text}\n\n"
+            srt_text += f"[{i+1}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
 
         # Build prompt
         prompt = f"""Create a director's shooting plan by dividing the SRT into visual scenes.

@@ -731,6 +731,55 @@ JS_SELECT_T2V_MODE_STEP3 = '''
 })();
 '''
 
+# JS để chuyển model sang "Lower Priority" (tránh rate limit)
+# Flow: Click Cài đặt → Click Mô hình dropdown → Select Lower Priority
+JS_SWITCH_TO_LOWER_PRIORITY = '''
+(function() {
+    window._modelSwitchResult = 'PENDING';
+
+    // Step 1: Click "Cài đặt"
+    var buttons = document.querySelectorAll('button');
+    for (var btn of buttons) {
+        if (btn.textContent.includes('Cài đặt')) {
+            btn.click();
+            console.log('[MODEL] [1] ✓ Clicked Cài đặt');
+
+            setTimeout(function() {
+                // Step 2: Click dropdown "Mô hình"
+                var combos = document.querySelectorAll('button[role="combobox"]');
+                for (var combo of combos) {
+                    if (combo.textContent.includes('Mô hình')) {
+                        combo.click();
+                        console.log('[MODEL] [2] ✓ Clicked Mô hình dropdown');
+
+                        setTimeout(function() {
+                            // Step 3: Select "Lower Priority"
+                            var spans = document.querySelectorAll('span');
+                            for (var span of spans) {
+                                if (span.textContent.includes('Lower Priority')) {
+                                    span.click();
+                                    console.log('[MODEL] [3] ✓ Selected Lower Priority');
+                                    window._modelSwitchResult = 'SUCCESS';
+                                    return;
+                                }
+                            }
+                            console.log('[MODEL] [3] ❌ Lower Priority not found');
+                            window._modelSwitchResult = 'NOT_FOUND_OPTION';
+                        }, 300);
+                        return;
+                    }
+                }
+                console.log('[MODEL] [2] ❌ Mô hình dropdown not found');
+                window._modelSwitchResult = 'NOT_FOUND_DROPDOWN';
+            }, 500);
+            return;
+        }
+    }
+    console.log('[MODEL] [1] ❌ Cài đặt button not found');
+    window._modelSwitchResult = 'NOT_FOUND_SETTINGS';
+})();
+'''
+
 
 class DrissionFlowAPI:
     """
@@ -3947,26 +3996,32 @@ class DrissionFlowAPI:
 
             # Check operations status
             if result.get('operations'):
-                op = result['operations'][0]
-                op_done = op.get('done', False)
-                progress = op.get('metadata', {}).get('progressPercent', 0)
+                op_item = result['operations'][0]
 
-                self.log(f"[I2V-FORCE] Progress: {progress}%, Done: {op_done}")
+                # Format mới: status field thay vì done
+                status = op_item.get('status', '')
+                op_done = status == 'MEDIA_GENERATION_STATUS_SUCCESSFUL'
+
+                # Operation data nằm trong nested 'operation' object
+                op_data = op_item.get('operation', {})
+                progress = op_data.get('metadata', {}).get('progressPercent', 0)
+
+                self.log(f"[I2V-FORCE] Status: {status}, Done: {op_done}")
 
                 if op_done:
-                    # Lấy video URL từ response
-                    if op.get('response', {}).get('videos'):
-                        video = op['response']['videos'][0]
-                        video_url = video.get('videoUri') or video.get('uri')
-                        if video_url:
-                            self.log(f"[I2V-FORCE] ✓ Video completed!")
-                            return video_url
+                    # Video URL ở operation.metadata.video.fifeUrl
+                    video_url = op_data.get('metadata', {}).get('video', {}).get('fifeUrl')
+                    if video_url:
+                        self.log(f"[I2V-FORCE] ✓ Video completed!")
+                        self.log(f"[I2V-FORCE] URL: {video_url[:80]}...")
+                        return video_url
+                    else:
+                        self.log(f"[I2V-FORCE] ⚠️ Video done but URL not found", "WARN")
 
-                    # Check error
-                    if op.get('error'):
-                        err_msg = op['error'].get('message', 'Unknown error')
-                        self.log(f"[I2V-FORCE] ✗ Video error: {err_msg}", "ERROR")
-                        return None
+                # Check error status
+                if status == 'MEDIA_GENERATION_STATUS_FAILED':
+                    self.log(f"[I2V-FORCE] ✗ Video generation failed", "ERROR")
+                    return None
 
             time.sleep(poll_interval)
 
@@ -3978,7 +4033,7 @@ class DrissionFlowAPI:
         media_id: str,
         prompt: str,
         save_path: Optional[Path] = None,
-        video_model: str = "veo_3_0_r2v_fast",
+        video_model: str = "veo_3_0_r2v_fast_ultra",
         max_wait: int = 300,
         timeout: int = 60,
         max_retries: int = 3
@@ -3994,14 +4049,14 @@ class DrissionFlowAPI:
         4. Interceptor catch T2V request và convert sang I2V:
            - Đổi URL: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
            - Thêm referenceImages với mediaId
-           - Đổi model: veo_3_1_t2v_fast → veo_3_0_r2v_fast
+           - Đổi model: veo_3_1_t2v → veo_3_0_r2v (giữ suffix _fast_ultra)
         5. Chrome gửi I2V request với fresh reCAPTCHA!
 
         Args:
             media_id: Media ID của ảnh (từ generate_image)
             prompt: Video prompt (mô tả chuyển động)
             save_path: Đường dẫn lưu video
-            video_model: Model video I2V (default: veo_3_0_r2v_fast)
+            video_model: Model video I2V (default: veo_3_0_r2v_fast_ultra)
             max_wait: Thời gian poll tối đa (giây)
             timeout: Timeout đợi response đầu tiên
             max_retries: Số lần retry khi gặp 403
@@ -4104,23 +4159,14 @@ class DrissionFlowAPI:
         self.log(f"[T2V→I2V] Tạo video từ media: {media_id[:50]}...")
         self.log(f"[T2V→I2V] Prompt: {prompt[:60]}...")
 
-        # 1. Chuyển sang T2V mode (CẦN THIẾT - phải switch mỗi lần như cleanup branch)
+        # 1. Chuyển sang T2V mode - dùng switch_to_t2v_mode() với retry như commit cũ đã hoạt động
         self.log("[T2V→I2V] Chuyển sang mode 'Từ văn bản sang video'...")
-        result = self.driver.run_js(JS_SELECT_T2V_MODE_ALL)
-        time.sleep(0.8)  # Đợi dropdown animation
-        t2v_result = self.driver.run_js("return window._t2vResult;")
-        if t2v_result == 'CLICKED':
-            self.log("[T2V→I2V] ✓ Đã chuyển sang T2V mode")
-            time.sleep(0.5)
-        else:
-            self.log(f"[T2V→I2V] ⚠️ T2V mode result: {t2v_result}", "WARN")
+        if not self.switch_to_t2v_mode():
+            self.log("[T2V→I2V] ⚠️ Không chuyển được T2V mode, thử tiếp...", "WARN")
 
-        # 1.5. Re-inject interceptor (có thể bị mất sau khi chuyển mode)
-        interceptor_ready = self.driver.run_js("return window.__interceptReady;")
-        if not interceptor_ready:
-            self.log("[T2V→I2V] Re-inject interceptor...")
-            self.driver.run_js(JS_INTERCEPTOR)
-            time.sleep(0.3)
+        # 1.5. Chuyển sang Lower Priority model (tránh rate limit)
+        self.log("[T2V→I2V] Chuyển sang model Lower Priority...")
+        self.switch_to_lower_priority_model()
 
         # 2. Reset video state
         self.driver.run_js("""
@@ -4249,6 +4295,53 @@ class DrissionFlowAPI:
                 time.sleep(0.5)
 
         self.log("[Mode] ✗ Không thể chuyển sang T2V mode sau nhiều lần thử", "ERROR")
+        return False
+
+    def switch_to_lower_priority_model(self) -> bool:
+        """
+        Chuyển model sang "Veo 3.1 - Fast [Lower Priority]" để tránh rate limit.
+        Flow: Click Cài đặt → Click Mô hình dropdown → Select Lower Priority
+
+        Returns:
+            True nếu thành công
+        """
+        if not self._ready:
+            return False
+
+        MAX_RETRIES = 2
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                self.log(f"[Model] Chuyển sang Lower Priority (attempt {attempt + 1}/{MAX_RETRIES})...")
+
+                # Chạy JS ALL-IN-ONE
+                self.driver.run_js("window._modelSwitchResult = 'PENDING';")
+                self.driver.run_js(JS_SWITCH_TO_LOWER_PRIORITY)
+
+                # Đợi JS async hoàn thành (500ms + 300ms = ~1s)
+                time.sleep(1.2)
+
+                # Kiểm tra kết quả
+                result = self.driver.run_js("return window._modelSwitchResult;")
+
+                if result == 'SUCCESS':
+                    self.log("[Model] ✓ Đã chuyển sang Lower Priority")
+                    # Click ra ngoài để đóng dialog
+                    time.sleep(0.3)
+                    self.driver.run_js('document.body.click();')
+                    time.sleep(0.3)
+                    return True
+                else:
+                    self.log(f"[Model] Chưa chuyển được: {result}", "WARN")
+                    # Click ra ngoài để đóng menu/dialog
+                    self.driver.run_js('document.body.click();')
+                    time.sleep(0.5)
+
+            except Exception as e:
+                self.log(f"[Model] Error: {e}", "ERROR")
+                time.sleep(0.5)
+
+        self.log("[Model] ⚠️ Không thể chuyển Lower Priority, tiếp tục với model mặc định", "WARN")
         return False
 
     def generate_video_pure_t2v(

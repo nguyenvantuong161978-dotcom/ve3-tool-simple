@@ -246,8 +246,7 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             log(f"  ❌ Failed to setup Chrome for video!")
             return False
 
-        # Chuyển sang T2V mode (Từ văn bản sang video)
-        log(f"  🎬 Switching to T2V mode...")
+        log(f"  🎬 Using T2V→I2V MODE (T2V UI → interceptor convert → I2V API)")
         time.sleep(1)
 
         # Create videos
@@ -266,8 +265,8 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             log(f"     Prompt: {video_prompt[:50]}...")
 
             try:
-                # Use T2V→I2V MODE (đã hoạt động trước đây):
-                # - UI ở "Từ văn bản sang video" (T2V)
+                # Use T2V→I2V MODE:
+                # - UI ở "Từ văn bản sang video" (T2V) - JS đã OK
                 # - Interceptor convert: batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
                 # - Interceptor thêm referenceImages với mediaId
                 ok, result_path, error = api.generate_video_t2v_mode(
