@@ -6007,9 +6007,10 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 shot_type, lens, composition, lighting, atmosphere, emotion = narrator_angles[angle_idx]
 
                 # References CỐ ĐỊNH cho Narrator - an toàn, nhất quán
-                characters_used = '["nvc"]'
+                # Format giống API: characters_used = comma-separated, reference_files = JSON
+                characters_used = "nvc"  # Comma-separated (like API)
                 location_used = "loc_narrator"
-                reference_files = '["nvc.png", "loc_narrator.png"]'
+                reference_files = '["nvc.png", "loc_narrator.png"]'  # JSON array (like API)
 
                 fallback_prompt = (
                     f"{shot_type}, {lens}. {composition}. "
@@ -6028,10 +6029,11 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 angle_idx = flashback_count % len(flashback_angles)
                 shot_type, lens, composition, lighting, atmosphere, emotion = flashback_angles[angle_idx]
 
+                # Format giống API: characters_used = comma-separated, reference_files = JSON
                 all_char_ids = ["nvc"] + [c["id"] for c in flashback_chars]
-                characters_used = json.dumps(all_char_ids)
+                characters_used = ", ".join(all_char_ids)  # Comma-separated (like API)
                 location_used = "loc_01"
-                reference_files = json.dumps(all_refs)
+                reference_files = json.dumps(all_refs)  # JSON array (like API)
 
                 fallback_prompt = (
                     f"{shot_type}, {lens}. {composition}. "
