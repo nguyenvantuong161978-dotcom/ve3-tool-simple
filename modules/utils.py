@@ -365,14 +365,15 @@ def group_srt_into_scenes(
 ) -> List[Dict[str, Any]]:
     """
     Gom các SRT entries thành các scene theo thời lượng.
-    
+
     Args:
         entries: List các SrtEntry
         min_duration: Thời lượng tối thiểu của scene (giây)
         max_duration: Thời lượng tối đa của scene (giây)
-        
+
     Returns:
-        List các scene, mỗi scene có: scene_id, start_time, end_time, text, srt_indices
+        List các scene, mỗi scene có: scene_id, start_time, end_time, text,
+        srt_start, srt_end, duration_seconds, srt_indices
     """
     if not entries:
         return []
@@ -393,6 +394,7 @@ def group_srt_into_scenes(
         # Nếu vượt quá max_duration và đã có đủ min_duration thì tạo scene mới
         if new_duration > max_duration and current_duration >= min_duration:
             # Lưu scene hiện tại
+            scene_duration = (current_scene["end_time"] - current_scene["start_time"]).total_seconds()
             scenes.append({
                 "scene_id": len(scenes) + 1,
                 "start_time": current_scene["start_time"],
@@ -400,6 +402,7 @@ def group_srt_into_scenes(
                 "text": " ".join(current_scene["texts"]),
                 "srt_start": format_srt_time(current_scene["start_time"]),  # Timestamp thực
                 "srt_end": format_srt_time(current_scene["end_time"]),      # Timestamp thực
+                "duration_seconds": scene_duration,  # Duration từ SRT
                 "srt_indices": current_scene["srt_indices"],  # Giữ lại indices cho reference
             })
             
@@ -418,6 +421,7 @@ def group_srt_into_scenes(
     
     # Thêm scene cuối cùng
     if current_scene["srt_indices"]:
+        scene_duration = (current_scene["end_time"] - current_scene["start_time"]).total_seconds()
         scenes.append({
             "scene_id": len(scenes) + 1,
             "start_time": current_scene["start_time"],
@@ -425,6 +429,7 @@ def group_srt_into_scenes(
             "text": " ".join(current_scene["texts"]),
             "srt_start": format_srt_time(current_scene["start_time"]),  # Timestamp thực
             "srt_end": format_srt_time(current_scene["end_time"]),      # Timestamp thực
+            "duration_seconds": scene_duration,  # Duration từ SRT
             "srt_indices": current_scene["srt_indices"],  # Giữ lại indices cho reference
         })
 
