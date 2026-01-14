@@ -3855,14 +3855,14 @@ class BrowserFlowGenerator:
                                     consecutive_errors = 0
                                     continue
                                 else:
-                                    self._log(f"   ✗ Retry vẫn thất bại - token không hợp lệ", "error")
-                                    break  # Token thực sự hết hạn
+                                    self._log(f"   ✗ Retry vẫn thất bại - skip scene {pid}, tiếp tục...", "warn")
+                                    # Không break, để RETRY PHASE xử lý sau
                             else:
-                                self._log("✗ Không restart được Chrome - dừng", "error")
-                                break
+                                self._log(f"✗ Không restart được Chrome - skip scene {pid}", "warn")
+                                # Không break, tiếp tục với scene khác
                         except Exception as e:
-                            self._log(f"✗ Refresh token error: {e}", "error")
-                            break
+                            self._log(f"✗ Refresh token error: {e} - skip scene {pid}", "warn")
+                            # Không break, tiếp tục với scene khác
 
                     # Check for 429 - Quota exceeded, cần đổi proxy/tài khoản
                     if error and "429" in str(error):
@@ -3963,13 +3963,13 @@ class BrowserFlowGenerator:
                                     elif images2[0].media_name:
                                         self._log(f"   Media name: {images2[0].media_name[:40]}...")
                                 else:
-                                    self._log(f"   ✗ Retry vẫn thất bại: {error2}", "error")
+                                    self._log(f"   ✗ Retry vẫn thất bại - skip scene {pid}", "warn")
                             else:
-                                self._log("✗ Không restart được Chrome", "error")
-                                break
+                                self._log(f"✗ Không restart được Chrome - skip scene {pid}", "warn")
+                                # Không break, tiếp tục với scene khác
                         except Exception as e:
-                            self._log(f"✗ Restart error: {e}", "error")
-                            break
+                            self._log(f"✗ Restart error: {e} - skip scene {pid}", "warn")
+                            # Không break, tiếp tục với scene khác
 
             except Exception as e:
                 self._log(f"   ✗ Exception: {e}", "error")
