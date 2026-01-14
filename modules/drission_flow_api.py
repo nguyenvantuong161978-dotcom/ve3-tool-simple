@@ -4387,6 +4387,55 @@ class DrissionFlowAPI:
                         if self.restart_chrome():
                             continue
 
+                # === 400 ERROR: Invalid argument - có thể do mediaId hết hạn hoặc payload sai ===
+                if "400" in str(error):
+                    self._consecutive_403 += 1  # Dùng chung counter với 403
+                    self.log(f"[T2V→I2V] ⚠️ 400 error (lần {self._consecutive_403}) - Invalid argument!", "WARN")
+                    self.log(f"[T2V→I2V] → Error details: {error}", "WARN")
+
+                    # Đợi 3 giây để user thấy lỗi trước khi reset
+                    time.sleep(3)
+
+                    # Sau 3 lần liên tiếp, đổi IPv6 và thử lại
+                    if self._consecutive_403 >= 3:
+                        self.log(f"[T2V→I2V] 🔄 {self._consecutive_403} lỗi liên tiếp → ROTATE IPv6 + RESET CHROME!")
+
+                        self._kill_chrome()
+                        self.close()
+                        time.sleep(2)
+
+                        if self._use_webshare and self._webshare_proxy:
+                            success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "T2V 400")
+                            self.log(f"[T2V→I2V] → Webshare rotate: {msg}", "WARN")
+
+                        # Rotate IPv6
+                        if not self._ipv6_activated:
+                            self.log(f"[T2V→I2V] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                            self._activate_ipv6()
+                        else:
+                            self.log(f"[T2V→I2V] → 🔄 Rotate sang IPv6 khác...")
+                            if self._ipv6_rotator:
+                                self._ipv6_rotator.rotate()
+
+                        self._consecutive_403 = 0
+
+                        if attempt < max_retries - 1:
+                            if self.restart_chrome(rotate_ipv6=True):
+                                self.log("[T2V→I2V] → Chrome restarted, tiếp tục...")
+                                continue
+                    else:
+                        # Chưa đến 3 lần, chỉ reset Chrome mà không đổi IPv6
+                        self._kill_chrome()
+                        self.close()
+                        time.sleep(2)
+
+                        if attempt < max_retries - 1:
+                            if self.restart_chrome():
+                                self.log("[T2V→I2V] → Chrome restarted, thử lại...")
+                                continue
+
+                    return False, None, error
+
                 # === 500 ERROR ===
                 if "500" in str(error):
                     self.log(f"[T2V→I2V] ⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
@@ -4394,6 +4443,9 @@ class DrissionFlowAPI:
                         time.sleep(3)
                         continue
 
+                # === OTHER ERROR: Đợi để hiển thị lỗi trước khi return ===
+                self.log(f"[T2V→I2V] ⚠️ Error: {error}", "WARN")
+                time.sleep(2)  # Đợi 2 giây để user thấy lỗi
                 return False, None, error
 
         return False, None, last_error or "Max retries exceeded"
@@ -4408,8 +4460,23 @@ class DrissionFlowAPI:
         timeout: int
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Thực hiện tạo video T2V mode một lần (không retry)."""
-        self.log(f"[T2V→I2V] Tạo video từ media: {media_id[:50]}...")
-        self.log(f"[T2V→I2V] Prompt: {prompt[:60]}...")
+
+        # === VALIDATION: Kiểm tra input trước khi gửi ===
+        if not media_id or len(media_id) < 10:
+            return False, None, f"Invalid media_id: '{media_id}' - quá ngắn hoặc rỗng"
+
+        if not prompt or len(prompt.strip()) < 3:
+            return False, None, f"Invalid prompt: '{prompt}' - quá ngắn hoặc rỗng"
+
+        # Kiểm tra format media_id (thường bắt đầu bằng số hoặc có dấu /)
+        if not any(c.isdigit() for c in media_id):
+            self.log(f"[T2V→I2V] ⚠️ Media ID không có số: {media_id[:50]} - có thể sai format!", "WARN")
+
+        self.log(f"[T2V→I2V] ══════════════════════════════════════════")
+        self.log(f"[T2V→I2V] Tạo video với:")
+        self.log(f"[T2V→I2V]   → Media ID: {media_id[:60]}...")
+        self.log(f"[T2V→I2V]   → Prompt: {prompt[:60]}...")
+        self.log(f"[T2V→I2V]   → Model: {video_model}")
 
         # 1. Chuyển sang T2V mode + Lower Priority model
         # CHỈ LÀM LẦN ĐẦU khi mới mở Chrome - sau F5 refresh không cần làm lại
@@ -4442,7 +4509,13 @@ class DrissionFlowAPI:
             "videoModelKey": video_model
         }
         self.driver.run_js(f"window._t2vToI2vConfig = {json.dumps(t2v_config)};")
-        self.log(f"[T2V→I2V] ✓ Config ready (mediaId: {media_id[:40]}...)")
+
+        # Verify config được set đúng
+        verify_config = self.driver.run_js("return window._t2vToI2vConfig;")
+        if not verify_config or not verify_config.get('mediaId'):
+            return False, None, "Failed to set T2V→I2V config in browser"
+
+        self.log(f"[T2V→I2V] ✓ Config verified (mediaId: {verify_config.get('mediaId', '')[:40]}...)")
 
         # 3. Tìm textarea và nhập prompt
         textarea = self._find_textarea()

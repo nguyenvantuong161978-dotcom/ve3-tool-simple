@@ -247,7 +247,7 @@ browser_generate_timeout: 120
 # Khi Chrome bị 403 liên tục, tự động đổi IPv6 để bypass
 
 ipv6_rotation:
-  enabled: false              # Bật/tắt tính năng đổi IPv6
+  enabled: true               # Bật/tắt tính năng đổi IPv6
 
   # Interface name (tên adapter mạng)
   # Chạy "netsh interface ipv6 show addresses" để xem tên
