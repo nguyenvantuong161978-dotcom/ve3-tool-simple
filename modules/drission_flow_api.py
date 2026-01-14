@@ -1390,6 +1390,74 @@ class DrissionFlowAPI:
         except Exception as e:
             pass
 
+    def clear_chrome_data(self) -> bool:
+        """
+        Xóa dữ liệu Chrome profile (cookies, cache, localStorage...) để reset reCAPTCHA score.
+        Gọi khi gặp 403 liên tiếp nhiều lần.
+
+        Returns:
+            True nếu xóa thành công
+        """
+        import shutil
+
+        try:
+            self.log("🗑️ Clearing Chrome profile data...")
+
+            # Đóng Chrome trước
+            self._kill_chrome()
+            time.sleep(2)
+
+            # Tìm profile directory
+            profile_path = self.profile_dir
+            if not profile_path or not profile_path.exists():
+                self.log("⚠️ Profile directory not found", "WARN")
+                return False
+
+            # Xóa các folder chứa data (giữ lại folder gốc)
+            folders_to_clear = [
+                "Default/Cache",
+                "Default/Code Cache",
+                "Default/GPUCache",
+                "Default/Cookies",
+                "Default/Cookies-journal",
+                "Default/Local Storage",
+                "Default/Session Storage",
+                "Default/IndexedDB",
+                "Default/Service Worker",
+                "Default/Web Data",
+                "Default/Web Data-journal",
+                "Default/History",
+                "Default/History-journal",
+                "Default/Visited Links",
+                "GrShaderCache",
+                "ShaderCache",
+            ]
+
+            cleared = 0
+            for folder in folders_to_clear:
+                target = profile_path / folder
+                if target.exists():
+                    try:
+                        if target.is_dir():
+                            shutil.rmtree(target)
+                        else:
+                            target.unlink()
+                        cleared += 1
+                    except Exception as e:
+                        pass  # Một số file có thể bị lock
+
+            self.log(f"✓ Cleared {cleared} items from Chrome profile")
+            self.log("⚠️ Cần login lại Google sau khi restart Chrome!")
+
+            # Reset flags
+            self._t2v_mode_selected = False
+
+            return True
+
+        except Exception as e:
+            self.log(f"✗ Clear Chrome data failed: {e}", "ERROR")
+            return False
+
     def setup(
         self,
         wait_for_project: bool = True,
@@ -4235,7 +4303,7 @@ class DrissionFlowAPI:
         save_path: Optional[Path] = None,
         video_model: str = "veo_3_0_r2v_fast_ultra",
         max_wait: int = 300,
-        timeout: int = 60,
+        timeout: int = 180,  # Tăng từ 60 → 180 giây
         max_retries: int = 3
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
@@ -4291,10 +4359,18 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === 403 ERROR: RESET CHROME + IPv6 ===
+                # === 403 ERROR: RESET CHROME + IPv6 + CLEAR DATA ===
                 if "403" in str(error):
                     self._consecutive_403 += 1
-                    self.log(f"[T2V→I2V] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
+                    self.log(f"[T2V→I2V] ⚠️ 403 error (lần {self._consecutive_403}) - RESET CHROME!", "WARN")
+
+                    # Sau 3 lần 403 liên tiếp, clear Chrome data để reset reCAPTCHA
+                    if self._consecutive_403 >= 3:
+                        self.log(f"[T2V→I2V] 🗑️ 403 liên tiếp {self._consecutive_403} lần → CLEAR CHROME DATA!")
+                        self.clear_chrome_data()
+                        self._consecutive_403 = 0
+                        # Sau clear data cần login lại - return để user xử lý
+                        return False, None, "403 liên tiếp - Đã clear Chrome data, cần login lại Google!"
 
                     self._kill_chrome()
                     self.close()
