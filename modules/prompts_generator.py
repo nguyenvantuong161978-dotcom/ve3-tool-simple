@@ -5738,26 +5738,80 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
     def _analyze_srt_for_characters(self, srt_entries: List) -> dict:
         """
         Phân tích nội dung SRT để đoán nhân vật và bối cảnh.
+        TRÍCH XUẤT mô tả chi tiết từ SRT để tạo prompt độc đáo cho mỗi project.
 
         Returns:
-            dict với keys: narrator_type, characters, locations, theme
+            dict với keys: narrator_type, characters, locations, theme, extracted_descriptions
         """
         import re
 
-        # Gộp tất cả text từ SRT
-        all_text = " ".join([
+        # Gộp tất cả text từ SRT - giữ nguyên case để trích xuất mô tả
+        all_text_original = " ".join([
             entry.get("text", "") if isinstance(entry, dict) else str(entry)
             for entry in srt_entries
-        ]).lower()
+        ])
+        all_text = all_text_original.lower()
 
         result = {
             "narrator_gender": "neutral",  # male, female, neutral
             "narrator_age": "adult",       # child, young, adult, elderly
-            "characters": [],              # List of detected character types
-            "locations": [],               # List of detected location types
+            "characters": [],              # List of detected character types with descriptions
+            "locations": [],               # List of detected location types with descriptions
             "theme": "general",            # romance, action, family, horror, etc.
-            "ethnicity": "western"         # western (default/American), asian, african
+            "ethnicity": "western",        # western (default/American), asian, african
+            "extracted_char_descriptions": [],  # Mô tả nhân vật trích từ SRT
+            "extracted_loc_descriptions": [],   # Mô tả bối cảnh trích từ SRT
         }
+
+        # === TRÍCH XUẤT MÔ TẢ NHÂN VẬT TỪ SRT ===
+        # Tìm các pattern mô tả người: "a/an/the [adj] [adj] man/woman/boy/girl..."
+        char_patterns = [
+            # English patterns
+            r'(?:a|an|the)\s+((?:\w+\s+){0,3})(man|woman|boy|girl|child|lady|gentleman|guy|person|old man|old woman|young man|young woman)',
+            r'((?:\w+\s+){0,3})(father|mother|dad|mom|grandfather|grandmother|grandpa|grandma|uncle|aunt|brother|sister|son|daughter)',
+            r'(?:he|she) (?:was|is|looked|appeared)\s+((?:\w+\s*){1,5})',
+            r'(?:his|her) ((?:\w+\s+){0,2})(face|eyes|hair|smile|voice|hands)',
+            # Vietnamese patterns
+            r'(?:một|người)\s+((?:\w+\s+){0,3})(đàn ông|phụ nữ|con trai|con gái|ông già|bà già|thanh niên|cô gái|chàng trai)',
+            r'((?:\w+\s+){0,3})(bố|mẹ|cha|má|ông|bà|anh|chị|em|con)',
+        ]
+
+        extracted_chars = []
+        for pattern in char_patterns:
+            matches = re.findall(pattern, all_text, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    desc = " ".join(match).strip()
+                else:
+                    desc = match.strip()
+                if desc and len(desc) > 3 and desc not in extracted_chars:
+                    extracted_chars.append(desc)
+
+        result["extracted_char_descriptions"] = extracted_chars[:10]  # Max 10
+
+        # === TRÍCH XUẤT MÔ TẢ BỐI CẢNH TỪ SRT ===
+        loc_patterns = [
+            # English patterns
+            r'(?:in|at|on|inside|outside|near|by)\s+(?:a|an|the)\s+((?:\w+\s+){0,4})(house|home|room|office|street|park|beach|mountain|city|village|hospital|school|restaurant|cafe|garden|forest|lake|river|building|church|store|shop)',
+            r'(?:the)\s+((?:\w+\s+){0,3})(sky|sun|moon|rain|snow|night|morning|evening|sunset|sunrise)',
+            r'(?:a|an|the)\s+((?:\w+\s+){0,3})(old|abandoned|beautiful|dark|bright|quiet|busy|empty|crowded)\s+(\w+)',
+            # Vietnamese patterns
+            r'(?:ở|tại|trong|ngoài|bên)\s+((?:\w+\s+){0,4})(nhà|phòng|đường|công viên|bãi biển|núi|thành phố|làng|bệnh viện|trường|quán|vườn|rừng|hồ|sông)',
+            r'((?:\w+\s+){0,3})(trời|nắng|mưa|tuyết|đêm|sáng|chiều|hoàng hôn|bình minh)',
+        ]
+
+        extracted_locs = []
+        for pattern in loc_patterns:
+            matches = re.findall(pattern, all_text, re.IGNORECASE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    desc = " ".join(match).strip()
+                else:
+                    desc = match.strip()
+                if desc and len(desc) > 3 and desc not in extracted_locs:
+                    extracted_locs.append(desc)
+
+        result["extracted_loc_descriptions"] = extracted_locs[:10]  # Max 10
 
         # === PHÁT HIỆN GIỚI TÍNH NGƯỜI KỂ ===
         male_vi = ["tôi là đàn ông", "anh ấy", "ông ấy", "chú ấy", "bố tôi", "cha tôi", "con trai"]
@@ -6019,9 +6073,23 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         flashback_chars = []
         ethnicity = analysis.get("ethnicity", "western")
 
-        # Thêm nhân vật từ phân tích
+        # Lấy mô tả đã trích xuất từ SRT
+        extracted_char_descs = analysis.get("extracted_char_descriptions", [])
+        extracted_loc_descs = analysis.get("extracted_loc_descriptions", [])
+
+        self.logger.info(f"[FALLBACK] Trích xuất từ SRT: {len(extracted_char_descs)} char, {len(extracted_loc_descs)} loc")
+        if extracted_char_descs:
+            self.logger.info(f"[FALLBACK] Mô tả nhân vật: {extracted_char_descs[:3]}")
+        if extracted_loc_descs:
+            self.logger.info(f"[FALLBACK] Mô tả bối cảnh: {extracted_loc_descs[:3]}")
+
+        # Thêm nhân vật từ phân tích (kết hợp với mô tả trích xuất)
         for i, char_info in enumerate(analysis.get("characters", [])[:3]):
             char_prompt = self._build_character_prompt(char_info, ethnicity)
+            # Thêm mô tả trích xuất từ SRT nếu có
+            if i < len(extracted_char_descs):
+                srt_desc = extracted_char_descs[i]
+                char_prompt = f"{char_prompt}. Story context: {srt_desc}"
             flashback_chars.append({
                 "id": f"nv{i+1}",
                 "name": char_info.get("type", f"Character {i+1}"),
@@ -6029,7 +6097,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 "english_prompt": char_prompt
             })
 
-        # Nếu không đủ 3 nhân vật, thêm generic characters
+        # Nếu không đủ 3 nhân vật, thêm từ mô tả trích xuất hoặc generic
         generic_chars = [
             {"type": "Main Character", "gender": "neutral", "age": "adult"},
             {"type": "Supporting Character", "gender": "neutral", "age": "adult"},
@@ -6039,6 +6107,10 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             idx = len(flashback_chars)
             char_info = generic_chars[idx]
             char_prompt = self._build_character_prompt(char_info, ethnicity)
+            # Thêm mô tả từ SRT nếu có
+            if idx < len(extracted_char_descs):
+                srt_desc = extracted_char_descs[idx]
+                char_prompt = f"{char_prompt}. Story context: {srt_desc}"
             flashback_chars.append({
                 "id": f"nv{idx+1}",
                 "name": char_info.get("type", f"Character {idx+1}"),
@@ -6130,7 +6202,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             },
         }
 
-        # Tạo locations từ phân tích SRT
+        # Tạo locations từ phân tích SRT (kết hợp mô tả trích xuất)
         flashback_locs = [
             {"id": "loc_narrator", "name": "Storytelling Room",
              "lock": LOCATION_LOCK,
@@ -6143,25 +6215,35 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 "lock": f"{loc_type.lower()}, atmospheric setting, cinematic mood",
                 "english_prompt": f"Photorealistic {loc_type.lower()} scene. Atmospheric setting with beautiful lighting, cinematic composition. 8K quality."
             })
+            # Thêm mô tả trích xuất từ SRT nếu có
+            english_prompt = loc_data["english_prompt"]
+            if i < len(extracted_loc_descs):
+                srt_loc_desc = extracted_loc_descs[i]
+                english_prompt = f"{english_prompt} Story setting: {srt_loc_desc}."
             flashback_locs.append({
                 "id": f"loc_{i+1:02d}",
                 "name": loc_type,
                 "lock": loc_data["lock"],
-                "english_prompt": loc_data["english_prompt"]
+                "english_prompt": english_prompt
             })
 
-        # Nếu không đủ 6 locations, thêm generic
+        # Nếu không đủ 6 locations, thêm generic (với mô tả từ SRT nếu có)
         generic_locs = ["Home Interior", "City", "Park/Garden", "Night Scene", "Village/Countryside"]
         while len(flashback_locs) < 6:
             idx = len(flashback_locs) - 1  # -1 vì đã có loc_narrator
             loc_type = generic_locs[idx % len(generic_locs)]
             if loc_type not in [l["name"] for l in flashback_locs]:
                 loc_data = location_prompts.get(loc_type)
+                english_prompt = loc_data["english_prompt"]
+                # Thêm mô tả từ SRT nếu còn
+                if idx < len(extracted_loc_descs):
+                    srt_loc_desc = extracted_loc_descs[idx]
+                    english_prompt = f"{english_prompt} Story setting: {srt_loc_desc}."
                 flashback_locs.append({
                     "id": f"loc_{idx+1:02d}",
                     "name": loc_type,
                     "lock": loc_data["lock"],
-                    "english_prompt": loc_data["english_prompt"]
+                    "english_prompt": english_prompt  # Dùng prompt đã thêm mô tả SRT
                 })
         all_loc_refs = []
         backup_locs = []
