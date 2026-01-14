@@ -2993,12 +2993,15 @@ class DrissionFlowAPI:
 
                     if self.driver and not downloaded:
                         try:
-                            # Lưu tab hiện tại
-                            original_tab = self.driver.tab_ids[0] if self.driver.tab_ids else None
+                            # Lưu tab hiện tại (tab chính)
+                            original_tab = self.driver.tab_id  # ID của tab đang active
 
                             # Mở tab mới với URL ảnh
                             new_tab = self.driver.new_tab(img.url)
                             time.sleep(2)  # Đợi ảnh load
+
+                            # Lấy ID tab mới (tab ảnh)
+                            image_tab = self.driver.tab_id
 
                             # Đợi ảnh load xong (tối đa 10s)
                             for _ in range(20):
@@ -3035,10 +3038,10 @@ class DrissionFlowAPI:
 
                             chrome_time = time.time() - dl_start
 
-                            # Đóng tab mới, quay về tab cũ
-                            if original_tab:
-                                self.driver.close()  # Đóng tab hiện tại (tab ảnh)
-                                self.driver.to_tab(original_tab)
+                            # Quay về tab chính TRƯỚC, rồi đóng tab ảnh
+                            if original_tab and image_tab:
+                                self.driver.to_tab(original_tab)  # Về tab chính
+                                self.driver.close(image_tab)  # Đóng tab ảnh bằng ID
 
                             if result and result.get('base64'):
                                 img.base64_data = result['base64']
@@ -3052,10 +3055,13 @@ class DrissionFlowAPI:
                                 self.log(f"   [DEBUG] Chrome tab error: {result['error']}")
                         except Exception as e:
                             self.log(f"   [DEBUG] Chrome tab exception: {e}")
-                            # Đảm bảo quay về tab gốc nếu có lỗi
+                            # Đảm bảo quay về tab gốc và đóng tab ảnh nếu có lỗi
                             try:
-                                if original_tab and self.driver:
-                                    self.driver.to_tab(original_tab)
+                                if self.driver:
+                                    if original_tab:
+                                        self.driver.to_tab(original_tab)
+                                    if image_tab and image_tab != original_tab:
+                                        self.driver.close(image_tab)
                             except:
                                 pass
 
