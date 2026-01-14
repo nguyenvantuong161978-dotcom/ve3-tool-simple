@@ -360,13 +360,15 @@ Return JSON only:
         # Save to Excel
         try:
             for char_data in data["characters"]:
+                char_id = char_data.get("id", "")
                 char = Character(
-                    id=char_data.get("id", ""),
+                    id=char_id,
                     name=char_data.get("name", ""),
                     role=char_data.get("role", "supporting"),
                     english_prompt=char_data.get("portrait_prompt", ""),
                     character_lock=char_data.get("character_lock", ""),
                     vietnamese_prompt=char_data.get("vietnamese_description", ""),
+                    image_file=f"{char_id}.png",  # Gán image_file = {id}.png
                 )
                 workbook.add_character(char)
 
@@ -474,12 +476,14 @@ Return JSON only:
         # Save to Excel
         try:
             for loc_data in data["locations"]:
+                loc_id = loc_data.get("id", "")
                 loc = Location(
-                    id=loc_data.get("id", ""),
+                    id=loc_id,
                     name=loc_data.get("name", ""),
                     english_prompt=loc_data.get("location_prompt", ""),
                     location_lock=loc_data.get("location_lock", ""),
                     lighting_default=loc_data.get("lighting_default", ""),
+                    image_file=f"{loc_id}.png",  # Gán image_file = {id}.png
                 )
                 workbook.add_location(loc)
 
