@@ -2990,22 +2990,21 @@ class DrissionFlowAPI:
                     dl_start = time.time()
                     self.log(f"→ Opening image in new tab...")
                     downloaded = False
+                    image_tab = None
 
                     if self.driver and not downloaded:
                         try:
-                            # Lưu tab hiện tại (tab chính)
-                            original_tab = self.driver.tab_id  # ID của tab đang active
+                            # Lưu tab hiện tại (tab chính) - dùng get_tab()
+                            original_tab = self.driver.get_tab()
 
-                            # Mở tab mới với URL ảnh
-                            new_tab = self.driver.new_tab(img.url)
+                            # Mở tab mới với URL ảnh - new_tab trả về tab object
+                            image_tab = self.driver.new_tab(img.url)
+                            image_tab.set.activate()  # Switch sang tab mới
                             time.sleep(2)  # Đợi ảnh load
-
-                            # Lấy ID tab mới (tab ảnh)
-                            image_tab = self.driver.tab_id
 
                             # Đợi ảnh load xong (tối đa 10s)
                             for _ in range(20):
-                                img_loaded = self.driver.run_js('''
+                                img_loaded = image_tab.run_js('''
                                     const img = document.querySelector('img');
                                     return img && img.complete && img.naturalWidth > 0;
                                 ''')
@@ -3014,7 +3013,7 @@ class DrissionFlowAPI:
                                 time.sleep(0.5)
 
                             # Convert ảnh sang base64 qua canvas
-                            result = self.driver.run_js('''
+                            result = image_tab.run_js('''
                                 const img = document.querySelector('img');
                                 if (!img || !img.complete) return { error: "Image not found or not loaded" };
 
@@ -3038,10 +3037,9 @@ class DrissionFlowAPI:
 
                             chrome_time = time.time() - dl_start
 
-                            # Quay về tab chính TRƯỚC, rồi đóng tab ảnh
-                            if original_tab and image_tab:
-                                self.driver.to_tab(original_tab)  # Về tab chính
-                                self.driver.close(image_tab)  # Đóng tab ảnh bằng ID
+                            # Đóng tab ảnh, quay về tab chính
+                            image_tab.close()  # Đóng tab ảnh
+                            original_tab.set.activate()  # Về tab chính
 
                             if result and result.get('base64'):
                                 img.base64_data = result['base64']
@@ -3055,13 +3053,10 @@ class DrissionFlowAPI:
                                 self.log(f"   [DEBUG] Chrome tab error: {result['error']}")
                         except Exception as e:
                             self.log(f"   [DEBUG] Chrome tab exception: {e}")
-                            # Đảm bảo quay về tab gốc và đóng tab ảnh nếu có lỗi
+                            # Đảm bảo đóng tab ảnh nếu có lỗi
                             try:
-                                if self.driver:
-                                    if original_tab:
-                                        self.driver.to_tab(original_tab)
-                                    if image_tab and image_tab != original_tab:
-                                        self.driver.close(image_tab)
+                                if image_tab:
+                                    image_tab.close()
                             except:
                                 pass
 
