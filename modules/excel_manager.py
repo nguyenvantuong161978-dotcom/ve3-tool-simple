@@ -611,7 +611,8 @@ class PromptWorkbook:
 
     def get_media_ids(self) -> Dict[str, str]:
         """
-        Lấy tất cả media_id từ characters VÀ locations sheets.
+        Lấy tất cả media_id từ characters sheet.
+        (Cả nhân vật nv* và bối cảnh loc* đều nằm trong characters sheet)
 
         Returns:
             Dict mapping id -> media_id
@@ -621,8 +622,6 @@ class PromptWorkbook:
             self.load_or_create()
 
         result = {}
-
-        # === 1. Đọc từ characters sheet ===
         ws = self.workbook[self.CHARACTERS_SHEET]
 
         # Tìm cột media_id
@@ -632,25 +631,18 @@ class PromptWorkbook:
                 media_id_col = col_idx
                 break
 
-        if media_id_col:
-            for row_idx in range(2, ws.max_row + 1):
-                char_id = ws.cell(row=row_idx, column=1).value
-                media_id = ws.cell(row=row_idx, column=media_id_col).value
-                if char_id and media_id:
-                    result[str(char_id)] = str(media_id)
+        if media_id_col is None:
+            return result
 
-        # === 2. Đọc từ locations sheet (nếu có) ===
-        if self.LOCATIONS_SHEET in self.workbook.sheetnames:
-            ws_loc = self.workbook[self.LOCATIONS_SHEET]
-            # locations sheet: id, name, english_prompt, location_lock, lighting_default, image_file, status, media_id
-            # media_id ở cột 8
-            for row_idx in range(2, ws_loc.max_row + 1):
-                loc_id = ws_loc.cell(row=row_idx, column=1).value
-                loc_media_id = ws_loc.cell(row=row_idx, column=8).value
-                if loc_id and loc_media_id:
-                    result[str(loc_id)] = str(loc_media_id)
+        # Đọc từ dòng 2 (skip header)
+        for row_idx in range(2, ws.max_row + 1):
+            char_id = ws.cell(row=row_idx, column=1).value
+            media_id = ws.cell(row=row_idx, column=media_id_col).value
 
-        self.logger.debug(f"Loaded {len(result)} media_ids from Excel (chars + locs)")
+            if char_id and media_id:
+                result[str(char_id)] = str(media_id)
+
+        self.logger.debug(f"Loaded {len(result)} media_ids from Excel")
         return result
 
     def get_scene_media_ids(self) -> Dict[str, str]:
@@ -1017,7 +1009,7 @@ class PromptWorkbook:
         header_fill = PatternFill(start_color="2E8B57", end_color="2E8B57", fill_type="solid")
         header_alignment = Alignment(horizontal="center", vertical="center")
 
-        columns = ["id", "name", "english_prompt", "location_lock", "lighting_default", "image_file", "status", "media_id"]
+        columns = ["id", "name", "english_prompt", "location_lock", "lighting_default", "image_file", "status"]
         for col, column_name in enumerate(columns, start=1):
             cell = ws.cell(row=1, column=col, value=column_name)
             cell.font = header_font
@@ -1073,38 +1065,6 @@ class PromptWorkbook:
             locations.append(loc)
 
         return locations
-
-    def update_location(self, location_id: str, **kwargs) -> bool:
-        """
-        Cập nhật thông tin location.
-
-        Args:
-            location_id: ID của location cần cập nhật
-            **kwargs: Các field cần cập nhật (status, media_id, etc.)
-
-        Returns:
-            True nếu cập nhật thành công, False nếu không tìm thấy
-        """
-        self._ensure_locations_sheet()
-        ws = self.workbook[self.LOCATIONS_SHEET]
-
-        # Locations columns: id, name, english_prompt, location_lock, lighting_default, image_file, status, media_id
-        loc_columns = ["id", "name", "english_prompt", "location_lock", "lighting_default", "image_file", "status", "media_id"]
-
-        # Tìm dòng có location_id
-        for row_idx in range(2, ws.max_row + 1):
-            if ws.cell(row=row_idx, column=1).value == location_id:
-                # Cập nhật các field
-                for key, value in kwargs.items():
-                    if key in loc_columns:
-                        col_idx = loc_columns.index(key) + 1
-                        ws.cell(row=row_idx, column=col_idx, value=value)
-
-                self.logger.debug(f"Updated location: {location_id}")
-                return True
-
-        self.logger.warning(f"Location not found: {location_id}")
-        return False
 
     # ========== BACKUP CHARACTERS SHEET ==========
 

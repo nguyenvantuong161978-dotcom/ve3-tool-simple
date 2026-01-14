@@ -5829,8 +5829,8 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         workbook.save_backup_characters(backup_chars)
 
         # === BƯỚC 5: Tạo locations cho Flashback ===
-        # QUAN TRỌNG: Phải add vào LOCATIONS sheet (không chỉ backup) để smart_engine đọc được
-        from .excel_manager import Location
+        # QUAN TRỌNG: Locations cũng add vào CHARACTERS sheet (như Character với role=location)
+        # Tất cả tham chiếu (nhân vật + bối cảnh) đều vào characters sheet, ảnh lưu vào nv/
 
         flashback_locs = [
             {"id": "loc_narrator", "name": "Storytelling Room",
@@ -5850,17 +5850,18 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         backup_locs = []
 
         for fl in flashback_locs:
-            # Tạo Location object và add vào locations sheet (để smart_engine tạo ảnh)
-            loc_obj = Location(
+            # Tạo Character object cho location (role=location) → vào characters sheet
+            loc_as_char = Character(
                 id=fl["id"],
                 name=fl["name"],
+                role="location",  # Đánh dấu là location
+                vietnamese_prompt=fl["name"],
                 english_prompt=fl["english_prompt"],
-                location_lock=fl["lock"],
-                lighting_default="natural warm",
+                character_lock=fl["lock"],
                 image_file=f"{fl['id']}.png",
                 status="pending"
             )
-            workbook.add_location(loc_obj)
+            workbook.add_character(loc_as_char)
             all_loc_refs.append(f"{fl['id']}.png")
 
             # Backup data
@@ -5871,7 +5872,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             })
 
         workbook.save_backup_locations(backup_locs)
-        self.logger.info(f"[FALLBACK] ✓ Đã tạo {len(flashback_locs)} locations (trong locations sheet)")
+        self.logger.info(f"[FALLBACK] ✓ Đã tạo {len(flashback_locs)} locations (trong characters sheet)")
 
         # === BƯỚC 6: Nhóm SRT thành scenes ===
         scenes_data = group_srt_into_scenes(
