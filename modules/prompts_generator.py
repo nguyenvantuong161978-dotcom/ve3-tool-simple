@@ -5756,7 +5756,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             "characters": [],              # List of detected character types
             "locations": [],               # List of detected location types
             "theme": "general",            # romance, action, family, horror, etc.
-            "ethnicity": "asian"           # asian, western, african, neutral
+            "ethnicity": "western"         # western (default/American), asian, african
         }
 
         # === PHÁT HIỆN GIỚI TÍNH NGƯỜI KỂ ===
@@ -5851,13 +5851,16 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 break
 
         # === PHÁT HIỆN DÂN TỘC/VĂN HÓA ===
-        western_kw = ["america", "europe", "london", "paris", "new york", "western"]
-        african_kw = ["africa", "african"]
+        # Mặc định là Western/American, chỉ đổi nếu phát hiện từ khóa khác
+        asian_kw = ["việt nam", "vietnam", "asian", "châu á", "nhật", "japan", "hàn", "korea",
+                    "trung quốc", "china", "thái lan", "thailand", "singapore"]
+        african_kw = ["africa", "african", "châu phi"]
 
-        if any(k in all_text for k in western_kw):
-            result["ethnicity"] = "western"
+        if any(k in all_text for k in asian_kw):
+            result["ethnicity"] = "asian"
         elif any(k in all_text for k in african_kw):
             result["ethnicity"] = "african"
+        # else: giữ mặc định "western"
 
         return result
 
@@ -5921,7 +5924,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         """Tạo CHARACTER_LOCK và COSTUME_LOCK cho narrator dựa trên phân tích."""
         gender = analysis.get("narrator_gender", "neutral")
         age = analysis.get("narrator_age", "adult")
-        ethnicity = analysis.get("ethnicity", "asian")
+        ethnicity = analysis.get("ethnicity", "western")
 
         eth_map = {"asian": "Asian", "western": "Caucasian", "african": "African", "neutral": ""}
         eth_str = eth_map.get(ethnicity, "Asian")
@@ -5992,9 +5995,9 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         CHARACTER_LOCK, COSTUME_LOCK = self._build_narrator_from_analysis(analysis)
 
         LOCATION_LOCK = (
-            "cozy living room corner, warm soft lamp light from beside, "
-            "wooden bookshelf with old books in background, comfortable armchair, "
-            "evening atmosphere with soft shadows, intimate storytelling setting"
+            "cozy American living room corner, warm table lamp lighting, "
+            "wooden bookshelf with classic books, comfortable leather armchair, "
+            "fireplace in background, evening atmosphere, intimate storytelling setting"
         )
 
         # === BƯỚC 2: Tạo nhân vật narrator trong characters sheet ===
@@ -6014,7 +6017,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         # === BƯỚC 3: Tạo nhân vật dựa trên phân tích SRT ===
         # ID phải bắt đầu bằng "nv" để smart_engine nhận diện
         flashback_chars = []
-        ethnicity = analysis.get("ethnicity", "asian")
+        ethnicity = analysis.get("ethnicity", "western")
 
         # Thêm nhân vật từ phân tích
         for i, char_info in enumerate(analysis.get("characters", [])[:3]):
@@ -6075,55 +6078,55 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         # === BƯỚC 5: Tạo locations dựa trên phân tích SRT ===
         # QUAN TRỌNG: Locations cũng add vào CHARACTERS sheet (như Character với role=location)
 
-        # Bảng mapping location type -> prompt details
+        # Bảng mapping location type -> prompt details (American/Western style)
         location_prompts = {
             "Home Interior": {
-                "lock": "warm cozy home interior, comfortable furniture, family photos on wall, soft lighting",
-                "english_prompt": "Photorealistic home interior. Warm living room with comfortable furniture, family atmosphere, soft natural light through curtains. Intimate homey feeling, 8K cinematic quality."
+                "lock": "American suburban home interior, comfortable sofa, family photos, warm lighting, modern decor",
+                "english_prompt": "Photorealistic American home interior. Spacious living room with comfortable leather sofa, family photos on mantle, warm lamp lighting, hardwood floors. Cozy suburban atmosphere, 8K cinematic quality."
             },
             "School": {
-                "lock": "school classroom or hallway, educational posters, desks and chairs, bright lighting",
-                "english_prompt": "Photorealistic school scene. Classroom with wooden desks, chalkboard, educational atmosphere, bright daylight through windows. Academic setting, 8K cinematic quality."
+                "lock": "American high school, lockers in hallway, classroom with desks, bright fluorescent lighting",
+                "english_prompt": "Photorealistic American school scene. High school hallway with metal lockers, classroom with individual desks, American flag, bright lighting. Typical US school atmosphere, 8K cinematic quality."
             },
             "Hospital": {
-                "lock": "hospital interior, clean white walls, medical equipment, sterile atmosphere",
-                "english_prompt": "Photorealistic hospital scene. Clean medical facility, soft fluorescent lighting, professional healthcare environment. Sterile yet caring atmosphere, 8K cinematic quality."
+                "lock": "modern American hospital, clean corridors, medical equipment, professional healthcare",
+                "english_prompt": "Photorealistic American hospital scene. Modern medical facility with clean white corridors, advanced equipment, professional staff atmosphere. Contemporary healthcare setting, 8K cinematic quality."
             },
             "Park/Garden": {
-                "lock": "beautiful park or garden, green trees, flowers, peaceful nature",
-                "english_prompt": "Photorealistic park scene. Lush green garden with blooming flowers, tall trees, dappled sunlight, peaceful atmosphere. Natural beauty, 8K cinematic quality."
+                "lock": "American city park, green lawn, oak trees, park benches, joggers",
+                "english_prompt": "Photorealistic American park scene. Beautiful city park with manicured lawns, tall oak trees, wooden benches, people jogging. Central Park style atmosphere, 8K cinematic quality."
             },
             "Beach/Ocean": {
-                "lock": "sandy beach, ocean waves, blue sky, tropical atmosphere",
-                "english_prompt": "Photorealistic beach scene. Golden sand, turquoise ocean waves, clear blue sky, warm sunlight. Serene coastal atmosphere, 8K cinematic quality."
+                "lock": "California beach, golden sand, Pacific ocean waves, palm trees, surfers",
+                "english_prompt": "Photorealistic California beach scene. Golden sandy beach, Pacific ocean waves, palm trees swaying, surfers in distance. West coast vibes, sunset lighting, 8K cinematic quality."
             },
             "Mountain": {
-                "lock": "majestic mountains, dramatic peaks, vast landscape, epic scale",
-                "english_prompt": "Photorealistic mountain landscape. Towering peaks, dramatic clouds, vast wilderness, golden hour lighting. Awe-inspiring nature, 8K cinematic quality."
+                "lock": "Rocky Mountains landscape, snow-capped peaks, pine forests, vast American wilderness",
+                "english_prompt": "Photorealistic Rocky Mountains landscape. Majestic snow-capped peaks, dense pine forests, crystal clear lake, American wilderness. Epic national park scenery, 8K cinematic quality."
             },
             "City": {
-                "lock": "modern city street, tall buildings, urban life, dynamic atmosphere",
-                "english_prompt": "Photorealistic city scene. Modern urban street with glass buildings, busy sidewalks, dynamic city energy. Contemporary metropolitan atmosphere, 8K cinematic quality."
+                "lock": "New York City street, skyscrapers, yellow taxis, busy sidewalks, urban energy",
+                "english_prompt": "Photorealistic New York City scene. Iconic Manhattan street with towering skyscrapers, yellow taxi cabs, busy pedestrians, steam rising from manholes. Iconic American urban atmosphere, 8K cinematic quality."
             },
             "Village/Countryside": {
-                "lock": "peaceful village, rice fields, traditional houses, rural atmosphere",
-                "english_prompt": "Photorealistic countryside scene. Peaceful village with traditional houses, green rice fields, misty morning atmosphere. Rural tranquility, 8K cinematic quality."
+                "lock": "American countryside, farmland, red barn, white picket fence, rolling hills",
+                "english_prompt": "Photorealistic American countryside scene. Peaceful farmland with iconic red barn, white picket fence, golden wheat fields, rolling green hills. Heartland America atmosphere, 8K cinematic quality."
             },
             "Restaurant/Cafe": {
-                "lock": "cozy cafe or restaurant, warm interior, coffee aroma, social atmosphere",
-                "english_prompt": "Photorealistic cafe scene. Cozy interior with warm lighting, wooden tables, coffee cups, relaxed social atmosphere. Inviting ambiance, 8K cinematic quality."
+                "lock": "American diner or coffee shop, booth seating, neon signs, classic Americana",
+                "english_prompt": "Photorealistic American diner scene. Classic 50s-style diner with red leather booths, chrome counter stools, neon signs, coffee and pie. Nostalgic Americana atmosphere, 8K cinematic quality."
             },
             "Office": {
-                "lock": "modern office space, computer desks, professional environment, corporate atmosphere",
-                "english_prompt": "Photorealistic office scene. Modern workspace with computers, glass partitions, professional lighting. Corporate business atmosphere, 8K cinematic quality."
+                "lock": "modern American corporate office, glass walls, ergonomic desks, Silicon Valley style",
+                "english_prompt": "Photorealistic American office scene. Modern open-plan workspace with glass partitions, standing desks, tech startup vibes. Contemporary corporate America, 8K cinematic quality."
             },
             "Night Scene": {
-                "lock": "nighttime urban scene, city lights, neon glow, mysterious atmosphere",
-                "english_prompt": "Photorealistic night scene. City at night with glowing streetlights, neon signs, wet reflective streets. Cinematic noir atmosphere, 8K quality."
+                "lock": "American city at night, neon lights, downtown nightlife, urban noir atmosphere",
+                "english_prompt": "Photorealistic American city night scene. Downtown at night with neon signs, streetlights reflecting on wet pavement, late-night diners glowing. Cinematic noir atmosphere, 8K quality."
             },
             "Rainy Scene": {
-                "lock": "rainy weather, wet streets, umbrellas, melancholic atmosphere",
-                "english_prompt": "Photorealistic rainy scene. Rain falling on city streets, reflections in puddles, people with umbrellas. Melancholic yet beautiful atmosphere, 8K cinematic quality."
+                "lock": "rainy American city, wet streets, umbrellas, yellow taxis, reflections",
+                "english_prompt": "Photorealistic rainy New York scene. Rain falling on city streets, yellow taxis with headlights, people with umbrellas, reflections in puddles. Melancholic urban beauty, 8K cinematic quality."
             },
         }
 
