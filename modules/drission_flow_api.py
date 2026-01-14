@@ -1013,10 +1013,10 @@ class DrissionFlowAPI:
         # Model fallback: khi quota exceeded (429), chuyển từ GEM_PIX_2 (Pro) sang GEM_PIX
         self._use_fallback_model = False  # True = dùng nano banana (GEM_PIX) thay vì pro (GEM_PIX_2)
 
-        # IPv6 rotation: đếm số lần reset Chrome do 403, sau 5 lần mới đổi IPv6
+        # IPv6 rotation: TẠM TẮT - đặt 999 để không bao giờ kích hoạt
         self._consecutive_403 = 0
-        self._max_403_before_ipv6 = 5  # Số lần reset Chrome liên tiếp trước khi đổi IPv6
-        self._ipv6_activated = False  # True = đã bật IPv6 proxy (chỉ bật sau khi reset Chrome đủ 5 lần)
+        self._max_403_before_ipv6 = 999  # TẠM TẮT IPv6 (đặt 999)
+        self._ipv6_activated = False  # True = đã bật IPv6 proxy
 
         # T2V mode tracking: chỉ chọn mode/model lần đầu khi mới mở Chrome
         # Sau F5 refresh thì trang vẫn giữ mode/model đã chọn, không cần chọn lại

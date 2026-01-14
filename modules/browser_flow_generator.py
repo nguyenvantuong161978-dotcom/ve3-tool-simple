@@ -4015,6 +4015,20 @@ class BrowserFlowGenerator:
                         break
 
                     self._log(f"\n--- Retry Round {retry_round + 1}/{MAX_RETRY_ROUNDS} ---")
+
+                    # Kiểm tra và restart Chrome nếu cần trước khi retry
+                    if drission_api and not drission_api._ready:
+                        self._log("[RETRY] API chưa sẵn sàng, restart Chrome...")
+                        try:
+                            if drission_api.restart_chrome():
+                                self._log("[RETRY] ✓ Chrome restarted")
+                            else:
+                                self._log("[RETRY] ✗ Không restart được Chrome, bỏ qua retry phase", "warn")
+                                break
+                        except Exception as e:
+                            self._log(f"[RETRY] ✗ Restart error: {e}", "warn")
+                            break
+
                     still_missing = []
 
                     for prompt_data in missing_prompts:
