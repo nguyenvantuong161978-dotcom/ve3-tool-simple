@@ -253,6 +253,90 @@ class ProgressivePromptsGenerator:
                 srt_text += f"[{i}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
         return srt_text
 
+    def _normalize_character_ids(self, characters_used: str, valid_char_ids: set) -> str:
+        """
+        Normalize character IDs từ API response về format chuẩn (nv_xxx).
+
+        Vấn đề: API có thể trả về "john, mary" thay vì "nv_john, nv_mary"
+        Giải pháp: Map về IDs đã biết trong valid_char_ids
+
+        Args:
+            characters_used: String từ API như "john, mary" hoặc "nv_john"
+            valid_char_ids: Set of valid IDs như {"nv_john", "nv_mary", "loc_office"}
+
+        Returns:
+            Normalized string như "nv_john, nv_mary"
+        """
+        if not characters_used or not valid_char_ids:
+            return characters_used
+
+        raw_ids = [x.strip() for x in characters_used.split(",") if x.strip()]
+        normalized = []
+
+        # Build lookup (lowercase -> original)
+        id_lookup = {cid.lower(): cid for cid in valid_char_ids}
+        # Also add versions without prefix
+        for cid in list(valid_char_ids):
+            if cid.startswith("nv_"):
+                id_lookup[cid[3:].lower()] = cid  # "john" -> "nv_john"
+            if cid.startswith("loc_"):
+                id_lookup[cid[4:].lower()] = cid  # "office" -> "loc_office"
+
+        for raw_id in raw_ids:
+            raw_lower = raw_id.lower()
+
+            # Tìm trong lookup
+            if raw_lower in id_lookup:
+                normalized.append(id_lookup[raw_lower])
+            elif raw_id in valid_char_ids:
+                normalized.append(raw_id)
+            elif f"nv_{raw_id}" in valid_char_ids:
+                normalized.append(f"nv_{raw_id}")
+            else:
+                # Không tìm thấy - giữ nguyên nhưng thêm nv_ prefix nếu chưa có
+                if not raw_id.startswith("nv_") and not raw_id.startswith("loc_"):
+                    normalized.append(f"nv_{raw_id}")
+                else:
+                    normalized.append(raw_id)
+
+        return ", ".join(normalized)
+
+    def _normalize_location_id(self, location_used: str, valid_loc_ids: set) -> str:
+        """
+        Normalize location ID từ API response về format chuẩn (loc_xxx).
+
+        Args:
+            location_used: String từ API như "office" hoặc "loc_office"
+            valid_loc_ids: Set of valid location IDs
+
+        Returns:
+            Normalized ID như "loc_office"
+        """
+        if not location_used or not valid_loc_ids:
+            return location_used
+
+        raw_id = location_used.strip()
+        raw_lower = raw_id.lower()
+
+        # Build lookup
+        id_lookup = {lid.lower(): lid for lid in valid_loc_ids}
+        for lid in list(valid_loc_ids):
+            if lid.startswith("loc_"):
+                id_lookup[lid[4:].lower()] = lid  # "office" -> "loc_office"
+
+        # Tìm trong lookup
+        if raw_lower in id_lookup:
+            return id_lookup[raw_lower]
+        elif raw_id in valid_loc_ids:
+            return raw_id
+        elif f"loc_{raw_id}" in valid_loc_ids:
+            return f"loc_{raw_id}"
+        else:
+            # Không tìm thấy - thêm loc_ prefix nếu chưa có
+            if not raw_id.startswith("loc_"):
+                return f"loc_{raw_id}"
+            return raw_id
+
     def _split_long_scene_cinematically(
         self,
         scene: dict,
@@ -1340,6 +1424,10 @@ Return JSON only:
         char_locks = [f"- {c.id}: {c.character_lock}" for c in characters if c.character_lock]
         loc_locks = [f"- {loc.id}: {loc.location_lock}" for loc in locations if hasattr(loc, 'location_lock') and loc.location_lock]
 
+        # Build valid ID sets for normalization
+        valid_char_ids = {c.id for c in characters}
+        valid_loc_ids = {loc.id for loc in locations}
+
         # Chia SRT entries thành batches ~6000 chars
         MAX_BATCH_CHARS = 6000
         batches = []
@@ -1395,6 +1483,13 @@ Create scenes (~8s each). Return JSON:
             if data and "scenes" in data:
                 for scene in data["scenes"]:
                     scene["scene_id"] = scene_id_counter
+
+                    # Normalize IDs từ API response
+                    raw_chars = scene.get("characters_used", "")
+                    raw_loc = scene.get("location_used", "")
+                    scene["characters_used"] = self._normalize_character_ids(raw_chars, valid_char_ids)
+                    scene["location_used"] = self._normalize_location_id(raw_loc, valid_loc_ids)
+
                     all_scenes.append(scene)
                     scene_id_counter += 1
 
@@ -1457,16 +1552,23 @@ Create scenes (~8s each). Return JSON:
 
         context_lock = story_analysis.get("context_lock", "")
 
-        # Build character/location info
+        # Build character/location info + valid ID sets for normalization
         char_locks = []
+        valid_char_ids = set()  # Để normalize IDs từ API response
         for c in characters:
+            valid_char_ids.add(c.id)
             if c.character_lock:
                 char_locks.append(f"- {c.id}: {c.character_lock}")
 
         loc_locks = []
+        valid_loc_ids = set()  # Để normalize IDs từ API response
         for loc in locations:
+            valid_loc_ids.add(loc.id)
             if hasattr(loc, 'location_lock') and loc.location_lock:
                 loc_locks.append(f"- {loc.id}: {loc.location_lock}")
+
+        self._log(f"  Valid char IDs: {valid_char_ids}")
+        self._log(f"  Valid loc IDs: {valid_loc_ids}")
 
         # Process each segment
         all_scenes = []
@@ -1625,9 +1727,17 @@ Create exactly {image_count} scenes!"""
             if len(api_scenes) != image_count:
                 self._log(f"     -> Warning: Expected {image_count}, got {len(api_scenes)}")
 
-            # Update scene IDs to be continuous
+            # Update scene IDs to be continuous + NORMALIZE character/location IDs
             for scene in api_scenes:
                 scene["scene_id"] = scene_id_counter
+
+                # Normalize IDs từ API response về format chuẩn
+                raw_chars = scene.get("characters_used", "")
+                raw_loc = scene.get("location_used", "")
+
+                scene["characters_used"] = self._normalize_character_ids(raw_chars, valid_char_ids)
+                scene["location_used"] = self._normalize_location_id(raw_loc, valid_loc_ids)
+
                 all_scenes.append(scene)
                 scene_id_counter += 1
 
