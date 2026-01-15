@@ -3246,13 +3246,27 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"✗ Download failed: {e}", "WARN")
 
-        # Mở tab mới thay vì F5 để tránh 403 (fresh page load như Chrome restart)
-        self.log("🔄 Mở tab mới (thay vì F5)...")
+        # Load lại trang bằng cách gõ URL vào thanh địa chỉ + Enter
+        self.log("🔄 Load lại trang...")
         try:
             if self.driver and self._current_project_url:
-                # Cách đơn giản hơn: navigate đến URL mới trong cùng tab
-                # Điều này tương đương mở tab mới vì URL được load fresh
-                self.driver.get(self._current_project_url)
+                # Ctrl+L để focus thanh địa chỉ, sau đó gõ URL và Enter
+                from DrissionPage.common import Keys
+
+                # Focus address bar (Ctrl+L hoặc Alt+D)
+                self.driver.actions.key_down(Keys.CTRL).key_down('l').key_up('l').key_up(Keys.CTRL)
+                time.sleep(0.3)
+
+                # Xóa nội dung cũ và gõ URL mới
+                self.driver.actions.key_down(Keys.CTRL).key_down('a').key_up('a').key_up(Keys.CTRL)
+                time.sleep(0.1)
+
+                # Gõ URL
+                self.driver.actions.type(self._current_project_url)
+                time.sleep(0.3)
+
+                # Nhấn Enter
+                self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
                 time.sleep(3)
 
                 # Đợi textarea xuất hiện = page load xong
