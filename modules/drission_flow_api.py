@@ -2294,37 +2294,31 @@ class DrissionFlowAPI:
 
     def _paste_prompt_ctrlv(self, textarea, prompt: str) -> bool:
         """
-        Paste prompt bằng Ctrl+V thay vì JS input.
+        Nhập prompt bằng cách GÕ thủ công (không dùng Ctrl+V).
         Tránh bị 403 do bot detection.
 
         Args:
             textarea: Element textarea đã tìm thấy
-            prompt: Nội dung prompt cần paste
+            prompt: Nội dung prompt cần nhập
 
         Returns:
             True nếu thành công
         """
-        import pyperclip
-
         try:
-            # 1. Copy prompt vào clipboard
-            pyperclip.copy(prompt)
-            self.log(f"→ Copied to clipboard ({len(prompt)} chars)")
-
-            # 2. Tìm textarea bằng DrissionPage
+            # 1. Tìm textarea bằng DrissionPage
             textarea = self.driver.ele('tag:textarea', timeout=10)
             if not textarea:
                 self.log("⚠️ Không tìm thấy textarea", "WARN")
                 return False
 
-            # 3. Click vào textarea để focus
+            # 2. Click vào textarea để focus
             try:
                 textarea.click()
                 time.sleep(0.3)
             except:
                 pass
 
-            # 4. Clear nội dung cũ bằng Ctrl+A + Delete
+            # 3. Clear nội dung cũ bằng Ctrl+A + Delete
             from DrissionPage.common import Keys
             try:
                 textarea.input(Keys.CTRL_A)
@@ -2334,15 +2328,15 @@ class DrissionFlowAPI:
             except:
                 pass
 
-            # 5. Paste bằng Ctrl+V
-            textarea.input(Keys.CTRL_V)
+            # 4. GÕ prompt thủ công (thay vì Ctrl+V)
+            textarea.input(prompt)
             time.sleep(0.3)
 
-            self.log("→ Pasted with Ctrl+V ✓")
+            self.log(f"→ Typed prompt ({len(prompt)} chars) ✓")
             return True
 
         except Exception as e:
-            self.log(f"⚠️ Ctrl+V failed: {e}", "WARN")
+            self.log(f"⚠️ Type prompt failed: {e}", "WARN")
             return False
 
     def _paste_prompt_js(self, prompt: str) -> bool:
@@ -3246,32 +3240,21 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"✗ Download failed: {e}", "WARN")
 
-        # Load lại trang bằng cách gõ URL vào thanh địa chỉ + Enter
-        self.log("🔄 Load lại trang...")
+        # F5 refresh 2 lần để reset reCAPTCHA hoàn toàn
+        self.log("🔄 F5 x2...")
         try:
-            if self.driver and self._current_project_url:
-                # Ctrl+L để focus thanh địa chỉ, sau đó gõ URL và Enter
-                from DrissionPage.common import Keys
+            if self.driver:
+                # F5 lần 1
+                self.driver.refresh()
+                time.sleep(3)
 
-                # Focus address bar (Ctrl+L hoặc Alt+D)
-                self.driver.actions.key_down(Keys.CTRL).key_down('l').key_up('l').key_up(Keys.CTRL)
-                time.sleep(0.3)
-
-                # Xóa nội dung cũ và gõ URL mới
-                self.driver.actions.key_down(Keys.CTRL).key_down('a').key_up('a').key_up(Keys.CTRL)
-                time.sleep(0.1)
-
-                # Gõ URL
-                self.driver.actions.type(self._current_project_url)
-                time.sleep(0.3)
-
-                # Nhấn Enter
-                self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+                # F5 lần 2
+                self.driver.refresh()
                 time.sleep(3)
 
                 # Đợi textarea xuất hiện = page load xong
                 if not self._wait_for_textarea_visible():
-                    self.log("⚠️ Không thấy textarea sau khi load URL", "WARN")
+                    self.log("⚠️ Không thấy textarea sau F5", "WARN")
 
                 # Re-inject JS Interceptor
                 self._reset_tokens()
@@ -3279,9 +3262,9 @@ class DrissionFlowAPI:
 
                 self.log("✓ Page ready!")
             else:
-                self.log("⚠️ No driver/URL", "WARN")
+                self.log("⚠️ No driver", "WARN")
         except Exception as e:
-            self.log(f"⚠️ Navigate error: {e}", "WARN")
+            self.log(f"⚠️ Refresh error: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
