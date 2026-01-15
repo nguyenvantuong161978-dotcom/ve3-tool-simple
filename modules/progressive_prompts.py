@@ -823,44 +823,57 @@ SCENE GUIDELINES:
 - Number of scenes should be based on CONTENT, not time formula
 - Split when the content NEEDS a different shot/angle/emotion"""
 
-            prompt = f"""Create a director's shooting plan by dividing the SRT into visual scenes.
+            prompt = f"""You are a FILM DIRECTOR creating a shot list. Each scene = ONE CINEMATIC SHOT (max 8 seconds).
 
-VISUAL CONTEXT:
+CORE PRINCIPLE: Each shot must SUPPORT and ENHANCE the narration. The viewer sees this image while hearing the audio.
+Ask yourself: "What visual would make this moment IMPACTFUL for the audience?"
+
+STORY CONTEXT:
 {context_lock}
 {segments_info}
-CHARACTERS (use these exact descriptions in scenes):
+CHARACTERS (use EXACT IDs in scenes):
 {chr(10).join(char_locks) if char_locks else 'No characters defined'}
 
-LOCATIONS (use these exact descriptions in scenes):
+LOCATIONS (use EXACT IDs in scenes):
 {chr(10).join(loc_locks) if loc_locks else 'No locations defined'}
 
 SRT ENTRIES (indices {batch_start+1} to {batch_end+1}):
 {srt_text}
 {expected_images_hint}
 
-Rules:
-1. STRICT: Each scene MUST be 3-8 seconds maximum. No exceptions!
-2. Group SRT entries by visual moment, but if content > 8s, you MUST split with PURPOSE
-3. Follow the STORY SEGMENTS plan for content distribution
-4. CRITICAL: characters_used and location_used MUST use EXACT IDs from the lists above!
-   - characters_used: comma-separated IDs like "nv_john, nv_sarah" (from CHARACTERS list)
-   - location_used: single ID like "loc_office" (from LOCATIONS list)
-   - Do NOT invent new IDs - only use what's provided!
-5. Create visual_moment description (what the viewer sees - be specific!)
-6. scene_id should start from {scene_id_counter}
-7. srt_indices should use the ORIGINAL indices shown in brackets [N]
-8. Duration = time from srt_start to srt_end, MUST be <= 8 seconds
+DIRECTOR'S MINDSET:
+1. Each scene = 1 SHOT (max 8 seconds) that SUPPORTS the content being narrated
+2. Choose the shot that BEST conveys the emotion/message of that moment
+3. Think cinematically:
+   - Narration about someone's feelings → Close-up on their face/expression
+   - Narration about a place/situation → Establishing wide shot
+   - Narration about interaction → Two-shot or over-shoulder
+   - Narration building tension → Dramatic angle, shadows
+   - Narration revealing information → Focus on the key element
 
-CINEMATIC SPLITTING (very important!):
-When content spans > 8 seconds, split into multiple scenes with DISTINCT purposes:
-- DON'T just split time mechanically (Part 1, Part 2 - this is BAD!)
-- DO split by cinematic moments: different angle, emotion, focus
-- Example: Two people talking for 15s →
-  * Scene 1: Close-up on speaker A, their emotion (5s)
-  * Scene 2: Reaction shot on listener B (4s)
-  * Scene 3: Wide shot showing both, environment (6s)
-- Each scene should tell PART of the story from a UNIQUE perspective
-- Think like a film director: what shot would convey this moment best?
+SHOT TYPES TO CONSIDER:
+- Close-up: emotion, detail, intimacy (face, hands, object)
+- Medium shot: action, body language, conversation
+- Wide/Establishing: location, context, scale, isolation
+- Over-shoulder: dialogue, perspective, connection
+- Insert/Detail: important object, symbol, emphasis
+
+RULES:
+1. Duration MUST be 3-8 seconds (based on SRT timing)
+2. characters_used: EXACT IDs like "nv_john, nv_sarah" from list above
+3. location_used: EXACT ID like "loc_office" from list above
+4. visual_moment: Describe WHAT viewer sees and WHY this shot serves the story
+5. camera: Shot type + any movement (pan, zoom, static)
+6. scene_id starts from {scene_id_counter}
+7. srt_indices use ORIGINAL indices in brackets [N]
+
+IF CONTENT > 8 SECONDS: Split into multiple shots with DIFFERENT purposes
+- Each shot shows a DIFFERENT aspect of the same moment
+- NOT "Part 1, Part 2" but distinct cinematic choices
+- Example: 15s about a difficult decision →
+  * Shot 1: Close-up on character's conflicted face (5s)
+  * Shot 2: Insert shot of the document/object of decision (4s)
+  * Shot 3: Wide shot showing character alone, weight of moment (6s)
 
 Return JSON only:
 {{
@@ -871,16 +884,16 @@ Return JSON only:
             "srt_start": "00:00:00,000",
             "srt_end": "00:00:05,000",
             "duration": 5.0,
-            "srt_text": "combined text from SRT entries",
-            "visual_moment": "what the viewer sees in this scene",
-            "characters_used": "nv_xxx, nv_yyy",
-            "location_used": "loc_xxx",
-            "camera": "shot type and movement",
-            "lighting": "lighting description"
+            "srt_text": "the narration text",
+            "visual_moment": "Close-up on John's worried face, sweat on forehead - showing his anxiety about the decision",
+            "shot_purpose": "Convey internal struggle as narration describes his dilemma",
+            "characters_used": "nv_john",
+            "location_used": "loc_office",
+            "camera": "Close-up, static, shallow depth of field",
+            "lighting": "Harsh overhead light creating shadows under eyes"
         }}
     ]
 }}
-NOTE: characters_used and location_used MUST match IDs from CHARACTERS/LOCATIONS lists above!
 """
 
             # Call API
