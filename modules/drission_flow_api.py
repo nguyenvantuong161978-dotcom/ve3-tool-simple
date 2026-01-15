@@ -683,53 +683,38 @@ JS_CLICK_NEW_PROJECT = '''
 })();
 '''
 
-# JS để chọn "Tạo hình ảnh" từ dropdown
-# JS bước 1: Kiểm tra mode và click dropdown nếu cần
-JS_SELECT_IMAGE_MODE_CHECK = '''
-(function() {
-    try {
-        var dropdown = document.querySelector('button[role="combobox"]');
-        if (!dropdown) {
-            return 'NO_DROPDOWN';
-        }
-        var currentText = dropdown.textContent || dropdown.innerText || '';
-        if (currentText.indexOf('Tạo hình ảnh') >= 0 || currentText.indexOf('Generate image') >= 0) {
-            return 'ALREADY_SELECTED';
-        }
-        dropdown.click();
-        return 'DROPDOWN_CLICKED';
-    } catch(e) {
-        return 'ERROR:' + e.message;
+# JS để chọn "Tạo hình ảnh" từ dropdown (dùng ở _create_new_project, _wait_for_project_manual)
+JS_SELECT_IMAGE_MODE = '''
+(async function() {
+    // 1. Click dropdown
+    var dropdown = document.querySelector('button[role="combobox"]');
+    if (!dropdown) {
+        console.log('[AUTO] Dropdown not found');
+        return 'NO_DROPDOWN';
     }
-})();
-'''
+    dropdown.click();
+    console.log('[AUTO] Clicked dropdown');
 
-# JS bước 2: Chọn option "Tạo hình ảnh" sau khi dropdown mở
-JS_SELECT_IMAGE_MODE_CLICK = '''
-(function() {
-    try {
-        var allElements = document.querySelectorAll('*');
-        for (var i = 0; i < allElements.length; i++) {
-            var el = allElements[i];
-            var text = el.textContent || '';
-            if (text === 'Tạo hình ảnh' || text.indexOf('Tạo hình ảnh từ văn bản') >= 0 ||
-                text === 'Generate image' || text.indexOf('Generate image from text') >= 0) {
-                var rect = el.getBoundingClientRect();
-                if (rect.height > 10 && rect.height < 80 && rect.width > 50) {
-                    el.click();
-                    return 'CLICKED';
-                }
+    // 2. Đợi dropdown mở
+    await new Promise(r => setTimeout(r, 500));
+
+    // 3. Tìm và click "Tạo hình ảnh"
+    var allElements = document.querySelectorAll('*');
+    for (var el of allElements) {
+        var text = el.textContent || '';
+        if (text === 'Tạo hình ảnh' || text.includes('Tạo hình ảnh từ văn bản') ||
+            text === 'Generate image' || text.includes('Generate image from text')) {
+            var rect = el.getBoundingClientRect();
+            if (rect.height > 10 && rect.height < 80 && rect.width > 50) {
+                el.click();
+                console.log('[AUTO] Clicked: Tao hinh anh');
+                return 'CLICKED';
             }
         }
-        return 'NOT_FOUND';
-    } catch(e) {
-        return 'ERROR:' + e.message;
     }
+    return 'NOT_FOUND';
 })();
 '''
-
-# Giữ lại JS cũ để tương thích (dùng cho các chỗ khác)
-JS_SELECT_IMAGE_MODE = JS_SELECT_IMAGE_MODE_CHECK
 
 # JS để chọn "Tạo video từ các thành phần" từ dropdown (cho I2V)
 # Bước 1: Click dropdown 2 lần để mở menu đúng
@@ -2075,31 +2060,8 @@ class DrissionFlowAPI:
 
         self.log("✓ Project đã sẵn sàng (textarea visible)!")
 
-        # 5.5. Kiểm tra mode "Tạo hình ảnh" - thường đã được chọn sẵn khi page load
-        # SKIP nếu skip_mode_selection=True (cho Chrome 2 video - sẽ switch T2V mode sau)
-        if not skip_mode_selection:
-            # Chỉ kiểm tra 1 lần, mode thường đã đúng sẵn
-            try:
-                result = self.driver.run_js(JS_SELECT_IMAGE_MODE_CHECK)
-                if result == 'ALREADY_SELECTED':
-                    self.log("✓ Mode: Tạo hình ảnh (OK)")
-                elif result == 'DROPDOWN_CLICKED':
-                    # Cần chọn mode
-                    time.sleep(0.5)
-                    result2 = self.driver.run_js(JS_SELECT_IMAGE_MODE_CLICK)
-                    if result2 == 'CLICKED':
-                        self.log("✓ Đã chọn mode 'Tạo hình ảnh'")
-                    else:
-                        self.log(f"⚠️ Mode selection: {result2}", "WARN")
-                elif result == 'NO_DROPDOWN':
-                    # Không có dropdown = có thể đã đúng mode
-                    self.log("⚠️ Không thấy dropdown mode (tiếp tục...)", "WARN")
-                else:
-                    self.log(f"⚠️ Mode check: {result}", "WARN")
-            except Exception as e:
-                self.log(f"⚠️ Mode check error: {e}", "WARN")
-        else:
-            self.log("⏭️ Skip mode selection (video mode)")
+        # Mode đã được chọn ở _create_new_project() hoặc _wait_for_project_manual()
+        # Không cần chọn lại ở đây
 
         # 6. Warm up session (tạo 1 ảnh trong Chrome để activate)
         if warm_up:
