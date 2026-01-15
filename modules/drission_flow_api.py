@@ -2328,20 +2328,11 @@ class DrissionFlowAPI:
             except:
                 pass
 
-            # 4. GÕ từng ký tự một (như người thật)
+            # 4. GÕ prompt bằng actions.type() (giống như gõ URL trước đó)
             self.log(f"→ Đang gõ prompt ({len(prompt)} chars)...")
 
-            # Gõ từng ký tự với delay nhỏ
-            import random
-            for i, char in enumerate(prompt):
-                # Gõ ký tự bằng cách gửi key event
-                textarea.input(char, clear=False)
-                # Delay ngẫu nhiên 10-30ms giữa các ký tự (như người gõ)
-                time.sleep(random.uniform(0.01, 0.03))
-
-                # Log progress mỗi 100 ký tự
-                if (i + 1) % 100 == 0:
-                    self.log(f"  → {i + 1}/{len(prompt)} chars...")
+            # Dùng actions.type() - giả lập keyboard thật, gõ từng ký tự
+            self.driver.actions.type(prompt)
 
             time.sleep(0.5)
             self.log(f"→ Gõ xong ✓")
