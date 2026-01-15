@@ -1458,7 +1458,28 @@ class DrissionFlowAPI:
                 return False
 
             # Xóa các folder chứa data (giữ lại folder gốc)
+            # Chrome Portable không có folder "Default", data nằm trực tiếp trong profile
             folders_to_clear = [
+                # Chrome Portable structure (direct in profile)
+                "Cache",
+                "Code Cache",
+                "GPUCache",
+                "Cookies",
+                "Cookies-journal",
+                "Local Storage",
+                "Session Storage",
+                "IndexedDB",
+                "Service Worker",
+                "Web Data",
+                "Web Data-journal",
+                "History",
+                "History-journal",
+                "Visited Links",
+                "Login Data",
+                "Login Data-journal",
+                "GrShaderCache",
+                "ShaderCache",
+                # Standard Chrome structure (with Default/)
                 "Default/Cache",
                 "Default/Code Cache",
                 "Default/GPUCache",
@@ -1473,9 +1494,18 @@ class DrissionFlowAPI:
                 "Default/History",
                 "Default/History-journal",
                 "Default/Visited Links",
-                "GrShaderCache",
-                "ShaderCache",
+                "Default/Login Data",
+                "Default/Login Data-journal",
             ]
+
+            self.log(f"  Profile path: {profile_path}")
+
+            # Log các file/folder có trong profile để debug
+            try:
+                items_in_profile = list(profile_path.iterdir())
+                self.log(f"  Found {len(items_in_profile)} items in profile")
+            except:
+                pass
 
             cleared = 0
             for folder in folders_to_clear:
@@ -1484,14 +1514,19 @@ class DrissionFlowAPI:
                     try:
                         if target.is_dir():
                             shutil.rmtree(target)
+                            self.log(f"  🗑️ Deleted dir: {folder}")
                         else:
                             target.unlink()
+                            self.log(f"  🗑️ Deleted file: {folder}")
                         cleared += 1
                     except Exception as e:
-                        pass  # Một số file có thể bị lock
+                        self.log(f"  ⚠️ Cannot delete {folder}: {e}")
 
             self.log(f"✓ Cleared {cleared} items from Chrome profile")
-            self.log("⚠️ Cần login lại Google sau khi restart Chrome!")
+            if cleared > 0:
+                self.log("⚠️ Cần login lại Google sau khi restart Chrome!")
+            else:
+                self.log("⚠️ Không xóa được gì - kiểm tra profile path!")
 
             # Reset flags
             self._t2v_mode_selected = False
