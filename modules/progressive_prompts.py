@@ -1073,6 +1073,258 @@ Return JSON only:
             return StepResult("create_director_plan", StepStatus.FAILED, str(e))
 
     # =========================================================================
+    # STEP 4 BASIC: TẠO DIRECTOR'S PLAN (SEGMENT-BASED, NO 8s LIMIT)
+    # =========================================================================
+
+    def step_create_director_plan_basic(
+        self,
+        project_dir: Path,
+        code: str,
+        workbook: PromptWorkbook,
+        srt_entries: list,
+    ) -> StepResult:
+        """
+        Step 4 BASIC: Tạo director's plan dựa trên story segments.
+
+        Khác với phiên bản thường:
+        - KHÔNG giới hạn 8s
+        - Số scenes = tổng image_count từ tất cả segments
+        - Duration = segment_duration / image_count
+        - Dựa hoàn toàn vào kế hoạch từ Step 1.5
+
+        Input: story_segments, characters, locations, SRT
+        Output: director_plan với số scenes = planned images
+        """
+        self._log("\n" + "="*60)
+        self._log("[STEP 4 BASIC] Creating director's plan (segment-based)...")
+        self._log("="*60)
+
+        # Check if already done
+        try:
+            existing_plan = workbook.get_director_plan()
+            if existing_plan and len(existing_plan) > 0:
+                self._log(f"  -> Already has {len(existing_plan)} scenes, skip!")
+                return StepResult("create_director_plan_basic", StepStatus.COMPLETED, "Already done")
+        except:
+            pass
+
+        # Read story segments (REQUIRED for basic mode)
+        story_segments = workbook.get_story_segments() or []
+        if not story_segments:
+            self._log("  ERROR: No story segments! Run step 1.5 first.", "ERROR")
+            return StepResult("create_director_plan_basic", StepStatus.FAILED, "No story segments")
+
+        total_planned_images = sum(s.get("image_count", 0) for s in story_segments)
+        self._log(f"  Story segments: {len(story_segments)} segments, {total_planned_images} planned images")
+
+        # Read context
+        story_analysis = workbook.get_story_analysis() or {}
+        characters = workbook.get_characters()
+        locations = workbook.get_locations()
+
+        context_lock = story_analysis.get("context_lock", "")
+
+        # Build character/location info
+        char_locks = []
+        for c in characters:
+            if c.character_lock:
+                char_locks.append(f"- {c.id}: {c.character_lock}")
+
+        loc_locks = []
+        for loc in locations:
+            if hasattr(loc, 'location_lock') and loc.location_lock:
+                loc_locks.append(f"- {loc.id}: {loc.location_lock}")
+
+        # Process each segment
+        all_scenes = []
+        scene_id_counter = 1
+
+        for seg in story_segments:
+            seg_id = seg.get("segment_id", 0)
+            seg_name = seg.get("segment_name", "")
+            image_count = seg.get("image_count", 1)
+            srt_start = seg.get("srt_range_start", 1)
+            srt_end = seg.get("srt_range_end", len(srt_entries))
+            message = seg.get("message", "")
+
+            self._log(f"  Segment {seg_id}: {seg_name} ({image_count} images, SRT {srt_start}-{srt_end})")
+
+            # Get SRT entries for this segment
+            seg_entries = [e for i, e in enumerate(srt_entries, 1) if srt_start <= i <= srt_end]
+
+            if not seg_entries:
+                self._log(f"     -> No SRT entries for this segment, skip")
+                continue
+
+            # Calculate segment duration
+            try:
+                first_entry = seg_entries[0]
+                last_entry = seg_entries[-1]
+
+                # Parse timestamps
+                def parse_time(ts):
+                    parts = ts.replace(',', ':').split(':')
+                    return int(parts[0])*3600 + int(parts[1])*60 + int(parts[2]) + int(parts[3])/1000
+
+                seg_start_time = parse_time(first_entry.start_time)
+                seg_end_time = parse_time(last_entry.end_time)
+                seg_duration = seg_end_time - seg_start_time
+            except:
+                seg_duration = len(seg_entries) * 5  # Fallback: 5s per entry
+
+            # Calculate duration per scene
+            scene_duration = seg_duration / image_count if image_count > 0 else seg_duration
+
+            # Distribute SRT entries among scenes
+            entries_per_scene = len(seg_entries) / image_count if image_count > 0 else len(seg_entries)
+
+            # Build SRT text for API prompt
+            srt_text = ""
+            for i, entry in enumerate(seg_entries):
+                idx = srt_start + i
+                srt_text += f"[{idx}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
+
+            # Call API to create scenes for this segment
+            prompt = f"""You are a FILM DIRECTOR. Create exactly {image_count} cinematic shots for this story segment.
+
+SEGMENT INFO:
+- Name: "{seg_name}"
+- Message: "{message}"
+- Duration: {seg_duration:.1f} seconds total
+- Required: EXACTLY {image_count} scenes (each ~{scene_duration:.1f}s)
+
+STORY CONTEXT:
+{context_lock}
+
+CHARACTERS:
+{chr(10).join(char_locks) if char_locks else 'No characters defined'}
+
+LOCATIONS:
+{chr(10).join(loc_locks) if loc_locks else 'No locations defined'}
+
+SRT CONTENT FOR THIS SEGMENT:
+{srt_text}
+
+INSTRUCTIONS:
+1. Create EXACTLY {image_count} scenes - no more, no less
+2. Each scene should be ~{scene_duration:.1f} seconds
+3. Distribute the SRT content evenly across all {image_count} scenes
+4. Each scene = one cinematic shot that supports the narration
+5. Use EXACT character/location IDs from the lists above
+6. Think like a film director - what shot best conveys each moment?
+
+Return JSON only:
+{{
+    "scenes": [
+        {{
+            "scene_id": {scene_id_counter},
+            "srt_indices": [list of SRT indices covered],
+            "srt_start": "timestamp",
+            "srt_end": "timestamp",
+            "duration": {scene_duration:.1f},
+            "srt_text": "narration text for this scene",
+            "visual_moment": "what viewer sees - specific and purposeful",
+            "characters_used": "nv_xxx, nv_yyy",
+            "location_used": "loc_xxx",
+            "camera": "shot type (close-up, wide, medium, etc.)",
+            "lighting": "lighting description"
+        }}
+    ]
+}}
+Create exactly {image_count} scenes!"""
+
+            # Call API
+            response = self._call_api(prompt, temperature=0.5, max_tokens=8192)
+            if not response:
+                self._log(f"     -> API failed, creating fallback scenes")
+                # Fallback: create basic scenes
+                for i in range(image_count):
+                    start_idx = int(i * entries_per_scene)
+                    end_idx = int((i + 1) * entries_per_scene)
+                    scene_entries = seg_entries[start_idx:end_idx] if seg_entries else []
+
+                    fallback_scene = {
+                        "scene_id": scene_id_counter,
+                        "srt_indices": list(range(srt_start + start_idx, srt_start + end_idx)),
+                        "srt_start": scene_entries[0].start_time if scene_entries else "",
+                        "srt_end": scene_entries[-1].end_time if scene_entries else "",
+                        "duration": scene_duration,
+                        "srt_text": " ".join([e.text for e in scene_entries]) if scene_entries else "",
+                        "visual_moment": f"Scene from segment: {seg_name}",
+                        "characters_used": "",
+                        "location_used": "",
+                        "camera": "Medium shot",
+                        "lighting": "Natural"
+                    }
+                    all_scenes.append(fallback_scene)
+                    scene_id_counter += 1
+                continue
+
+            # Parse response
+            data = self._extract_json(response)
+            if not data or "scenes" not in data:
+                self._log(f"     -> Parse failed, creating fallback scenes")
+                # Same fallback as above
+                for i in range(image_count):
+                    start_idx = int(i * entries_per_scene)
+                    end_idx = int((i + 1) * entries_per_scene)
+                    scene_entries = seg_entries[start_idx:end_idx] if seg_entries else []
+
+                    fallback_scene = {
+                        "scene_id": scene_id_counter,
+                        "srt_indices": list(range(srt_start + start_idx, srt_start + end_idx)),
+                        "srt_start": scene_entries[0].start_time if scene_entries else "",
+                        "srt_end": scene_entries[-1].end_time if scene_entries else "",
+                        "duration": scene_duration,
+                        "srt_text": " ".join([e.text for e in scene_entries]) if scene_entries else "",
+                        "visual_moment": f"Scene from segment: {seg_name}",
+                        "characters_used": "",
+                        "location_used": "",
+                        "camera": "Medium shot",
+                        "lighting": "Natural"
+                    }
+                    all_scenes.append(fallback_scene)
+                    scene_id_counter += 1
+                continue
+
+            # Add scenes from API response
+            api_scenes = data["scenes"]
+            self._log(f"     -> Got {len(api_scenes)} scenes from API")
+
+            # Ensure correct scene count
+            if len(api_scenes) != image_count:
+                self._log(f"     -> Warning: Expected {image_count}, got {len(api_scenes)}")
+
+            # Update scene IDs to be continuous
+            for scene in api_scenes:
+                scene["scene_id"] = scene_id_counter
+                all_scenes.append(scene)
+                scene_id_counter += 1
+
+            # Delay between segments
+            time.sleep(0.5)
+
+        # Verify total scene count
+        if len(all_scenes) != total_planned_images:
+            self._log(f"  Note: Created {len(all_scenes)} scenes (planned: {total_planned_images})")
+
+        if not all_scenes:
+            self._log("  ERROR: No scenes created!", "ERROR")
+            return StepResult("create_director_plan_basic", StepStatus.FAILED, "No scenes created")
+
+        # Save to Excel
+        try:
+            workbook.save_director_plan(all_scenes)
+            workbook.save()
+            self._log(f"  -> Saved {len(all_scenes)} scenes to director_plan")
+            self._log(f"     Total duration: {sum(s.get('duration', 0) for s in all_scenes):.1f}s")
+
+            return StepResult("create_director_plan_basic", StepStatus.COMPLETED, "Success", {"scenes": all_scenes})
+        except Exception as e:
+            self._log(f"  ERROR: Could not save to Excel: {e}", "ERROR")
+            return StepResult("create_director_plan_basic", StepStatus.FAILED, str(e))
+
+    # =========================================================================
     # STEP 4.5: LÊN KẾ HOẠCH CHI TIẾT TỪNG SCENE
     # =========================================================================
 
