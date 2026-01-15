@@ -1010,16 +1010,27 @@ Return JSON only:
 }}
 """
 
-            # Call API
-            response = self._call_api(prompt, temperature=0.5, max_tokens=8192)
-            if not response:
-                self._log(f"  ERROR: API call failed for batch {batch_idx+1}!", "ERROR")
-                continue  # Thử batch tiếp theo
+            # Call API with retry logic
+            MAX_RETRIES = 3
+            data = None
 
-            # Parse response
-            data = self._extract_json(response)
+            for retry in range(MAX_RETRIES):
+                response = self._call_api(prompt, temperature=0.5, max_tokens=8192)
+                if not response:
+                    self._log(f"     Retry {retry+1}/{MAX_RETRIES}: API call failed", "WARNING")
+                    time.sleep(2 ** retry)  # Exponential backoff
+                    continue
+
+                # Parse response
+                data = self._extract_json(response)
+                if data and "scenes" in data:
+                    break  # Success!
+                else:
+                    self._log(f"     Retry {retry+1}/{MAX_RETRIES}: JSON parse failed", "WARNING")
+                    time.sleep(2 ** retry)
+
             if not data or "scenes" not in data:
-                self._log(f"  ERROR: Could not parse batch {batch_idx+1}!", "ERROR")
+                self._log(f"  ERROR: Batch {batch_idx+1} failed after {MAX_RETRIES} retries, skipping!", "ERROR")
                 continue
 
             # Thêm scenes vào kết quả
