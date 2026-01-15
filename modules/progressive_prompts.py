@@ -193,6 +193,116 @@ class ProgressivePromptsGenerator:
 
         return None
 
+    def _split_long_scene_cinematically(
+        self,
+        scene: dict,
+        char_locks: list,
+        loc_locks: list
+    ) -> list:
+        """
+        Chia một scene dài (> 8s) thành multiple shots một cách nghệ thuật.
+        Gọi API để quyết định cách chia dựa trên nội dung, không phải công thức.
+
+        Returns:
+            List of split scenes, or None if failed
+        """
+        duration = scene.get("duration", 0)
+        srt_text = scene.get("srt_text", "")
+        visual_moment = scene.get("visual_moment", "")
+        characters_used = scene.get("characters_used", "")
+        location_used = scene.get("location_used", "")
+        srt_start = scene.get("srt_start", "")
+        srt_end = scene.get("srt_end", "")
+
+        # Tính số shots cần thiết (target 5-7s mỗi shot)
+        min_shots = max(2, int(duration / 7))
+        max_shots = max(2, int(duration / 4))
+
+        prompt = f"""You are a FILM DIRECTOR. This scene is {duration:.1f} seconds - TOO LONG for one shot (max 8s).
+Split it into {min_shots}-{max_shots} DISTINCT cinematic shots.
+
+ORIGINAL SCENE:
+- Duration: {duration:.1f}s (from {srt_start} to {srt_end})
+- Narration: "{srt_text}"
+- Visual concept: "{visual_moment}"
+- Characters: {characters_used}
+- Location: {location_used}
+
+AVAILABLE CHARACTERS:
+{chr(10).join(char_locks) if char_locks else 'None'}
+
+AVAILABLE LOCATIONS:
+{chr(10).join(loc_locks) if loc_locks else 'None'}
+
+RULES FOR SPLITTING:
+1. Each shot MUST be 3-8 seconds (divide the {duration:.1f}s total)
+2. Each shot must show DIFFERENT aspect: angle, focus, emotion
+3. All shots together must cover the FULL narration
+4. Use EXACT character/location IDs from the lists above
+5. Think cinematically - what sequence of shots tells this story best?
+
+Examples of good splits:
+- Character making decision: Close-up face → Insert object → Wide shot reaction
+- Two people talking: Speaker close-up → Listener reaction → Two-shot
+- Action sequence: Wide establishing → Medium action → Close-up detail
+
+Return JSON only:
+{{
+    "shots": [
+        {{
+            "shot_number": 1,
+            "duration": 5.0,
+            "srt_text": "portion of narration for this shot",
+            "visual_moment": "what viewer sees - specific and purposeful",
+            "shot_purpose": "why this shot at this moment",
+            "characters_used": "{characters_used}",
+            "location_used": "{location_used}",
+            "camera": "shot type and movement"
+        }}
+    ]
+}}"""
+
+        response = self._call_api(prompt, temperature=0.5, max_tokens=2000)
+        if not response:
+            return None
+
+        data = self._extract_json(response)
+        if not data or "shots" not in data:
+            return None
+
+        shots = data["shots"]
+        if not shots or len(shots) < 2:
+            return None
+
+        # Validate total duration roughly matches original
+        total_split_duration = sum(s.get("duration", 0) for s in shots)
+        if abs(total_split_duration - duration) > duration * 0.3:  # Allow 30% variance
+            # Adjust durations proportionally
+            ratio = duration / total_split_duration if total_split_duration > 0 else 1
+            for shot in shots:
+                shot["duration"] = round(shot.get("duration", 5) * ratio, 2)
+
+        # Convert shots to scene format
+        split_scenes = []
+        for shot in shots:
+            split_scene = {
+                "scene_id": 0,  # Will be assigned later
+                "srt_indices": scene.get("srt_indices", []),
+                "srt_start": srt_start,  # Keep original timing reference
+                "srt_end": srt_end,
+                "duration": shot.get("duration", 5.0),
+                "srt_text": shot.get("srt_text", srt_text),
+                "visual_moment": shot.get("visual_moment", ""),
+                "shot_purpose": shot.get("shot_purpose", ""),
+                "characters_used": shot.get("characters_used", characters_used),
+                "location_used": shot.get("location_used", location_used),
+                "camera": shot.get("camera", ""),
+                "lighting": scene.get("lighting", "")
+            }
+            split_scenes.append(split_scene)
+
+        return split_scenes
+
     # =========================================================================
     # STEP 1: PHÂN TÍCH STORY
     # =========================================================================
@@ -912,14 +1022,25 @@ Return JSON only:
             batch_scenes = data["scenes"]
             self._log(f"     -> Got {len(batch_scenes)} scenes from this batch")
 
-            # Validate: scenes > 8s sẽ được cảnh báo (API phải tự chia đúng)
+            # POST-PROCESS: Chia scenes > 8s một cách nghệ thuật (không chia đều)
+            processed_scenes = []
             for scene in batch_scenes:
                 duration = scene.get("duration", 0)
                 if duration and duration > 8:
-                    self._log(f"     ⚠️ Warning: Scene {scene.get('scene_id')}: {duration:.1f}s > 8s (API should split better)")
+                    # Gọi API để chia scene này thành multiple shots
+                    split_scenes = self._split_long_scene_cinematically(scene, char_locks, loc_locks)
+                    if split_scenes:
+                        self._log(f"     🎬 Scene {scene.get('scene_id')}: {duration:.1f}s → split into {len(split_scenes)} cinematic shots")
+                        processed_scenes.extend(split_scenes)
+                    else:
+                        # Fallback: giữ nguyên nếu split fail
+                        self._log(f"     ⚠️ Scene {scene.get('scene_id')}: {duration:.1f}s > 8s (kept as-is)")
+                        processed_scenes.append(scene)
+                else:
+                    processed_scenes.append(scene)
 
             # Cập nhật scene_id để liên tục
-            for scene in batch_scenes:
+            for scene in processed_scenes:
                 scene["scene_id"] = scene_id_counter
                 all_scenes.append(scene)
                 scene_id_counter += 1
