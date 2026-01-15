@@ -677,37 +677,33 @@ JS_CLICK_NEW_PROJECT = '''
 })();
 '''
 
-# JS để chọn "Tạo hình ảnh" từ dropdown (dùng ở _create_new_project, _wait_for_project_manual)
+# JS để chọn "Tạo hình ảnh" từ dropdown
+# Dùng cách giống T2V: click dropdown 2 lần với setTimeout
+# Vietnamese: "Tạo hình ảnh" = 12 ký tự
 JS_SELECT_IMAGE_MODE = '''
-(async function() {
-    // 1. Click dropdown
-    var dropdown = document.querySelector('button[role="combobox"]');
-    if (!dropdown) {
-        console.log('[AUTO] Dropdown not found');
-        return 'NO_DROPDOWN';
-    }
-    dropdown.click();
-    console.log('[AUTO] Clicked dropdown');
-
-    // 2. Đợi dropdown mở
-    await new Promise(r => setTimeout(r, 500));
-
-    // 3. Tìm và click "Tạo hình ảnh"
-    var allElements = document.querySelectorAll('*');
-    for (var el of allElements) {
-        var text = el.textContent || '';
-        if (text === 'Tạo hình ảnh' || text.includes('Tạo hình ảnh từ văn bản') ||
-            text === 'Generate image' || text.includes('Generate image from text')) {
-            var rect = el.getBoundingClientRect();
-            if (rect.height > 10 && rect.height < 80 && rect.width > 50) {
+// Tìm bằng "hình ảnh" + length 12
+var btn = document.querySelector('button[role="combobox"]');
+btn.click();
+setTimeout(() => {
+    btn.click();
+    setTimeout(() => {
+        var spans = document.querySelectorAll('span');
+        for (var el of spans) {
+            var text = el.textContent.trim();
+            // Vietnamese: "Tạo hình ảnh" = 12 chars
+            // English: "Generate image" = 14 chars
+            if ((text.includes('hình ảnh') && text.length === 12) ||
+                (text.includes('image') && text.length === 14)) {
+                console.log('[IMAGE] FOUND:', text);
                 el.click();
-                console.log('[AUTO] Clicked: Tao hinh anh');
-                return 'CLICKED';
+                window._imageResult = 'CLICKED';
+                return;
             }
         }
-    }
-    return 'NOT_FOUND';
-})();
+        console.log('[IMAGE] NOT FOUND');
+        window._imageResult = 'NOT_FOUND';
+    }, 300);
+}, 100);
 '''
 
 # JS để chọn "Tạo video từ các thành phần" từ dropdown (cho I2V)
@@ -4177,21 +4173,43 @@ class DrissionFlowAPI:
         return True, result_path, None
 
     def switch_to_image_mode(self) -> bool:
-        """Chuyển Chrome về mode tạo ảnh."""
+        """Chuyển Chrome về mode tạo ảnh. Dùng cách giống T2V: click dropdown 2 lần với setTimeout."""
         if not self._ready:
             return False
-        try:
-            result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
-            if result == 'CLICKED':
-                self.log("[Mode] ✓ Đã chuyển về Image mode")
+
+        MAX_RETRIES = 3
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                self.log(f"[Mode] Chuyển sang Image mode (attempt {attempt + 1}/{MAX_RETRIES})...")
+
+                # Dùng JS với setTimeout (đợi dropdown mở)
+                self.driver.run_js("window._imageResult = 'PENDING';")
+                self.driver.run_js(JS_SELECT_IMAGE_MODE)
+
+                # Đợi JS async hoàn thành (setTimeout 100ms + 300ms = ~500ms)
+                time.sleep(0.8)
+
+                # Kiểm tra kết quả
+                result = self.driver.run_js("return window._imageResult;")
+
+                if result == 'CLICKED':
+                    self.log("[Mode] ✓ Đã chuyển sang Image mode")
+                    time.sleep(0.3)
+                    return True
+                else:
+                    self.log(f"[Mode] Không tìm thấy Image option: {result}", "WARN")
+                    # Click ra ngoài để đóng menu
+                    self.driver.run_js('document.body.click();')
+                    time.sleep(0.3)
+                    continue
+
+            except Exception as e:
+                self.log(f"[Mode] Error: {e}", "ERROR")
                 time.sleep(0.5)
-                return True
-            else:
-                self.log(f"[Mode] Không tìm thấy Image mode: {result}", "WARN")
-                return False
-        except Exception as e:
-            self.log(f"[Mode] Error: {e}", "ERROR")
-            return False
+
+        self.log("[Mode] ✗ Không thể chuyển sang Image mode sau nhiều lần thử", "ERROR")
+        return False
 
     def switch_to_video_mode(self) -> bool:
         """Chuyển Chrome sang mode tạo video từ ảnh. Dùng cách cũ: click dropdown 2 lần với delay."""
