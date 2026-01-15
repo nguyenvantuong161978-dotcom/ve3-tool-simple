@@ -88,7 +88,7 @@ def create_excel_with_api_basic(project_dir: Path, code: str, callback=None) -> 
             log(f"  ERROR: No SRT file found!", "ERROR")
             return False
 
-        srt_entries = parse_srt_file(str(srt_path))
+        srt_entries = parse_srt_file(srt_path)
         txt_content = txt_path.read_text(encoding='utf-8') if txt_path.exists() else ""
 
         # Create workbook
