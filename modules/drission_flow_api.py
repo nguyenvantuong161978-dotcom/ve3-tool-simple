@@ -661,9 +661,31 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
 })();
 '''
 
-# JS để click "Dự án mới"
+# JS để click dự án (ưu tiên dự án có sẵn, sau đó mới tạo mới)
 JS_CLICK_NEW_PROJECT = '''
 (function() {
+    // 1. Ưu tiên: Click vào dự án có sẵn (thường là div với thumbnail)
+    var projectCards = document.querySelectorAll('[role="listitem"], [data-project-id], .project-card');
+    for (var card of projectCards) {
+        if (card.offsetWidth > 50 && card.offsetHeight > 50) {
+            card.click();
+            console.log('[AUTO] Clicked existing project card');
+            return 'CLICKED';
+        }
+    }
+
+    // 2. Tìm div/button có chứa thumbnail ảnh (dự án có sẵn)
+    var thumbs = document.querySelectorAll('img[src*="thumbnail"], img[src*="project"]');
+    for (var img of thumbs) {
+        var parent = img.closest('button') || img.closest('[role="button"]') || img.parentElement;
+        if (parent) {
+            parent.click();
+            console.log('[AUTO] Clicked project thumbnail');
+            return 'CLICKED';
+        }
+    }
+
+    // 3. Fallback: Tìm button "Dự án mới" / "New project"
     var btns = document.querySelectorAll('button');
     for (var b of btns) {
         var text = b.textContent || '';
@@ -673,6 +695,22 @@ JS_CLICK_NEW_PROJECT = '''
             return 'CLICKED';
         }
     }
+
+    // 4. Tìm bất kỳ clickable element nào có text project
+    var allElements = document.querySelectorAll('*');
+    for (var el of allElements) {
+        var text = (el.textContent || '').trim();
+        if (el.offsetWidth > 100 && el.offsetHeight > 50) {
+            // Có thể là project card
+            var style = window.getComputedStyle(el);
+            if (style.cursor === 'pointer' && text.length < 50) {
+                el.click();
+                console.log('[AUTO] Clicked clickable element:', text.substring(0, 30));
+                return 'CLICKED';
+            }
+        }
+    }
+
     return 'NOT_FOUND';
 })();
 '''
