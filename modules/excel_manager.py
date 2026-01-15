@@ -27,8 +27,10 @@ CHARACTERS_COLUMNS = [
     "name",             # Tên nhân vật trong truyện
     "english_prompt",   # Prompt tiếng Anh mô tả ngoại hình
     "vietnamese_prompt", # Prompt tiếng Việt (nếu cần)
+    "character_lock",   # Mô tả cố định nhân vật (dùng cho scene prompts)
     "image_file",       # Tên file ảnh tham chiếu (nvc.png, nvp1.png, ...)
-    "status",           # Trạng thái (pending/done/error)
+    "status",           # Trạng thái (pending/done/skip/error) - skip = trẻ em, không tạo ảnh
+    "is_child",         # True nếu là trẻ vị thành niên (bỏ qua tạo ảnh)
     "media_id",         # Media ID từ Google Flow API (dùng cho reference)
 ]
 
