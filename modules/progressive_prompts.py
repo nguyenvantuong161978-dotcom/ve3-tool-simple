@@ -473,6 +473,12 @@ STORY CONTENT:
 
 TASK: Divide the story into logical segments. Each segment is a distinct part of the narrative.
 
+CRITICAL REQUIREMENT:
+- Your segments MUST cover ALL {len(srt_entries)} SRT entries
+- First segment starts at srt_range_start: 1
+- Last segment MUST end at srt_range_end: {len(srt_entries)}
+- NO gaps between segments (segment N ends where segment N+1 starts)
+
 For each segment, determine:
 1. What is the main message/purpose of this segment?
 2. How many images are needed to fully convey this segment visually?
@@ -517,6 +523,58 @@ Return JSON only:
         if not data or "segments" not in data:
             self._log("  ERROR: Could not parse segments!", "ERROR")
             return StepResult("analyze_story_segments", StepStatus.FAILED, "JSON parse failed")
+
+        segments = data["segments"]
+        total_srt = len(srt_entries)
+
+        # VALIDATION: Check if segments cover all SRT entries
+        if segments:
+            last_seg = segments[-1]
+            last_srt_end = last_seg.get("srt_range_end", 0)
+
+            if last_srt_end < total_srt:
+                # FIX: Extend coverage to include all SRT entries
+                missing_entries = total_srt - last_srt_end
+                self._log(f"  ⚠️ Segments only cover SRT 1-{last_srt_end}, missing {missing_entries} entries")
+                self._log(f"  -> Auto-fixing: extending coverage to SRT {total_srt}")
+
+                # Calculate how many additional images needed (~5s per image)
+                missing_duration = missing_entries * (total_duration / total_srt)
+                additional_images = max(1, int(missing_duration / 5))
+
+                # Either extend last segment or add new segment
+                if missing_entries <= 50:  # Small gap - extend last segment
+                    segments[-1]["srt_range_end"] = total_srt
+                    segments[-1]["image_count"] = segments[-1].get("image_count", 1) + additional_images
+                    self._log(f"     -> Extended last segment to SRT {total_srt} (+{additional_images} images)")
+                else:
+                    # Larger gap - add new segment(s)
+                    remaining = missing_entries
+                    current_start = last_srt_end + 1
+                    seg_id = len(segments) + 1
+
+                    while remaining > 0:
+                        chunk = min(remaining, 100)  # Max 100 entries per segment
+                        chunk_images = max(1, int(chunk * (total_duration / total_srt) / 5))
+                        new_seg = {
+                            "segment_id": seg_id,
+                            "segment_name": f"Continuation Part {seg_id - len(data['segments'])}",
+                            "message": "Continuing the narrative",
+                            "key_elements": [],
+                            "image_count": chunk_images,
+                            "estimated_duration": chunk * (total_duration / total_srt),
+                            "srt_range_start": current_start,
+                            "srt_range_end": current_start + chunk - 1,
+                            "importance": "medium"
+                        }
+                        segments.append(new_seg)
+                        self._log(f"     -> Added segment {seg_id}: SRT {current_start}-{current_start + chunk - 1} ({chunk_images} images)")
+
+                        current_start += chunk
+                        remaining -= chunk
+                        seg_id += 1
+
+                data["segments"] = segments
 
         # Save to Excel
         try:
