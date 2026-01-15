@@ -1221,6 +1221,14 @@ Return JSON only:
             except:
                 seg_duration = len(seg_entries) * 5  # Fallback: 5s per entry
 
+            # SEGMENT 1 SPECIAL: Tuân thủ 8s limit như bản worker_pic
+            # Các segment khác: dùng image_count từ Step 1.5
+            if seg_id == 1:
+                # Segment 1: tính số scenes theo 8s limit
+                original_image_count = image_count
+                image_count = max(1, int(seg_duration / 8) + 1)  # Target ~8s per scene
+                self._log(f"     -> Segment 1 special: {original_image_count} planned -> {image_count} scenes (8s limit)")
+
             # Calculate duration per scene
             scene_duration = seg_duration / image_count if image_count > 0 else seg_duration
 
@@ -1282,41 +1290,30 @@ Return JSON only:
 }}
 Create exactly {image_count} scenes!"""
 
-            # Call API
-            response = self._call_api(prompt, temperature=0.5, max_tokens=8192)
-            if not response:
-                self._log(f"     -> API failed, creating fallback scenes")
-                # Fallback: create basic scenes
-                for i in range(image_count):
-                    start_idx = int(i * entries_per_scene)
-                    end_idx = int((i + 1) * entries_per_scene)
-                    scene_entries = seg_entries[start_idx:end_idx] if seg_entries else []
+            # Call API with retry logic
+            MAX_RETRIES = 3
+            data = None
 
-                    fallback_scene = {
-                        "scene_id": scene_id_counter,
-                        "srt_indices": list(range(srt_start + start_idx, srt_start + end_idx)),
-                        "srt_start": scene_entries[0].start_time if scene_entries else "",
-                        "srt_end": scene_entries[-1].end_time if scene_entries else "",
-                        "duration": scene_duration,
-                        "srt_text": " ".join([e.text for e in scene_entries]) if scene_entries else "",
-                        "visual_moment": f"Scene from segment: {seg_name}",
-                        "characters_used": "",
-                        "location_used": "",
-                        "camera": "Medium shot",
-                        "lighting": "Natural"
-                    }
-                    all_scenes.append(fallback_scene)
-                    scene_id_counter += 1
-                continue
+            for retry in range(MAX_RETRIES):
+                response = self._call_api(prompt, temperature=0.5, max_tokens=8192)
+                if not response:
+                    self._log(f"     Retry {retry+1}/{MAX_RETRIES}: API call failed", "WARNING")
+                    time.sleep(2 ** retry)
+                    continue
 
-            # Parse response
-            data = self._extract_json(response)
+                data = self._extract_json(response)
+                if data and "scenes" in data:
+                    break  # Success!
+                else:
+                    self._log(f"     Retry {retry+1}/{MAX_RETRIES}: JSON parse failed", "WARNING")
+                    time.sleep(2 ** retry)
+
+            # If all retries failed, create fallback scenes
             if not data or "scenes" not in data:
-                self._log(f"     -> Parse failed, creating fallback scenes")
-                # Same fallback as above
+                self._log(f"     -> All retries failed, creating {image_count} fallback scenes", "WARNING")
                 for i in range(image_count):
                     start_idx = int(i * entries_per_scene)
-                    end_idx = int((i + 1) * entries_per_scene)
+                    end_idx = min(int((i + 1) * entries_per_scene), len(seg_entries))
                     scene_entries = seg_entries[start_idx:end_idx] if seg_entries else []
 
                     fallback_scene = {
@@ -1326,11 +1323,11 @@ Create exactly {image_count} scenes!"""
                         "srt_end": scene_entries[-1].end_time if scene_entries else "",
                         "duration": scene_duration,
                         "srt_text": " ".join([e.text for e in scene_entries]) if scene_entries else "",
-                        "visual_moment": f"Scene from segment: {seg_name}",
+                        "visual_moment": f"[Auto] Scene {i+1}/{image_count} from: {seg_name}",
                         "characters_used": "",
                         "location_used": "",
                         "camera": "Medium shot",
-                        "lighting": "Natural"
+                        "lighting": "Natural lighting"
                     }
                     all_scenes.append(fallback_scene)
                     scene_id_counter += 1
