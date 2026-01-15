@@ -466,17 +466,30 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                         // delete req.seed; // KHÔNG XÓA!
 
                         // 4. Đổi model từ T2V sang I2V
-                        // CHỈ đổi _t2v_ → _r2v_, GIỮ NGUYÊN tất cả phần còn lại
-                        // Ví dụ: veo_3_1_t2v_fast_landscape_ultra_relaxed → veo_3_1_r2v_fast_landscape_ultra_relaxed
+                        // - Đổi _t2v_ → _r2v_
+                        // - Đổi veo_3_1 → veo_3_0 (I2V API chỉ support veo_3_0)
+                        // - Giữ _fast_, _ultra, _relaxed, _landscape
                         var currentModel = req.videoModelKey || 'veo_3_1_t2v_fast';
                         console.log('[T2V→I2V] Original model from Chrome:', currentModel);
 
-                        // FIX: Chỉ đổi t2v → r2v, GIỮ _landscape_, _relaxed, veo_3_1
+                        // STEP 1: Đổi t2v → r2v
                         var newModel = currentModel.replace('_t2v_', '_r2v_');
 
-                        // Override nếu config có chỉ định model cụ thể
+                        // STEP 2: Đổi veo_3_1 → veo_3_0 (I2V API chỉ hỗ trợ veo_3_0)
+                        newModel = newModel.replace('veo_3_1_', 'veo_3_0_');
+
+                        // STEP 3: Strip _relaxed suffix (I2V API không support)
+                        // I2V API tested OK: veo_3_0_r2v_fast_ultra (không có _relaxed)
+                        if (newModel.endsWith('_relaxed')) {
+                            newModel = newModel.replace('_relaxed', '');
+                            console.log('[T2V→I2V] Stripped _relaxed suffix');
+                        }
+                        console.log('[T2V→I2V] Converted model:', newModel);
+
+                        // Override nếu config có chỉ định model cụ thể (hiếm khi dùng)
                         if (t2vConfig.videoModelKey) {
                             newModel = t2vConfig.videoModelKey;
+                            console.log('[T2V→I2V] Using override model from config:', newModel);
                         }
 
                         req.videoModelKey = newModel;
@@ -4723,7 +4736,7 @@ class DrissionFlowAPI:
         self.log(f"[T2V→I2V] Tạo video với:")
         self.log(f"[T2V→I2V]   → Media ID: {media_id[:60]}...")
         self.log(f"[T2V→I2V]   → Prompt: {prompt[:60]}...")
-        self.log(f"[T2V→I2V]   → Model: {video_model}")
+        self.log(f"[T2V→I2V]   → Model: Chrome sẽ dùng (interceptor convert _t2v_ → _r2v_)")
 
         # 1. Chuyển sang T2V mode + Lower Priority model
         # CHỈ LÀM LẦN ĐẦU khi mới mở Chrome - sau F5 refresh không cần làm lại
@@ -4751,9 +4764,13 @@ class DrissionFlowAPI:
         """)
 
         # 2. Set T2V→I2V config
+        # QUAN TRỌNG: KHÔNG gửi videoModelKey - để interceptor tự convert từ Chrome model
+        # Chrome gửi: veo_3_1_t2v_fast_ultra_relaxed
+        # Interceptor sẽ convert: _t2v_ → _r2v_ → veo_3_1_r2v_fast_ultra_relaxed
+        # Nếu gửi videoModelKey, sẽ override thành model sai (veo_3_0_r2v_fast_ultra)
         t2v_config = {
-            "mediaId": media_id,
-            "videoModelKey": video_model
+            "mediaId": media_id
+            # videoModelKey: Bỏ để dùng Chrome model convert (giữ _relaxed, veo_3_1, etc.)
         }
         self.driver.run_js(f"window._t2vToI2vConfig = {json.dumps(t2v_config)};")
 
