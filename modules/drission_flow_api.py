@@ -446,58 +446,45 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                     var newUrl = urlStr.replace('batchAsyncGenerateVideoText', 'batchAsyncGenerateVideoReferenceImages');
                     console.log('[T2V→I2V] New URL:', newUrl);
 
-                    // 2. CHỈ GIỮ 1 REQUEST - API I2V không hỗ trợ batch
-                    if (chromeVideoBody.requests && chromeVideoBody.requests.length > 1) {
-                        console.log('[T2V→I2V] Chrome gửi ' + chromeVideoBody.requests.length + ' requests, chỉ giữ 1');
-                        chromeVideoBody.requests = chromeVideoBody.requests.slice(0, 1);
-                    }
+                    // 2. GIỮ TẤT CẢ REQUESTS - Thêm referenceImages và fix model cho mỗi request
+                    console.log('[T2V→I2V] Processing ' + (chromeVideoBody.requests ? chromeVideoBody.requests.length : 0) + ' requests');
 
-                    // 3. Thêm referenceImages và fix model
                     if (chromeVideoBody.requests && chromeVideoBody.requests.length > 0) {
-                        var req = chromeVideoBody.requests[0];
+                        for (var i = 0; i < chromeVideoBody.requests.length; i++) {
+                            var req = chromeVideoBody.requests[i];
 
-                        // Thêm reference image với mediaId từ ảnh đã upload
-                        req.referenceImages = [{
-                            "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
-                            "mediaId": t2vConfig.mediaId
-                        }];
+                            // Thêm reference image với mediaId từ ảnh đã upload
+                            req.referenceImages = [{
+                                "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                                "mediaId": t2vConfig.mediaId
+                            }];
 
-                        // GIỮ seed - I2V CẦN seed (đã test thủ công OK)
-                        // delete req.seed; // KHÔNG XÓA!
+                            // GIỮ seed - I2V CẦN seed
 
-                        // 4. Đổi model từ T2V sang I2V
-                        // Dựa trên payload thực I2V THÀNH CÔNG:
-                        // T2V: veo_3_1_t2v_fast_ultra_relaxed
-                        // I2V: veo_3_1_r2v_fast_landscape_ultra_relaxed
-                        var currentModel = req.videoModelKey || 'veo_3_1_t2v_fast';
-                        console.log('[T2V→I2V] Original model from Chrome:', currentModel);
+                            // Đổi model từ T2V sang I2V
+                            var currentModel = req.videoModelKey || 'veo_3_1_t2v_fast';
 
-                        // STEP 1: Đổi _t2v_ → _r2v_
-                        var newModel = currentModel.replace('_t2v_', '_r2v_');
+                            // STEP 1: Đổi _t2v_ → _r2v_
+                            var newModel = currentModel.replace('_t2v_', '_r2v_');
 
-                        // STEP 2: Thêm _landscape trước _ultra (I2V model format)
-                        // veo_3_1_r2v_fast_ultra_relaxed → veo_3_1_r2v_fast_landscape_ultra_relaxed
-                        if (newModel.includes('_ultra') && !newModel.includes('_landscape')) {
-                            newModel = newModel.replace('_ultra', '_landscape_ultra');
-                            console.log('[T2V→I2V] Added _landscape before _ultra');
+                            // STEP 2: Thêm _landscape trước _ultra (I2V model format)
+                            if (newModel.includes('_ultra') && !newModel.includes('_landscape')) {
+                                newModel = newModel.replace('_ultra', '_landscape_ultra');
+                            }
+
+                            // Override nếu config có chỉ định model cụ thể
+                            if (t2vConfig.videoModelKey) {
+                                newModel = t2vConfig.videoModelKey;
+                            }
+
+                            req.videoModelKey = newModel;
+
+                            if (i === 0) {
+                                console.log('[T2V→I2V] Model converted:', currentModel, '→', newModel);
+                                console.log('[T2V→I2V] MediaId:', t2vConfig.mediaId.substring(0, 50) + '...');
+                            }
                         }
-
-                        // KHÔNG đổi veo_3_1 → veo_3_0 (I2V veo 3.1 hoạt động!)
-                        // KHÔNG strip _relaxed (I2V accept _relaxed!)
-
-                        console.log('[T2V→I2V] Converted model:', newModel);
-
-                        // Override nếu config có chỉ định model cụ thể (hiếm khi dùng)
-                        if (t2vConfig.videoModelKey) {
-                            newModel = t2vConfig.videoModelKey;
-                            console.log('[T2V→I2V] Using override model from config:', newModel);
-                        }
-
-                        req.videoModelKey = newModel;
-                        console.log('[T2V→I2V] Model converted:', currentModel, '→', newModel);
-                        console.log('[T2V→I2V] MediaId:', t2vConfig.mediaId.substring(0, 50) + '...');
-                        console.log('[T2V→I2V] Seed:', req.seed);
-                        console.log('[T2V→I2V] Final request:', JSON.stringify(req, null, 2));
+                        console.log('[T2V→I2V] All ' + chromeVideoBody.requests.length + ' requests processed');
                     }
 
                     // Update body với payload đã convert
