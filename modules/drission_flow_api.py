@@ -3249,23 +3249,15 @@ class DrissionFlowAPI:
                             self.log(f"✗ Download failed: {e}", "WARN")
 
         # Restart Chrome sau mỗi ảnh để tránh 403
+        # (Logic 403 handling: 3 lần fail → clear data → fail nữa → đổi IPv6
+        #  đã có trong phần xử lý 403 error ở trên)
         self.log("🔄 Restarting Chrome...")
         try:
             # Lưu URL trước khi restart
             current_url = self.driver.url if self.driver else None
 
-            # Đếm số lần restart liên tiếp
-            restart_count = getattr(self, '_restart_count', 0) + 1
-            self._restart_count = restart_count
-
-            # Nếu restart 3 lần mà vẫn fail → đổi IPv6
-            rotate_ipv6 = restart_count >= 3
-            if rotate_ipv6:
-                self.log(f"   → Restart lần {restart_count}, sẽ đổi IPv6...")
-                self._restart_count = 0  # Reset counter
-
-            # Restart Chrome (với hoặc không đổi IPv6)
-            success = self.restart_chrome(rotate_ipv6=rotate_ipv6)
+            # Restart Chrome bình thường
+            success = self.restart_chrome(rotate_ipv6=False)
 
             if success and current_url:
                 # Navigate về project URL
@@ -3276,7 +3268,6 @@ class DrissionFlowAPI:
                 # Đợi textarea
                 if self._wait_for_textarea_visible():
                     self.log("✓ Chrome restarted!")
-                    self._restart_count = 0  # Reset counter khi thành công
                 else:
                     self.log("⚠️ Không thấy textarea sau restart", "WARN")
             else:
