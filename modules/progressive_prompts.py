@@ -929,11 +929,17 @@ Return JSON only:
             expected_images_hint = f"""
 SCENE GUIDELINES:
 - This batch spans approximately {batch_duration:.0f} seconds
-- Each scene MUST be maximum 8 seconds (no exceptions!)
-- Number of scenes should be based on CONTENT, not time formula
-- Split when the content NEEDS a different shot/angle/emotion"""
+- Preferred: 5-8 seconds per scene (ideal for engagement)
+- Acceptable: up to 10-12 seconds for important/complex moments
+- AVOID: Creating too many scenes - a 1-hour video shouldn't have 500+ images!
+- Split ONLY when content truly NEEDS a different shot/angle/emotion"""
 
-            prompt = f"""You are a FILM DIRECTOR creating a shot list. Each scene = ONE CINEMATIC SHOT (max 8 seconds).
+            prompt = f"""You are a FILM DIRECTOR creating a shot list. Each scene = ONE CINEMATIC SHOT.
+
+IMPORTANT: Balance quality vs quantity. A 1-hour video with too many images feels choppy.
+- Preferred duration: 5-8 seconds per scene
+- Acceptable: up to 10-12 seconds for important moments
+- DON'T split just to hit a number - split only when cinematically necessary
 
 CORE PRINCIPLE: Each shot must SUPPORT and ENHANCE the narration. The viewer sees this image while hearing the audio.
 Ask yourself: "What visual would make this moment IMPACTFUL for the audience?"
@@ -969,7 +975,7 @@ SHOT TYPES TO CONSIDER:
 - Insert/Detail: important object, symbol, emphasis
 
 RULES:
-1. Duration MUST be 3-8 seconds (based on SRT timing)
+1. Duration: 5-8s preferred, up to 10-12s acceptable for important moments
 2. characters_used: EXACT IDs like "nv_john, nv_sarah" from list above
 3. location_used: EXACT ID like "loc_office" from list above
 4. visual_moment: Describe WHAT viewer sees and WHY this shot serves the story
@@ -977,13 +983,10 @@ RULES:
 6. scene_id starts from {scene_id_counter}
 7. srt_indices use ORIGINAL indices in brackets [N]
 
-IF CONTENT > 8 SECONDS: Split into multiple shots with DIFFERENT purposes
-- Each shot shows a DIFFERENT aspect of the same moment
-- NOT "Part 1, Part 2" but distinct cinematic choices
-- Example: 15s about a difficult decision →
-  * Shot 1: Close-up on character's conflicted face (5s)
-  * Shot 2: Insert shot of the document/object of decision (4s)
-  * Shot 3: Wide shot showing character alone, weight of moment (6s)
+WHEN TO SPLIT vs KEEP AS ONE SCENE:
+- KEEP as one scene (up to 12s): Single continuous moment, same emotion/focus
+- SPLIT only when: Emotion changes, focus shifts, different character reaction needed
+- DON'T over-split: A 1-hour video with 500+ images is too choppy!
 
 Return JSON only:
 {{
@@ -1022,11 +1025,13 @@ Return JSON only:
             batch_scenes = data["scenes"]
             self._log(f"     -> Got {len(batch_scenes)} scenes from this batch")
 
-            # POST-PROCESS: Chia scenes > 8s một cách nghệ thuật (không chia đều)
+            # POST-PROCESS: Chỉ chia scenes > 12s (8-12s chấp nhận được để giảm số ảnh)
+            # Video 1 tiếng không nên có quá nhiều ảnh
+            SPLIT_THRESHOLD = 12  # Chỉ split khi thực sự quá dài
             processed_scenes = []
             for scene in batch_scenes:
                 duration = scene.get("duration", 0)
-                if duration and duration > 8:
+                if duration and duration > SPLIT_THRESHOLD:
                     # Gọi API để chia scene này thành multiple shots
                     split_scenes = self._split_long_scene_cinematically(scene, char_locks, loc_locks)
                     if split_scenes:
@@ -1034,7 +1039,7 @@ Return JSON only:
                         processed_scenes.extend(split_scenes)
                     else:
                         # Fallback: giữ nguyên nếu split fail
-                        self._log(f"     ⚠️ Scene {scene.get('scene_id')}: {duration:.1f}s > 8s (kept as-is)")
+                        self._log(f"     ⚠️ Scene {scene.get('scene_id')}: {duration:.1f}s (kept as-is)")
                         processed_scenes.append(scene)
                 else:
                     processed_scenes.append(scene)
