@@ -4673,6 +4673,21 @@ class DrissionFlowAPI:
                     self._consecutive_403 = 0
                     self._cleared_data_for_403 = False
                 self._timeout_count = 0  # Reset timeout counter
+
+                # Restart Chrome sau mỗi video (giống image generation)
+                # Để tránh 403 cho video tiếp theo
+                self.log("[T2V→I2V] 🔄 Restart Chrome sau video thành công...")
+                try:
+                    self._kill_chrome()
+                    self.close()
+                    time.sleep(1)
+                    if self.restart_chrome(rotate_ipv6=False):
+                        self.log("[T2V→I2V] ✓ Chrome reset xong")
+                    else:
+                        self.log("[T2V→I2V] ⚠️ Chrome restart failed", "WARN")
+                except Exception as e:
+                    self.log(f"[T2V→I2V] ⚠️ Restart error: {e}", "WARN")
+
                 return True, result, None
 
             if error:
@@ -4746,8 +4761,19 @@ class DrissionFlowAPI:
                         if self.restart_chrome():
                             continue  # Retry 1 lần
                     else:
-                        # LẦN 2+: Skip sang prompt khác
-                        self.log("[T2V→I2V] → Timeout 2 lần → SKIP sang prompt khác!", "WARN")
+                        # LẦN 2+: Reset Chrome rồi skip sang prompt khác
+                        self.log("[T2V→I2V] → Timeout 2 lần → RESET CHROME + SKIP!", "WARN")
+
+                        # RESET Chrome trước khi qua prompt mới
+                        self._kill_chrome()
+                        self.close()
+                        time.sleep(2)
+
+                        if self.restart_chrome():
+                            self.log("[T2V→I2V] → Chrome reset xong, qua prompt mới")
+                        else:
+                            self.log("[T2V→I2V] ⚠️ Restart Chrome fail", "WARN")
+
                         self._timeout_count = 0  # Reset counter
                         return False, None, "Timeout 2 lần - skip prompt"
 
@@ -4855,28 +4881,11 @@ class DrissionFlowAPI:
             self.log("[T2V→I2V] Chuyển sang model Lower Priority...")
             self.switch_to_lower_priority_model()
 
-            # Đánh dấu đã chọn mode/model - không cần chọn lại sau F5
+            # Đánh dấu đã chọn mode/model - không cần chọn lại
             self._t2v_mode_selected = True
             self.log("[T2V→I2V] ✓ Mode/Model đã chọn - các video sau sẽ không chọn lại")
         else:
             self.log("[T2V→I2V] Mode/Model đã sẵn sàng (giữ từ lần trước)")
-
-        # 1.5. F5 REFRESH TRƯỚC MỖI PROMPT để tránh 403
-        # Sau F5: mode/model vẫn giữ, chỉ cần re-inject interceptor
-        self.log("[T2V→I2V] 🔄 F5 refresh trước khi gửi prompt...")
-        try:
-            self.driver.refresh()
-            time.sleep(3)  # Đợi page load
-
-            # Re-inject interceptor sau F5 (bị mất sau refresh)
-            self.driver.run_js(JS_INTERCEPTOR)
-            self.log("[T2V→I2V] ✓ Page refreshed + Interceptor re-injected")
-
-            # Đợi textarea xuất hiện
-            if not self._wait_for_textarea_visible(timeout=30, max_refresh=1):
-                self.log("[T2V→I2V] ⚠️ Textarea không xuất hiện sau F5", "WARN")
-        except Exception as e:
-            self.log(f"[T2V→I2V] ⚠️ F5 refresh error: {e}", "WARN")
 
         # 2. Reset video state
         self.driver.run_js("""
