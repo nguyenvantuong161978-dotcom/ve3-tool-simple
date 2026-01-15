@@ -1156,13 +1156,25 @@ class DrissionFlowAPI:
         """
         self.log("→ Đang tự động tạo dự án mới...")
 
+        # 0. Đợi page load xong trước (tránh ContextLostError)
+        self.log("   Đợi page load...")
+        if not self._wait_for_page_ready(timeout=30):
+            self.log("⚠️ Page chưa sẵn sàng", "WARN")
+
         # 1. Đợi trang load và tìm button "Dự án mới"
         for i in range(15):
-            result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
-            if result == 'CLICKED':
-                self.log("✓ Clicked 'Dự án mới'")
-                time.sleep(2)
-                break
+            try:
+                result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
+                if result == 'CLICKED':
+                    self.log("✓ Clicked 'Dự án mới'")
+                    time.sleep(2)
+                    break
+            except Exception as e:
+                if "ContextLost" in str(type(e).__name__) or "refresh" in str(e).lower():
+                    self.log(f"   Page đang refresh, đợi...")
+                    time.sleep(2)
+                    continue
+                raise
             time.sleep(1)
             if i == 5:
                 self.log("  ... đợi button 'Dự án mới' xuất hiện...")
