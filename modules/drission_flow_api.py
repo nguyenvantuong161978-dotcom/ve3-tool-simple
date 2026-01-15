@@ -1681,9 +1681,10 @@ class DrissionFlowAPI:
                         # === START LOCAL SOCKS5 PROXY - ÉP CHROME DÙNG IPv6 ===
                         # PC có cả IPv4+IPv6, Chrome mặc định dùng IPv4
                         # Proxy này ép TẤT CẢ traffic của Chrome đi qua IPv6
+                        # QUAN TRỌNG: Dùng CÙNG port 1088 cho TẤT CẢ workers vì proxy là singleton
                         try:
                             from modules.ipv6_proxy import start_ipv6_proxy
-                            proxy_port = 1088 + self.worker_id  # Unique port per worker
+                            proxy_port = 1088  # Fixed port - shared by all workers (singleton proxy)
                             self._ipv6_proxy = start_ipv6_proxy(
                                 ipv6_address=working_ipv6,
                                 port=proxy_port,
