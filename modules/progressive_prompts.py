@@ -370,6 +370,9 @@ Return JSON only:
             minor_count = 0
             for char_data in data["characters"]:
                 char_id = char_data.get("id", "")
+                # Đảm bảo id bắt đầu bằng "nv_"
+                if not char_id.startswith("nv_"):
+                    char_id = f"nv_{char_id}"
 
                 # Detect trẻ vị thành niên (dưới 18 tuổi)
                 is_minor = char_data.get("is_minor", False)
