@@ -3248,37 +3248,42 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"✗ Download failed: {e}", "WARN")
 
-        # Reset page: navigate về about:blank rồi lại URL (đơn giản, không đổi tab)
-        self.log("🔄 Resetting page...")
+        # Restart Chrome sau mỗi ảnh để tránh 403
+        self.log("🔄 Restarting Chrome...")
         try:
-            if self.driver:
-                current_url = self.driver.url
-                self.log(f"   URL: {current_url}")
+            # Lưu URL trước khi restart
+            current_url = self.driver.url if self.driver else None
 
-                # Navigate về about:blank để clear hoàn toàn
-                self.log("   → Clearing (about:blank)...")
-                self.driver.get('about:blank')
-                time.sleep(1)
+            # Đếm số lần restart liên tiếp
+            restart_count = getattr(self, '_restart_count', 0) + 1
+            self._restart_count = restart_count
 
-                # Navigate lại URL
-                self.log("   → Loading URL...")
+            # Nếu restart 3 lần mà vẫn fail → đổi IPv6
+            rotate_ipv6 = restart_count >= 3
+            if rotate_ipv6:
+                self.log(f"   → Restart lần {restart_count}, sẽ đổi IPv6...")
+                self._restart_count = 0  # Reset counter
+
+            # Restart Chrome (với hoặc không đổi IPv6)
+            success = self.restart_chrome(rotate_ipv6=rotate_ipv6)
+
+            if success and current_url:
+                # Navigate về project URL
+                self.log(f"   → Loading URL: {current_url}")
                 self.driver.get(current_url)
                 time.sleep(3)
 
-                # Re-inject JS
-                self.log("   → Injecting JS...")
-                self._reset_tokens()
-                self.driver.run_js(JS_INTERCEPTOR)
-
                 # Đợi textarea
-                if not self._wait_for_textarea_visible():
-                    self.log("⚠️ Không thấy textarea", "WARN")
-
-                self.log("✓ Page reset done!")
+                if self._wait_for_textarea_visible():
+                    self.log("✓ Chrome restarted!")
+                    self._restart_count = 0  # Reset counter khi thành công
+                else:
+                    self.log("⚠️ Không thấy textarea sau restart", "WARN")
             else:
-                self.log("⚠️ No driver", "WARN")
+                self.log("⚠️ Restart Chrome failed", "WARN")
+
         except Exception as e:
-            self.log(f"⚠️ Reset error: {e}", "WARN")
+            self.log(f"⚠️ Restart error: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
