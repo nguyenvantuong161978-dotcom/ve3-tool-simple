@@ -583,27 +583,51 @@ Return JSON only:
             if hasattr(loc, 'location_lock') and loc.location_lock:
                 loc_locks.append(f"- {loc.id}: {loc.location_lock}")
 
-        # Chia SRT entries thành batches để xử lý SRT dài
-        # Mỗi batch ~80 entries hoặc ~10000 ký tự
-        BATCH_SIZE = 80  # Số entries mỗi batch
+        # Chia SRT entries thành batches dựa vào độ dài ký tự
+        MAX_BATCH_CHARS = 10000  # Tối đa ~10000 ký tự mỗi batch
         all_scenes = []
         scene_id_counter = 1
 
         total_entries = len(srt_entries)
         self._log(f"  Total SRT entries: {total_entries}")
 
-        for batch_start in range(0, total_entries, BATCH_SIZE):
-            batch_end = min(batch_start + BATCH_SIZE, total_entries)
-            batch_entries = srt_entries[batch_start:batch_end]
+        # Tạo batches dựa vào độ dài ký tự
+        batches = []
+        current_batch = []
+        current_chars = 0
 
-            self._log(f"  Processing batch: entries {batch_start+1}-{batch_end}/{total_entries}")
+        for i, entry in enumerate(srt_entries):
+            # Tính độ dài của entry này
+            entry_text = f"[{i+1}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
+            entry_len = len(entry_text)
+
+            # Nếu thêm entry này vượt quá limit và batch hiện tại không rỗng
+            if current_chars + entry_len > MAX_BATCH_CHARS and current_batch:
+                batches.append(current_batch)
+                current_batch = []
+                current_chars = 0
+
+            current_batch.append((i, entry))
+            current_chars += entry_len
+
+        # Thêm batch cuối cùng
+        if current_batch:
+            batches.append(current_batch)
+
+        self._log(f"  Split into {len(batches)} batches based on content length")
+
+        for batch_idx, batch_entries in enumerate(batches):
+            batch_start = batch_entries[0][0]  # Index đầu tiên
+            batch_end = batch_entries[-1][0]   # Index cuối cùng
+
+            self._log(f"  Processing batch {batch_idx+1}/{len(batches)}: entries {batch_start+1}-{batch_end+1}/{total_entries}")
 
             # Format SRT entries cho batch này
+            # batch_entries là list của tuples (original_index, entry)
             srt_text = ""
-            for i, entry in enumerate(batch_entries):
-                # Giữ nguyên index gốc (1-based)
-                original_idx = batch_start + i + 1
-                srt_text += f"[{original_idx}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
+            for original_idx, entry in batch_entries:
+                # original_idx là 0-based, cần +1 cho 1-based
+                srt_text += f"[{original_idx+1}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
 
             # Build prompt
             prompt = f"""Create a director's shooting plan by dividing the SRT into visual scenes.
@@ -617,7 +641,7 @@ CHARACTERS (use these exact descriptions in scenes):
 LOCATIONS (use these exact descriptions in scenes):
 {chr(10).join(loc_locks) if loc_locks else 'No locations defined'}
 
-SRT ENTRIES (indices {batch_start+1} to {batch_end}):
+SRT ENTRIES (indices {batch_start+1} to {batch_end+1}):
 {srt_text}
 
 Rules:
@@ -651,13 +675,13 @@ Return JSON only:
             # Call API
             response = self._call_api(prompt, temperature=0.5, max_tokens=8192)
             if not response:
-                self._log(f"  ERROR: API call failed for batch {batch_start+1}-{batch_end}!", "ERROR")
+                self._log(f"  ERROR: API call failed for batch {batch_idx+1}!", "ERROR")
                 continue  # Thử batch tiếp theo
 
             # Parse response
             data = self._extract_json(response)
             if not data or "scenes" not in data:
-                self._log(f"  ERROR: Could not parse batch {batch_start+1}-{batch_end}!", "ERROR")
+                self._log(f"  ERROR: Could not parse batch {batch_idx+1}!", "ERROR")
                 continue
 
             # Thêm scenes vào kết quả
@@ -671,7 +695,7 @@ Return JSON only:
                 scene_id_counter += 1
 
             # Delay giữa các batch để tránh rate limit
-            if batch_end < total_entries:
+            if batch_idx < len(batches) - 1:
                 time.sleep(1)
 
         # Kiểm tra có scenes không
