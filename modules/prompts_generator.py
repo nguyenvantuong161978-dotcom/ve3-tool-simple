@@ -6458,7 +6458,6 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
             else:
                 # === FLASHBACK SCENE (70%) ===
-                # Dùng TẤT CẢ references - Flow tự chọn phù hợp với SRT content
                 flashback_count += 1
                 angle_idx = flashback_count % len(flashback_angles)
                 shot_type, lens, composition, lighting, atmosphere, emotion = flashback_angles[angle_idx]
@@ -6467,7 +6466,10 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 all_char_ids = ["nvc"] + [c["id"] for c in flashback_chars]
                 characters_used = ", ".join(all_char_ids)  # Comma-separated (like API)
                 location_used = "loc_01"
-                reference_files = json.dumps(all_refs)  # JSON array (like API)
+
+                # Build reference_files từ characters_used và location_used (KHÔNG dùng all_refs)
+                scene_refs = [f"{cid}.png" for cid in all_char_ids] + [f"{location_used}.png"]
+                reference_files = json.dumps(scene_refs)  # Chỉ refs của scene này
 
                 fallback_prompt = (
                     f"{shot_type}, {lens}. {composition}. "
