@@ -3216,15 +3216,25 @@ class DrissionFlowAPI:
         try:
             if self.driver:
                 self.driver.refresh()
-                time.sleep(2)  # Đợi page bắt đầu load
-                # Đợi textarea xuất hiện = page load xong (tự động F5 nếu không thấy)
+                time.sleep(3)  # Đợi page bắt đầu load (tăng từ 2s lên 3s)
+
+                # Đợi textarea xuất hiện = page load xong
                 if not self._wait_for_textarea_visible():
                     self.log("⚠️ Không thấy textarea sau F5", "WARN")
 
                 # Re-inject JS Interceptor sau khi refresh (bị mất sau F5)
                 self._reset_tokens()
                 self.driver.run_js(JS_INTERCEPTOR)
-                self.log("✓ F5 done, ready for next prompt")
+
+                # Click vào textarea để trigger reCAPTCHA initialization
+                textarea = self._find_textarea()
+                if textarea:
+                    textarea.click()
+                    time.sleep(0.5)
+
+                # Đợi thêm để reCAPTCHA fully load (quan trọng!)
+                time.sleep(3)
+                self.log("✓ F5 done, reCAPTCHA ready")
             else:
                 self.log("⚠️ No driver for refresh", "WARN")
         except Exception as e:
