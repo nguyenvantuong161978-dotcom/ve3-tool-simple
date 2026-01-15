@@ -2075,56 +2075,29 @@ class DrissionFlowAPI:
 
         self.log("✓ Project đã sẵn sàng (textarea visible)!")
 
-        # 5.5. Chọn mode "Tạo hình ảnh" - SAU KHI page đã load xong
+        # 5.5. Kiểm tra mode "Tạo hình ảnh" - thường đã được chọn sẵn khi page load
         # SKIP nếu skip_mode_selection=True (cho Chrome 2 video - sẽ switch T2V mode sau)
         if not skip_mode_selection:
-            self.log("Chọn mode 'Tạo hình ảnh'...")
-            time.sleep(0.5)
-            select_success = False
-            for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
-                try:
-                    for j in range(5):
-                        # Bước 1: Kiểm tra mode hiện tại và click dropdown nếu cần
-                        result = self.driver.run_js(JS_SELECT_IMAGE_MODE_CHECK)
-
-                        if result == 'ALREADY_SELECTED':
-                            self.log("✓ Mode đã là 'Tạo hình ảnh' (OK)")
-                            select_success = True
-                            break
-                        elif result == 'DROPDOWN_CLICKED':
-                            # Bước 2: Đợi dropdown mở rồi chọn option
-                            time.sleep(0.5)
-                            result2 = self.driver.run_js(JS_SELECT_IMAGE_MODE_CLICK)
-                            if result2 == 'CLICKED':
-                                self.log("✓ Chọn 'Tạo hình ảnh' thành công!")
-                                time.sleep(0.5)
-                                select_success = True
-                                break
-                            else:
-                                self.log(f"  [Mode] Click option: {result2} (lần {j+1}/5)")
-                        elif result == 'NO_DROPDOWN':
-                            self.log(f"  [Mode] Không tìm thấy dropdown (lần {j+1}/5)")
-                        else:
-                            self.log(f"  [Mode] Check: {result} (lần {j+1}/5)")
-                        time.sleep(0.5)
-                    if select_success:
-                        break
+            # Chỉ kiểm tra 1 lần, mode thường đã đúng sẵn
+            try:
+                result = self.driver.run_js(JS_SELECT_IMAGE_MODE_CHECK)
+                if result == 'ALREADY_SELECTED':
+                    self.log("✓ Mode: Tạo hình ảnh (OK)")
+                elif result == 'DROPDOWN_CLICKED':
+                    # Cần chọn mode
+                    time.sleep(0.5)
+                    result2 = self.driver.run_js(JS_SELECT_IMAGE_MODE_CLICK)
+                    if result2 == 'CLICKED':
+                        self.log("✓ Đã chọn mode 'Tạo hình ảnh'")
                     else:
-                        self.log(f"[Mode] ⚠️ Không chọn được mode (retry {retry_count+1}/3)", "WARN")
-                except Exception as e:
-                    if ContextLostError and isinstance(e, ContextLostError):
-                        self.log(f"[PAGE] ⚠️ Page bị refresh, đợi load lại... (retry {retry_count + 1}/3)")
-                        if self._wait_for_page_ready(timeout=30):
-                            continue
-                        else:
-                            self.log("[PAGE] ✗ Timeout đợi page, thử lại...", "WARN")
-                            continue
-                    else:
-                        self.log(f"[PAGE] ⚠️ Lỗi: {e}", "WARN")
-                        break
-
-            if not select_success:
-                self.log("[Mode] ⚠️ KHÔNG CHỌN ĐƯỢC MODE - tiếp tục dù sao...", "WARN")
+                        self.log(f"⚠️ Mode selection: {result2}", "WARN")
+                elif result == 'NO_DROPDOWN':
+                    # Không có dropdown = có thể đã đúng mode
+                    self.log("⚠️ Không thấy dropdown mode (tiếp tục...)", "WARN")
+                else:
+                    self.log(f"⚠️ Mode check: {result}", "WARN")
+            except Exception as e:
+                self.log(f"⚠️ Mode check error: {e}", "WARN")
         else:
             self.log("⏭️ Skip mode selection (video mode)")
 
