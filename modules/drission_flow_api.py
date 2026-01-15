@@ -3250,33 +3250,24 @@ class DrissionFlowAPI:
         self.log("🔄 Mở tab mới (thay vì F5)...")
         try:
             if self.driver and self._current_project_url:
-                # Lấy tab hiện tại
-                old_tab = self.driver.get_tab()
-
-                # Mở tab mới với project URL
-                new_tab = self.driver.new_tab(self._current_project_url)
-                new_tab.set.activate()
-                time.sleep(2)
-
-                # Đóng tab cũ
-                try:
-                    old_tab.close()
-                except:
-                    pass
+                # Cách đơn giản hơn: navigate đến URL mới trong cùng tab
+                # Điều này tương đương mở tab mới vì URL được load fresh
+                self.driver.get(self._current_project_url)
+                time.sleep(3)
 
                 # Đợi textarea xuất hiện = page load xong
                 if not self._wait_for_textarea_visible():
-                    self.log("⚠️ Không thấy textarea sau khi mở tab mới", "WARN")
+                    self.log("⚠️ Không thấy textarea sau khi load URL", "WARN")
 
                 # Re-inject JS Interceptor
                 self._reset_tokens()
                 self.driver.run_js(JS_INTERCEPTOR)
 
-                self.log("✓ Tab mới ready!")
+                self.log("✓ Page ready!")
             else:
-                self.log("⚠️ No driver/URL for new tab", "WARN")
+                self.log("⚠️ No driver/URL", "WARN")
         except Exception as e:
-            self.log(f"⚠️ New tab error: {e}", "WARN")
+            self.log(f"⚠️ Navigate error: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
