@@ -2060,56 +2060,36 @@ class DrissionFlowAPI:
                     self.log("⏭️ Skip mode selection (video mode)")
                     time.sleep(1)
 
-        # 5. Đợi textarea sẵn sàng - với xử lý ContextLostError và LOGOUT
-        self.log("Đợi project load...")
-        textarea_ready = False
-        for retry_count in range(3):  # Retry tối đa 3 lần nếu page refresh
-            try:
-                for i in range(30):
-                    # === KIỂM TRA LOGOUT MỖI 5 GIÂY ===
-                    if i % 5 == 0 and i > 0:
-                        if self._is_logged_out():
-                            self.log("[PROJECT] ⚠️ Phát hiện bị LOGOUT khi đợi project!")
-                            if self._auto_login_google():
-                                self.log("[PROJECT] ✓ Đã login lại, quay lại project...")
-                                # Navigate lại project
-                                self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
-                                time.sleep(3)
-                                continue
-                            else:
-                                self.log("[PROJECT] ✗ Login lại thất bại", "ERROR")
-                                return False
+        # 5. Đợi textarea sẵn sàng - TEXTAREA = page đã load xong
+        # IPv6 cần thời gian lâu hơn, tự động F5 nếu không thấy
+        self.log("Đợi project load (textarea = ready)...")
 
-                    if self._find_textarea():
-                        self.log("✓ Project đã sẵn sàng!")
-                        textarea_ready = True
-                        break
-                    time.sleep(1)
-                if textarea_ready:
-                    break
-                else:
-                    # Timeout: check logout lần cuối
-                    if self._is_logged_out():
-                        self.log("[PROJECT] ⚠️ Timeout do bị LOGOUT!")
-                        if self._auto_login_google():
-                            self.log("[PROJECT] ✓ Đã login lại, thử lại...")
-                            self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
-                            time.sleep(3)
-                            continue
-                    self.log("✗ Timeout - không tìm thấy textarea", "ERROR")
+        # Kiểm tra logout trước
+        if self._is_logged_out():
+            self.log("[PROJECT] ⚠️ Phát hiện bị LOGOUT!")
+            if self._auto_login_google():
+                self.log("[PROJECT] ✓ Đã login lại, quay lại project...")
+                self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
+                time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
+            else:
+                self.log("[PROJECT] ✗ Login lại thất bại", "ERROR")
+                return False
+
+        # Đợi textarea - tự động F5 nếu không thấy (IPv6 friendly)
+        if not self._wait_for_textarea_visible():
+            # Thử navigate lại project 1 lần nữa
+            self.log("[PROJECT] ⚠️ Không thấy textarea, thử load lại project...")
+            try:
+                self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
+                time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
+                if not self._wait_for_textarea_visible():
+                    self.log("✗ Không thể tìm textarea sau nhiều lần thử", "ERROR")
                     return False
             except Exception as e:
-                if ContextLostError and isinstance(e, ContextLostError):
-                    self.log(f"[PAGE] ⚠️ Page bị refresh khi đợi textarea (retry {retry_count + 1}/3)")
-                    if self._wait_for_page_ready(timeout=30):
-                        continue
-                else:
-                    self.log(f"[PAGE] Lỗi: {e}", "WARN")
-                    break
+                self.log(f"[PROJECT] Navigate error: {e}", "ERROR")
+                return False
 
-        if not textarea_ready:
-            self.log("✗ Không thể tìm textarea sau khi retry", "ERROR")
-            return False
+        self.log("✓ Project đã sẵn sàng (textarea visible)!")
 
         # 6. Warm up session (tạo 1 ảnh trong Chrome để activate)
         if warm_up:
