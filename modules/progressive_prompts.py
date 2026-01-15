@@ -890,6 +890,11 @@ For each character, provide:
 2. character_lock: Short 10-15 word description to use in scene prompts (for consistency)
 3. is_minor: TRUE if character is under 18 years old (child, teenager, baby, infant, etc.)
 
+IMPORTANT - TARGET AUDIENCE: American/US viewers
+- Default ethnicity: Caucasian (unless story EXPLICITLY mentions different ethnicity)
+- DO NOT use "Asian" unless the story explicitly mentions Asian characters
+- Use American-style names and appearances
+
 IMPORTANT: Identify minors accurately based on context clues:
 - Age mentions (e.g., "5-year-old", "teenager", "16 years old")
 - Role descriptions (e.g., "son", "daughter", "child", "kid", "baby", "infant", "toddler")

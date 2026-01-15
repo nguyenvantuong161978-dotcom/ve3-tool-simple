@@ -5322,7 +5322,7 @@ DURATION: {duration:.1f}s → {num_shots} shot(s)
 }}
 
 === EXAMPLE HIGH-QUALITY PROMPT ===
-"Close-up shot, 85mm portrait lens, 35-year-old Asian man with salt-and-pepper hair and tired eyes, wearing a faded blue work shirt, his weathered hands gripping an old photograph, tears welling in his eyes as memories flood back, soft diffused window light casting gentle shadows on his face, bokeh background of a modest living room, photorealistic, 4K cinematic quality. (nvc.png)"
+"Close-up shot, 85mm portrait lens, 35-year-old Caucasian man with salt-and-pepper hair and tired eyes, wearing a faded blue work shirt, his weathered hands gripping an old photograph, tears welling in his eyes as memories flood back, soft diffused window light casting gentle shadows on his face, bokeh background of a modest living room, photorealistic, 4K cinematic quality. (nvc.png)"
 
 NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summary if scene_summary else srt_text[:100]}"
 """
@@ -5989,7 +5989,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         ethnicity = analysis.get("ethnicity", "western")
 
         eth_map = {"asian": "Asian", "western": "Caucasian", "african": "African", "neutral": ""}
-        eth_str = eth_map.get(ethnicity, "Asian")
+        eth_str = eth_map.get(ethnicity, "Caucasian")
 
         # Build character description based on analysis
         if gender == "male":
