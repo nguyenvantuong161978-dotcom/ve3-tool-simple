@@ -929,18 +929,17 @@ Return JSON only:
             expected_images_hint = f"""
 SCENE GUIDELINES:
 - This batch spans approximately {batch_duration:.0f} seconds
-- IDEAL duration: 5-8 seconds per scene
-- MAXIMUM: 8 seconds (hard limit - will be split if exceeded)
-- MINIMUM: 5 seconds (avoid too short scenes like 2-3s)
-- Balance: Don't create too many scenes for a long video"""
+- Duration should FIT THE CONTENT - not rigid numbers
+- Target around 8 seconds per scene, but let content guide you
+- Avoid extremes: not too long (>12s) or too short (<3s)"""
 
             prompt = f"""You are a FILM DIRECTOR creating a shot list. Each scene = ONE CINEMATIC SHOT.
 
-DURATION RULES (very important!):
-- IDEAL: 5-8 seconds per scene (best for viewer engagement)
-- MAXIMUM: 8 seconds - scenes longer than this will be automatically split
-- MINIMUM: 5 seconds - avoid creating too many short scenes (2-3s is too choppy)
-- For a 1-hour video, aim for quality over quantity
+DURATION GUIDANCE (flexible, based on content):
+- Target: around 8 seconds per scene
+- Let the CONTENT determine the duration - some moments need more time, some less
+- Avoid extremes: scenes >12s feel too long, scenes <3s feel too rushed
+- A complete thought/moment = one scene
 
 CORE PRINCIPLE: Each shot must SUPPORT and ENHANCE the narration. The viewer sees this image while hearing the audio.
 Ask yourself: "What visual would make this moment IMPACTFUL for the audience?"
@@ -975,22 +974,20 @@ SHOT TYPES TO CONSIDER:
 - Over-shoulder: dialogue, perspective, connection
 - Insert/Detail: important object, symbol, emphasis
 
-RULES:
-1. Duration: 5-8 seconds (IDEAL), maximum 8s, minimum 5s
-2. characters_used: EXACT IDs like "nv_john, nv_sarah" from list above
-3. location_used: EXACT ID like "loc_office" from list above
-4. visual_moment: Describe WHAT viewer sees and WHY this shot serves the story
-5. camera: Shot type + any movement (pan, zoom, static)
-6. scene_id starts from {scene_id_counter}
-7. srt_indices use ORIGINAL indices in brackets [N]
+THINK LIKE A MOVIE DIRECTOR:
+1. Each scene = one shot in a film, serving the story
+2. Duration fits the content naturally (target ~8s, flexible based on moment)
+3. characters_used: EXACT IDs like "nv_john, nv_sarah" from list above
+4. location_used: EXACT ID like "loc_office" from list above
+5. visual_moment: What viewer sees - be specific and purposeful
+6. camera: Shot type that serves the emotion (close-up for intimacy, wide for scale)
+7. scene_id starts from {scene_id_counter}
 
-ARTISTIC SPLITTING (when content > 8s):
-- If SRT content spans > 8s, you MUST split into multiple scenes
-- Each scene should show DIFFERENT aspect: angle, emotion, focus
-- Example: 15s about a decision →
-  * Scene 1 (6s): Close-up character's face, showing internal conflict
-  * Scene 2 (5s): Wide shot of the room, showing isolation
-  * Scene 3 (4s): Insert of the object of decision
+CINEMATIC APPROACH:
+- Pacing varies like a real film: slow moments, quick cuts, breathing room
+- Match shot duration to content: emotional beats need time, action can be quicker
+- When narration spans long time, use multiple angles (like film editing)
+- Create visual rhythm: vary shot types, don't repeat same angle
 
 Return JSON only:
 {{
@@ -1029,9 +1026,9 @@ Return JSON only:
             batch_scenes = data["scenes"]
             self._log(f"     -> Got {len(batch_scenes)} scenes from this batch")
 
-            # POST-PROCESS: Chia scenes > 8s một cách nghệ thuật
-            # Tối đa 8s, nhưng cũng không nên quá ngắn (5-8s là ideal)
-            SPLIT_THRESHOLD = 8  # Tối đa 8s
+            # POST-PROCESS: Chia scenes quá dài một cách nghệ thuật
+            # Target ~8s, nhưng linh hoạt - chỉ split khi thực sự cần
+            SPLIT_THRESHOLD = 10  # Chỉ split khi > 10s (cho phép linh hoạt)
             processed_scenes = []
             for scene in batch_scenes:
                 duration = scene.get("duration", 0)
