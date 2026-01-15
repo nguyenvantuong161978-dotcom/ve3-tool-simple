@@ -3257,29 +3257,34 @@ class DrissionFlowAPI:
                 # Mở tab mới với URL
                 self.log("   → Opening new tab...")
                 new_tab = self.driver.new_tab(current_url)
+
+                # Activate tab mới (quan trọng!)
+                self.log("   → Activating new tab...")
+                new_tab.set.activate()
                 time.sleep(2)
 
                 # Lấy tab ID mới
-                new_tab_id = None
-                for tid in self.driver.tab_ids:
-                    if tid != old_tab_id:
-                        new_tab_id = tid
-                        break
+                new_tab_id = new_tab.tab_id if hasattr(new_tab, 'tab_id') else None
                 self.log(f"   New tab ID: {new_tab_id}")
-
-                # Switch driver sang tab mới TRƯỚC KHI đóng tab cũ
-                if new_tab_id:
-                    self.log(f"   → Switching to new tab {new_tab_id}...")
-                    self.driver.to_tab(new_tab_id)
-                    time.sleep(1)
 
                 # Đợi page load trong tab mới
                 time.sleep(3)
 
-                # Đóng tab cũ bằng tab_id
-                if old_tab_id and new_tab_id:
+                # Đóng tab cũ
+                if old_tab_id:
                     self.log(f"   → Closing old tab {old_tab_id}...")
-                    self.driver.close_tabs(old_tab_id)
+                    try:
+                        self.driver.close_tabs(old_tab_id)
+                    except:
+                        pass
+                    time.sleep(1)
+
+                # QUAN TRỌNG: Update self.driver để dùng tab mới
+                # Sau khi đóng tab cũ, driver tự động switch sang tab còn lại
+                # Nhưng cần đảm bảo focus đúng
+                if self.driver.tab_ids:
+                    self.log(f"   → Remaining tabs: {self.driver.tab_ids}")
+                    self.driver.to_tab(self.driver.tab_ids[0])
                     time.sleep(1)
 
                 # Đợi textarea xuất hiện = page load xong
