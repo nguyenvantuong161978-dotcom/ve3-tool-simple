@@ -241,12 +241,17 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
             chrome_portable=chrome_portable_2
         )
 
-        # Setup Chrome - skip mode selection, sẽ chuyển T2V mode sau
+        # Setup Chrome
         if not api.setup(project_url=project_url, skip_mode_selection=True):
             log(f"  ❌ Failed to setup Chrome for video!")
             return False
 
-        log(f"  🎬 Using FORCE VIDEO MODE (Image UI → interceptor → Video API)")
+        # Chuyển sang mode I2V ("Tạo video từ các thành phần")
+        log(f"  🎬 Switching to I2V mode...")
+        if api.switch_to_video_mode():
+            log(f"  ✓ Switched to I2V mode (Tạo video từ các thành phần)")
+        else:
+            log(f"  ⚠️ Could not switch to I2V mode, trying anyway...", "WARN")
         time.sleep(1)
 
         # Create videos
@@ -282,12 +287,11 @@ def process_project_video(code: str, video_count: int = -1, callback=None) -> bo
                     continue
 
             try:
-                # Use FORCE VIDEO MODE (giống bên ảnh):
-                # - Chrome ở mode "Tạo hình ảnh"
-                # - Interceptor lấy fresh reCAPTCHA từ image request
-                # - Đổi URL và payload thành video request
-                # - Model: veo_3_1_r2v_fast_landscape_ultra_relaxed
-                ok, result_path, error = api.generate_video_chrome(
+                # Use I2V MODIFY MODE:
+                # - Chrome ở mode "Tạo video từ các thành phần" (I2V)
+                # - Chrome gửi request I2V với reCAPTCHA đúng endpoint
+                # - Interceptor chỉ inject mediaId vào payload
+                ok, result_path, error = api.generate_video_modify_mode(
                     media_id=media_id,
                     prompt=video_prompt,
                     save_path=mp4_path
