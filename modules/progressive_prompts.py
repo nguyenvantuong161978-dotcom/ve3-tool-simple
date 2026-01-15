@@ -427,6 +427,10 @@ Return JSON only:
         except:
             pass
 
+        # TRACKING: Khởi tạo SRT coverage để đối chiếu
+        self._log(f"  Khởi tạo SRT coverage tracking...")
+        workbook.init_srt_coverage(srt_entries)
+
         # Read context from previous step
         story_analysis = {}
         try:
@@ -585,6 +589,14 @@ Return JSON only:
             self._log(f"  -> Saved {len(data['segments'])} segments ({total_images} total images)")
             for seg in data["segments"][:5]:
                 self._log(f"     - {seg.get('segment_name')}: {seg.get('image_count')} images")
+
+            # TRACKING: Cập nhật và kiểm tra coverage
+            coverage = workbook.update_srt_coverage_segments(data["segments"])
+            self._log(f"\n  📊 SRT COVERAGE (sau Step 1.5):")
+            self._log(f"     Total SRT: {coverage['total_srt']}")
+            self._log(f"     Covered by segments: {coverage['covered_by_segment']} ({coverage['coverage_percent']}%)")
+            if coverage['uncovered'] > 0:
+                self._log(f"     ⚠️ UNCOVERED: {coverage['uncovered']} entries", "WARN")
 
             return StepResult("analyze_story_segments", StepStatus.COMPLETED, "Success", data)
         except Exception as e:
@@ -1175,6 +1187,17 @@ Return JSON only:
             self._log(f"  -> Saved {len(all_scenes)} scenes to director_plan")
             self._log(f"     Total duration: {sum(s.get('duration', 0) for s in all_scenes):.1f}s")
 
+            # TRACKING: Cập nhật và kiểm tra coverage
+            coverage = workbook.update_srt_coverage_scenes(all_scenes)
+            self._log(f"\n  📊 SRT COVERAGE (sau Step 4):")
+            self._log(f"     Total SRT: {coverage['total_srt']}")
+            self._log(f"     Covered by scenes: {coverage['covered_by_scene']} ({coverage['coverage_percent']}%)")
+            if coverage['uncovered'] > 0:
+                self._log(f"     ⚠️ UNCOVERED: {coverage['uncovered']} entries", "WARN")
+                uncovered_list = workbook.get_uncovered_srt_entries()
+                if uncovered_list:
+                    self._log(f"     Missing SRT: {[u['srt_index'] for u in uncovered_list[:10]]}...")
+
             return StepResult("create_director_plan", StepStatus.COMPLETED, "Success", {"scenes": all_scenes})
         except Exception as e:
             self._log(f"  ERROR: Could not save to Excel: {e}", "ERROR")
@@ -1423,6 +1446,17 @@ Create exactly {image_count} scenes!"""
             workbook.save()
             self._log(f"  -> Saved {len(all_scenes)} scenes to director_plan")
             self._log(f"     Total duration: {sum(s.get('duration', 0) for s in all_scenes):.1f}s")
+
+            # TRACKING: Cập nhật và kiểm tra coverage
+            coverage = workbook.update_srt_coverage_scenes(all_scenes)
+            self._log(f"\n  📊 SRT COVERAGE (sau Step 4 BASIC):")
+            self._log(f"     Total SRT: {coverage['total_srt']}")
+            self._log(f"     Covered by scenes: {coverage['covered_by_scene']} ({coverage['coverage_percent']}%)")
+            if coverage['uncovered'] > 0:
+                self._log(f"     ⚠️ UNCOVERED: {coverage['uncovered']} entries", "WARN")
+                uncovered_list = workbook.get_uncovered_srt_entries()
+                if uncovered_list:
+                    self._log(f"     Missing SRT: {[u['srt_index'] for u in uncovered_list[:10]]}...")
 
             return StepResult("create_director_plan_basic", StepStatus.COMPLETED, "Success", {"scenes": all_scenes})
         except Exception as e:

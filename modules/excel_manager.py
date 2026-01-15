@@ -363,6 +363,7 @@ class PromptWorkbook:
     LOCATIONS_SHEET = "locations"
     BACKUP_CHARACTERS_SHEET = "backup_characters"
     BACKUP_LOCATIONS_SHEET = "backup_locations"
+    SRT_COVERAGE_SHEET = "srt_coverage"  # Đối chiếu SRT entries với segments/scenes
     
     def __init__(self, path: Union[str, Path]):
         """
@@ -1541,9 +1542,236 @@ class PromptWorkbook:
         return gaps
 
     # ========================================================================
+    # SRT COVERAGE TRACKING - Đối chiếu SRT với Segments/Scenes
+    # ========================================================================
+
+    def _ensure_srt_coverage_sheet(self) -> None:
+        """Tạo sheet srt_coverage nếu chưa có."""
+        if self.SRT_COVERAGE_SHEET not in self.workbook.sheetnames:
+            ws = self.workbook.create_sheet(self.SRT_COVERAGE_SHEET)
+            headers = [
+                "srt_index", "start_time", "end_time", "text_preview",
+                "segment_id", "segment_name", "scene_id", "status"
+            ]
+            header_font = Font(bold=True, color="FFFFFF")
+            header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
+
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+
+            # Set column widths
+            ws.column_dimensions['A'].width = 10
+            ws.column_dimensions['B'].width = 15
+            ws.column_dimensions['C'].width = 15
+            ws.column_dimensions['D'].width = 50
+            ws.column_dimensions['E'].width = 12
+            ws.column_dimensions['F'].width = 30
+            ws.column_dimensions['G'].width = 12
+            ws.column_dimensions['H'].width = 12
+
+    def init_srt_coverage(self, srt_entries: list) -> None:
+        """
+        Khởi tạo SRT coverage tracking với tất cả SRT entries.
+        Gọi ở đầu quy trình để có baseline.
+
+        Args:
+            srt_entries: List các SRT entry objects
+        """
+        self._ensure_srt_coverage_sheet()
+        ws = self.workbook[self.SRT_COVERAGE_SHEET]
+
+        # Clear existing data (keep header)
+        for row in range(ws.max_row, 1, -1):
+            ws.delete_rows(row)
+
+        # Add all SRT entries
+        uncovered_fill = PatternFill(start_color="FFCDD2", end_color="FFCDD2", fill_type="solid")
+
+        for i, entry in enumerate(srt_entries, 1):
+            row = i + 1  # +1 for header
+            ws.cell(row=row, column=1, value=i)  # srt_index
+            ws.cell(row=row, column=2, value=entry.start_time)
+            ws.cell(row=row, column=3, value=entry.end_time)
+            ws.cell(row=row, column=4, value=entry.text[:50] + "..." if len(entry.text) > 50 else entry.text)
+            ws.cell(row=row, column=5, value="")  # segment_id - empty
+            ws.cell(row=row, column=6, value="")  # segment_name - empty
+            ws.cell(row=row, column=7, value="")  # scene_id - empty
+            status_cell = ws.cell(row=row, column=8, value="UNCOVERED")
+            status_cell.fill = uncovered_fill
+
+        self.save()
+        self.logger.info(f"Initialized SRT coverage tracking for {len(srt_entries)} entries")
+
+    def update_srt_coverage_segments(self, segments: list) -> dict:
+        """
+        Cập nhật coverage sau Step 1.5 (segments).
+
+        Args:
+            segments: List segments từ Step 1.5
+
+        Returns:
+            Dict với coverage statistics
+        """
+        self._ensure_srt_coverage_sheet()
+        ws = self.workbook[self.SRT_COVERAGE_SHEET]
+
+        segment_fill = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")  # Yellow
+        covered = 0
+        uncovered = 0
+
+        for row in range(2, ws.max_row + 1):
+            srt_index = ws.cell(row=row, column=1).value
+            if srt_index is None:
+                continue
+
+            # Find which segment covers this SRT
+            segment_found = None
+            for seg in segments:
+                start = seg.get("srt_range_start", 0)
+                end = seg.get("srt_range_end", 0)
+                if start <= srt_index <= end:
+                    segment_found = seg
+                    break
+
+            if segment_found:
+                ws.cell(row=row, column=5, value=segment_found.get("segment_id", ""))
+                ws.cell(row=row, column=6, value=segment_found.get("segment_name", ""))
+                ws.cell(row=row, column=8, value="SEGMENT_OK")
+                ws.cell(row=row, column=8).fill = segment_fill
+                covered += 1
+            else:
+                uncovered += 1
+
+        self.save()
+
+        total = covered + uncovered
+        coverage_pct = (covered / total * 100) if total > 0 else 0
+
+        return {
+            "total_srt": total,
+            "covered_by_segment": covered,
+            "uncovered": uncovered,
+            "coverage_percent": round(coverage_pct, 1)
+        }
+
+    def update_srt_coverage_scenes(self, director_plan: list) -> dict:
+        """
+        Cập nhật coverage sau Step 4 (director_plan).
+
+        Args:
+            director_plan: List scenes từ Step 4
+
+        Returns:
+            Dict với coverage statistics
+        """
+        self._ensure_srt_coverage_sheet()
+        ws = self.workbook[self.SRT_COVERAGE_SHEET]
+
+        scene_fill = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")  # Green
+        covered = 0
+        uncovered = 0
+
+        for row in range(2, ws.max_row + 1):
+            srt_index = ws.cell(row=row, column=1).value
+            if srt_index is None:
+                continue
+
+            # Find which scene covers this SRT
+            scene_ids = []
+            for scene in director_plan:
+                indices = scene.get("srt_indices", [])
+                if srt_index in indices:
+                    scene_ids.append(scene.get("scene_id", ""))
+
+            if scene_ids:
+                ws.cell(row=row, column=7, value=", ".join(map(str, scene_ids)))
+                ws.cell(row=row, column=8, value="COVERED")
+                ws.cell(row=row, column=8).fill = scene_fill
+                covered += 1
+            else:
+                current_status = ws.cell(row=row, column=8).value
+                if current_status != "COVERED":
+                    uncovered += 1
+
+        self.save()
+
+        total = covered + uncovered
+        coverage_pct = (covered / total * 100) if total > 0 else 0
+
+        return {
+            "total_srt": total,
+            "covered_by_scene": covered,
+            "uncovered": uncovered,
+            "coverage_percent": round(coverage_pct, 1)
+        }
+
+    def get_srt_coverage_summary(self) -> dict:
+        """
+        Lấy tổng hợp coverage hiện tại.
+
+        Returns:
+            Dict với statistics
+        """
+        self._ensure_srt_coverage_sheet()
+        ws = self.workbook[self.SRT_COVERAGE_SHEET]
+
+        total = 0
+        covered = 0
+        segment_only = 0
+        uncovered = 0
+
+        for row in range(2, ws.max_row + 1):
+            srt_index = ws.cell(row=row, column=1).value
+            if srt_index is None:
+                continue
+
+            total += 1
+            status = ws.cell(row=row, column=8).value
+
+            if status == "COVERED":
+                covered += 1
+            elif status == "SEGMENT_OK":
+                segment_only += 1
+            else:
+                uncovered += 1
+
+        return {
+            "total_srt": total,
+            "fully_covered": covered,
+            "segment_only": segment_only,
+            "uncovered": uncovered,
+            "coverage_percent": round((covered / total * 100) if total > 0 else 0, 1)
+        }
+
+    def get_uncovered_srt_entries(self) -> list:
+        """
+        Lấy danh sách SRT entries chưa được cover.
+
+        Returns:
+            List of dicts với SRT info
+        """
+        self._ensure_srt_coverage_sheet()
+        ws = self.workbook[self.SRT_COVERAGE_SHEET]
+
+        uncovered = []
+        for row in range(2, ws.max_row + 1):
+            status = ws.cell(row=row, column=8).value
+            if status == "UNCOVERED":
+                uncovered.append({
+                    "srt_index": ws.cell(row=row, column=1).value,
+                    "start_time": ws.cell(row=row, column=2).value,
+                    "end_time": ws.cell(row=row, column=3).value,
+                    "text_preview": ws.cell(row=row, column=4).value
+                })
+
+        return uncovered
+
+    # ========================================================================
     # UTILITY METHODS
     # ========================================================================
-    
+
     def has_prompts(self) -> bool:
         """Kiểm tra xem đã có prompt nào chưa."""
         scenes = self.get_scenes()
