@@ -466,24 +466,25 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                         // delete req.seed; // KHÔNG XÓA!
 
                         // 4. Đổi model từ T2V sang I2V
-                        // - Đổi _t2v_ → _r2v_
-                        // - Đổi veo_3_1 → veo_3_0 (I2V API chỉ support veo_3_0)
-                        // - Giữ _fast_, _ultra, _relaxed, _landscape
+                        // Dựa trên payload thực I2V THÀNH CÔNG:
+                        // T2V: veo_3_1_t2v_fast_ultra_relaxed
+                        // I2V: veo_3_1_r2v_fast_landscape_ultra_relaxed
                         var currentModel = req.videoModelKey || 'veo_3_1_t2v_fast';
                         console.log('[T2V→I2V] Original model from Chrome:', currentModel);
 
-                        // STEP 1: Đổi t2v → r2v
+                        // STEP 1: Đổi _t2v_ → _r2v_
                         var newModel = currentModel.replace('_t2v_', '_r2v_');
 
-                        // STEP 2: Đổi veo_3_1 → veo_3_0 (I2V API chỉ hỗ trợ veo_3_0)
-                        newModel = newModel.replace('veo_3_1_', 'veo_3_0_');
-
-                        // STEP 3: Strip _relaxed suffix (I2V API không support)
-                        // I2V API tested OK: veo_3_0_r2v_fast_ultra (không có _relaxed)
-                        if (newModel.endsWith('_relaxed')) {
-                            newModel = newModel.replace('_relaxed', '');
-                            console.log('[T2V→I2V] Stripped _relaxed suffix');
+                        // STEP 2: Thêm _landscape trước _ultra (I2V model format)
+                        // veo_3_1_r2v_fast_ultra_relaxed → veo_3_1_r2v_fast_landscape_ultra_relaxed
+                        if (newModel.includes('_ultra') && !newModel.includes('_landscape')) {
+                            newModel = newModel.replace('_ultra', '_landscape_ultra');
+                            console.log('[T2V→I2V] Added _landscape before _ultra');
                         }
+
+                        // KHÔNG đổi veo_3_1 → veo_3_0 (I2V veo 3.1 hoạt động!)
+                        // KHÔNG strip _relaxed (I2V accept _relaxed!)
+
                         console.log('[T2V→I2V] Converted model:', newModel);
 
                         // Override nếu config có chỉ định model cụ thể (hiếm khi dùng)
