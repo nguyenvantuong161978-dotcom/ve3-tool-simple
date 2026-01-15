@@ -3261,20 +3261,9 @@ class DrissionFlowAPI:
                 # Mở tab mới với URL
                 self.log("   → Opening new tab...")
                 new_tab = self.driver.new_tab(current_url)
+                time.sleep(1)
 
-                # Activate tab mới (quan trọng!)
-                self.log("   → Activating new tab...")
-                new_tab.set.activate()
-                time.sleep(2)
-
-                # Lấy tab ID mới
-                new_tab_id = new_tab.tab_id if hasattr(new_tab, 'tab_id') else None
-                self.log(f"   New tab ID: {new_tab_id}")
-
-                # Đợi page load trong tab mới
-                time.sleep(3)
-
-                # Đóng tab cũ
+                # ĐÓNG TAB CŨ NGAY LẬP TỨC
                 if old_tab_id:
                     self.log(f"   → Closing old tab {old_tab_id}...")
                     try:
@@ -3283,21 +3272,25 @@ class DrissionFlowAPI:
                         pass
                     time.sleep(1)
 
-                # QUAN TRỌNG: Update self.driver để dùng tab mới
-                # Sau khi đóng tab cũ, driver tự động switch sang tab còn lại
-                # Nhưng cần đảm bảo focus đúng
+                # Switch driver sang tab còn lại (tab mới)
                 if self.driver.tab_ids:
-                    self.log(f"   → Remaining tabs: {self.driver.tab_ids}")
-                    self.driver.to_tab(self.driver.tab_ids[0])
+                    remaining_tab_id = self.driver.tab_ids[0]
+                    self.log(f"   → Switch to tab: {remaining_tab_id}")
+                    self.driver.to_tab(remaining_tab_id)
                     time.sleep(1)
+
+                # Đợi page load
+                self.log("   → Waiting for page load...")
+                time.sleep(3)
+
+                # INJECT JS VÀO TAB MỚI ĐỂ ĐIỀU KHIỂN
+                self.log("   → Injecting JS to new tab...")
+                self._reset_tokens()
+                self.driver.run_js(JS_INTERCEPTOR)
 
                 # Đợi textarea xuất hiện = page load xong
                 if not self._wait_for_textarea_visible():
                     self.log("⚠️ Không thấy textarea sau new tab", "WARN")
-
-                # Re-inject JS Interceptor
-                self._reset_tokens()
-                self.driver.run_js(JS_INTERCEPTOR)
 
                 self.log("✓ New tab ready!")
             else:
