@@ -3244,55 +3244,37 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"✗ Download failed: {e}", "WARN")
 
-        # Mở tab mới với URL, đóng tab cũ để reset hoàn toàn
-        self.log("🔄 Opening new tab, closing old...")
+        # Reset page bằng cách navigate qua about:blank rồi quay lại
+        self.log("🔄 Resetting page (about:blank → URL)...")
         try:
             if self.driver:
-                # Lưu URL hiện tại và tab hiện tại
+                # Lưu URL hiện tại
                 current_url = self.driver.url
                 self.log(f"   Current URL: {current_url}")
 
-                # Lưu tab cũ
-                old_tab = self.driver.get_tab()
+                # Navigate to about:blank để clear hoàn toàn
+                self.log("   → about:blank...")
+                self.driver.get('about:blank')
+                time.sleep(2)
 
-                # Mở tab mới với URL (new_tab trả về tab object và tự switch sang)
-                self.log("   Opening new tab...")
-                new_tab = self.driver.new_tab(current_url)
-                new_tab.set.activate()  # Đảm bảo focus vào tab mới
+                # Navigate lại URL
+                self.log("   → Back to URL...")
+                self.driver.get(current_url)
                 time.sleep(3)
-
-                # Đóng tab cũ
-                self.log("   Closing old tab...")
-                try:
-                    old_tab.close()
-                except:
-                    pass
-                time.sleep(1)
 
                 # Đợi textarea xuất hiện = page load xong
                 if not self._wait_for_textarea_visible():
-                    self.log("⚠️ Không thấy textarea sau new tab", "WARN")
+                    self.log("⚠️ Không thấy textarea sau reset", "WARN")
 
                 # Re-inject JS Interceptor
                 self._reset_tokens()
                 self.driver.run_js(JS_INTERCEPTOR)
 
-                self.log("✓ New tab ready!")
+                self.log("✓ Page reset done!")
             else:
                 self.log("⚠️ No driver", "WARN")
         except Exception as e:
-            self.log(f"⚠️ New tab error: {e}", "WARN")
-            # Fallback: F5 refresh
-            try:
-                self.log("   Fallback: F5 refresh...")
-                self.driver.refresh()
-                time.sleep(3)
-                if not self._wait_for_textarea_visible():
-                    self.log("⚠️ Không thấy textarea sau F5", "WARN")
-                self._reset_tokens()
-                self.driver.run_js(JS_INTERCEPTOR)
-            except:
-                pass
+            self.log(f"⚠️ Reset page error: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
