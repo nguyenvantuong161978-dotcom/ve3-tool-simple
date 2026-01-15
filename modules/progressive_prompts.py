@@ -840,9 +840,10 @@ VISUAL CONTEXT (use as prefix):
 {context_lock}
 
 IMPORTANT - REFERENCE FILE ANNOTATIONS:
-- Each character MUST have their reference file in parentheses: "a man (nvc.png)"
-- Location MUST have reference file: "in the room (loc_room.png)"
-- Format: "Description of person (filename.png) doing action in location (loc_filename.png)"
+- Each character MUST have their reference file in parentheses: "a man (nv_john.png)"
+- Location MUST have reference file: "in the room (loc_office.png)"
+- Format: "Description of person (nv_xxx.png) doing action in location (loc_xxx.png)"
+- Character files always start with "nv_", location files always start with "loc_"
 
 SCENES TO PROCESS:
 {scenes_text}
@@ -852,7 +853,7 @@ For each scene, create:
 2. video_prompt: Motion/video prompt if this becomes a video clip
 
 Example img_prompt:
-"Close-up shot, 85mm lens, a 35-year-old man with tired eyes (nvc.png) sitting at a desk, looking worried, soft window light, in a modern office (loc_office.png), cinematic, 4K"
+"Close-up shot, 85mm lens, a 35-year-old man with tired eyes (nv_john.png) sitting at a desk, looking worried, soft window light, in a modern office (loc_office.png), cinematic, 4K"
 
 Return JSON only:
 {{
