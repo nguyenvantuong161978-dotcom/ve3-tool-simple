@@ -2981,11 +2981,15 @@ class DrissionFlowAPI:
 
         last_error = None
 
+        # Số lần retry cho 403 (cần nhiều hơn để đi qua: reset x2 → clear data → IPv6 rotation)
+        effective_max_retries = max_retries
+
         # Log reference images if provided
         if image_inputs:
             self.log(f"→ Using {len(image_inputs)} reference image(s)")
 
-        for attempt in range(max_retries):
+        attempt = 0
+        while attempt < effective_max_retries:
             # SỬ DỤNG FORWARD MODE - không cancel request
             # reCAPTCHA token được dùng ngay (0.05s không bị expired)
             images, error = self.generate_image_forward(
@@ -3009,7 +3013,7 @@ class DrissionFlowAPI:
                         force_model = "GEM_PIX"  # Override cho các lần retry sau
 
                     # Retry với nano banana: đợi 5s → F5 refresh → retry
-                    if attempt < max_retries - 1:
+                    if attempt < effective_max_retries - 1:
                         self.log(f"⚠️ 429 Quota - Đợi 5s, F5 refresh rồi retry...", "WARN")
                         time.sleep(5)
                         # F5 refresh page
@@ -3019,6 +3023,7 @@ class DrissionFlowAPI:
                             self.log(f"  → F5 refreshed, retry...")
                         except Exception as e:
                             self.log(f"  → Refresh failed: {e}", "WARN")
+                        attempt += 1
                         continue
 
                     # Hết retry trong hàm này, nhưng KHÔNG return False
@@ -3028,30 +3033,34 @@ class DrissionFlowAPI:
 
                 # Nếu lỗi 500 (Internal Error), retry với delay
                 if "500" in error:
-                    self.log(f"⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
-                    if attempt < max_retries - 1:
+                    self.log(f"⚠️ 500 Internal Error (attempt {attempt+1}/{effective_max_retries})", "WARN")
+                    if attempt < effective_max_retries - 1:
                         self.log(f"  → Đợi 3s rồi retry...")
                         time.sleep(3)
+                        attempt += 1
                         continue
                     else:
                         return False, [], error
 
                 # === 403 ERROR HANDLING ===
-                # Logic: 403 → Reset Chrome (3 lần) → Clear data + login lại → Đổi IPv6
+                # Logic: 403 → Reset Chrome (2 lần) → Lần 3 clear data + login lại → Sau clear vẫn 403 thì đổi IPv6
                 if "403" in error:
                     self._consecutive_403 += 1
                     cleared_flag = getattr(self, '_cleared_data_for_403', False)
 
-                    if self._consecutive_403 <= 3 and not cleared_flag:
-                        # Bước 1: Reset Chrome (tối đa 3 lần)
+                    if self._consecutive_403 < 3 and not cleared_flag:
+                        # Bước 1: Reset Chrome (lần 1 và 2)
                         self.log(f"⚠️ 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
                         self._kill_chrome()
                         self.close()
                         time.sleep(2)
 
-                    elif self._consecutive_403 == 4 or (self._consecutive_403 > 3 and not cleared_flag):
-                        # Bước 2: Sau 3 lần reset vẫn 403 → Xóa dữ liệu + đăng nhập lại
-                        self.log(f"⚠️ 403 sau 3 lần reset → XÓA DỮ LIỆU + ĐĂNG NHẬP LẠI!", "WARN")
+                    elif self._consecutive_403 >= 3 and not cleared_flag:
+                        # Bước 2: Lần 3 → Xóa dữ liệu + đăng nhập lại NGAY
+                        self.log(f"⚠️ 403 lần {self._consecutive_403} → XÓA DỮ LIỆU + ĐĂNG NHẬP LẠI!", "WARN")
+                        self._kill_chrome()
+                        self.close()
+                        time.sleep(1)
                         self.clear_chrome_data()
                         self._cleared_data_for_403 = True
                         self._consecutive_403 = 0  # Reset counter sau khi clear
@@ -3071,9 +3080,15 @@ class DrissionFlowAPI:
                             else:
                                 self.log(f"  → ⚠️ Không rotate được IPv6!", "WARN")
 
+                    # Extend retries để đủ cho cả flow: reset x2 → clear data → IPv6 rotation
+                    if effective_max_retries < 6:
+                        effective_max_retries = 6
+                        self.log(f"  → Extend retries to {effective_max_retries} for 403 handling")
+
                     # Restart Chrome
                     if self.restart_chrome(rotate_ipv6=False):
                         self.log("  → Chrome restarted, tiếp tục...")
+                        attempt += 1
                         continue
                     else:
                         return False, [], "Không restart được Chrome sau 403"
