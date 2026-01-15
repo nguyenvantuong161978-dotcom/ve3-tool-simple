@@ -445,14 +445,22 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                             }];
 
                             // 3. Đổi model từ T2V sang I2V
-                            // T2V: veo_3_1_t2v_fast, veo_3_1_t2v_fast_ultra, veo_3_1_t2v
-                            // I2V: veo_3_0_r2v_fast, veo_3_0_r2v_fast_ultra, veo_3_0_r2v
+                            // T2V: veo_3_1_t2v_fast, veo_3_1_t2v_fast_ultra
+                            // I2V ĐÚNG: veo_3_0_r2v_fast_ultra (KHÔNG có _landscape_)
                             var currentModel = chromeVideoBody.requests[i].videoModelKey || 'veo_3_1_t2v_fast';
-                            var newModel = currentModel
-                                .replace('veo_3_1_t2v', 'veo_3_0_r2v')
-                                .replace('veo_3_0_t2v', 'veo_3_0_r2v');  // Fallback
 
-                            // Override nếu config có chỉ định
+                            // Fix model name:
+                            // 1. Loại bỏ _landscape_ (Chrome thêm vào nhưng API không nhận)
+                            // 2. Đổi veo_3_1 → veo_3_0 (I2V chỉ hỗ trợ 3.0)
+                            // 3. Đổi t2v → r2v nếu cần
+                            var newModel = currentModel
+                                .replace('_landscape_', '_')       // Xóa _landscape_
+                                .replace('_portrait_', '_')        // Xóa _portrait_
+                                .replace('veo_3_1_t2v', 'veo_3_0_r2v')  // T2V 3.1 → I2V 3.0
+                                .replace('veo_3_1_r2v', 'veo_3_0_r2v')  // I2V 3.1 → I2V 3.0
+                                .replace('veo_3_0_t2v', 'veo_3_0_r2v'); // T2V 3.0 → I2V 3.0
+
+                            // Override nếu config có chỉ định model cụ thể
                             if (t2vConfig.videoModelKey) {
                                 newModel = t2vConfig.videoModelKey;
                             }
