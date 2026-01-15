@@ -815,14 +815,13 @@ Return JSON only:
                 except:
                     pass
 
-            # Tính expected scenes: mỗi scene ~6s (để có chỗ cho nghệ thuật)
-            expected_scenes = max(2, int(batch_duration / 6) if batch_duration else len(batch_entries) // 5)
+            # Không tính số scenes - để API quyết định theo nội dung
             expected_images_hint = f"""
 SCENE GUIDELINES:
 - This batch spans approximately {batch_duration:.0f} seconds
-- Expect around {expected_scenes} scenes (target: 5-7 seconds per scene)
-- Each scene MUST be 3-8 seconds maximum
-- Split with PURPOSE, not just to hit a number!"""
+- Each scene MUST be maximum 8 seconds (no exceptions!)
+- Number of scenes should be based on CONTENT, not time formula
+- Split when the content NEEDS a different shot/angle/emotion"""
 
             prompt = f"""Create a director's shooting plan by dividing the SRT into visual scenes.
 
