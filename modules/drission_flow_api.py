@@ -3248,39 +3248,37 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"✗ Download failed: {e}", "WARN")
 
-        # Mở tab mới với URL (không đóng tab cũ để tránh mất kết nối)
-        self.log("🔄 Opening new tab...")
+        # Reset page: navigate về about:blank rồi lại URL (đơn giản, không đổi tab)
+        self.log("🔄 Resetting page...")
         try:
             if self.driver:
                 current_url = self.driver.url
                 self.log(f"   URL: {current_url}")
 
-                # Mở tab mới với URL
-                new_tab = self.driver.new_tab(current_url)
-                self.log("   → New tab created")
+                # Navigate về about:blank để clear hoàn toàn
+                self.log("   → Clearing (about:blank)...")
+                self.driver.get('about:blank')
+                time.sleep(1)
 
-                # Đợi page load trong tab mới
+                # Navigate lại URL
+                self.log("   → Loading URL...")
+                self.driver.get(current_url)
                 time.sleep(3)
 
-                # Inject JS TRƯỚC KHI làm gì khác
-                self.log("   → Injecting JS to new tab...")
+                # Re-inject JS
+                self.log("   → Injecting JS...")
                 self._reset_tokens()
-                new_tab.run_js(JS_INTERCEPTOR)
-
-                # Activate tab mới
-                new_tab.set.activate()
-                self.log("   → Activated new tab")
-                time.sleep(1)
+                self.driver.run_js(JS_INTERCEPTOR)
 
                 # Đợi textarea
                 if not self._wait_for_textarea_visible():
                     self.log("⚠️ Không thấy textarea", "WARN")
 
-                self.log("✓ New tab ready!")
+                self.log("✓ Page reset done!")
             else:
                 self.log("⚠️ No driver", "WARN")
         except Exception as e:
-            self.log(f"⚠️ New tab error: {e}", "WARN")
+            self.log(f"⚠️ Reset error: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
