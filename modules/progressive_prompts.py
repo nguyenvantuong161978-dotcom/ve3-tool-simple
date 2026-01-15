@@ -886,37 +886,23 @@ SAMPLE SRT CONTENT (for character dialogue/description details):
 {targeted_srt_text[:8000] if targeted_srt_text else 'Use segment analysis above'}
 
 For each character, provide:
-1. portrait_prompt: Full description for generating a reference portrait (white background, portrait style)
-2. character_lock: Short 10-15 word description to use in scene prompts (for consistency)
-3. is_minor: TRUE if character is under 18 years old (child, teenager, baby, infant, etc.)
+1. portrait_prompt: Portrait on pure white background, 85mm lens, front-facing, Caucasian ethnicity, photorealistic 8K
+2. character_lock: Short 10-15 word description for scene prompts
+3. is_minor: true if under 18 (child, teenager, baby, etc.)
 
-IMPORTANT - TARGET AUDIENCE: American/US viewers
-- Default ethnicity: Caucasian (unless story EXPLICITLY mentions different ethnicity)
-- DO NOT use "Asian" unless the story explicitly mentions Asian characters
-- Use American-style names and appearances
-
-IMPORTANT: Identify minors accurately based on context clues:
-- Age mentions (e.g., "5-year-old", "teenager", "16 years old")
-- Role descriptions (e.g., "son", "daughter", "child", "kid", "baby", "infant", "toddler")
-- School context (e.g., "student", "high school", "elementary")
-- Any character described as young, minor, underage, or child-like
-
-Return JSON only:
+Return JSON:
 {{
     "characters": [
         {{
             "id": "char_id",
-            "name": "Character Name",
-            "role": "protagonist/antagonist/supporting/narrator",
-            "portrait_prompt": "A cinematic portrait, medium close-up shot on 85mm lens. Subject is a 35-year-old Caucasian man with short brown hair, tired blue eyes, light stubble. Looking directly at camera with neutral expression. Bright studio lighting, fully illuminated face. Pure white studio background. 8K, sharp focus, photorealistic.",
-            "character_lock": "35-year-old Caucasian man, short brown hair, tired blue eyes, light stubble",
-            "vietnamese_description": "Optional alternate description",
+            "name": "Name",
+            "role": "protagonist/supporting/narrator",
+            "portrait_prompt": "Portrait on pure white background, 85mm lens, [age]-year-old Caucasian [man/woman], [hair], [eyes], [clothing], front-facing neutral expression, photorealistic 8K",
+            "character_lock": "[age] Caucasian [man/woman], [hair], [eyes], [clothing]",
             "is_minor": false
         }}
     ]
 }}
-
-IMPORTANT: Use "Caucasian" for ethnicity in portrait_prompt (American audience). Only use other ethnicities if explicitly mentioned in story.
 """
 
         # Call API
