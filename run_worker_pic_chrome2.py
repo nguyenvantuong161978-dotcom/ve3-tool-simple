@@ -282,6 +282,8 @@ def run_chrome2_pic_worker(excel_path: str):
         success_count = 0
         consecutive_failures = 0
         MAX_FAILURES = 5
+        logout_retry_count = 0
+        MAX_LOGOUT_RETRIES = 3
 
         for scene_info in my_scenes:
             scene_id = scene_info['scene_id']
@@ -297,6 +299,30 @@ def run_chrome2_pic_worker(excel_path: str):
             safe_print(f"   Prompt: {prompt[:60]}...")
 
             try:
+                # Check logout TRƯỚC KHI generate
+                if api._is_logged_out():
+                    safe_print(f"[Chrome2-PIC] ⚠️ Phát hiện bị LOGOUT!")
+                    if logout_retry_count < MAX_LOGOUT_RETRIES:
+                        safe_print(f"[Chrome2-PIC] → Đang tự động đăng nhập lại...")
+                        if api._auto_login_google():
+                            safe_print(f"[Chrome2-PIC] ✓ Đăng nhập thành công!")
+                            # Re-setup Chrome
+                            api.close()
+                            time.sleep(2)
+                            if api.setup(project_url=project_url, skip_mode_selection=True):
+                                api.switch_to_image_mode()
+                                logout_retry_count += 1
+                                safe_print(f"[Chrome2-PIC] ✓ Chrome đã sẵn sàng!")
+                            else:
+                                safe_print(f"[Chrome2-PIC] ✗ Setup lại thất bại!")
+                                break
+                        else:
+                            safe_print(f"[Chrome2-PIC] ✗ Đăng nhập thất bại!")
+                            break
+                    else:
+                        safe_print(f"[Chrome2-PIC] ✗ Đã thử đăng nhập {MAX_LOGOUT_RETRIES} lần, dừng!")
+                        break
+
                 # Generate image
                 ok, images, error = api.generate_image(
                     prompt=prompt,
@@ -307,12 +333,23 @@ def run_chrome2_pic_worker(excel_path: str):
                 if ok and images:
                     success_count += 1
                     consecutive_failures = 0
+                    logout_retry_count = 0  # Reset logout counter on success
                     safe_print(f"[Chrome2-PIC] {scene_id}: SUCCESS")
                 else:
                     consecutive_failures += 1
                     safe_print(f"[Chrome2-PIC] {scene_id}: FAILED - {error}")
 
-                    if consecutive_failures >= MAX_FAILURES:
+                    # Check if error is due to logout
+                    if error and ("logout" in error.lower() or "login" in error.lower() or "unauthorized" in error.lower()):
+                        safe_print(f"[Chrome2-PIC] → Có vẻ bị logout, thử đăng nhập lại...")
+                        if api._auto_login_google():
+                            api.close()
+                            time.sleep(2)
+                            api.setup(project_url=project_url, skip_mode_selection=True)
+                            api.switch_to_image_mode()
+                            consecutive_failures = 0
+
+                    elif consecutive_failures >= MAX_FAILURES:
                         safe_print(f"[Chrome2-PIC] {consecutive_failures} failures, restarting Chrome...")
                         try:
                             if api.restart_chrome():
