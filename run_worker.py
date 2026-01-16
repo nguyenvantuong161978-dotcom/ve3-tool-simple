@@ -407,14 +407,22 @@ def copy_from_master(code: str) -> Path:
     # If local already exists, use it (even if master was deleted)
     if dst.exists():
         print(f"  📂 Using existing local: {code}")
-        # Try to update Excel from master if available
+        # Try to update Excel and SRT from master if available
         if src.exists():
+            # Copy Excel if newer
             excel_src = src / f"{code}_prompts.xlsx"
             excel_dst = dst / f"{code}_prompts.xlsx"
             if excel_src.exists():
                 if not excel_dst.exists() or excel_src.stat().st_mtime > excel_dst.stat().st_mtime:
                     shutil.copy2(excel_src, excel_dst)
                     print(f"  📥 Updated Excel from master")
+
+            # Copy SRT if local doesn't have it
+            srt_src = src / f"{code}.srt"
+            srt_dst = dst / f"{code}.srt"
+            if srt_src.exists() and not srt_dst.exists():
+                shutil.copy2(srt_src, srt_dst)
+                print(f"  📥 Copied SRT from master")
         return dst
 
     # Local doesn't exist, need to copy from master
