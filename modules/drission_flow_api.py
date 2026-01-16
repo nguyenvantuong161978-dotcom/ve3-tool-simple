@@ -2262,6 +2262,7 @@ class DrissionFlowAPI:
 
             # === AUTO KILL CHROME CŨ TRƯỚC KHI START ===
             # Kill Chrome đang dùng profile này hoặc port này
+            self.log("🔪 Kiểm tra và kill Chrome cũ nếu có...")
             self._auto_kill_conflicting_chrome()
 
             # Thử khởi tạo Chrome với retry
@@ -5984,27 +5985,55 @@ class DrissionFlowAPI:
         """
         Tự động kill Chrome đang conflict với profile hoặc port.
         Gọi trước khi start Chrome mới.
+        MẠNH: Kill TẤT CẢ Chrome portable để tránh conflict.
         """
         import subprocess
         import platform
 
         killed_any = False
 
-        # 1. Kill Chrome dùng profile này
-        try:
-            self._kill_chrome_using_profile()
-        except:
-            pass
+        if platform.system() == 'Windows':
+            try:
+                # === CÁCH 1: Kill TẤT CẢ Chrome Portable (mạnh nhất) ===
+                # Tìm tất cả chrome.exe có chứa "GoogleChromePortable" hoặc "ve3" trong command line
+                result = subprocess.run(
+                    ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
+                    capture_output=True, text=True, timeout=15
+                )
 
-        # 2. Kill Chrome dùng port này
-        try:
-            if self._kill_chrome_on_port(self.chrome_port):
-                killed_any = True
-        except:
-            pass
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines:
+                        # Tìm Chrome portable hoặc Chrome dùng profile của tool
+                        if any(x in line for x in ['GoogleChromePortable', 've3', 'chrome_profile', str(self.profile_dir)]):
+                            # Lấy PID ở cuối dòng
+                            parts = line.strip().split()
+                            if parts:
+                                pid = parts[-1]
+                                if pid.isdigit():
+                                    subprocess.run(['taskkill', '/F', '/PID', pid],
+                                                 capture_output=True, timeout=5)
+                                    self.log(f"  → Killed Chrome cũ (PID: {pid})")
+                                    killed_any = True
+
+                # === CÁCH 2: Kill Chrome trên port 9222 (backup) ===
+                if self._kill_chrome_on_port(self.chrome_port):
+                    killed_any = True
+
+            except Exception as e:
+                self.log(f"  → Kill Chrome error: {e}", "WARN")
+
+        else:
+            # Linux/Mac
+            try:
+                self._kill_chrome_using_profile()
+                self._kill_chrome_on_port(self.chrome_port)
+            except:
+                pass
 
         if killed_any:
-            time.sleep(2)  # Đợi Chrome tắt hẳn
+            self.log("  → Đợi Chrome tắt hẳn...")
+            time.sleep(3)  # Đợi Chrome tắt hẳn
 
     def _kill_chrome_on_port(self, port: int) -> bool:
         """
