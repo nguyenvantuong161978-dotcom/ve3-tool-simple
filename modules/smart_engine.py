@@ -3013,6 +3013,63 @@ class SmartEngine:
             results["success"] += retry_results.get("success", 0)
             results["failed"] = max(0, results.get("failed", 0) - retry_results.get("success", 0))
 
+        # === 9.5. FULL RESTART IF STILL FAILED ===
+        # Nếu vẫn còn ảnh fail sau retry, tắt hết Chrome và chạy lại từ đầu
+        # Giống như người dùng làm thủ công: tắt đi bật lại
+        _full_restart_count = getattr(self, '_full_restart_count', 0)
+        MAX_FULL_RESTARTS = 3  # Tối đa 3 lần restart toàn bộ
+
+        if results.get("failed", 0) > 0 and _full_restart_count < MAX_FULL_RESTARTS:
+            self._full_restart_count = _full_restart_count + 1
+            self.log(f"\n{'='*60}")
+            self.log(f"🔄 FULL RESTART {self._full_restart_count}/{MAX_FULL_RESTARTS} - Còn {results['failed']} ảnh fail")
+            self.log(f"{'='*60}")
+
+            # 1. Đóng tất cả browser
+            self.log("   → Đóng tất cả Chrome...")
+            self._close_browser()
+            time.sleep(3)
+
+            # 2. Kill tất cả Chrome processes (giống tắt tool)
+            self.log("   → Kill Chrome processes...")
+            try:
+                import subprocess
+                import platform
+                if platform.system() == 'Windows':
+                    # Kill Chrome có remote-debugging-port (Chrome của tool)
+                    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                                 capture_output=True, timeout=10)
+                else:
+                    subprocess.run(['pkill', '-f', 'chrome'],
+                                 capture_output=True, timeout=10)
+            except:
+                pass
+            time.sleep(5)
+
+            # 3. Chạy lại từ đầu (chỉ tạo ảnh, không tạo lại prompts)
+            self.log("   → Chạy lại tool từ đầu...")
+            self.log("   → (Sẽ skip ảnh đã có, chỉ tạo ảnh thiếu)")
+
+            # Recursive call - run lại với cùng parameters
+            # skip_compose=True vì compose sẽ chạy ở lần cuối
+            restart_results = self.run(
+                input_path=str(excel_path),
+                output_dir=str(proj_dir),
+                callback=self.callback,
+                skip_compose=True,  # Không compose trong recursive call
+                skip_video=self._skip_video,
+                skip_references=self._skip_references
+            )
+
+            # Merge results
+            results["success"] = restart_results.get("success", 0)
+            results["failed"] = restart_results.get("failed", 0)
+
+            # Reset counter nếu đã thành công hết
+            if results["failed"] == 0:
+                self._full_restart_count = 0
+                self.log("   ✓ Tất cả ảnh đã hoàn thành sau full restart!")
+
         # === 10. DONG BROWSER ===
         self._close_browser()
 
