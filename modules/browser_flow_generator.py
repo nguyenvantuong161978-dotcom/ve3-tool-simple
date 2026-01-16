@@ -73,7 +73,8 @@ class BrowserFlowGenerator:
         verbose: bool = True,
         config_path: str = "config/settings.yaml",
         worker_id: int = 0,
-        total_workers: int = 1
+        total_workers: int = 1,
+        chrome_portable: str = None
     ):
         """
         Khoi tao BrowserFlowGenerator.
@@ -86,6 +87,7 @@ class BrowserFlowGenerator:
             config_path: Duong dan file config
             worker_id: Worker ID for parallel processing (affects proxy, Chrome port)
             total_workers: Total number of workers (for window layout)
+            chrome_portable: Chrome Portable path (overrides config)
         """
         if not SELENIUM_AVAILABLE:
             raise ImportError(
@@ -105,6 +107,13 @@ class BrowserFlowGenerator:
         config_file = Path(config_path)
         if config_file.exists():
             self.config = load_settings(config_file)  # Pass Path object, not string
+
+        # Override chrome_portable if passed (for Chrome 2 parallel mode)
+        if chrome_portable:
+            self.config['chrome_portable'] = chrome_portable
+            self._chrome_portable_override = True
+        else:
+            self._chrome_portable_override = False
 
         # Paths
         self.img_path = self.project_path / "img"

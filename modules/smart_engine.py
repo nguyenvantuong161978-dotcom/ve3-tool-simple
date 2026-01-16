@@ -1804,7 +1804,8 @@ class SmartEngine:
                 verbose=True,
                 config_path=str(settings_path),
                 worker_id=chrome1_worker_id,  # For parallel processing
-                total_workers=chrome1_total_workers  # For window layout
+                total_workers=chrome1_total_workers,  # For window layout
+                chrome_portable=self.chrome_portable if self._chrome_portable_override else None
             )
 
             # === QUAN TRỌNG: Load project_id từ Excel khi chạy lại (RESUME MODE) ===
@@ -2082,7 +2083,8 @@ class SmartEngine:
                     headless=headless,
                     verbose=True,
                     worker_id=chrome1_worker_id,  # For parallel processing
-                    total_workers=chrome1_total_workers  # For window layout
+                    total_workers=chrome1_total_workers,  # For window layout
+                    chrome_portable=self.chrome_portable if self._chrome_portable_override else None
                 )
                 self._browser_generator = generator
                 # Restore project_id tu generator cu
