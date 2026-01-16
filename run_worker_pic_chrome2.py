@@ -45,8 +45,9 @@ def run_chrome2_pic_worker(excel_path: str):
     Chrome 2 worker for image generation.
     Uses SmartEngine like run_worker_pic.py does.
     """
-    # Force flush output
-    sys.stdout.reconfigure(line_buffering=True)
+    # Force UTF-8 encoding và flush output để tránh lỗi font tiếng Việt
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
     print(f"[Chrome2-PIC] Starting worker...", flush=True)
 

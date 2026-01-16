@@ -208,7 +208,10 @@ def process_project_pic_basic_2(code: str, callback=None) -> bool:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1
+        bufsize=1,
+        encoding='utf-8',
+        errors='replace',
+        env={**os.environ, 'PYTHONIOENCODING': 'utf-8'}
     )
 
     log(f"[PARALLEL] Chrome2 PID: {chrome2_process.pid}")
