@@ -218,17 +218,21 @@ def run_chrome2_pic_worker(excel_path: str):
 
         try:
             # Generate image using DrissionFlowAPI
-            result = api.generate_image(
+            # Signature: generate_image(prompt, save_dir, filename, max_retries, image_inputs, force_model)
+            success, images, error = api.generate_image(
                 prompt=prompt_text,
-                reference_media_ids=None,  # TODO: handle references
-                output_path=str(img_path)
+                save_dir=img_dir,
+                filename=f"{prompt_id}.png",
+                max_retries=3,
+                image_inputs=None,  # TODO: handle references
+                force_model=""
             )
 
-            if result and img_path.exists():
+            if success and img_path.exists():
                 print(f"[Chrome2-PIC]   -> OK: {img_path.name}", flush=True)
                 success_count += 1
             else:
-                print(f"[Chrome2-PIC]   -> FAILED", flush=True)
+                print(f"[Chrome2-PIC]   -> FAILED: {error}", flush=True)
                 fail_count += 1
 
         except Exception as e:
