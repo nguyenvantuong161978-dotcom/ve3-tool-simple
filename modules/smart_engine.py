@@ -1185,6 +1185,12 @@ class SmartEngine:
         QUAN TRỌNG: Retry nhiều lần cho đến khi TẤT CẢ characters (trừ skip) có ảnh!
         Vì scenes cần reference images từ characters.
         """
+        # === DOUBLE CHECK: Skip nếu là Chrome 2 (skip_references=True) ===
+        if getattr(self, '_skip_references', False):
+            self.log("[PARALLEL] ⏭️ SKIP character generation (Chrome 2 - skip_references=True)")
+            self._character_gen_result = {"success": 0, "failed": 0, "skipped": True}
+            return
+
         MAX_RETRIES = 5  # Số lần retry tối đa
 
         def _worker():
@@ -1286,9 +1292,13 @@ class SmartEngine:
         Callback duoc goi khi characters prompts da duoc save.
         Bat dau generate character images song song.
         """
+        worker_id = getattr(self, 'worker_id', 0)
+        skip_refs = getattr(self, '_skip_references', False)
+        self.log(f"[STEP 3] _on_characters_ready called (worker_id={worker_id}, skip_references={skip_refs})")
+
         # Skip character generation nếu flag được set (Chrome 2)
-        if getattr(self, '_skip_references', False):
-            self.log("[STEP 3] Skip character generation (skip_references=True)")
+        if skip_refs:
+            self.log(f"[STEP 3] ⏭️ SKIP character generation (Chrome 2 / worker_id={worker_id})")
             return
         self._generate_characters_async(excel_path, proj_dir)
 
