@@ -1203,27 +1203,83 @@ class DrissionFlowAPI:
             self.log("⚠️ Page chưa sẵn sàng", "WARN")
 
         # 1. Đợi trang load và tìm button "Dự án mới"
-        for i in range(15):
-            try:
-                result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
-                if result == 'CLICKED':
-                    self.log("✓ Clicked 'Dự án mới'")
-                    time.sleep(2)
-                    break
-            except Exception as e:
-                if "ContextLost" in str(type(e).__name__) or "refresh" in str(e).lower():
-                    self.log(f"   Page đang refresh, đợi...")
-                    time.sleep(2)
-                    continue
-                raise
-            time.sleep(1)
-            if i == 5:
-                self.log("  ... đợi button 'Dự án mới' xuất hiện...")
+        # Nếu không tìm thấy → F5 refresh và thử lại (mỗi 10s)
+        MAX_REFRESH = 6  # Tối đa 6 lần refresh (60s)
+        clicked_success = False
+        for refresh_count in range(MAX_REFRESH):
+            # Thử tìm button trong 10s
+            for i in range(10):
+                # Check URL trước - có thể đã vào project rồi
+                try:
+                    current_url = self.driver.url
+                    if "/project/" in current_url:
+                        self.log("✓ Đã vào project (URL check)")
+                        return True
+                except:
+                    pass
+
+                try:
+                    result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
+                    if result == 'CLICKED':
+                        self.log("✓ Clicked 'Dự án mới'")
+                        clicked_success = True
+                        time.sleep(2)
+                        # Check URL ngay sau click
+                        try:
+                            if "/project/" in self.driver.url:
+                                self.log("✓ Đã vào project!")
+                                return True
+                        except:
+                            pass
+                        break
+                except Exception as e:
+                    if "ContextLost" in str(type(e).__name__) or "refresh" in str(e).lower():
+                        self.log(f"   Page đang refresh, đợi...")
+                        time.sleep(2)
+                        # Page refresh có thể là do đang navigate vào project
+                        try:
+                            if "/project/" in self.driver.url:
+                                self.log("✓ Đã vào project (sau refresh)!")
+                                return True
+                        except:
+                            pass
+                        continue
+                    raise
+                time.sleep(1)
+                if i == 4:
+                    self.log("  ... đợi button 'Dự án mới' xuất hiện...")
+            else:
+                # Không tìm thấy button → check URL trước khi F5
+                try:
+                    if "/project/" in self.driver.url:
+                        self.log("✓ Đã vào project!")
+                        return True
+                except:
+                    pass
+                # F5 refresh
+                self.log(f"⚠️ Không tìm thấy button - F5 refresh (lần {refresh_count + 1}/{MAX_REFRESH})...")
+                try:
+                    self.driver.refresh()
+                    time.sleep(3)  # Đợi page load sau refresh
+                    if not self._wait_for_page_ready(timeout=15):
+                        self.log("⚠️ Page chưa sẵn sàng sau refresh", "WARN")
+                except Exception as e:
+                    self.log(f"  → F5 error: {e}", "WARN")
+                continue
+
+            # Đã click thành công, check URL một lần nữa
+            if clicked_success:
+                break
         else:
-            self.log("✗ Không tìm thấy button 'Dự án mới'", "ERROR")
-            self.log("→ Hãy click thủ công vào dự án", "WARN")
-            # Fallback: đợi user click thủ công
-            return self._wait_for_project_manual(timeout)
+            # Check URL lần cuối
+            try:
+                if "/project/" in self.driver.url:
+                    self.log("✓ Đã vào project!")
+                    return True
+            except:
+                pass
+            self.log(f"✗ Không tìm thấy button 'Dự án mới' sau {MAX_REFRESH} lần refresh", "ERROR")
+            return False
 
         # 2. Chọn "Tạo hình ảnh" từ dropdown
         time.sleep(1)
@@ -1231,6 +1287,7 @@ class DrissionFlowAPI:
             result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
             if result == 'CLICKED':
                 self.log("✓ Chọn 'Tạo hình ảnh'")
+                self._image_mode_selected = True  # Đánh dấu đã chọn mode
                 time.sleep(2)
                 break
             time.sleep(0.5)
@@ -1250,57 +1307,6 @@ class DrissionFlowAPI:
 
         self.log("✗ Timeout - chưa vào được dự án", "ERROR")
         return False
-
-    def _wait_for_project_manual(self, timeout: int = 60) -> bool:
-        """
-        Fallback: đợi user chọn project thủ công.
-        Nếu quá lâu (30s) → tự động F5 refresh.
-        Nếu vẫn không được (60s) → restart Chrome với IP mới.
-        """
-        self.log("Đợi chọn dự án thủ công...")
-        self.log("→ Click vào dự án có sẵn hoặc tạo dự án mới")
-
-        REFRESH_TIMEOUT = 30  # Sau 30s không click được → F5
-        refreshed = False
-
-        for i in range(timeout):
-            current_url = self.driver.url
-            if "/project/" in current_url:
-                self.log(f"✓ Đã vào dự án!")
-
-                # Quan trọng: Chọn "Tạo hình ảnh" từ dropdown
-                time.sleep(1)
-                for j in range(10):
-                    result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
-                    if result == 'CLICKED':
-                        self.log("✓ Chọn 'Tạo hình ảnh'")
-                        time.sleep(1)
-                        break
-                    time.sleep(0.5)
-                else:
-                    self.log("⚠️ Không tìm thấy dropdown 'Tạo hình ảnh'", "WARN")
-
-                return True
-            time.sleep(1)
-
-            # Sau 30s → tự động F5 refresh
-            if i == REFRESH_TIMEOUT and not refreshed:
-                self.log(f"⚠️ Đợi quá lâu ({REFRESH_TIMEOUT}s) - Tự động F5 refresh...")
-                try:
-                    self.driver.refresh()
-                    refreshed = True
-                    time.sleep(3)  # Đợi page load
-                except Exception as e:
-                    self.log(f"  → F5 error: {e}", "WARN")
-
-            if i % 15 == 14:
-                self.log(f"... đợi {i+1}s - hãy click chọn dự án")
-
-        self.log("✗ Timeout - chưa chọn dự án", "ERROR")
-
-        # Timeout → gợi ý restart với IP mới
-        self.log("→ Sẽ restart Chrome với IP mới...", "WARN")
-        return False  # Trả về False để trigger restart ở layer trên
 
     def _warm_up_session(self, dummy_prompt: str = "a simple test image") -> bool:
         """
@@ -1396,10 +1402,13 @@ class DrissionFlowAPI:
             pass
         return False
 
-    def _auto_login_google(self) -> bool:
+    def _auto_login_google(self, max_retries: int = 3) -> bool:
         """
         Tự động đăng nhập Google khi bị logout.
-        Gọi hàm login từ google_login.py.
+        Gọi hàm login từ google_login.py. Tự động retry khi fail.
+
+        Args:
+            max_retries: Số lần retry tối đa (default 3)
 
         Returns:
             True nếu login thành công
@@ -1425,7 +1434,7 @@ class DrissionFlowAPI:
 
             self.log(f"Mã máy: {machine_code}")
 
-            # 2. Lấy thông tin tài khoản từ Google Sheet
+            # 2. Lấy thông tin tài khoản từ Google Sheet (đã có retry bên trong)
             self.log("Đọc thông tin tài khoản từ Google Sheet...")
             account_info = get_account_info(machine_code)
             if not account_info:
@@ -1440,28 +1449,46 @@ class DrissionFlowAPI:
             self.close()
             time.sleep(2)
 
-            # 4. Chạy login - QUAN TRỌNG: Truyền chrome_portable, profile_dir và worker_id
+            # 4. Chạy login với retry
+            # QUAN TRỌNG: Truyền chrome_portable, profile_dir và worker_id
             # Khi có 2 Chrome song song (Chrome 1 tạo ảnh, Chrome 2 tạo video),
             # cần login đúng Chrome bị logout, không phải Chrome kia
-            self.log("Bắt đầu đăng nhập Google...")
-            self.log(f"  Chrome: {self._chrome_portable or 'default'}")
-            self.log(f"  Profile: {self.profile_dir}")
-            self.log(f"  Worker ID: {self.worker_id}")
-            success = login_google_chrome(
-                account_info,
-                chrome_portable=self._chrome_portable,
-                profile_dir=str(self.profile_dir) if self.profile_dir else None,
-                worker_id=self.worker_id
-            )
+            for attempt in range(max_retries):
+                if attempt > 0:
+                    self.log(f"🔄 Retry login ({attempt + 1}/{max_retries})...")
+                    time.sleep(3)
 
-            if success:
-                self.log("✓ Đăng nhập thành công!")
-                # Đóng Chrome login để setup lại từ đầu
-                time.sleep(2)
-                return True
-            else:
-                self.log("✗ Đăng nhập thất bại", "ERROR")
-                return False
+                self.log("Bắt đầu đăng nhập Google...")
+                self.log(f"  Chrome: {self._chrome_portable or 'default'}")
+                self.log(f"  Profile: {self.profile_dir}")
+                self.log(f"  Worker ID: {self.worker_id}")
+
+                try:
+                    success = login_google_chrome(
+                        account_info,
+                        chrome_portable=self._chrome_portable,
+                        profile_dir=str(self.profile_dir) if self.profile_dir else None,
+                        worker_id=self.worker_id
+                    )
+
+                    if success:
+                        self.log("✓ Đăng nhập thành công!")
+                        # Đóng Chrome login để setup lại từ đầu
+                        time.sleep(2)
+                        return True
+                    else:
+                        self.log(f"✗ Đăng nhập thất bại (attempt {attempt + 1}/{max_retries})", "WARN")
+                        # Kill Chrome trước khi retry
+                        self._kill_chrome()
+                        time.sleep(2)
+
+                except Exception as login_err:
+                    self.log(f"✗ Login error (attempt {attempt + 1}): {login_err}", "WARN")
+                    self._kill_chrome()
+                    time.sleep(2)
+
+            self.log("✗ Đăng nhập thất bại sau nhiều lần thử", "ERROR")
+            return False
 
         except ImportError as e:
             self.log(f"✗ Không import được google_login: {e}", "ERROR")
@@ -2521,7 +2548,7 @@ class DrissionFlowAPI:
 
         self.log("✓ Project đã sẵn sàng (textarea visible)!")
 
-        # Mode đã được chọn ở _create_new_project() hoặc _wait_for_project_manual()
+        # Mode đã được chọn ở _auto_setup_project()
         # Không cần chọn lại ở đây
 
         # 6. Warm up session (tạo 1 ảnh trong Chrome để activate)
@@ -6260,6 +6287,17 @@ class DrissionFlowAPI:
 
         if self.setup(project_url=saved_project_url, skip_mode_selection=skip_mode):
             self.log("✓ Chrome restarted thành công!")
+
+            # Chọn lại mode "Tạo hình ảnh" ngay sau restart (nếu không phải video mode)
+            # Đảm bảo mode được set đúng trước khi tiếp tục generate
+            if not skip_mode:
+                self.log("  → Chọn lại mode 'Tạo hình ảnh'...")
+                if self.switch_to_image_mode():
+                    self._image_mode_selected = True
+                    self.log("  ✓ Image mode selected")
+                else:
+                    self.log("  ⚠️ Không chọn được mode, sẽ thử lại khi generate", "WARN")
+
             return True
         else:
             self.log("✗ Không restart được Chrome", "ERROR")

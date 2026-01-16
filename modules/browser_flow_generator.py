@@ -3533,6 +3533,20 @@ class BrowserFlowGenerator:
         # Store reference
         self._drission_api = drission_api
 
+        # Đăng ký với ChromeManager để giám sát
+        try:
+            from modules.chrome_manager import get_chrome_manager
+            chrome_mgr = get_chrome_manager()
+            chrome_mgr.set_log_callback(self._log)
+            chrome_mgr.register_chrome(
+                worker_id=self.worker_id,
+                drission_api=drission_api,
+                project_url=saved_project_url or getattr(drission_api, '_current_project_url', '')
+            )
+            self._log(f"[Manager] Đã đăng ký Chrome {self.worker_id} với ChromeManager")
+        except Exception as e:
+            self._log(f"[Manager] Không đăng ký được với ChromeManager: {e}", "warn")
+
         # Generate images - use self.img_path as output directory
         return self._generate_images_drission_mode(prompts, self.img_path, excel_path)
 
@@ -3634,8 +3648,19 @@ class BrowserFlowGenerator:
                 except:
                     pass
 
+        # === CHECK NẾU ĐANG TẠO REFERENCES RIÊNG LẺ ===
+        # Nếu TẤT CẢ prompts là references (nv/loc) → không áp dụng parallel skip
+        # Vì step 1 cần tạo TẤT CẢ references trước khi step 2 tạo scenes
+        all_are_references = all(
+            str(p.get('id', '')).lower().startswith('nv') or str(p.get('id', '')).lower().startswith('loc')
+            for p in prompts
+        ) if prompts else False
+
         if total_workers > 1:
-            self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - Worker sẽ xử lý scenes theo modulo")
+            if all_are_references:
+                self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - TẠO REFERENCES: xử lý TẤT CẢ (không skip)")
+            else:
+                self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - Worker sẽ xử lý scenes theo modulo")
 
         for i, prompt_data in enumerate(prompts):
             pid = str(prompt_data.get('id', i + 1))
@@ -3653,11 +3678,12 @@ class BrowserFlowGenerator:
                 continue
 
             # === PARALLEL: Skip nếu không thuộc worker này ===
-            if total_workers > 1:
+            # QUAN TRỌNG: Không áp dụng parallel skip khi đang tạo references riêng lẻ
+            if total_workers > 1 and not all_are_references:
                 is_ref = pid.lower().startswith('nv') or pid.lower().startswith('loc')
 
                 if is_ref:
-                    # Reference images: chỉ worker 1 xử lý
+                    # Reference images: chỉ worker 1 xử lý (khi chạy cùng scenes)
                     if worker_id != 1:
                         self.stats["skipped"] += 1
                         continue
@@ -3819,6 +3845,13 @@ class BrowserFlowGenerator:
                     self.stats["success"] += 1
                     consecutive_403 = 0  # Reset counter on success
 
+                    # Đánh dấu thành công với ChromeManager
+                    try:
+                        from modules.chrome_manager import get_chrome_manager
+                        get_chrome_manager().mark_success(self.worker_id)
+                    except:
+                        pass
+
                     # Update Excel if available - SAVE MEDIA_ID for SCENE images
                     if workbook and not is_reference_image:
                         try:
@@ -3869,6 +3902,26 @@ class BrowserFlowGenerator:
                 else:
                     self._log(f"   ✗ Thất bại: {error}", "error")
                     self.stats["failed"] += 1
+
+                    # Đánh dấu lỗi với ChromeManager để giám sát
+                    try:
+                        from modules.chrome_manager import get_chrome_manager
+                        chrome_mgr = get_chrome_manager()
+                        chrome_mgr.mark_error(self.worker_id, str(error))
+
+                        # Nếu Chrome bị đánh dấu ERROR, để Manager restart
+                        if not chrome_mgr.is_healthy(self.worker_id):
+                            self._log(f"[Manager] Chrome {self.worker_id} bị lỗi nhiều, đang restart...")
+                            if chrome_mgr.restart_chrome(self.worker_id):
+                                self._log(f"[Manager] ✓ Chrome {self.worker_id} đã restart")
+                                # Cập nhật reference
+                                worker = chrome_mgr.workers.get(self.worker_id)
+                                if worker and worker.drission_api:
+                                    drission_api = worker.drission_api
+                            else:
+                                self._log(f"[Manager] ✗ Restart Chrome {self.worker_id} thất bại", "warn")
+                    except Exception as mgr_e:
+                        pass  # Silent fail - fallback to original logic
 
                     # Check for token expiry - thử refresh và retry
                     if error and "401" in str(error):
@@ -4136,6 +4189,95 @@ class BrowserFlowGenerator:
 
                 if missing_prompts:
                     self._log(f"⚠️ Vẫn còn {len(missing_prompts)} ảnh không tạo được sau {MAX_RETRY_ROUNDS} rounds", "warn")
+
+                    # === FULL RESTART: Tắt Chrome hoàn toàn, mở lại và thử lại ===
+                    # Giống như người dùng làm thủ công: tắt đi bật lại
+                    MAX_FULL_RESTARTS = 2  # Tối đa 2 lần full restart
+                    for restart_count in range(MAX_FULL_RESTARTS):
+                        if not missing_prompts:
+                            break
+
+                        self._log(f"\n{'='*60}")
+                        self._log(f"🔄 FULL RESTART {restart_count + 1}/{MAX_FULL_RESTARTS} - Tắt Chrome, mở lại")
+                        self._log(f"{'='*60}")
+
+                        try:
+                            # 1. Đóng Chrome hoàn toàn
+                            self._log("   → Đóng Chrome...")
+                            drission_api.close()
+                            time.sleep(3)
+
+                            # 2. Mở lại Chrome và setup
+                            self._log("   → Mở lại Chrome...")
+                            saved_url = getattr(drission_api, '_current_project_url', None)
+                            if drission_api.setup(project_url=saved_url):
+                                self._log("   ✓ Chrome đã sẵn sàng!")
+
+                                # 3. Chọn mode tạo hình ảnh
+                                if drission_api.switch_to_image_mode():
+                                    drission_api._image_mode_selected = True
+                                    self._log("   ✓ Image mode selected")
+
+                                # 4. Thử lại các ảnh thiếu
+                                still_missing = []
+                                for prompt_data in missing_prompts:
+                                    pid = str(prompt_data.get('id', ''))
+                                    prompt = prompt_data.get('prompt', '')
+                                    is_reference = pid.lower().startswith('nv') or pid.lower().startswith('loc')
+                                    save_dir = self.nv_path if is_reference else output_dir
+
+                                    self._log(f"   [FULL-RETRY] {pid}...")
+
+                                    try:
+                                        success, images, error = drission_api.generate_image(
+                                            prompt=prompt,
+                                            save_dir=save_dir,
+                                            filename=pid,
+                                            force_model=force_model
+                                        )
+
+                                        if success and images:
+                                            self._log(f"      ✓ OK!")
+                                            self.stats["success"] += 1
+                                            self.stats["failed"] -= 1
+
+                                            # Save media_id nếu có
+                                            if images[0].media_name and is_reference:
+                                                try:
+                                                    if workbook and workbook.update_character(pid, media_id=images[0].media_name):
+                                                        workbook.save()
+                                                        excel_media_ids[pid] = images[0].media_name
+                                                except:
+                                                    pass
+                                        else:
+                                            self._log(f"      ✗ {error}", "warn")
+                                            still_missing.append(prompt_data)
+
+                                    except Exception as e:
+                                        self._log(f"      ✗ Error: {e}", "error")
+                                        still_missing.append(prompt_data)
+
+                                    time.sleep(2)
+
+                                missing_prompts = still_missing
+
+                                if not missing_prompts:
+                                    self._log("   ✓ Tất cả ảnh đã hoàn thành sau full restart!")
+                                    break
+                            else:
+                                self._log("   ✗ Không thể mở lại Chrome", "error")
+
+                        except Exception as e:
+                            self._log(f"   ✗ Full restart error: {e}", "error")
+
+                        # Đợi trước khi thử lại
+                        if missing_prompts and restart_count < MAX_FULL_RESTARTS - 1:
+                            wait = 10 * (restart_count + 1)
+                            self._log(f"   Còn {len(missing_prompts)} ảnh, đợi {wait}s...")
+                            time.sleep(wait)
+
+                    if missing_prompts:
+                        self._log(f"⚠️ Vẫn còn {len(missing_prompts)} ảnh sau {MAX_FULL_RESTARTS} full restart", "warn")
             else:
                 self._log("Tất cả ảnh đã có, không cần retry")
 

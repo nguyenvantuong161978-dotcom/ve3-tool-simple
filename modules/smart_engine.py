@@ -1858,6 +1858,10 @@ class SmartEngine:
             total_failed = 0
 
             # === BƯỚC 1: TẠO TẤT CẢ REFERENCES TRƯỚC ===
+            ref_success = 0
+            ref_failed = 0
+            ref_media_ids_created = 0
+
             if ref_prompts:
                 self.log(f"[STEP 1/2] Tạo {len(ref_prompts)} ảnh tham chiếu (nv/loc) TRƯỚC...")
                 ref_result = generator.generate_from_prompts_auto(
@@ -1865,25 +1869,62 @@ class SmartEngine:
                     excel_path=excel_files[0],
                     bearer_token=bearer_token if bearer_token else None
                 )
-                total_success += ref_result.get("success", 0)
-                total_failed += ref_result.get("failed", 0)
-                self.log(f"[STEP 1/2] References: {ref_result.get('success', 0)} OK, {ref_result.get('failed', 0)} fail")
+                # Sử dụng stats dict thay vì success boolean
+                ref_stats = ref_result.get("stats", {})
+                ref_success = ref_stats.get("success", 0)
+                ref_failed = ref_stats.get("failed", 0)
+                ref_skipped = ref_stats.get("skipped", 0)
+                total_success += ref_success
+                total_failed += ref_failed
+                self.log(f"[STEP 1/2] References: {ref_success} OK, {ref_failed} fail, {ref_skipped} skip")
 
                 # Đợi chút để đảm bảo ảnh được lưu xong
                 import time
                 time.sleep(2)
 
+                # === KIỂM TRA MEDIA_ID SAU KHI TẠO REFERENCES ===
+                # Đọc lại Excel để xem có media_id cho references không
+                try:
+                    from modules.excel_manager import PromptWorkbook
+                    wb = PromptWorkbook(excel_files[0])
+                    wb.load_or_create()
+                    media_ids = wb.get_media_ids()
+
+                    # Đếm số references có media_id
+                    for ref_prompt in ref_prompts:
+                        ref_id = str(ref_prompt.get('id', ''))
+                        ref_id_lower = ref_id.lower()
+                        if any(k.lower() == ref_id_lower for k in media_ids.keys()):
+                            ref_media_ids_created += 1
+
+                    self.log(f"[STEP 1/2] Media IDs: {ref_media_ids_created}/{len(ref_prompts)} references có media_id")
+                except Exception as e:
+                    self.log(f"[STEP 1/2] Không thể kiểm tra media_ids: {e}", "WARN")
+
             # === BƯỚC 2: TẠO SCENES SAU KHI REFERENCES XONG ===
             if scene_prompts:
+                # Kiểm tra: nếu có references nhưng KHÔNG có media_id nào → cảnh báo mạnh
+                if ref_prompts and ref_media_ids_created == 0 and ref_success == 0:
+                    self.log("=" * 60, "WARN")
+                    self.log("⚠️ CẢNH BÁO: Không có reference nào được tạo thành công!", "WARN")
+                    self.log("⚠️ Scenes sẽ được tạo KHÔNG CÓ tham chiếu nhân vật/địa điểm!", "WARN")
+                    self.log("⚠️ Khuyến nghị: Tạo lại references trước khi tạo scenes", "WARN")
+                    self.log("=" * 60, "WARN")
+
                 self.log(f"[STEP 2/2] Tạo {len(scene_prompts)} scene images...")
                 scene_result = generator.generate_from_prompts_auto(
                     prompts=scene_prompts,
                     excel_path=excel_files[0],
                     bearer_token=bearer_token if bearer_token else None
                 )
-                total_success += scene_result.get("success", 0)
-                total_failed += scene_result.get("failed", 0)
-                self.log(f"[STEP 2/2] Scenes: {scene_result.get('success', 0)} OK, {scene_result.get('failed', 0)} fail")
+                # Sử dụng stats dict thay vì success boolean
+                scene_stats = scene_result.get("stats", {})
+                scene_success = scene_stats.get("success", 0)
+                scene_failed = scene_stats.get("failed", 0)
+                scene_skipped = scene_stats.get("skipped", 0)
+                total_success += scene_success
+                total_failed += scene_failed
+                self.log(f"[STEP 2/2] Scenes: {scene_success} OK, {scene_failed} fail, {scene_skipped} skip")
 
             # Kết quả tổng hợp
             result = {"success": total_success, "failed": total_failed}
@@ -2971,6 +3012,63 @@ class SmartEngine:
             # Update results
             results["success"] += retry_results.get("success", 0)
             results["failed"] = max(0, results.get("failed", 0) - retry_results.get("success", 0))
+
+        # === 9.5. FULL RESTART IF STILL FAILED ===
+        # Nếu vẫn còn ảnh fail sau retry, tắt hết Chrome và chạy lại từ đầu
+        # Giống như người dùng làm thủ công: tắt đi bật lại
+        _full_restart_count = getattr(self, '_full_restart_count', 0)
+        MAX_FULL_RESTARTS = 3  # Tối đa 3 lần restart toàn bộ
+
+        if results.get("failed", 0) > 0 and _full_restart_count < MAX_FULL_RESTARTS:
+            self._full_restart_count = _full_restart_count + 1
+            self.log(f"\n{'='*60}")
+            self.log(f"🔄 FULL RESTART {self._full_restart_count}/{MAX_FULL_RESTARTS} - Còn {results['failed']} ảnh fail")
+            self.log(f"{'='*60}")
+
+            # 1. Đóng tất cả browser
+            self.log("   → Đóng tất cả Chrome...")
+            self._close_browser()
+            time.sleep(3)
+
+            # 2. Kill tất cả Chrome processes (giống tắt tool)
+            self.log("   → Kill Chrome processes...")
+            try:
+                import subprocess
+                import platform
+                if platform.system() == 'Windows':
+                    # Kill Chrome có remote-debugging-port (Chrome của tool)
+                    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                                 capture_output=True, timeout=10)
+                else:
+                    subprocess.run(['pkill', '-f', 'chrome'],
+                                 capture_output=True, timeout=10)
+            except:
+                pass
+            time.sleep(5)
+
+            # 3. Chạy lại từ đầu (chỉ tạo ảnh, không tạo lại prompts)
+            self.log("   → Chạy lại tool từ đầu...")
+            self.log("   → (Sẽ skip ảnh đã có, chỉ tạo ảnh thiếu)")
+
+            # Recursive call - run lại với cùng parameters
+            # skip_compose=True vì compose sẽ chạy ở lần cuối
+            restart_results = self.run(
+                input_path=str(excel_path),
+                output_dir=str(proj_dir),
+                callback=self.callback,
+                skip_compose=True,  # Không compose trong recursive call
+                skip_video=self._skip_video,
+                skip_references=self._skip_references
+            )
+
+            # Merge results
+            results["success"] = restart_results.get("success", 0)
+            results["failed"] = restart_results.get("failed", 0)
+
+            # Reset counter nếu đã thành công hết
+            if results["failed"] == 0:
+                self._full_restart_count = 0
+                self.log("   ✓ Tất cả ảnh đã hoàn thành sau full restart!")
 
         # === 10. DONG BROWSER ===
         self._close_browser()
