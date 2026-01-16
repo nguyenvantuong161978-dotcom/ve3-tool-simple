@@ -129,6 +129,11 @@ def get_account_info(machine_code: str) -> dict:
     """
     Lấy thông tin tài khoản từ Google Sheet.
 
+    Tìm kiếm theo thứ tự ưu tiên:
+    1. Exact match: TA1-T2
+    2. Base code (bỏ -T#): TA1-T2 → TA1
+    3. Partial match: tìm code bắt đầu bằng TA1
+
     Returns:
         {"id": "email@gmail.com", "password": "xxx"} or None
     """
@@ -146,23 +151,56 @@ def get_account_info(machine_code: str) -> dict:
             log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
             return None
 
-        # Tìm row có mã máy khớp (cột A)
+        machine_code_upper = machine_code.upper()
+
+        # Tạo list các code cần tìm theo thứ tự ưu tiên
+        search_codes = [machine_code_upper]
+
+        # Nếu có dạng XX#-T# (ví dụ: TA1-T2), thêm base code (TA1) vào list
+        # Pattern: 2 chữ + 1-3 số + -T + số
+        import re
+        base_match = re.match(r'^([A-Z]{2}\d{1,3})-T\d+$', machine_code_upper)
+        if base_match:
+            base_code = base_match.group(1)  # TA1
+            search_codes.append(base_code)
+            log(f"Will also try base code: {base_code}")
+
+        # Tìm theo từng code
+        partial_matches = []  # Lưu các partial match để dùng nếu không có exact match
+
         for row_idx, row in enumerate(all_data, start=1):
             if len(row) >= 3:
                 code = str(row[0]).strip().upper()
-                if code == machine_code.upper():
-                    account_id = str(row[1]).strip()
-                    password = str(row[2]).strip()
+                account_id = str(row[1]).strip()
+                password = str(row[2]).strip()
 
-                    if account_id and password:
-                        log(f"Found account for {machine_code}: {account_id}")
-                        return {
-                            "id": account_id,
-                            "password": password,
-                            "row": row_idx
-                        }
-                    else:
-                        log(f"Row {row_idx} has empty ID or password", "WARN")
+                if not account_id or not password:
+                    continue
+
+                # Check exact match với các code trong list
+                if code in search_codes:
+                    log(f"Found account for {code} (searched: {machine_code}): {account_id}")
+                    return {
+                        "id": account_id,
+                        "password": password,
+                        "row": row_idx,
+                        "matched_code": code
+                    }
+
+                # Lưu partial match (code bắt đầu bằng base code)
+                if base_match and code.startswith(base_match.group(1)):
+                    partial_matches.append({
+                        "id": account_id,
+                        "password": password,
+                        "row": row_idx,
+                        "matched_code": code
+                    })
+
+        # Nếu không có exact match, dùng partial match đầu tiên
+        if partial_matches:
+            match = partial_matches[0]
+            log(f"Using partial match: {match['matched_code']} for {machine_code}")
+            return match
 
         log(f"Machine code '{machine_code}' not found in sheet", "ERROR")
         return None
