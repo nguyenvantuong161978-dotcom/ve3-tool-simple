@@ -1402,10 +1402,13 @@ class DrissionFlowAPI:
             pass
         return False
 
-    def _auto_login_google(self) -> bool:
+    def _auto_login_google(self, max_retries: int = 3) -> bool:
         """
         Tự động đăng nhập Google khi bị logout.
-        Gọi hàm login từ google_login.py.
+        Gọi hàm login từ google_login.py. Tự động retry khi fail.
+
+        Args:
+            max_retries: Số lần retry tối đa (default 3)
 
         Returns:
             True nếu login thành công
@@ -1431,7 +1434,7 @@ class DrissionFlowAPI:
 
             self.log(f"Mã máy: {machine_code}")
 
-            # 2. Lấy thông tin tài khoản từ Google Sheet
+            # 2. Lấy thông tin tài khoản từ Google Sheet (đã có retry bên trong)
             self.log("Đọc thông tin tài khoản từ Google Sheet...")
             account_info = get_account_info(machine_code)
             if not account_info:
@@ -1446,28 +1449,46 @@ class DrissionFlowAPI:
             self.close()
             time.sleep(2)
 
-            # 4. Chạy login - QUAN TRỌNG: Truyền chrome_portable, profile_dir và worker_id
+            # 4. Chạy login với retry
+            # QUAN TRỌNG: Truyền chrome_portable, profile_dir và worker_id
             # Khi có 2 Chrome song song (Chrome 1 tạo ảnh, Chrome 2 tạo video),
             # cần login đúng Chrome bị logout, không phải Chrome kia
-            self.log("Bắt đầu đăng nhập Google...")
-            self.log(f"  Chrome: {self._chrome_portable or 'default'}")
-            self.log(f"  Profile: {self.profile_dir}")
-            self.log(f"  Worker ID: {self.worker_id}")
-            success = login_google_chrome(
-                account_info,
-                chrome_portable=self._chrome_portable,
-                profile_dir=str(self.profile_dir) if self.profile_dir else None,
-                worker_id=self.worker_id
-            )
+            for attempt in range(max_retries):
+                if attempt > 0:
+                    self.log(f"🔄 Retry login ({attempt + 1}/{max_retries})...")
+                    time.sleep(3)
 
-            if success:
-                self.log("✓ Đăng nhập thành công!")
-                # Đóng Chrome login để setup lại từ đầu
-                time.sleep(2)
-                return True
-            else:
-                self.log("✗ Đăng nhập thất bại", "ERROR")
-                return False
+                self.log("Bắt đầu đăng nhập Google...")
+                self.log(f"  Chrome: {self._chrome_portable or 'default'}")
+                self.log(f"  Profile: {self.profile_dir}")
+                self.log(f"  Worker ID: {self.worker_id}")
+
+                try:
+                    success = login_google_chrome(
+                        account_info,
+                        chrome_portable=self._chrome_portable,
+                        profile_dir=str(self.profile_dir) if self.profile_dir else None,
+                        worker_id=self.worker_id
+                    )
+
+                    if success:
+                        self.log("✓ Đăng nhập thành công!")
+                        # Đóng Chrome login để setup lại từ đầu
+                        time.sleep(2)
+                        return True
+                    else:
+                        self.log(f"✗ Đăng nhập thất bại (attempt {attempt + 1}/{max_retries})", "WARN")
+                        # Kill Chrome trước khi retry
+                        self._kill_chrome()
+                        time.sleep(2)
+
+                except Exception as login_err:
+                    self.log(f"✗ Login error (attempt {attempt + 1}): {login_err}", "WARN")
+                    self._kill_chrome()
+                    time.sleep(2)
+
+            self.log("✗ Đăng nhập thất bại sau nhiều lần thử", "ERROR")
+            return False
 
         except ImportError as e:
             self.log(f"✗ Không import được google_login: {e}", "ERROR")

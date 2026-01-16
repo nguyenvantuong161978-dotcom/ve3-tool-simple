@@ -125,89 +125,78 @@ def load_gsheet_client():
         return None, None
 
 
-def get_account_info(machine_code: str) -> dict:
+def get_account_info(machine_code: str, max_retries: int = 3) -> dict:
     """
     Lấy thông tin tài khoản từ Google Sheet.
 
-    Tìm kiếm theo thứ tự ưu tiên:
-    1. Exact match: TA1-T2
-    2. Base code (bỏ -T#): TA1-T2 → TA1
-    3. Partial match: tìm code bắt đầu bằng TA1
+    Tìm exact match theo mã máy. Nếu gặp lỗi network sẽ tự động retry.
+
+    Args:
+        machine_code: Mã máy cần tìm (exact match)
+        max_retries: Số lần retry khi gặp lỗi (default 3)
 
     Returns:
         {"id": "email@gmail.com", "password": "xxx"} or None
     """
-    gc, spreadsheet_name = load_gsheet_client()
-    if not gc:
-        return None
+    import time
 
-    try:
-        ws = gc.open(spreadsheet_name).worksheet(SHEET_NAME)
+    machine_code_upper = machine_code.upper()
+    last_error = None
 
-        # Đọc tất cả dữ liệu
-        all_data = ws.get_all_values()
+    for attempt in range(max_retries):
+        if attempt > 0:
+            wait_time = 2 * attempt  # 2s, 4s
+            log(f"Retry đọc Google Sheet ({attempt + 1}/{max_retries}) sau {wait_time}s...")
+            time.sleep(wait_time)
 
-        if not all_data:
-            log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
-            return None
+        gc, spreadsheet_name = load_gsheet_client()
+        if not gc:
+            last_error = "Cannot load gsheet client"
+            continue
 
-        machine_code_upper = machine_code.upper()
+        try:
+            ws = gc.open(spreadsheet_name).worksheet(SHEET_NAME)
 
-        # Tạo list các code cần tìm theo thứ tự ưu tiên
-        search_codes = [machine_code_upper]
+            # Đọc tất cả dữ liệu
+            all_data = ws.get_all_values()
 
-        # Nếu có dạng XX#-T# (ví dụ: TA1-T2), thêm base code (TA1) vào list
-        # Pattern: 2 chữ + 1-3 số + -T + số
-        import re
-        base_match = re.match(r'^([A-Z]{2}\d{1,3})-T\d+$', machine_code_upper)
-        if base_match:
-            base_code = base_match.group(1)  # TA1
-            search_codes.append(base_code)
-            log(f"Will also try base code: {base_code}")
+            if not all_data:
+                log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
+                return None
 
-        # Tìm theo từng code
-        partial_matches = []  # Lưu các partial match để dùng nếu không có exact match
+            # Tìm exact match
+            for row_idx, row in enumerate(all_data, start=1):
+                if len(row) >= 3:
+                    code = str(row[0]).strip().upper()
+                    account_id = str(row[1]).strip()
+                    password = str(row[2]).strip()
 
-        for row_idx, row in enumerate(all_data, start=1):
-            if len(row) >= 3:
-                code = str(row[0]).strip().upper()
-                account_id = str(row[1]).strip()
-                password = str(row[2]).strip()
+                    if not account_id or not password:
+                        continue
 
-                if not account_id or not password:
-                    continue
+                    # Exact match
+                    if code == machine_code_upper:
+                        log(f"Found account for {machine_code}: {account_id}")
+                        return {
+                            "id": account_id,
+                            "password": password,
+                            "row": row_idx
+                        }
 
-                # Check exact match với các code trong list
-                if code in search_codes:
-                    log(f"Found account for {code} (searched: {machine_code}): {account_id}")
-                    return {
-                        "id": account_id,
-                        "password": password,
-                        "row": row_idx,
-                        "matched_code": code
-                    }
+            # Không tìm thấy - có thể do sheet chưa sync, retry
+            last_error = f"Machine code '{machine_code}' not found"
+            if attempt < max_retries - 1:
+                log(f"Không tìm thấy {machine_code}, thử lại...", "WARN")
+                continue
 
-                # Lưu partial match (code bắt đầu bằng base code)
-                if base_match and code.startswith(base_match.group(1)):
-                    partial_matches.append({
-                        "id": account_id,
-                        "password": password,
-                        "row": row_idx,
-                        "matched_code": code
-                    })
+        except Exception as e:
+            last_error = str(e)
+            log(f"Error reading sheet (attempt {attempt + 1}): {e}", "WARN")
+            continue
 
-        # Nếu không có exact match, dùng partial match đầu tiên
-        if partial_matches:
-            match = partial_matches[0]
-            log(f"Using partial match: {match['matched_code']} for {machine_code}")
-            return match
-
-        log(f"Machine code '{machine_code}' not found in sheet", "ERROR")
-        return None
-
-    except Exception as e:
-        log(f"Error reading sheet: {e}", "ERROR")
-        return None
+    # Hết retry
+    log(f"Machine code '{machine_code}' not found in sheet after {max_retries} attempts: {last_error}", "ERROR")
+    return None
 
 
 def login_google_chrome(account_info: dict, chrome_portable: str = None, profile_dir: str = None, worker_id: int = 0) -> bool:
