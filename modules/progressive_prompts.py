@@ -1823,9 +1823,53 @@ Create exactly {image_count} scenes!"""
             api_scenes = data["scenes"]
             self._log(f"     -> Got {len(api_scenes)} scenes from API")
 
-            # Ensure correct scene count
-            if len(api_scenes) != image_count:
-                self._log(f"     -> Warning: Expected {image_count}, got {len(api_scenes)}")
+            # Ensure correct scene count - TẠO THÊM NẾU THIẾU
+            if len(api_scenes) < image_count:
+                self._log(f"     -> Warning: Expected {image_count}, got {len(api_scenes)} - ADDING MISSING SCENES")
+
+                # Tạo thêm scenes từ SRT entries chưa được cover
+                existing_srt_indices = set()
+                for s in api_scenes:
+                    indices = s.get("srt_indices", [])
+                    if isinstance(indices, list):
+                        existing_srt_indices.update(indices)
+
+                # Tìm SRT entries chưa được assign
+                all_seg_indices = list(range(srt_start, srt_end + 1))
+                missing_indices = [i for i in all_seg_indices if i not in existing_srt_indices]
+
+                # Chia missing_indices cho số scenes còn thiếu
+                scenes_needed = image_count - len(api_scenes)
+                if missing_indices and scenes_needed > 0:
+                    indices_per_scene = max(1, len(missing_indices) // scenes_needed)
+
+                    for i in range(scenes_needed):
+                        start_idx = i * indices_per_scene
+                        end_idx = min((i + 1) * indices_per_scene, len(missing_indices))
+                        scene_indices = missing_indices[start_idx:end_idx]
+
+                        if not scene_indices:
+                            continue
+
+                        # Lấy SRT entries cho scene này
+                        scene_entries = [e for idx, e in enumerate(srt_entries, 1) if idx in scene_indices]
+
+                        fill_scene = {
+                            "scene_id": scene_id_counter + len(api_scenes) + i,
+                            "srt_indices": scene_indices,
+                            "srt_start": scene_entries[0].start_time if scene_entries else "",
+                            "srt_end": scene_entries[-1].end_time if scene_entries else "",
+                            "duration": scene_duration,
+                            "srt_text": " ".join([e.text for e in scene_entries]) if scene_entries else "",
+                            "visual_moment": f"[Auto-fill] Scene covering SRT {scene_indices[0]}-{scene_indices[-1]}",
+                            "characters_used": "",
+                            "location_used": "",
+                            "camera": "Medium shot",
+                            "lighting": "Natural lighting"
+                        }
+                        api_scenes.append(fill_scene)
+
+                    self._log(f"     -> Added {scenes_needed} auto-fill scenes, total: {len(api_scenes)}")
 
             # Update scene IDs to be continuous + NORMALIZE character/location IDs
             for scene in api_scenes:
@@ -2303,9 +2347,44 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                 self._log(f"  Batch {batch_num}: skipped ({error})", "WARNING")
                 continue
 
-            # Validate
-            if len(api_scenes) != len(batch):
-                self._log(f"  ⚠️ Batch {batch_num}: API returned {len(api_scenes)}, expected {len(batch)}", "WARN")
+            # Validate và tạo fallback cho scenes thiếu
+            if len(api_scenes) < len(batch):
+                self._log(f"  ⚠️ Batch {batch_num}: API returned {len(api_scenes)}, expected {len(batch)} - ADDING MISSING")
+
+                # Tìm scene_ids đã có từ API
+                api_scene_ids = {int(s.get("scene_id", 0)) for s in api_scenes}
+
+                # Tạo fallback cho scenes thiếu
+                for original in batch:
+                    orig_id = int(original.get("scene_id", 0))
+                    if orig_id not in api_scene_ids:
+                        # Tạo fallback prompt
+                        srt_text = original.get("srt_text", "")
+                        visual_moment = original.get("visual_moment", "")
+                        chars_used = original.get("characters_used", "")
+                        loc_used = original.get("location_used", "")
+
+                        fallback_prompt = f"Cinematic scene: {visual_moment or srt_text[:200]}. "
+                        fallback_prompt += "4K photorealistic, dramatic lighting, film quality."
+
+                        # Thêm character/location annotations
+                        if chars_used:
+                            for cid in chars_used.split(","):
+                                cid = cid.strip()
+                                if cid:
+                                    img = char_image_lookup.get(cid, f"{cid}.png")
+                                    fallback_prompt += f" ({img})"
+                        if loc_used:
+                            img = loc_image_lookup.get(loc_used, f"{loc_used}.png")
+                            fallback_prompt += f" (reference: {img})"
+
+                        fallback_scene = {
+                            "scene_id": orig_id,
+                            "img_prompt": fallback_prompt,
+                            "video_prompt": f"Smooth camera movement: {visual_moment or srt_text[:100]}"
+                        }
+                        api_scenes.append(fallback_scene)
+                        self._log(f"     -> Created fallback for scene {orig_id}")
 
             # Check duplicates
             seen_prompts = set()
