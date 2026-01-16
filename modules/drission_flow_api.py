@@ -2327,6 +2327,12 @@ class DrissionFlowAPI:
                 wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
                 time.sleep(wait_time)
 
+                # === F5 REFRESH ngay sau khi vào link ===
+                # Trang hay bị lag khi mới vào, refresh để load lại cho ổn định
+                self.log("🔄 Refresh trang (tránh lag)...")
+                self.driver.refresh()
+                time.sleep(wait_time)
+
                 # Kiểm tra xem trang có load được không
                 current_url = self.driver.url
                 if not current_url or current_url == "about:blank" or "error" in current_url.lower():
