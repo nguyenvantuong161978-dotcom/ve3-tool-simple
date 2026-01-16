@@ -1287,6 +1287,7 @@ class DrissionFlowAPI:
             result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
             if result == 'CLICKED':
                 self.log("✓ Chọn 'Tạo hình ảnh'")
+                self._image_mode_selected = True  # Đánh dấu đã chọn mode
                 time.sleep(2)
                 break
             time.sleep(0.5)
@@ -6265,6 +6266,17 @@ class DrissionFlowAPI:
 
         if self.setup(project_url=saved_project_url, skip_mode_selection=skip_mode):
             self.log("✓ Chrome restarted thành công!")
+
+            # Chọn lại mode "Tạo hình ảnh" ngay sau restart (nếu không phải video mode)
+            # Đảm bảo mode được set đúng trước khi tiếp tục generate
+            if not skip_mode:
+                self.log("  → Chọn lại mode 'Tạo hình ảnh'...")
+                if self.switch_to_image_mode():
+                    self._image_mode_selected = True
+                    self.log("  ✓ Image mode selected")
+                else:
+                    self.log("  ⚠️ Không chọn được mode, sẽ thử lại khi generate", "WARN")
+
             return True
         else:
             self.log("✗ Không restart được Chrome", "ERROR")
