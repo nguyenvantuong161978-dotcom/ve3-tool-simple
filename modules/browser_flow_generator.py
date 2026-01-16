@@ -3634,8 +3634,19 @@ class BrowserFlowGenerator:
                 except:
                     pass
 
+        # === CHECK NẾU ĐANG TẠO REFERENCES RIÊNG LẺ ===
+        # Nếu TẤT CẢ prompts là references (nv/loc) → không áp dụng parallel skip
+        # Vì step 1 cần tạo TẤT CẢ references trước khi step 2 tạo scenes
+        all_are_references = all(
+            str(p.get('id', '')).lower().startswith('nv') or str(p.get('id', '')).lower().startswith('loc')
+            for p in prompts
+        ) if prompts else False
+
         if total_workers > 1:
-            self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - Worker sẽ xử lý scenes theo modulo")
+            if all_are_references:
+                self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - TẠO REFERENCES: xử lý TẤT CẢ (không skip)")
+            else:
+                self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - Worker sẽ xử lý scenes theo modulo")
 
         for i, prompt_data in enumerate(prompts):
             pid = str(prompt_data.get('id', i + 1))
@@ -3653,11 +3664,12 @@ class BrowserFlowGenerator:
                 continue
 
             # === PARALLEL: Skip nếu không thuộc worker này ===
-            if total_workers > 1:
+            # QUAN TRỌNG: Không áp dụng parallel skip khi đang tạo references riêng lẻ
+            if total_workers > 1 and not all_are_references:
                 is_ref = pid.lower().startswith('nv') or pid.lower().startswith('loc')
 
                 if is_ref:
-                    # Reference images: chỉ worker 1 xử lý
+                    # Reference images: chỉ worker 1 xử lý (khi chạy cùng scenes)
                     if worker_id != 1:
                         self.stats["skipped"] += 1
                         continue

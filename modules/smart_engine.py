@@ -1858,6 +1858,10 @@ class SmartEngine:
             total_failed = 0
 
             # === BƯỚC 1: TẠO TẤT CẢ REFERENCES TRƯỚC ===
+            ref_success = 0
+            ref_failed = 0
+            ref_media_ids_created = 0
+
             if ref_prompts:
                 self.log(f"[STEP 1/2] Tạo {len(ref_prompts)} ảnh tham chiếu (nv/loc) TRƯỚC...")
                 ref_result = generator.generate_from_prompts_auto(
@@ -1865,25 +1869,62 @@ class SmartEngine:
                     excel_path=excel_files[0],
                     bearer_token=bearer_token if bearer_token else None
                 )
-                total_success += ref_result.get("success", 0)
-                total_failed += ref_result.get("failed", 0)
-                self.log(f"[STEP 1/2] References: {ref_result.get('success', 0)} OK, {ref_result.get('failed', 0)} fail")
+                # Sử dụng stats dict thay vì success boolean
+                ref_stats = ref_result.get("stats", {})
+                ref_success = ref_stats.get("success", 0)
+                ref_failed = ref_stats.get("failed", 0)
+                ref_skipped = ref_stats.get("skipped", 0)
+                total_success += ref_success
+                total_failed += ref_failed
+                self.log(f"[STEP 1/2] References: {ref_success} OK, {ref_failed} fail, {ref_skipped} skip")
 
                 # Đợi chút để đảm bảo ảnh được lưu xong
                 import time
                 time.sleep(2)
 
+                # === KIỂM TRA MEDIA_ID SAU KHI TẠO REFERENCES ===
+                # Đọc lại Excel để xem có media_id cho references không
+                try:
+                    from modules.excel_manager import PromptWorkbook
+                    wb = PromptWorkbook(excel_files[0])
+                    wb.load_or_create()
+                    media_ids = wb.get_media_ids()
+
+                    # Đếm số references có media_id
+                    for ref_prompt in ref_prompts:
+                        ref_id = str(ref_prompt.get('id', ''))
+                        ref_id_lower = ref_id.lower()
+                        if any(k.lower() == ref_id_lower for k in media_ids.keys()):
+                            ref_media_ids_created += 1
+
+                    self.log(f"[STEP 1/2] Media IDs: {ref_media_ids_created}/{len(ref_prompts)} references có media_id")
+                except Exception as e:
+                    self.log(f"[STEP 1/2] Không thể kiểm tra media_ids: {e}", "WARN")
+
             # === BƯỚC 2: TẠO SCENES SAU KHI REFERENCES XONG ===
             if scene_prompts:
+                # Kiểm tra: nếu có references nhưng KHÔNG có media_id nào → cảnh báo mạnh
+                if ref_prompts and ref_media_ids_created == 0 and ref_success == 0:
+                    self.log("=" * 60, "WARN")
+                    self.log("⚠️ CẢNH BÁO: Không có reference nào được tạo thành công!", "WARN")
+                    self.log("⚠️ Scenes sẽ được tạo KHÔNG CÓ tham chiếu nhân vật/địa điểm!", "WARN")
+                    self.log("⚠️ Khuyến nghị: Tạo lại references trước khi tạo scenes", "WARN")
+                    self.log("=" * 60, "WARN")
+
                 self.log(f"[STEP 2/2] Tạo {len(scene_prompts)} scene images...")
                 scene_result = generator.generate_from_prompts_auto(
                     prompts=scene_prompts,
                     excel_path=excel_files[0],
                     bearer_token=bearer_token if bearer_token else None
                 )
-                total_success += scene_result.get("success", 0)
-                total_failed += scene_result.get("failed", 0)
-                self.log(f"[STEP 2/2] Scenes: {scene_result.get('success', 0)} OK, {scene_result.get('failed', 0)} fail")
+                # Sử dụng stats dict thay vì success boolean
+                scene_stats = scene_result.get("stats", {})
+                scene_success = scene_stats.get("success", 0)
+                scene_failed = scene_stats.get("failed", 0)
+                scene_skipped = scene_stats.get("skipped", 0)
+                total_success += scene_success
+                total_failed += scene_failed
+                self.log(f"[STEP 2/2] Scenes: {scene_success} OK, {scene_failed} fail, {scene_skipped} skip")
 
             # Kết quả tổng hợp
             result = {"success": total_success, "failed": total_failed}
