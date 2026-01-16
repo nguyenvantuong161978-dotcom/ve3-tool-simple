@@ -2872,7 +2872,28 @@ class DrissionFlowAPI:
             """)
 
             if result == 'clicked':
-                self.log("✓ Clicked textarea (JS)")
+                self.log("✓ Clicked textarea (JS) - lần 1")
+                # Click lần 2 sau 2s để đảm bảo focus
+                time.sleep(2)
+                result2 = self.driver.run_js("""
+                    (function() {
+                        var textarea = document.querySelector('textarea');
+                        if (!textarea) return 'not_found';
+                        textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+                        var rect = textarea.getBoundingClientRect();
+                        var centerX = rect.left + rect.width / 2;
+                        var centerY = rect.top + rect.height / 2;
+                        var click = new MouseEvent('click', {
+                            bubbles: true, cancelable: true, view: window,
+                            clientX: centerX, clientY: centerY
+                        });
+                        textarea.dispatchEvent(click);
+                        textarea.focus();
+                        return 'clicked';
+                    })();
+                """)
+                if result2 == 'clicked':
+                    self.log("✓ Clicked textarea (JS) - lần 2")
                 time.sleep(0.3)
                 return True
             elif result == 'not_found':
