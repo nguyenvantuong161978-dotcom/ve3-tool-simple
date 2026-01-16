@@ -3444,7 +3444,8 @@ class DrissionFlowAPI:
                                 self._cleared_data_for_403 = False
                                 self._consecutive_403 = 0
 
-                                if self._ipv6_rotator and self._ipv6_activated:
+                                # CHỈ Chrome 1 (worker_id=0) rotate IPv6
+                                if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
                                     new_ip = self._ipv6_rotator.rotate()
                                     if new_ip:
                                         self.log(f"  → 🌐 IPv6 mới: {new_ip}")
@@ -3466,7 +3467,8 @@ class DrissionFlowAPI:
                             self._cleared_data_for_403 = False
                             self._consecutive_403 = 0
 
-                            if self._ipv6_rotator and self._ipv6_activated:
+                            # CHỈ Chrome 1 (worker_id=0) rotate IPv6
+                            if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
                                 new_ip = self._ipv6_rotator.rotate()
                                 if new_ip:
                                     self.log(f"  → 🌐 IPv6 mới: {new_ip}")
@@ -4943,7 +4945,8 @@ class DrissionFlowAPI:
                         self.close()
                         time.sleep(2)
 
-                        if self._ipv6_rotator and self._ipv6_activated:
+                        # CHỈ Chrome 1 (worker_id=0) rotate IPv6
+                        if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
                             new_ip = self._ipv6_rotator.rotate()
                             if new_ip:
                                 self.log(f"[T2V→I2V] → 🌐 IPv6 mới: {new_ip}")
@@ -5015,16 +5018,19 @@ class DrissionFlowAPI:
                             success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "T2V 400")
                             self.log(f"[T2V→I2V] → Webshare rotate: {msg}", "WARN")
 
-                        # Rotate IPv6
-                        if not self._ipv6_activated:
-                            self.log(f"[T2V→I2V] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
-                            self._activate_ipv6()
+                        # Rotate IPv6 - CHỈ Chrome 1 (worker_id=0) rotate
+                        if self.worker_id == 0:
+                            if not self._ipv6_activated:
+                                self.log(f"[T2V→I2V] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                                self._activate_ipv6()
+                            else:
+                                self.log(f"[T2V→I2V] → 🔄 Rotate sang IPv6 khác...")
+                                if self._ipv6_rotator:
+                                    new_ip = self._ipv6_rotator.rotate()
+                                    if new_ip and hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
+                                        self._ipv6_proxy.set_ipv6(new_ip)
                         else:
-                            self.log(f"[T2V→I2V] → 🔄 Rotate sang IPv6 khác...")
-                            if self._ipv6_rotator:
-                                new_ip = self._ipv6_rotator.rotate()
-                                if new_ip and hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
-                                    self._ipv6_proxy.set_ipv6(new_ip)
+                            self.log(f"[Worker{self.worker_id}] Skip IPv6 rotation (chỉ Chrome 1 rotate)")
 
                         self._consecutive_403 = 0
 
@@ -5923,6 +5929,12 @@ class DrissionFlowAPI:
             True nếu restart thành công
         """
         # === IPv6 ROTATION (khi bị 403 nhiều lần) ===
+        # CHỈ Chrome 1 (worker_id=0) mới được rotate IPv6
+        # Chrome 2+ chỉ dùng IPv6 hiện tại (do Chrome 1 set)
+        if rotate_ipv6 and self.worker_id > 0:
+            self.log(f"[Worker{self.worker_id}] Skip IPv6 rotation (chỉ Chrome 1 rotate)")
+            rotate_ipv6 = False
+
         if rotate_ipv6:
             try:
                 from modules.ipv6_rotator import get_ipv6_rotator
