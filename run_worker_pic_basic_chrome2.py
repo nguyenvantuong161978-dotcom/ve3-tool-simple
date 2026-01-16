@@ -78,11 +78,8 @@ def load_chrome2_path() -> str:
 def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
     """Process a single project - Chrome 2."""
 
-    def log(msg, level="INFO"):
-        if callback:
-            callback(msg, level)
-        else:
-            print(f"[Chrome2] {msg}")
+    def log(msg, level=None):
+        print(f"[Chrome2] {msg}")
 
     log(f"\n{'='*60}")
     log(f"Processing: {code}")
@@ -138,7 +135,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         # Run engine - skip nv/loc (Chrome 1 làm), skip video
         result = engine.run(
             str(excel_path),
-            callback=lambda msg, lvl: log(msg, lvl),
+            callback=log,
             skip_compose=True,
             skip_video=True,
             skip_references=True  # Chrome 1 tạo nv/loc
