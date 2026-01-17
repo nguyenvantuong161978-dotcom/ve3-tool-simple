@@ -12,6 +12,23 @@ Proxy kết nối ra ngoài: IPv6 address
 Như vậy RDP vẫn dùng IPv4, Chrome dùng IPv6.
 """
 
+import sys
+import os
+
+# Fix Windows encoding issues
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+    if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+
+
 import socket
 import threading
 import select

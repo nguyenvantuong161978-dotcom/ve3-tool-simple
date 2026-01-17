@@ -4,6 +4,23 @@ VE3 Tool - Voice to SRT Module
 Chuyển đổi file audio thành file subtitle SRT sử dụng Whisper.
 """
 
+import sys
+import os
+
+# Fix Windows encoding issues
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+    if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+
+
 from pathlib import Path
 from typing import Optional, Dict, Any
 
