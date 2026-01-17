@@ -20,8 +20,6 @@ if sys.platform == "win32":
         except:
             pass
 
-
-import os
 from pathlib import Path
 
 try:
