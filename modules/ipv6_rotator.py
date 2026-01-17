@@ -201,7 +201,7 @@ class IPv6Rotator:
             # Chỉ xóa khỏi memory, KHÔNG sửa file ipv6_list.txt
             if dead_ip in self.ipv6_list:
                 self.ipv6_list.remove(dead_ip)
-                self.log(f"[IPv6] 🗑️ Removed dead IP from memory: {dead_ip}")
+                self.log(f"[IPv6] [DEL] Removed dead IP from memory: {dead_ip}")
                 self.log(f"[IPv6] Remaining this session: {len(self.ipv6_list)} IPs")
 
             # Điều chỉnh current_index nếu cần
@@ -587,7 +587,7 @@ class IPv6Rotator:
             # (cần có IP trên interface thì proxy mới bind được)
             self.log(f"[IPv6] Ensuring interface has: {ipv6_address}")
             if not self.set_ipv6(ipv6_address):
-                self.log("[IPv6] ⚠️ Failed to set IPv6, proxy may not work correctly", "WARN")
+                self.log("[IPv6] [WARN] Failed to set IPv6, proxy may not work correctly", "WARN")
 
             if self._local_proxy is None:
                 # Start proxy lần đầu

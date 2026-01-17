@@ -862,6 +862,9 @@ class VMManagerGUI:
         self.manager: Optional[VMManager] = None
         self.running = False
 
+        # Get current branch
+        self.current_branch = self._get_current_branch()
+
         # UI Components
         self.worker_cards: Dict[str, WorkerCard] = {}
         self.project_cards: Dict[str, ProjectCard] = {}
@@ -869,8 +872,46 @@ class VMManagerGUI:
         # Build UI
         self._build_ui()
 
+        # Update title with branch info
+        self.root.title(f"VM Manager - [{self.current_branch}]")
+
+        # Run update.py on startup
+        self._run_update()
+
         # Start update loop - faster for real-time feel
         self._update_loop()
+
+    def _get_current_branch(self) -> str:
+        """Get current git branch name."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True, text=True, cwd=TOOL_DIR, timeout=5
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except:
+            pass
+        return "unknown"
+
+    def _run_update(self):
+        """Run update.py on startup."""
+        update_script = TOOL_DIR / "update.py"
+        if update_script.exists():
+            try:
+                import subprocess
+                self._log(f"Running update.py...")
+                result = subprocess.run(
+                    [sys.executable, str(update_script)],
+                    capture_output=True, text=True, cwd=str(TOOL_DIR), timeout=30
+                )
+                if result.returncode == 0:
+                    self._log(f"Update completed")
+                else:
+                    self._log(f"Update failed: {result.stderr[:100] if result.stderr else 'unknown'}")
+            except Exception as e:
+                self._log(f"Update error: {e}")
 
     def _build_ui(self):
         """Xây dựng giao diện."""
@@ -1118,9 +1159,14 @@ class VMManagerGUI:
         self._last_log_positions = {}
 
     def _build_status_bar(self, parent):
-        """Status bar."""
+        """Status bar with branch info."""
         frame = ttk.Frame(parent)
         frame.pack(fill="x", pady=(10, 0))
+
+        # Branch info on the left
+        branch_label = ttk.Label(frame, text=f"Branch: {self.current_branch}",
+                                  font=("Consolas", 9), foreground="blue")
+        branch_label.pack(side="left", padx=(0, 20))
 
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(frame, textvariable=self.status_var).pack(side="left")
@@ -1540,6 +1586,11 @@ class VMManagerGUI:
     def _log(self, message: str):
         """Add message to log."""
         timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] {message}")  # Always print to console
+
+        # Also add to GUI log if available
+        if not hasattr(self, 'logs_text'):
+            return
         self.logs_text.configure(state="normal")
         self.logs_text.insert("end", f"[{timestamp}] {message}\n")
         self.logs_text.see("end")

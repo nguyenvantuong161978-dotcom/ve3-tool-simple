@@ -215,7 +215,7 @@ class GoogleFlowAPI:
 
         # Validate token format
         if not self.bearer_token.startswith("ya29."):
-            print("⚠️  Warning: Bearer token should start with 'ya29.'")
+            print("[WARN]  Warning: Bearer token should start with 'ya29.'")
 
         self.session = self._create_session()
     
@@ -2060,7 +2060,7 @@ class GoogleFlowAPI:
 ║                                                                              ║
 ║  9. Copy TOÀN BỘ giá trị sau "Bearer " (bắt đầu bằng "ya29.")               ║
 ║                                                                              ║
-║  ⚠️  LƯU Ý QUAN TRỌNG:                                                      ║
+║  [WARN]  LƯU Ý QUAN TRỌNG:                                                      ║
 ║     - Token có thời hạn ngắn (~1 giờ), cần refresh thường xuyên            ║
 ║     - Mỗi lần refresh trang hoặc tạo ảnh mới sẽ có token mới               ║
 ║     - Không chia sẻ token với người khác                                    ║
@@ -2138,7 +2138,7 @@ def quick_generate(
     if success:
         return [str(p) for p in paths]
     else:
-        print(f"❌ Error: {error}")
+        print(f"[FAIL] Error: {error}")
         return []
 
 
@@ -2200,7 +2200,7 @@ def quick_generate_video(
     )
 
     if not success:
-        print(f"❌ Error: {error}")
+        print(f"[FAIL] Error: {error}")
         return None
 
     # If video URL available, download it
@@ -2225,7 +2225,7 @@ def quick_generate_video(
             if path:
                 return str(path)
         else:
-            print(f"❌ Polling failed: {poll_error}")
+            print(f"[FAIL] Polling failed: {poll_error}")
 
     return None
 
@@ -2286,7 +2286,7 @@ if __name__ == "__main__":
 
     if mode == "image":
         if len(sys.argv) < 4:
-            print("❌ Missing token or prompt for image mode")
+            print("[FAIL] Missing token or prompt for image mode")
             sys.exit(1)
 
         token = sys.argv[2]
@@ -2296,15 +2296,15 @@ if __name__ == "__main__":
         paths = quick_generate(prompt, token)
 
         if paths:
-            print(f"\n✅ Generated {len(paths)} images:")
+            print(f"\n[OK] Generated {len(paths)} images:")
             for p in paths:
                 print(f"   📁 {p}")
         else:
-            print("\n❌ Image generation failed")
+            print("\n[FAIL] Image generation failed")
 
     elif mode == "video":
         if len(sys.argv) < 4:
-            print("❌ Missing token or prompt for video mode")
+            print("[FAIL] Missing token or prompt for video mode")
             sys.exit(1)
 
         token = sys.argv[2]
@@ -2319,7 +2319,7 @@ if __name__ == "__main__":
                 proxy_token = sys.argv[proxy_idx + 1]
                 use_proxy = True
 
-        print(f"\n🎬 Generating video for: {prompt}")
+        print(f"\n[VIDEO] Generating video for: {prompt}")
         if use_proxy:
             print("   (Using proxy API to bypass captcha)")
 
@@ -2331,10 +2331,10 @@ if __name__ == "__main__":
         )
 
         if path:
-            print(f"\n✅ Video saved to: {path}")
+            print(f"\n[OK] Video saved to: {path}")
         else:
-            print("\n❌ Video generation failed")
+            print("\n[FAIL] Video generation failed")
 
     else:
-        print(f"❌ Unknown mode: {mode}")
+        print(f"[FAIL] Unknown mode: {mode}")
         print("   Use 'image' or 'video'")

@@ -822,7 +822,7 @@ class PromptGenerator:
                     open_brackets = result.count('[') - result.count(']')
 
                     if open_braces > 0 or open_brackets > 0:
-                        print(f"[Director] ⚠️ JSON BỊ TRUNCATE! Braces: +{open_braces}, Brackets: +{open_brackets}")
+                        print(f"[Director] [WARN] JSON BỊ TRUNCATE! Braces: +{open_braces}, Brackets: +{open_brackets}")
                         print("[Director] Response không hoàn chỉnh - sẽ retry...")
                         return ""  # Return empty to trigger retry
                     else:
@@ -2711,7 +2711,7 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
 
                 if gap > 60:  # Gap > 1 phút
                     self.logger.warning(
-                        f"[SRT CHECK] ⚠️ GAP trong SRT: "
+                        f"[SRT CHECK] [WARN] GAP trong SRT: "
                         f"{self._format_timedelta(srt_entries[i].end_time)} -> "
                         f"{self._format_timedelta(srt_entries[i + 1].start_time)} "
                         f"(gap: {gap:.0f}s = {gap/60:.1f} phút)"
@@ -2846,14 +2846,14 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                 chunk_parts = chunk_plan.get("story_parts", [])
 
                 if chunk_parts:
-                    self.logger.info(f"[TIER 1] ✅ Chunk {chunk_num} succeeded with DeepSeek!")
+                    self.logger.info(f"[TIER 1] [OK] Chunk {chunk_num} succeeded with DeepSeek!")
                     break
                 else:
                     self.logger.error(f"[TIER 1] Chunk {chunk_num} attempt {attempt+1} - empty story_parts")
 
             # === TIER 2: SRT Fallback (luôn hoạt động) ===
             if not chunk_parts:
-                self.logger.warning(f"[TIER 2] ⚠️ DeepSeek failed for chunk {chunk_num}, using SRT FALLBACK...")
+                self.logger.warning(f"[TIER 2] [WARN] DeepSeek failed for chunk {chunk_num}, using SRT FALLBACK...")
                 self.logger.warning(f"[TIER 2] Creating shots from {len(chunk_entries)} SRT entries...")
                 chunk_parts = self._create_fallback_shots_from_srt(
                     chunk_entries,
@@ -2862,7 +2862,7 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                     global_style
                 )
                 fallback_shots = sum(len(p.get("shots", [])) for p in chunk_parts) if chunk_parts else 0
-                self.logger.info(f"[TIER 2] ✅ FALLBACK created {len(chunk_parts) if chunk_parts else 0} parts, {fallback_shots} shots")
+                self.logger.info(f"[TIER 2] [OK] FALLBACK created {len(chunk_parts) if chunk_parts else 0} parts, {fallback_shots} shots")
 
             # Safety check - nếu vẫn không có chunk_parts, tạo empty list để tránh crash
             if not chunk_parts:
@@ -3024,12 +3024,12 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                         if gap_sec > 30:
                             gap_info = f"Shot {current_shot.get('shot_number')} ({current_end}) -> Shot {next_shot.get('shot_number')} ({next_start}): GAP {gap_sec:.0f}s"
                             gaps_found.append((gap_sec, gap_info, i))
-                            self.logger.warning(f"[GAP CHECK] ⚠️ {gap_info}")
+                            self.logger.warning(f"[GAP CHECK] [WARN] {gap_info}")
                 except Exception as e:
                     pass  # Ignore parsing errors
 
             if gaps_found:
-                self.logger.error(f"[GAP CHECK] ⚠️ TÌM THẤY {len(gaps_found)} GAPS LỚN!")
+                self.logger.error(f"[GAP CHECK] [WARN] TÌM THẤY {len(gaps_found)} GAPS LỚN!")
                 self.logger.error("[GAP CHECK] Đang tự động fill từ SRT entries...")
 
                 # === AUTO-FILL GAPS TỪ SRT ===
@@ -3100,11 +3100,11 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                                         "shots": fill_shots
                                     }
                                     all_parts.append(new_part)
-                                    self.logger.info(f"[GAP FILL] ✅ Đã thêm {len(fill_shots)} shots để fill gap")
+                                    self.logger.info(f"[GAP FILL] [OK] Đã thêm {len(fill_shots)} shots để fill gap")
                         except Exception as e:
                             self.logger.warning(f"[GAP FILL] Lỗi fill gap: {e}")
             else:
-                self.logger.info("[GAP CHECK] ✅ Không có gaps lớn")
+                self.logger.info("[GAP CHECK] [OK] Không có gaps lớn")
 
         # Đếm lại total shots sau khi fill gaps
         total_shots_final = sum(len(p.get("shots", [])) for p in all_parts)
@@ -5578,12 +5578,12 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                         for shot in shots:
                             # Validate timestamp
                             if not shot.get("srt_start") or not shot.get("srt_end"):
-                                self.logger.warning(f"    ⚠️ Shot thiếu timestamp, dùng fallback")
+                                self.logger.warning(f"    [WARN] Shot thiếu timestamp, dùng fallback")
                                 continue
 
                             # Validate prompt
                             if not shot.get("img_prompt") or len(shot.get("img_prompt", "")) < 20:
-                                self.logger.warning(f"    ⚠️ Shot thiếu prompt, dùng fallback")
+                                self.logger.warning(f"    [WARN] Shot thiếu prompt, dùng fallback")
                                 continue
 
                             # Validate references - đảm bảo luôn có
@@ -5597,7 +5597,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
                         # Nếu không có shot valid, dùng fallback cho scene
                         if not validated_shots:
-                            self.logger.warning(f"    ⚠️ Scene {scene['scene_id']} không có shot valid, tạo fallback...")
+                            self.logger.warning(f"    [WARN] Scene {scene['scene_id']} không có shot valid, tạo fallback...")
                             num_shots = max(1, int(scene.get("duration_seconds", 5) / 8) + 1)
                             start_secs = self._timestamp_to_seconds_v2(scene.get("srt_start", "00:00:00,000"))
                             validated_shots = self._create_fallback_shots_v2(
@@ -5609,7 +5609,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                         self.logger.info(f"    Scene {scene['scene_id']}: {len(validated_shots)} shots ({scene['srt_start']} - {scene['srt_end']})")
 
                     except Exception as scene_err:
-                        self.logger.error(f"    ❌ Scene {scene['scene_id']} lỗi: {scene_err}, tạo fallback...")
+                        self.logger.error(f"    [FAIL] Scene {scene['scene_id']} lỗi: {scene_err}, tạo fallback...")
                         # Tạo fallback cho scene lỗi
                         num_shots = max(1, int(scene.get("duration_seconds", 5) / 8) + 1)
                         start_secs = self._timestamp_to_seconds_v2(scene.get("srt_start", "00:00:00,000"))
@@ -5656,7 +5656,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 # Kiểm tra gap bất thường
                 gap = shot_start - prev_end_seconds
                 if prev_end_seconds > 0 and gap > MAX_GAP_SECONDS:
-                    self.logger.warning(f"  ⚠️ Gap bất thường {gap:.1f}s tại {shot['srt_start']}, điều chỉnh...")
+                    self.logger.warning(f"  [WARN] Gap bất thường {gap:.1f}s tại {shot['srt_start']}, điều chỉnh...")
                     # Điều chỉnh timestamp để liên tục
                     duration = shot_end - shot_start
                     shot["srt_start"] = self._seconds_to_timestamp(prev_end_seconds)

@@ -805,7 +805,7 @@ Return JSON only:
             if last_srt_end < total_srt:
                 # FIX: Extend coverage to include all SRT entries
                 missing_entries = total_srt - last_srt_end
-                self._log(f"  ⚠️ Segments only cover SRT 1-{last_srt_end}, missing {missing_entries} entries")
+                self._log(f"  [WARN] Segments only cover SRT 1-{last_srt_end}, missing {missing_entries} entries")
                 self._log(f"  -> Auto-fixing: extending coverage to SRT {total_srt}")
 
                 # Calculate how many additional images needed (~5s per image)
@@ -858,13 +858,13 @@ Return JSON only:
 
             # TRACKING: Cập nhật và kiểm tra coverage
             coverage = workbook.update_srt_coverage_segments(data["segments"])
-            self._log(f"\n  📊 SRT COVERAGE (sau Step 1.5):")
+            self._log(f"\n  [STATS] SRT COVERAGE (sau Step 1.5):")
             self._log(f"     Total SRT: {coverage['total_srt']}")
             self._log(f"     Covered by segments: {coverage['covered_by_segment']} ({coverage['coverage_percent']}%)")
 
             # Determine status based on coverage
             if coverage['uncovered'] > 0:
-                self._log(f"     ⚠️ UNCOVERED: {coverage['uncovered']} entries", "WARN")
+                self._log(f"     [WARN] UNCOVERED: {coverage['uncovered']} entries", "WARN")
                 status = "PARTIAL" if coverage['coverage_percent'] >= 50 else "ERROR"
                 workbook.update_step_status("step_1.5", status,
                     coverage['total_srt'], coverage['covered_by_segment'],
@@ -1057,7 +1057,7 @@ Return JSON:
             workbook.save()
             self._log(f"  -> Saved {len(data['characters'])} characters to Excel")
             if minor_count > 0:
-                self._log(f"  -> ⚠️ {minor_count} characters là trẻ em (sẽ KHÔNG tạo ảnh)")
+                self._log(f"  -> [WARN] {minor_count} characters là trẻ em (sẽ KHÔNG tạo ảnh)")
             for c in data["characters"][:3]:
                 minor_tag = " [MINOR]" if c.get("is_minor") else ""
                 self._log(f"     - {c.get('name', 'N/A')} ({c.get('role', 'N/A')}){minor_tag}")
@@ -1476,7 +1476,7 @@ Return JSON only:
 
             # TRACKING: Cập nhật và kiểm tra coverage
             coverage = workbook.update_srt_coverage_scenes(all_scenes)
-            self._log(f"\n  📊 SRT COVERAGE (sau Step 4):")
+            self._log(f"\n  [STATS] SRT COVERAGE (sau Step 4):")
             self._log(f"     Total SRT: {coverage['total_srt']}")
             self._log(f"     Covered by scenes: {coverage['covered_by_scene']} ({coverage['coverage_percent']}%)")
 
@@ -1484,7 +1484,7 @@ Return JSON only:
 
             # Determine status based on coverage
             if coverage['uncovered'] > 0:
-                self._log(f"     ⚠️ UNCOVERED: {coverage['uncovered']} entries", "WARN")
+                self._log(f"     [WARN] UNCOVERED: {coverage['uncovered']} entries", "WARN")
                 uncovered_list = workbook.get_uncovered_srt_entries()
                 if uncovered_list:
                     self._log(f"     Missing SRT: {[u['srt_index'] for u in uncovered_list[:10]]}...")
@@ -1905,11 +1905,11 @@ Create exactly {image_count} scenes!"""
 
             # TRACKING: Cập nhật và kiểm tra coverage
             coverage = workbook.update_srt_coverage_scenes(all_scenes)
-            self._log(f"\n  📊 SRT COVERAGE (sau Step 4 BASIC):")
+            self._log(f"\n  [STATS] SRT COVERAGE (sau Step 4 BASIC):")
             self._log(f"     Total SRT: {coverage['total_srt']}")
             self._log(f"     Covered by scenes: {coverage['covered_by_scene']} ({coverage['coverage_percent']}%)")
             if coverage['uncovered'] > 0:
-                self._log(f"     ⚠️ UNCOVERED: {coverage['uncovered']} entries", "WARN")
+                self._log(f"     [WARN] UNCOVERED: {coverage['uncovered']} entries", "WARN")
                 uncovered_list = workbook.get_uncovered_srt_entries()
                 if uncovered_list:
                     self._log(f"     Missing SRT: {[u['srt_index'] for u in uncovered_list[:10]]}...")
@@ -2349,7 +2349,7 @@ Return JSON only with EXACTLY {len(batch)} scenes:
 
             # Validate và tạo fallback cho scenes thiếu
             if len(api_scenes) < len(batch):
-                self._log(f"  ⚠️ Batch {batch_num}: API returned {len(api_scenes)}, expected {len(batch)} - ADDING MISSING")
+                self._log(f"  [WARN] Batch {batch_num}: API returned {len(api_scenes)}, expected {len(batch)} - ADDING MISSING")
 
                 # Tìm scene_ids đã có từ API
                 api_scene_ids = {int(s.get("scene_id", 0)) for s in api_scenes}

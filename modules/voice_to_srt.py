@@ -117,7 +117,7 @@ class VoiceToSrt:
                 device=self.device
             )
 
-        print(f"  ✅ Whisper model loaded!")
+        print(f"  [OK] Whisper model loaded!")
         self.logger.info("Model loaded successfully")
     
     def transcribe(

@@ -1230,7 +1230,7 @@ class BrowserFlowGenerator:
                 if has_annotations:
                     self._log(f"[ANNOTATION] ✓ Prompt DA CO annotations", "success")
                 else:
-                    self._log(f"[ANNOTATION] ⚠️ Prompt CHUA CO annotations - them vao cuoi...", "warn")
+                    self._log(f"[ANNOTATION] [WARN] Prompt CHUA CO annotations - them vao cuoi...", "warn")
                     # Them annotation neu chua co
                     refs_str = ", ".join(reference_files)
                     prompt = prompt.rstrip('. ') + f" (reference: {refs_str})."
@@ -1347,7 +1347,7 @@ class BrowserFlowGenerator:
         if reference_files:
             self._log(f"[REF] reference_files: {reference_files}")
         else:
-            self._log(f"[REF] ⚠️ NO REFERENCES - Excel cot 'reference_files' trong!")
+            self._log(f"[REF] [WARN] NO REFERENCES - Excel cot 'reference_files' trong!")
             self._log(f"[REF] raw value from Excel: '{ref_str}'")
 
         if not prompt:
@@ -1573,7 +1573,7 @@ class BrowserFlowGenerator:
             if has_cached_project:
                 self._log(f"[CACHE] Co project URL -> se reuse de giu media_name valid")
         else:
-            self._log("[CACHE] ⚠️ EMPTY - Characters (nv/loc) chua duoc tao!", "warn")
+            self._log("[CACHE] [WARN] EMPTY - Characters (nv/loc) chua duoc tao!", "warn")
 
         # Khoi dong browser - vao dung project neu co cache
         if not self.driver:
@@ -1817,7 +1817,7 @@ class BrowserFlowGenerator:
 
             # Skip children (status="skip" or english_prompt="DO_NOT_GENERATE" or is_child=True)
             if char.status == "skip" or char.english_prompt == "DO_NOT_GENERATE" or getattr(char, 'is_child', False):
-                self._log(f"  ⏭️  {char.id}: Child character, skipping (will use inline description)")
+                self._log(f"  [SKIP]  {char.id}: Child character, skipping (will use inline description)")
                 continue
 
             if char.status == "done" and not overwrite:
@@ -1977,7 +1977,7 @@ class BrowserFlowGenerator:
         # Vi Google Flow detect headless mode va block!
         # Headless chi dung cho viec TAO ANH, khong dung cho LAY TOKEN.
         use_headless = False  # LUON False khi lay token
-        self._log("⚠️ Lay token: Chrome se HIEN THI (Google block headless)")
+        self._log("[WARN] Lay token: Chrome se HIEN THI (Google block headless)")
 
         # Chon extractor phu hop:
         TokenExtractor = None
@@ -2256,8 +2256,8 @@ class BrowserFlowGenerator:
             captured = extractor.trigger_api_and_capture()
 
             if captured.is_valid():
-                self._log(f"✅ x-browser-validation: {captured.x_browser_validation[:40]}...", "success")
-                self._log(f"✅ Authorization: {captured.authorization[:50]}...", "success")
+                self._log(f"[OK] x-browser-validation: {captured.x_browser_validation[:40]}...", "success")
+                self._log(f"[OK] Authorization: {captured.authorization[:50]}...", "success")
 
                 # Extract token and project_id
                 if captured.authorization.startswith("Bearer "):
@@ -3149,9 +3149,9 @@ class BrowserFlowGenerator:
                     if image_file.exists():
                         try:
                             image_file.unlink()
-                            self._log(f"   🗑️ Deleted image: {image_file.name}")
+                            self._log(f"   [DEL] Deleted image: {image_file.name}")
                         except Exception as e:
-                            self._log(f"   ⚠️ Cannot delete image: {e}", "warn")
+                            self._log(f"   [WARN] Cannot delete image: {e}", "warn")
 
                     # Update Excel
                     workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
@@ -3289,11 +3289,11 @@ class BrowserFlowGenerator:
                     self._log(f"✓ Loaded {len(manager.proxies)} proxies")
                     self._log(f"  Current: {manager.current_proxy.endpoint}")
                 else:
-                    self._log("⚠️ No proxies loaded - chạy không có proxy", "WARN")
+                    self._log("[WARN] No proxies loaded - chạy không có proxy", "WARN")
                     use_webshare = False
 
             except Exception as e:
-                self._log(f"⚠️ Webshare init error: {e} - chạy không có proxy", "WARN")
+                self._log(f"[WARN] Webshare init error: {e} - chạy không có proxy", "WARN")
                 use_webshare = False
 
         # === ĐỌC CONFIG TỪ EXCEL/CACHE TRƯỚC (để biết profile nào đã dùng) ===
@@ -3360,7 +3360,7 @@ class BrowserFlowGenerator:
                     self._log(f"[DEBUG] Không có sheet 'config' trong Excel")
                 wb.close()
             except Exception as e:
-                self._log(f"⚠️ Không đọc được config từ Excel: {e}", "warn")
+                self._log(f"[WARN] Không đọc được config từ Excel: {e}", "warn")
 
         # Chọn profile: ưu tiên saved profile từ Excel, fallback về default
         if saved_chrome_profile:
@@ -3418,7 +3418,7 @@ class BrowserFlowGenerator:
                         saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{cached_id}"
                         self._log(f"[FOUND] Tìm thấy project_id từ cache: {cached_id[:20]}...")
                 except Exception as e:
-                    self._log(f"⚠️ Không đọc được cache: {e}", "warn")
+                    self._log(f"[WARN] Không đọc được cache: {e}", "warn")
             else:
                 self._log(f"[DEBUG] Cache file không tồn tại")
 
@@ -3502,11 +3502,11 @@ class BrowserFlowGenerator:
                         wb.close()
                         self._log(f"✓ Lưu project URL vào Excel: {new_project_url[:50]}...")
                     except Exception as e:
-                        self._log(f"⚠️ Không lưu được project URL: {e}", "warn")
+                        self._log(f"[WARN] Không lưu được project URL: {e}", "warn")
 
                 break
             else:
-                self._log(f"❌ Setup failed (attempt {setup_attempt + 1}/{MAX_SETUP_RETRIES})", "error")
+                self._log(f"[FAIL] Setup failed (attempt {setup_attempt + 1}/{MAX_SETUP_RETRIES})", "error")
 
                 if setup_attempt < MAX_SETUP_RETRIES - 1:
                     # Rotate IP và restart Chrome
@@ -3525,7 +3525,7 @@ class BrowserFlowGenerator:
                             self._log(f"   → Rotate error: {e}", "warn")
 
         if not setup_success:
-            self._log("❌ DrissionFlowAPI setup failed sau tất cả retries!", "error")
+            self._log("[FAIL] DrissionFlowAPI setup failed sau tất cả retries!", "error")
             return {"success": False, "error": "DrissionFlowAPI setup failed"}
 
         self._log(f"Tong: {len(prompts)} prompts")
@@ -3610,7 +3610,7 @@ class BrowserFlowGenerator:
                 if excel_media_ids:
                     self._log(f"[EXCEL] Loaded {len(excel_media_ids)} media_ids: {list(excel_media_ids.keys())}")
                 else:
-                    self._log("[EXCEL] ⚠️ KHÔNG CÓ MEDIA_ID TRONG EXCEL - ảnh nv/loc sẽ được tạo lại", "warn")
+                    self._log("[EXCEL] [WARN] KHÔNG CÓ MEDIA_ID TRONG EXCEL - ảnh nv/loc sẽ được tạo lại", "warn")
             except Exception as e:
                 self._log(f"Warning: Cannot load media_ids from Excel: {e}", "warn")
 
@@ -3735,7 +3735,7 @@ class BrowserFlowGenerator:
                 has_media_id = any(k.lower() == pid_lower for k in excel_media_ids.keys())
 
                 if is_reference_image and not has_media_id:
-                    self._log(f"[{i+1}/{len(prompts)}] ID: {pid} - ⚠️ ANH TON TAI NHUNG KHONG CO MEDIA_ID")
+                    self._log(f"[{i+1}/{len(prompts)}] ID: {pid} - [WARN] ANH TON TAI NHUNG KHONG CO MEDIA_ID")
                     self._log(f"   → Dang xoa {output_file.name} de tao lai...")
                     try:
                         output_file.unlink()  # Xóa file
@@ -3819,7 +3819,7 @@ class BrowserFlowGenerator:
                         self._log(f"   [REF] ✗ {ref_id} - KHÔNG CÓ MEDIA_ID!", "warn")
 
                 if missing_refs:
-                    self._log(f"   [REF] ⚠️ THIẾU {len(missing_refs)} media_id: {missing_refs}", "warn")
+                    self._log(f"   [REF] [WARN] THIẾU {len(missing_refs)} media_id: {missing_refs}", "warn")
                     self._log(f"   [REF] → Cần tạo ảnh nv/loc trước để có media_id!", "warn")
 
                 if image_inputs:
@@ -3827,7 +3827,7 @@ class BrowserFlowGenerator:
                     for idx, img_inp in enumerate(image_inputs):
                         self._log(f"   [REF] #{idx+1}: {img_inp.get('name', 'N/A')[:40]}...")
                 else:
-                    self._log(f"   [REF] ⚠️ KHÔNG CÓ REFERENCE NÀO! Ảnh sẽ tạo không có tham chiếu", "warn")
+                    self._log(f"   [REF] [WARN] KHÔNG CÓ REFERENCE NÀO! Ảnh sẽ tạo không có tham chiếu", "warn")
 
             try:
                 # Generate image using DrissionFlowAPI with reference images
@@ -3867,7 +3867,7 @@ class BrowserFlowGenerator:
                                 self._log(f"   [EXCEL] Saved scene {pid}: media_id={images[0].media_name[:40]}...")
                             elif pid.isdigit():
                                 # Scene image but no media_name - this will cause I2V to skip
-                                self._log(f"   ⚠️ Scene {pid}: API không trả về media_name (I2V sẽ không hoạt động)", "warn")
+                                self._log(f"   [WARN] Scene {pid}: API không trả về media_name (I2V sẽ không hoạt động)", "warn")
                         except Exception as e:
                             self._log(f"   [EXCEL] Cannot update scene {pid}: {e}", "warn")
 
@@ -3925,7 +3925,7 @@ class BrowserFlowGenerator:
 
                     # Check for token expiry - thử refresh và retry
                     if error and "401" in str(error):
-                        self._log("⚠️ Bearer token hết hạn - thử restart Chrome...", "warn")
+                        self._log("[WARN] Bearer token hết hạn - thử restart Chrome...", "warn")
                         try:
                             if drission_api.restart_chrome():
                                 self._log(f"→ Retry prompt: {pid}...", "info")
@@ -3953,7 +3953,7 @@ class BrowserFlowGenerator:
 
                     # Check for 429 - Quota exceeded, cần đổi proxy/tài khoản
                     if error and "429" in str(error):
-                        self._log(f"⚠️ Lỗi 429 (Quota) - Restart Chrome + đổi proxy...", "warn")
+                        self._log(f"[WARN] Lỗi 429 (Quota) - Restart Chrome + đổi proxy...", "warn")
                         try:
                             if drission_api.restart_chrome():
                                 self._log(f"→ Retry prompt: {pid}...", "info")
@@ -3978,14 +3978,14 @@ class BrowserFlowGenerator:
 
                     # Check for POLICY_VIOLATION - Skip prompt immediately (đã retry trong drission_flow_api)
                     if error and "POLICY_VIOLATION" in str(error):
-                        self._log(f"⚠️ POLICY VIOLATION - Prompt vi phạm nội dung! SKIP {pid}", "warn")
+                        self._log(f"[WARN] POLICY VIOLATION - Prompt vi phạm nội dung! SKIP {pid}", "warn")
                         self.stats["skipped"] = self.stats.get("skipped", 0) + 1
                         self.stats["failed"] -= 1  # Undo fail count (đã đánh dấu failed trước đó)
                         continue  # Skip to next prompt
 
                     # Check for 400 - Invalid argument (reference image expired or invalid prompt)
                     if error and "400" in str(error):
-                        self._log(f"⚠️ Lỗi 400 - Restart Chrome + retry không có reference...", "warn")
+                        self._log(f"[WARN] Lỗi 400 - Restart Chrome + retry không có reference...", "warn")
                         try:
                             # Restart Chrome trước khi retry
                             if drission_api.restart_chrome():
@@ -4009,7 +4009,7 @@ class BrowserFlowGenerator:
 
                     # Check for 403 - restart Chrome với proxy mới
                     if error and "403" in str(error):
-                        self._log(f"⚠️ Lỗi 403 - Restart Chrome với proxy mới...", "warn")
+                        self._log(f"[WARN] Lỗi 403 - Restart Chrome với proxy mới...", "warn")
                         try:
                             # Restart Chrome (clear blocked IPs + restart với proxy)
                             if drission_api.restart_chrome():
@@ -4188,7 +4188,7 @@ class BrowserFlowGenerator:
                         time.sleep(wait_time)
 
                 if missing_prompts:
-                    self._log(f"⚠️ Vẫn còn {len(missing_prompts)} ảnh không tạo được sau {MAX_RETRY_ROUNDS} rounds", "warn")
+                    self._log(f"[WARN] Vẫn còn {len(missing_prompts)} ảnh không tạo được sau {MAX_RETRY_ROUNDS} rounds", "warn")
 
                     # === FULL RESTART: Tắt Chrome hoàn toàn, mở lại và thử lại ===
                     # Giống như người dùng làm thủ công: tắt đi bật lại
@@ -4277,7 +4277,7 @@ class BrowserFlowGenerator:
                             time.sleep(wait)
 
                     if missing_prompts:
-                        self._log(f"⚠️ Vẫn còn {len(missing_prompts)} ảnh sau {MAX_FULL_RESTARTS} full restart", "warn")
+                        self._log(f"[WARN] Vẫn còn {len(missing_prompts)} ảnh sau {MAX_FULL_RESTARTS} full restart", "warn")
             else:
                 self._log("Tất cả ảnh đã có, không cần retry")
 
@@ -4445,7 +4445,7 @@ class BrowserFlowGenerator:
                             })
 
                     if scenes_without_media_id:
-                        self._log(f"[I2V] ⚠️ {len(scenes_without_media_id)} scenes KHÔNG CÓ media_id: {scenes_without_media_id[:5]}{'...' if len(scenes_without_media_id) > 5 else ''}", "warn")
+                        self._log(f"[I2V] [WARN] {len(scenes_without_media_id)} scenes KHÔNG CÓ media_id: {scenes_without_media_id[:5]}{'...' if len(scenes_without_media_id) > 5 else ''}", "warn")
                 except Exception as e:
                     self._log(f"[I2V] Error loading scenes: {e}", "warn")
 
@@ -4498,9 +4498,9 @@ class BrowserFlowGenerator:
                             if image_file.exists():
                                 try:
                                     image_file.unlink()
-                                    self._log(f"   🗑️ Deleted image: {image_file.name}")
+                                    self._log(f"   [DEL] Deleted image: {image_file.name}")
                                 except Exception as e:
-                                    self._log(f"   ⚠️ Cannot delete image: {e}", "warn")
+                                    self._log(f"   [WARN] Cannot delete image: {e}", "warn")
 
                             # Update Excel
                             if workbook:

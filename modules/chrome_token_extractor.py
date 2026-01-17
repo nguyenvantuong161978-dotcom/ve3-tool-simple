@@ -447,7 +447,7 @@ class ChromeTokenExtractor:
             if "accounts.google.com" in current_url:
                 # Wait for manual login
                 if callback:
-                    callback("⚠️ Vui lòng đăng nhập Google trong cửa sổ Chrome...")
+                    callback("[WARN] Vui lòng đăng nhập Google trong cửa sổ Chrome...")
                 
                 # Wait up to 2 minutes for login
                 for _ in range(120):
@@ -466,7 +466,7 @@ class ChromeTokenExtractor:
                 token, project_id = self._extract_token_from_logs()
                 if token:
                     if callback:
-                        callback("✅ Đã lấy được token!")
+                        callback("[OK] Đã lấy được token!")
                     return token, project_id, ""
                 time.sleep(1)
             
@@ -482,7 +482,7 @@ class ChromeTokenExtractor:
                 token, project_id = self._extract_token_from_logs()
                 if token:
                     if callback:
-                        callback("✅ Đã lấy được token!")
+                        callback("[OK] Đã lấy được token!")
                     return token, project_id, ""
                 time.sleep(1)
             
@@ -617,8 +617,8 @@ if __name__ == "__main__":
     token, project_id, error = extractor.extract_token(callback=progress)
     
     if token:
-        print(f"\n✅ Success!")
+        print(f"\n[OK] Success!")
         print(f"Token: {token[:50]}...")
         print(f"Project ID: {project_id}")
     else:
-        print(f"\n❌ Failed: {error}")
+        print(f"\n[FAIL] Failed: {error}")
