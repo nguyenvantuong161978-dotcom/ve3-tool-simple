@@ -2119,18 +2119,31 @@ class VMManagerGUI:
                         images_done = worker_total - len([s for s in status.images_missing if s % 2 == 0])
                         videos_total = worker_total
                         videos_done = worker_total - len([s for s in status.videos_missing if s % 2 == 0])
+                    elif wid == "excel":
+                        # Excel worker - show prompts done / total (use Images column for Prompts)
+                        images_done = status.img_prompts_count
+                        images_total = status.total_scenes
+                        videos_done = 0  # N/A for Excel
+                        videos_total = 0
+                        # Show Excel-specific status
+                        if status.excel_status == "complete":
+                            current_task = "Prompts ready"
+                        elif status.excel_status == "needs_prompts":
+                            current_task = f"Need {status.total_scenes - status.img_prompts_count} prompts"
+                        else:
+                            current_task = status.excel_status or "Scanning..."
                     else:
-                        # Excel or other workers - show total
+                        # Other workers - show total
                         images_done = status.images_done
                         images_total = status.total_scenes
                         videos_done = status.videos_done
                         videos_total = status.total_scenes
 
-                    # Current task from details
+                    # Current task from details (override for Chrome)
                     current_scene = details.get("current_scene", 0)
-                    if current_scene > 0:
+                    if wid.startswith("chrome_") and current_scene > 0:
                         current_task = f"Scene {current_scene}/{status.total_scenes}"
-                    else:
+                    elif not current_task:
                         current_task = details.get("current_task", "") or status.current_step
                 except:
                     pass
