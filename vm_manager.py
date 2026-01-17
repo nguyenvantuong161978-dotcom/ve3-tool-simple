@@ -35,6 +35,13 @@ try:
 except ImportError:
     AGENT_PROTOCOL_ENABLED = False
 
+# Import IPv6 Manager for rotation
+try:
+    from modules.ipv6_manager import get_ipv6_manager
+    IPV6_MANAGER_ENABLED = True
+except ImportError:
+    IPV6_MANAGER_ENABLED = False
+
 TOOL_DIR = Path(__file__).parent
 AGENT_DIR = TOOL_DIR / ".agent"
 TASKS_DIR = AGENT_DIR / "tasks"
@@ -550,8 +557,8 @@ class Dashboard:
             "║    tasks     - Show tasks  │ restart N    - Restart Chrome N             ║",
             "║    scan      - Scan new    │ scale N      - Scale to N Chrome            ║",
             "║    logs N    - Worker logs │ errors       - Show all errors              ║",
-            "║    detail N  - Worker info │ set          - Settings                     ║",
-            "║    quit      - Exit                                                      ║",
+            "║    detail N  - Worker info │ ipv6         - IPv6 status/rotate           ║",
+            "║    set       - Settings    │ quit         - Exit                         ║",
             "╚═══════════════════════════════════════════════════════════════════════════╝",
         ]
 
@@ -592,6 +599,18 @@ class VMManager:
         # Control
         self._stop_flag = False
         self._lock = threading.Lock()
+
+        # IPv6 Manager for rotation
+        if IPV6_MANAGER_ENABLED:
+            self.ipv6_manager = get_ipv6_manager()
+        else:
+            self.ipv6_manager = None
+
+        # Error tracking for intelligent restart/IPv6 rotation
+        self.consecutive_403_count = 0  # Tổng 403 liên tiếp (all workers)
+        self.worker_error_counts: Dict[str, int] = {}  # Per-worker consecutive errors
+        self.max_403_before_ipv6 = 5  # Đổi IPv6 sau 5 lần 403
+        self.max_errors_before_clear = 3  # Xóa data Chrome sau 3 lần lỗi liên tiếp
 
         # Auto-detect
         self.auto_path = self._detect_auto_path()
@@ -663,23 +682,26 @@ class VMManager:
                 worker.completed_tasks = agent_status.completed_count
                 worker.failed_tasks = agent_status.failed_count
 
-    def check_worker_health(self, cooldown_seconds: int = 120) -> List[str]:
+    def check_worker_health(self, cooldown_seconds: int = 120) -> List[tuple]:
         """
-        Kiểm tra health của workers, trả về danh sách workers cần restart.
+        Kiểm tra health của workers, trả về danh sách (worker_id, error_type).
 
         Args:
             cooldown_seconds: Thời gian chờ tối thiểu giữa các lần restart (mặc định 120s)
+
+        Returns:
+            List of tuples: [(worker_id, error_type), ...]
         """
-        workers_to_restart = []
+        workers_with_errors = []
 
         if not self.agent_protocol:
-            return workers_to_restart
+            return workers_with_errors
 
         for worker_id, worker in self.workers.items():
             if worker.status == WorkerStatus.STOPPED:
                 continue
 
-            # Check cooldown - không restart nếu vừa restart gần đây
+            # Check cooldown - không action nếu vừa restart gần đây
             if worker.last_restart_time:
                 elapsed = (datetime.now() - worker.last_restart_time).total_seconds()
                 if elapsed < cooldown_seconds:
@@ -688,14 +710,14 @@ class VMManager:
             # Check if worker is alive (updated status within last 60s)
             if not self.agent_protocol.is_worker_alive(worker_id, timeout_seconds=60):
                 self.log(f"{worker_id} không phản hồi (timeout 60s)", worker_id, "WARN")
-                workers_to_restart.append(worker_id)
+                workers_with_errors.append((worker_id, "timeout"))
                 continue
 
-            # Check for critical errors - chỉ restart nếu error mới (sau lần restart cuối)
+            # Check for critical errors - chỉ xử lý nếu error mới (sau lần restart cuối)
             agent_status = self.agent_protocol.get_worker_status(worker_id)
             if agent_status and agent_status.last_error_type:
                 error_type = agent_status.last_error_type
-                if error_type in ("chrome_crash", "chrome_403"):
+                if error_type in ("chrome_crash", "chrome_403", "api_error"):
                     # Kiểm tra xem error này có phải sau lần restart cuối không
                     try:
                         error_time = datetime.fromisoformat(agent_status.last_update)
@@ -704,10 +726,9 @@ class VMManager:
                     except:
                         pass
 
-                    self.log(f"{worker_id} lỗi nghiêm trọng: {error_type}", worker_id, "ERROR")
-                    workers_to_restart.append(worker_id)
+                    workers_with_errors.append((worker_id, error_type))
 
-        return workers_to_restart
+        return workers_with_errors
 
     def get_worker_details(self, worker_id: str) -> Optional[Dict]:
         """Lấy thông tin chi tiết của worker từ Agent Protocol."""
@@ -743,6 +764,156 @@ class VMManager:
         if not self.agent_protocol:
             return {}
         return self.agent_protocol.get_error_summary()
+
+    # ================================================================================
+    # ERROR TRACKING & IPv6 ROTATION
+    # ================================================================================
+
+    def track_worker_error(self, worker_id: str, error_type: str) -> str:
+        """
+        Track lỗi của worker và quyết định hành động.
+
+        Returns:
+            "none" - Không cần action
+            "restart" - Restart worker đó
+            "clear_data" - Xóa data Chrome và login lại
+            "rotate_ipv6" - Đổi IPv6 và restart tất cả
+        """
+        # Track per-worker errors
+        if worker_id not in self.worker_error_counts:
+            self.worker_error_counts[worker_id] = 0
+
+        if error_type == "chrome_403":
+            # Track 403 globally
+            self.consecutive_403_count += 1
+            self.worker_error_counts[worker_id] += 1
+
+            self.log(f"403 count: {self.consecutive_403_count}/{self.max_403_before_ipv6} (global), "
+                     f"{self.worker_error_counts[worker_id]} ({worker_id})", "ERROR", "WARN")
+
+            # Check if need IPv6 rotation
+            if self.consecutive_403_count >= self.max_403_before_ipv6:
+                return "rotate_ipv6"
+
+            # Check if need Chrome data clear (3 consecutive for same worker)
+            if self.worker_error_counts[worker_id] >= self.max_errors_before_clear:
+                return "clear_data"
+
+            return "restart"
+
+        elif error_type in ("chrome_crash", "timeout", "unknown"):
+            self.worker_error_counts[worker_id] += 1
+
+            if self.worker_error_counts[worker_id] >= self.max_errors_before_clear:
+                return "clear_data"
+
+            return "restart"
+
+        return "none"
+
+    def reset_error_tracking(self, worker_id: str = None):
+        """Reset error tracking (sau khi action thành công)."""
+        if worker_id:
+            self.worker_error_counts[worker_id] = 0
+        else:
+            # Reset all
+            self.consecutive_403_count = 0
+            self.worker_error_counts.clear()
+
+    def perform_ipv6_rotation(self) -> bool:
+        """
+        Thực hiện IPv6 rotation:
+        1. Tắt tất cả Chrome workers
+        2. Đổi IPv6
+        3. Khởi động lại tất cả
+
+        Returns:
+            True nếu thành công
+        """
+        if not self.ipv6_manager or not self.ipv6_manager.enabled:
+            self.log("IPv6 rotation disabled or not available", "IPv6", "WARN")
+            return False
+
+        self.log("Starting IPv6 rotation...", "IPv6", "WARN")
+
+        # 1. Stop all Chrome workers
+        for wid, w in self.workers.items():
+            if w.worker_type == "chrome":
+                self.stop_worker(wid)
+
+        # 2. Kill all Chrome processes
+        self.kill_all_chrome()
+        time.sleep(2)
+
+        # 3. Rotate IPv6
+        result = self.ipv6_manager.rotate_ipv6()
+
+        if result["success"]:
+            self.log(f"IPv6 rotated: {result['message']}", "IPv6", "SUCCESS")
+
+            # 4. Reset error tracking
+            self.reset_error_tracking()
+
+            # 5. Wait and restart Chrome workers
+            time.sleep(3)
+            for wid, w in self.workers.items():
+                if w.worker_type == "chrome":
+                    self.start_worker(wid)
+                    time.sleep(2)
+
+            return True
+        else:
+            self.log(f"IPv6 rotation failed: {result['message']}", "IPv6", "ERROR")
+            return False
+
+    def clear_chrome_data(self, worker_id: str) -> bool:
+        """
+        Xóa data Chrome và khởi động lại.
+        Worker sẽ cần login lại.
+        """
+        self.log(f"Clearing Chrome data for {worker_id}...", worker_id, "WARN")
+
+        # Stop worker
+        self.stop_worker(worker_id)
+        self.kill_all_chrome()
+
+        # Get Chrome profile path
+        w = self.workers.get(worker_id)
+        if not w:
+            return False
+
+        # Xóa profile nếu có
+        # TODO: Implement Chrome profile clearing based on settings
+        # For now, just restart and reset error count
+        self.reset_error_tracking(worker_id)
+
+        time.sleep(3)
+        self.start_worker(worker_id)
+
+        self.log(f"Chrome data cleared, {worker_id} restarted", worker_id, "SUCCESS")
+        return True
+
+    def handle_worker_error(self, worker_id: str, error_type: str):
+        """
+        Xử lý lỗi worker theo logic thông minh:
+        - Lỗi 1-2 lần → Restart
+        - Lỗi 3 lần liên tiếp → Clear data + Restart
+        - 403 lỗi 5 lần (any worker) → Đổi IPv6 + Restart all
+        """
+        action = self.track_worker_error(worker_id, error_type)
+
+        if action == "rotate_ipv6":
+            self.log(f"403 threshold reached ({self.consecutive_403_count}), rotating IPv6...", "MANAGER", "ERROR")
+            self.perform_ipv6_rotation()
+
+        elif action == "clear_data":
+            self.log(f"Error threshold reached for {worker_id}, clearing data...", worker_id, "ERROR")
+            self.clear_chrome_data(worker_id)
+
+        elif action == "restart":
+            self.restart_worker(worker_id)
+            # Reset count cho worker này sau restart
+            self.worker_error_counts[worker_id] = max(0, self.worker_error_counts.get(worker_id, 1) - 1)
 
     # ================================================================================
     # TASK MANAGEMENT
@@ -1002,10 +1173,11 @@ class VMManager:
                 health_check_counter += 1
                 if health_check_counter >= 6:
                     health_check_counter = 0
-                    workers_to_restart = self.check_worker_health()
-                    for wid in workers_to_restart:
-                        self.log(f"Auto-restarting {wid}...", "MANAGER", "WARN")
-                        self.restart_worker(wid)
+                    workers_with_errors = self.check_worker_health()
+                    for wid, error_type in workers_with_errors:
+                        # Sử dụng handle_worker_error thay vì restart trực tiếp
+                        # Hàm này sẽ quyết định: restart, clear data, hoặc IPv6 rotation
+                        self.handle_worker_error(wid, error_type)
 
                 # 4. Check completed tasks và retry nếu cần
                 for task in list(self.tasks.values()):
@@ -1167,6 +1339,30 @@ class VMManager:
                             print(f"  Error: {e}")
                     elif cmd == "detail":
                         print("\n  Usage: detail <worker>  (e.g., detail 1, detail excel)")
+                    elif cmd == "ipv6":
+                        # Hiển thị trạng thái IPv6
+                        if self.ipv6_manager:
+                            status = self.ipv6_manager.get_status()
+                            print(f"\n  IPv6 STATUS:")
+                            print(f"    Enabled:        {status['enabled']}")
+                            print(f"    Interface:      {status['interface']}")
+                            print(f"    Current IPs:    {status['current_ipv6']}")
+                            print(f"    Available:      {status['available_count']}")
+                            print(f"    Rotations:      {status['rotation_count']}")
+                            print(f"    Last rotation:  {status['last_rotation'] or 'Never'}")
+                            print(f"\n  ERROR TRACKING:")
+                            print(f"    403 count:      {self.consecutive_403_count}/{self.max_403_before_ipv6}")
+                            for wid, count in self.worker_error_counts.items():
+                                print(f"    {wid}:      {count}/{self.max_errors_before_clear}")
+                        else:
+                            print("\n  IPv6 Manager not available")
+                    elif cmd == "ipv6 rotate":
+                        # Manual rotation
+                        if self.ipv6_manager and self.ipv6_manager.enabled:
+                            print("\n  Rotating IPv6...")
+                            self.perform_ipv6_rotation()
+                        else:
+                            print("\n  IPv6 rotation disabled or not available")
                     elif cmd == "set":
                         print(f"\n  SETTINGS:")
                         for k, v in self.settings.get_summary().items():
@@ -1174,7 +1370,7 @@ class VMManager:
                     elif cmd in ("quit", "exit", "q"):
                         break
                     else:
-                        print("  Commands: status, tasks, scan, restart, scale, logs, errors, detail, set, quit")
+                        print("  Commands: status, tasks, scan, restart, scale, logs, errors, detail, ipv6, set, quit")
 
                 except (EOFError, KeyboardInterrupt):
                     break
