@@ -47,6 +47,7 @@ AGENT_DIR = TOOL_DIR / ".agent"
 TASKS_DIR = AGENT_DIR / "tasks"
 RESULTS_DIR = AGENT_DIR / "results"
 STATUS_DIR = AGENT_DIR / "status"
+LOGS_DIR = AGENT_DIR / "logs"
 CONFIG_FILE = TOOL_DIR / "config" / "settings.yaml"
 
 # ================================================================================
@@ -705,7 +706,7 @@ class VMManager:
         # Control
         self._stop_flag = False
         self._lock = threading.Lock()
-        self.hidden_mode = False  # Track if workers run in hidden mode (for GUI)
+        self.gui_mode = False  # Track if workers run in GUI mode (minimized CMD)
 
         # IPv6 Manager for rotation
         if IPV6_MANAGER_ENABLED:
@@ -724,7 +725,7 @@ class VMManager:
         self.channel = self._get_channel_from_folder()
 
     def _setup_agent_dirs(self):
-        for d in [AGENT_DIR, TASKS_DIR, RESULTS_DIR, STATUS_DIR]:
+        for d in [AGENT_DIR, TASKS_DIR, RESULTS_DIR, STATUS_DIR, LOGS_DIR]:
             d.mkdir(parents=True, exist_ok=True)
         for f in TASKS_DIR.glob("*.json"):
             f.unlink()
@@ -1179,7 +1180,7 @@ class VMManager:
             time.sleep(3)
             for wid, w in self.workers.items():
                 if w.worker_type == "chrome":
-                    self.start_worker(wid, hidden=self.hidden_mode)
+                    self.start_worker(wid, gui_mode=self.gui_mode)
                     time.sleep(2)
 
             return True
@@ -1384,13 +1385,140 @@ class VMManager:
             subprocess.run(["pkill", "-f", "chrome"], capture_output=True)
         time.sleep(2)
 
-    def start_worker(self, worker_id: str, hidden: bool = False) -> bool:
+    # ================================================================================
+    # CHROME WINDOW MANAGEMENT (Hide/Show by moving off-screen)
+    # ================================================================================
+
+    def get_chrome_windows(self) -> List[int]:
+        """Lấy danh sách handle của các cửa sổ Chrome."""
+        if sys.platform != "win32":
+            return []
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            user32 = ctypes.windll.user32
+            chrome_windows = []
+
+            def enum_windows_callback(hwnd, lParam):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        title = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, title, length + 1)
+                        # Chrome windows usually have " - Google Chrome" in title
+                        if "Chrome" in title.value or "chrome" in title.value.lower():
+                            chrome_windows.append(hwnd)
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            user32.EnumWindows(WNDENUMPROC(enum_windows_callback), 0)
+
+            return chrome_windows
+        except Exception as e:
+            self.log(f"Error getting Chrome windows: {e}", "CHROME", "ERROR")
+            return []
+
+    def hide_chrome_windows(self):
+        """
+        Ẩn các cửa sổ Chrome bằng cách di chuyển ra ngoài màn hình.
+        Chrome vẫn chạy và có thể xử lý CAPTCHA.
+        """
+        if sys.platform != "win32":
+            self.log("Window hiding only supported on Windows", "CHROME", "WARN")
+            return False
+
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+
+            chrome_windows = self.get_chrome_windows()
+            if not chrome_windows:
+                self.log("No Chrome windows found", "CHROME", "WARN")
+                return False
+
+            # Di chuyển tất cả cửa sổ Chrome ra ngoài màn hình (x = -3000)
+            for hwnd in chrome_windows:
+                # SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004
+                user32.SetWindowPos(hwnd, 0, -3000, 100, 0, 0, 0x0001 | 0x0004)
+
+            self.log(f"Hidden {len(chrome_windows)} Chrome windows (moved off-screen)", "CHROME", "SUCCESS")
+            return True
+        except Exception as e:
+            self.log(f"Error hiding Chrome windows: {e}", "CHROME", "ERROR")
+            return False
+
+    def show_chrome_windows(self):
+        """
+        Hiện các cửa sổ Chrome bằng cách di chuyển vào màn hình.
+        """
+        if sys.platform != "win32":
+            self.log("Window showing only supported on Windows", "CHROME", "WARN")
+            return False
+
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+
+            chrome_windows = self.get_chrome_windows()
+            if not chrome_windows:
+                self.log("No Chrome windows found", "CHROME", "WARN")
+                return False
+
+            # Di chuyển các cửa sổ Chrome vào màn hình với cascade effect
+            x_offset = 50
+            y_offset = 50
+            for i, hwnd in enumerate(chrome_windows):
+                x = 100 + (i * x_offset)
+                y = 100 + (i * y_offset)
+                # SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004
+                user32.SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0001 | 0x0004)
+
+            self.log(f"Shown {len(chrome_windows)} Chrome windows", "CHROME", "SUCCESS")
+            return True
+        except Exception as e:
+            self.log(f"Error showing Chrome windows: {e}", "CHROME", "ERROR")
+            return False
+
+    def toggle_chrome_visibility(self) -> bool:
+        """
+        Toggle hiển thị Chrome windows.
+        Returns: True nếu đang hiển thị, False nếu đang ẩn
+        """
+        if sys.platform != "win32":
+            return True
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+
+            chrome_windows = self.get_chrome_windows()
+            if not chrome_windows:
+                return True
+
+            # Kiểm tra vị trí hiện tại của cửa sổ đầu tiên
+            rect = wintypes.RECT()
+            user32.GetWindowRect(chrome_windows[0], ctypes.byref(rect))
+
+            # Nếu x < 0 (đang ẩn), thì show
+            if rect.left < 0:
+                self.show_chrome_windows()
+                return True
+            else:
+                self.hide_chrome_windows()
+                return False
+        except Exception:
+            return True
+
+    def start_worker(self, worker_id: str, gui_mode: bool = False) -> bool:
         """
         Start a worker process.
 
         Args:
             worker_id: ID of worker to start
-            hidden: If True, hide CMD window and capture logs to file (for GUI mode)
+            gui_mode: If True, start with minimized CMD window but Chrome visible
         """
         if worker_id not in self.workers:
             return False
@@ -1413,29 +1541,37 @@ class VMManager:
                 w.status = WorkerStatus.ERROR
                 return False
 
-            if sys.platform == "win32":
-                if hidden:
-                    # Hidden mode - không mở CMD, redirect output to log file
-                    log_dir = AGENT_DIR / "logs"
-                    log_dir.mkdir(parents=True, exist_ok=True)
-                    log_file = log_dir / f"{worker_id}.log"
+            # Ensure logs directory exists
+            log_dir = LOGS_DIR
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / f"{worker_id}.log"
 
+            if sys.platform == "win32":
+                # Windows - start with cmd window
+                title = f"{w.worker_type.upper()} {w.worker_num or ''}"
+                cmd_args = f"python {script.name}"
+                if args:
+                    cmd_args += f" {args}"
+
+                if gui_mode:
+                    # GUI mode - minimize CMD window, redirect output to log file
+                    # Chrome will still open and be visible (can be hidden later with hide_chrome_windows)
                     cmd_list = [sys.executable, str(script)]
                     if args:
                         cmd_list.extend(args.split())
 
-                    # Hide window using STARTUPINFO
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    startupinfo.wShowWindow = subprocess.SW_HIDE
-
-                    # Open log file (append mode) - keep file handle open for process lifetime
-                    # Store the file handle in worker info so it stays open
+                    # Open log file
                     log_handle = open(log_file, 'a', encoding='utf-8', buffering=1)
                     log_handle.write(f"\n{'='*60}\n")
                     log_handle.write(f"[{datetime.now().isoformat()}] Starting {worker_id}\n")
+                    log_handle.write(f"Command: {' '.join(cmd_list)}\n")
                     log_handle.write(f"{'='*60}\n")
                     log_handle.flush()
+
+                    # Minimize CMD window but let Chrome be visible
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = 6  # SW_SHOWMINNOACTIVE
 
                     w.process = subprocess.Popen(
                         cmd_list,
@@ -1443,19 +1579,15 @@ class VMManager:
                         stdout=log_handle,
                         stderr=subprocess.STDOUT,
                         startupinfo=startupinfo,
-                        creationflags=subprocess.CREATE_NO_WINDOW
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
                     )
-                    # Store log handle to keep it open
                     w._log_handle = log_handle
                 else:
-                    # Visible mode - mở CMD window
-                    title = f"{w.worker_type.upper()} {w.worker_num or ''}"
-                    cmd_args = f"python {script.name}"
-                    if args:
-                        cmd_args += f" {args}"
+                    # Normal mode - visible CMD window
                     cmd = f'start "{title}" cmd /k "cd /d {TOOL_DIR} && {cmd_args}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR))
             else:
+                # Linux/Mac
                 cmd_list = [sys.executable, str(script)]
                 if args:
                     cmd_list.extend(args.split())
@@ -1463,10 +1595,12 @@ class VMManager:
 
             w.status = WorkerStatus.IDLE
             w.start_time = datetime.now()
-            self.log(f"{worker_id} started {'(hidden)' if hidden else ''}", worker_id, "SUCCESS")
+            self.log(f"{worker_id} started", worker_id, "SUCCESS")
             return True
         except Exception as e:
             self.log(f"Failed: {e}", worker_id, "ERROR")
+            import traceback
+            self.log(f"Traceback: {traceback.format_exc()}", worker_id, "ERROR")
             w.status = WorkerStatus.ERROR
             w.last_error = str(e)
             return False
@@ -1501,26 +1635,26 @@ class VMManager:
             self.kill_all_chrome()
 
         time.sleep(3)
-        self.start_worker(worker_id, hidden=self.hidden_mode)
+        self.start_worker(worker_id, gui_mode=self.gui_mode)
 
         # Track restart time và count
         w.last_restart_time = datetime.now()
         w.restart_count += 1
         self.log(f"{worker_id} restarted (count: {w.restart_count})", worker_id, "SUCCESS")
 
-    def start_all(self, hidden: bool = False):
+    def start_all(self, gui_mode: bool = False):
         """Start all workers.
 
         Args:
-            hidden: If True, hide CMD windows (for GUI mode)
+            gui_mode: If True, minimize CMD windows and log to files (for GUI mode)
         """
-        self.hidden_mode = hidden  # Track mode for restart
+        self.gui_mode = gui_mode  # Track mode for restart
         self.kill_all_chrome()
         if self.enable_excel:
-            self.start_worker("excel", hidden=hidden)
+            self.start_worker("excel", gui_mode=gui_mode)
             time.sleep(2)
         for i in range(1, self.num_chrome_workers + 1):
-            self.start_worker(f"chrome_{i}", hidden=hidden)
+            self.start_worker(f"chrome_{i}", gui_mode=gui_mode)
             time.sleep(2)
 
     def stop_all(self):
@@ -1634,7 +1768,7 @@ class VMManager:
                             self.stop_all()
                             # Scale with auto-creation of Chrome profiles
                             if self.scale_chrome_workers(num):
-                                self.start_all(hidden=self.hidden_mode)
+                                self.start_all(gui_mode=self.gui_mode)
                                 print(f"  Scaled to {num} Chrome workers")
                             else:
                                 print(f"  Failed to scale to {num} workers")

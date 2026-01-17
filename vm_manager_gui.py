@@ -864,17 +864,17 @@ class VMManagerGUI:
         row1 = ttk.Frame(frame)
         row1.pack(fill="x", pady=5)
 
-        # Excel Mode
+        # Excel Mode - default basic
         ttk.Label(row1, text="Excel Mode:").pack(side="left", padx=(0, 5))
-        self.excel_mode_var = tk.StringVar(value="full")
+        self.excel_mode_var = tk.StringVar(value="basic")
         excel_combo = ttk.Combobox(row1, textvariable=self.excel_mode_var,
                                     values=["basic", "full"], width=10, state="readonly")
         excel_combo.pack(side="left", padx=(0, 20))
         excel_combo.bind("<<ComboboxSelected>>", self._on_excel_mode_change)
 
-        # Video Mode
+        # Video Mode - default basic
         ttk.Label(row1, text="Video Mode:").pack(side="left", padx=(0, 5))
-        self.video_mode_var = tk.StringVar(value="full")
+        self.video_mode_var = tk.StringVar(value="basic (8s)")
         video_combo = ttk.Combobox(row1, textvariable=self.video_mode_var,
                                     values=["basic (8s)", "full"], width=12, state="readonly")
         video_combo.pack(side="left", padx=(0, 20))
@@ -911,6 +911,15 @@ class VMManagerGUI:
 
         self.scan_btn = ttk.Button(row2, text="🔍 Scan Projects", command=self._scan_projects, width=15)
         self.scan_btn.pack(side="left", padx=5)
+
+        ttk.Separator(row2, orient="vertical").pack(side="left", fill="y", padx=10)
+
+        # Chrome visibility toggle buttons
+        self.hide_chrome_btn = ttk.Button(row2, text="👁 Hide Chrome", command=self._hide_chrome, width=14)
+        self.hide_chrome_btn.pack(side="left", padx=5)
+
+        self.show_chrome_btn = ttk.Button(row2, text="👁 Show Chrome", command=self._show_chrome, width=14)
+        self.show_chrome_btn.pack(side="left", padx=5)
 
         ttk.Separator(row2, orient="vertical").pack(side="left", fill="y", padx=10)
 
@@ -1110,11 +1119,12 @@ class VMManagerGUI:
             self.log_worker_combo.configure(values=worker_list)
 
         self.running = True
-        self._log("Starting all workers in hidden mode...")
+        self._log("Starting all workers (CMD minimized, Chrome visible)...")
 
         def start_thread():
-            # Start in hidden mode - CMD windows hidden, logs to file
-            self.manager.start_all(hidden=True)
+            # Start in GUI mode - CMD windows minimized, Chrome still visible for CAPTCHA
+            # Chrome can be hidden/shown later using Hide/Show Chrome buttons
+            self.manager.start_all(gui_mode=True)
             # Start orchestration in background
             threading.Thread(target=self.manager.orchestrate, daemon=True).start()
 
@@ -1155,6 +1165,28 @@ class VMManagerGUI:
             threading.Thread(target=self.manager.perform_ipv6_rotation, daemon=True).start()
         else:
             messagebox.showwarning("Warning", "IPv6 Manager not available")
+
+    def _hide_chrome(self):
+        """Hide Chrome windows (move off-screen)."""
+        if self.manager:
+            self._log("Hiding Chrome windows (moving off-screen)...")
+            if self.manager.hide_chrome_windows():
+                self._log("Chrome windows hidden")
+            else:
+                self._log("No Chrome windows found to hide")
+        else:
+            messagebox.showwarning("Warning", "Manager not started")
+
+    def _show_chrome(self):
+        """Show Chrome windows (move back on-screen)."""
+        if self.manager:
+            self._log("Showing Chrome windows...")
+            if self.manager.show_chrome_windows():
+                self._log("Chrome windows shown")
+            else:
+                self._log("No Chrome windows found to show")
+        else:
+            messagebox.showwarning("Warning", "Manager not started")
 
     def _scan_projects(self):
         """Scan for projects."""
