@@ -413,11 +413,8 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
 
         # Step 7: Copy to VISUAL
         log(f"\n[STEP 7] Copying to VISUAL...")
-        if copy_to_visual(code):
+        if copy_to_visual(code, local_dir):
             log(f"  [OK] Copied to VISUAL!")
-            # Xóa local project sau khi copy
-            delete_local_project(code)
-            log(f"  [OK] Deleted local project")
             return True
         else:
             log(f"  [WARN] Failed to copy to VISUAL", "WARN")

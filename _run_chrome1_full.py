@@ -304,10 +304,8 @@ def process_project_full(code: str, callback=None) -> bool:
 
         # Step 8: Copy to VISUAL
         log(f"\n[STEP 8] Copying to VISUAL...")
-        if copy_to_visual(code):
+        if copy_to_visual(code, local_dir):
             log(f"  [OK] Copied to VISUAL!")
-            delete_local_project(code)
-            log(f"  [OK] Deleted local project")
             return True
         else:
             log(f"  [WARN] Failed to copy to VISUAL", "WARN")

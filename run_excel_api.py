@@ -201,7 +201,7 @@ def create_excel_with_api(
         api_success = gen.run_all_steps(
             project_dir,
             name,
-            log_callback=lambda msg: log_callback(msg, "INFO")
+            log_callback=lambda msg, level="INFO": log_callback(msg, level)
         )
 
         if api_success and excel_path.exists():
@@ -285,7 +285,7 @@ def fix_excel_with_api(
         api_success = gen.run_all_steps(
             project_dir,
             name,
-            log_callback=lambda msg: log_callback(msg, "INFO")
+            log_callback=lambda msg, level="INFO": log_callback(msg, level)
         )
 
         if api_success:
