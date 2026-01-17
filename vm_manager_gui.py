@@ -476,7 +476,7 @@ class ProjectDetailDialog(tk.Toplevel):
             self.scene_listbox.delete(0, "end")
             for scene in self.scenes:
                 # Status icons
-                img_icon = "[v]" if scene.img_local_path and Path(scene.img_local_path).exists() else "○"
+                img_icon = "[v]" if scene.img_path and Path(scene.img_path).exists() else "○"
                 vid_icon = "[v]" if scene.video_local_path and Path(scene.video_local_path).exists() else "○"
                 prompt_icon = "[v]" if scene.img_prompt else "○"
 
@@ -484,7 +484,7 @@ class ProjectDetailDialog(tk.Toplevel):
                     f"Scene {scene.scene_number:03d} │ P:{prompt_icon} I:{img_icon} V:{vid_icon}")
 
                 # Color based on status
-                if scene.img_local_path and Path(scene.img_local_path).exists():
+                if scene.img_path and Path(scene.img_path).exists():
                     self.scene_listbox.itemconfig("end", fg="green")
                 elif not scene.img_prompt:
                     self.scene_listbox.itemconfig("end", fg="red")
@@ -535,7 +535,7 @@ class ProjectDetailDialog(tk.Toplevel):
 
     def _load_image_preview(self, scene):
         """Load and display image preview."""
-        img_path = scene.img_local_path
+        img_path = scene.img_path
 
         if not img_path or not Path(img_path).exists():
             self.image_label.configure(image="", text="No image generated")
@@ -1643,13 +1643,13 @@ class VMManagerGUI:
             for scene in scenes:
                 # Status checks
                 has_prompt = "[v]" if scene.img_prompt else "-"
-                has_image = "[v]" if scene.img_local_path and Path(scene.img_local_path).exists() else "-"
+                has_image = "[v]" if scene.img_path and Path(scene.img_path).exists() else "-"
                 has_video = "[v]" if scene.video_local_path and Path(scene.video_local_path).exists() else "-"
 
                 # Count stats
                 if scene.img_prompt:
                     prompts_done += 1
-                if scene.img_local_path and Path(scene.img_local_path).exists():
+                if scene.img_path and Path(scene.img_path).exists():
                     images_done += 1
                 if scene.video_local_path and Path(scene.video_local_path).exists():
                     videos_done += 1

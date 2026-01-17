@@ -72,15 +72,26 @@ def close_agent():
         _agent = None
 
 
+def safe_str(s) -> str:
+    """Convert any value to a safe ASCII-friendly string."""
+    try:
+        text = str(s)
+        # Replace non-ASCII characters with '?'
+        return text.encode('ascii', errors='replace').decode('ascii')
+    except:
+        return "[encoding error]"
+
+
 def agent_log(msg: str, level: str = "INFO"):
     """Log và gửi đến Agent."""
     global _agent
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+    safe_msg = safe_str(msg)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {safe_msg}")
     if _agent:
         if level == "ERROR":
-            _agent.log_error(msg)
+            _agent.log_error(safe_msg)
         else:
-            _agent.log(msg, level)
+            _agent.log(safe_msg, level)
 
 # Import từ run_worker (dùng chung logic)
 from run_worker import (

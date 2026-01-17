@@ -346,11 +346,11 @@ class QualityChecker:
 
             # Check images
             for scene in scenes:
-                img_path = scene.img_local_path
-                if img_path and Path(img_path).exists():
+                scene_img_path = scene.img_path
+                if scene_img_path and Path(scene_img_path).exists():
                     status.images_done += 1
                 else:
-                    status.images_missing.append(scene.scene_number)
+                    status.images_missing.append(scene.scene_id)
 
             if status.excel_status == "complete":
                 if status.images_done == status.total_scenes:
@@ -360,11 +360,11 @@ class QualityChecker:
 
             # Check videos
             for scene in scenes:
-                video_path = scene.video_local_path
-                if video_path and Path(video_path).exists():
+                scene_video_path = scene.video_path
+                if scene_video_path and Path(scene_video_path).exists():
                     status.videos_done += 1
                 else:
-                    status.videos_missing.append(scene.scene_number)
+                    status.videos_missing.append(scene.scene_id)
 
             if status.images_done == status.total_scenes:
                 if status.videos_done == status.total_scenes:
@@ -1572,14 +1572,19 @@ class VMManager:
             if sys.platform == "win32":
                 # Windows - start with cmd window
                 title = f"{w.worker_type.upper()} {w.worker_num or ''}"
-                cmd_args = f"python {script.name}"
+                cmd_args = f"python -X utf8 {script.name}"
                 if args:
                     cmd_args += f" {args}"
+
+                # Prepare environment with UTF-8 encoding for subprocess
+                worker_env = os.environ.copy()
+                worker_env['PYTHONIOENCODING'] = 'utf-8'
+                worker_env['PYTHONUTF8'] = '1'
 
                 if gui_mode:
                     # GUI mode - minimize CMD window, redirect output to log file
                     # Chrome will still open and be visible (can be hidden later with hide_chrome_windows)
-                    cmd_list = [sys.executable, str(script)]
+                    cmd_list = [sys.executable, '-X', 'utf8', str(script)]
                     if args:
                         cmd_list.extend(args.split())
 
@@ -1602,19 +1607,23 @@ class VMManager:
                         stdout=log_handle,
                         stderr=subprocess.STDOUT,
                         startupinfo=startupinfo,
-                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                        env=worker_env
                     )
                     w._log_handle = log_handle
                 else:
-                    # Normal mode - visible CMD window
-                    cmd = f'start "{title}" cmd /k "cd /d {TOOL_DIR} && {cmd_args}"'
-                    w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR))
+                    # Normal mode - visible CMD window with UTF-8 code page
+                    cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
+                    w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
             else:
                 # Linux/Mac
-                cmd_list = [sys.executable, str(script)]
+                worker_env = os.environ.copy()
+                worker_env['PYTHONIOENCODING'] = 'utf-8'
+                worker_env['PYTHONUTF8'] = '1'
+                cmd_list = [sys.executable, '-X', 'utf8', str(script)]
                 if args:
                     cmd_list.extend(args.split())
-                w.process = subprocess.Popen(cmd_list, cwd=str(TOOL_DIR))
+                w.process = subprocess.Popen(cmd_list, cwd=str(TOOL_DIR), env=worker_env)
 
             w.status = WorkerStatus.IDLE
             w.start_time = datetime.now()
