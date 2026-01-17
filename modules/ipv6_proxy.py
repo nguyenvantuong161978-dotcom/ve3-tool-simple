@@ -12,6 +12,23 @@ Proxy kết nối ra ngoài: IPv6 address
 Như vậy RDP vẫn dùng IPv4, Chrome dùng IPv6.
 """
 
+import sys
+import os
+
+# Fix Windows encoding issues
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+    if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+
+
 import socket
 import threading
 import select
@@ -62,13 +79,13 @@ class IPv6SocksProxy:
             self._thread = threading.Thread(target=self._accept_loop, daemon=True)
             self._thread.start()
 
-            self.log(f"[IPv6-Proxy] ✓ Started on localhost:{self.listen_port}")
+            self.log(f"[IPv6-Proxy] [v] Started on localhost:{self.listen_port}")
             if self.ipv6_address:
                 self.log(f"[IPv6-Proxy] → Routing via: {self.ipv6_address}")
             return True
 
         except Exception as e:
-            self.log(f"[IPv6-Proxy] ✗ Failed to start: {e}")
+            self.log(f"[IPv6-Proxy] [x] Failed to start: {e}")
             return False
 
     def stop(self):

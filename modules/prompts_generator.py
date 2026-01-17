@@ -5,6 +5,23 @@ Sử dụng AI API để phân tích SRT và tạo prompts cho ảnh/video.
 Hỗ trợ: DeepSeek API
 """
 
+import sys
+import os
+
+# Fix Windows encoding issues
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+    if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+
+
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
@@ -822,7 +839,7 @@ class PromptGenerator:
                     open_brackets = result.count('[') - result.count(']')
 
                     if open_braces > 0 or open_brackets > 0:
-                        print(f"[Director] ⚠️ JSON BỊ TRUNCATE! Braces: +{open_braces}, Brackets: +{open_brackets}")
+                        print(f"[Director] [WARN] JSON BỊ TRUNCATE! Braces: +{open_braces}, Brackets: +{open_brackets}")
                         print("[Director] Response không hoàn chỉnh - sẽ retry...")
                         return ""  # Return empty to trigger retry
                     else:
@@ -1082,10 +1099,10 @@ class PromptGenerator:
             )
 
             if success:
-                self.logger.info("[V2 FLOW] ✓ Hoàn thành!")
+                self.logger.info("[V2 FLOW] [v] Hoàn thành!")
                 return True
             else:
-                self.logger.error("[V2 FLOW] ✗ Thất bại!")
+                self.logger.error("[V2 FLOW] [x] Thất bại!")
                 # KHÔNG fallback về flow cũ - flow cũ tạo scenes lỗi
                 # Nếu V2 fail, return False để retry hoặc dùng fallback_only
                 return False
@@ -1274,7 +1291,7 @@ Trả về JSON:"""
                 self.logger.info(f"[BACKUP] Lưu {len(backup_scenes_data)} backup scenes vào Excel...")
                 workbook.save_director_plan(backup_scenes_data)
                 workbook.save()
-                self.logger.info(f"[BACKUP] ✓ Đã lưu backup với character/location mapping!")
+                self.logger.info(f"[BACKUP] [v] Đã lưu backup với character/location mapping!")
             else:
                 self.logger.info(f"[BACKUP] Đã có {len(existing_plan)} scenes trong director_plan, skip backup")
         except Exception as e:
@@ -1347,7 +1364,7 @@ Trả về JSON:"""
             # Dùng kế hoạch quay từ đạo diễn
             scenes_data = self._convert_shooting_plan_to_scenes(directors_shooting["shooting_plan"])
             using_director_prompts = True
-            self.logger.info(f"[Director] ✓ Sử dụng {len(scenes_data)} shots từ đạo diễn")
+            self.logger.info(f"[Director] [v] Sử dụng {len(scenes_data)} shots từ đạo diễn")
         else:
             # Fallback: Dùng smart_divide_scenes cũ
             self.logger.warning("[Director] Không có kế hoạch quay, sử dụng smart_divide_scenes...")
@@ -1411,7 +1428,7 @@ Trả về JSON:"""
 
                 if not missing_scenes_data:
                     # Tất cả scenes đã có → skip hoàn toàn
-                    self.logger.info(f"[RESUME] ✓ Tất cả {len(scenes_data)} scenes đã có prompts - SKIP!")
+                    self.logger.info(f"[RESUME] [v] Tất cả {len(scenes_data)} scenes đã có prompts - SKIP!")
                     return True
                 else:
                     # Một số scenes thiếu → chỉ generate phần thiếu
@@ -1447,7 +1464,7 @@ Trả về JSON:"""
                     "shot_type": scene.get("shot_type", ""),
                     "camera_angle": scene.get("camera_angle", ""),
                 })
-            self.logger.info(f"[Director Flow] ✓ Lấy {len(all_scene_prompts)} prompts từ đạo diễn")
+            self.logger.info(f"[Director Flow] [v] Lấy {len(all_scene_prompts)} prompts từ đạo diễn")
         else:
             # === FLOW CŨ: Gọi AI tạo prompts ===
             self.logger.info("[Legacy Flow] Tạo prompts bằng AI...")
@@ -1824,7 +1841,7 @@ Trả về JSON:"""
                 # Detect timeline gaps (khoảng thời gian không có scene nào)
                 timeline_gaps = workbook.detect_timeline_gaps(video_duration_seconds)
                 if not timeline_gaps:
-                    self.logger.info(f"[TIMELINE CHECK] ✓ Không có gaps trong timeline - hoàn thành!")
+                    self.logger.info(f"[TIMELINE CHECK] [v] Không có gaps trong timeline - hoàn thành!")
                     break
 
                 total_gap_duration = sum(g['duration'] for g in timeline_gaps)
@@ -2028,7 +2045,7 @@ Trả về JSON:"""
                         total_new_scenes += 1
 
                 workbook.save()
-                self.logger.info(f"[TIMELINE RETRY] ✓ Đã tạo thêm {total_new_scenes} scenes cho gaps")
+                self.logger.info(f"[TIMELINE RETRY] [v] Đã tạo thêm {total_new_scenes} scenes cho gaps")
 
                 # Delay trước retry tiếp theo
                 if retry_round < max_gap_retries - 1:
@@ -2119,9 +2136,9 @@ Trả về JSON:"""
 
                 if force_filled > 0:
                     workbook.save()
-                    self.logger.info(f"[FINAL] ✓ Force filled {force_filled} scenes cho gaps còn lại!")
+                    self.logger.info(f"[FINAL] [v] Force filled {force_filled} scenes cho gaps còn lại!")
             else:
-                self.logger.info("[FINAL] ✓ Timeline đầy đủ - không còn gaps!")
+                self.logger.info("[FINAL] [v] Timeline đầy đủ - không còn gaps!")
         except Exception as e:
             self.logger.error(f"[FINAL] Lỗi force fill: {e}")
 
@@ -2711,7 +2728,7 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
 
                 if gap > 60:  # Gap > 1 phút
                     self.logger.warning(
-                        f"[SRT CHECK] ⚠️ GAP trong SRT: "
+                        f"[SRT CHECK] [WARN] GAP trong SRT: "
                         f"{self._format_timedelta(srt_entries[i].end_time)} -> "
                         f"{self._format_timedelta(srt_entries[i + 1].start_time)} "
                         f"(gap: {gap:.0f}s = {gap/60:.1f} phút)"
@@ -2846,14 +2863,14 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                 chunk_parts = chunk_plan.get("story_parts", [])
 
                 if chunk_parts:
-                    self.logger.info(f"[TIER 1] ✅ Chunk {chunk_num} succeeded with DeepSeek!")
+                    self.logger.info(f"[TIER 1] [OK] Chunk {chunk_num} succeeded with DeepSeek!")
                     break
                 else:
                     self.logger.error(f"[TIER 1] Chunk {chunk_num} attempt {attempt+1} - empty story_parts")
 
             # === TIER 2: SRT Fallback (luôn hoạt động) ===
             if not chunk_parts:
-                self.logger.warning(f"[TIER 2] ⚠️ DeepSeek failed for chunk {chunk_num}, using SRT FALLBACK...")
+                self.logger.warning(f"[TIER 2] [WARN] DeepSeek failed for chunk {chunk_num}, using SRT FALLBACK...")
                 self.logger.warning(f"[TIER 2] Creating shots from {len(chunk_entries)} SRT entries...")
                 chunk_parts = self._create_fallback_shots_from_srt(
                     chunk_entries,
@@ -2862,11 +2879,11 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                     global_style
                 )
                 fallback_shots = sum(len(p.get("shots", [])) for p in chunk_parts) if chunk_parts else 0
-                self.logger.info(f"[TIER 2] ✅ FALLBACK created {len(chunk_parts) if chunk_parts else 0} parts, {fallback_shots} shots")
+                self.logger.info(f"[TIER 2] [OK] FALLBACK created {len(chunk_parts) if chunk_parts else 0} parts, {fallback_shots} shots")
 
             # Safety check - nếu vẫn không có chunk_parts, tạo empty list để tránh crash
             if not chunk_parts:
-                self.logger.error(f"[Director CHUNKING] 🚨 CRITICAL: Chunk {chunk_num} has NO parts even after fallback!")
+                self.logger.error(f"[Director CHUNKING] [!] CRITICAL: Chunk {chunk_num} has NO parts even after fallback!")
                 chunk_parts = []
 
             # Adjust part and shot numbers + VALIDATE TIMESTAMPS
@@ -3024,12 +3041,12 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                         if gap_sec > 30:
                             gap_info = f"Shot {current_shot.get('shot_number')} ({current_end}) -> Shot {next_shot.get('shot_number')} ({next_start}): GAP {gap_sec:.0f}s"
                             gaps_found.append((gap_sec, gap_info, i))
-                            self.logger.warning(f"[GAP CHECK] ⚠️ {gap_info}")
+                            self.logger.warning(f"[GAP CHECK] [WARN] {gap_info}")
                 except Exception as e:
                     pass  # Ignore parsing errors
 
             if gaps_found:
-                self.logger.error(f"[GAP CHECK] ⚠️ TÌM THẤY {len(gaps_found)} GAPS LỚN!")
+                self.logger.error(f"[GAP CHECK] [WARN] TÌM THẤY {len(gaps_found)} GAPS LỚN!")
                 self.logger.error("[GAP CHECK] Đang tự động fill từ SRT entries...")
 
                 # === AUTO-FILL GAPS TỪ SRT ===
@@ -3100,11 +3117,11 @@ Estimated Shots: {part_info.get('estimated_shots', 5)}
                                         "shots": fill_shots
                                     }
                                     all_parts.append(new_part)
-                                    self.logger.info(f"[GAP FILL] ✅ Đã thêm {len(fill_shots)} shots để fill gap")
+                                    self.logger.info(f"[GAP FILL] [OK] Đã thêm {len(fill_shots)} shots để fill gap")
                         except Exception as e:
                             self.logger.warning(f"[GAP FILL] Lỗi fill gap: {e}")
             else:
-                self.logger.info("[GAP CHECK] ✅ Không có gaps lớn")
+                self.logger.info("[GAP CHECK] [OK] Không có gaps lớn")
 
         # Đếm lại total shots sau khi fill gaps
         total_shots_final = sum(len(p.get("shots", [])) for p in all_parts)
@@ -4390,7 +4407,7 @@ Return JSON: {{"scenes": [{{"scene_id": 1, "img_prompt": "...", "video_prompt": 
                 # Create STORY-AWARE visual based on scene_type and scene text
                 scene_text = scene.get("text", "").lower()
 
-                # 🔥 HOOK SCENES (1-3) - CRITICAL FOR VIEWER RETENTION!
+                # [HOT] HOOK SCENES (1-3) - CRITICAL FOR VIEWER RETENTION!
                 # These scenes need EXTRA dramatic visuals to hook viewers immediately
                 if idx < 3:
                     hook_visual = self._create_hook_visual(idx, scene_text, char_parts, loc_part)
@@ -5554,7 +5571,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             # BƯỚC 2: Nhóm SRT entries thành scenes
             self.logger.info("\n[V2 BƯỚC 2] Nhóm SRT entries thành scenes...")
             scenes = self._group_srt_entries_v2(srt_entries, characters, locations)
-            self.logger.info(f"[V2 BƯỚC 2] ✓ Tạo được {len(scenes)} scenes")
+            self.logger.info(f"[V2 BƯỚC 2] [v] Tạo được {len(scenes)} scenes")
 
             # BƯỚC 3: Tạo shots cho mỗi scene - XỬ LÝ THEO BATCH ĐỂ TRÁNH LỖI TOKEN
             self.logger.info("\n[V2 BƯỚC 3] Tạo shots cho mỗi scene (batch mode)...")
@@ -5578,12 +5595,12 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                         for shot in shots:
                             # Validate timestamp
                             if not shot.get("srt_start") or not shot.get("srt_end"):
-                                self.logger.warning(f"    ⚠️ Shot thiếu timestamp, dùng fallback")
+                                self.logger.warning(f"    [WARN] Shot thiếu timestamp, dùng fallback")
                                 continue
 
                             # Validate prompt
                             if not shot.get("img_prompt") or len(shot.get("img_prompt", "")) < 20:
-                                self.logger.warning(f"    ⚠️ Shot thiếu prompt, dùng fallback")
+                                self.logger.warning(f"    [WARN] Shot thiếu prompt, dùng fallback")
                                 continue
 
                             # Validate references - đảm bảo luôn có
@@ -5597,7 +5614,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
                         # Nếu không có shot valid, dùng fallback cho scene
                         if not validated_shots:
-                            self.logger.warning(f"    ⚠️ Scene {scene['scene_id']} không có shot valid, tạo fallback...")
+                            self.logger.warning(f"    [WARN] Scene {scene['scene_id']} không có shot valid, tạo fallback...")
                             num_shots = max(1, int(scene.get("duration_seconds", 5) / 8) + 1)
                             start_secs = self._timestamp_to_seconds_v2(scene.get("srt_start", "00:00:00,000"))
                             validated_shots = self._create_fallback_shots_v2(
@@ -5609,7 +5626,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                         self.logger.info(f"    Scene {scene['scene_id']}: {len(validated_shots)} shots ({scene['srt_start']} - {scene['srt_end']})")
 
                     except Exception as scene_err:
-                        self.logger.error(f"    ❌ Scene {scene['scene_id']} lỗi: {scene_err}, tạo fallback...")
+                        self.logger.error(f"    [FAIL] Scene {scene['scene_id']} lỗi: {scene_err}, tạo fallback...")
                         # Tạo fallback cho scene lỗi
                         num_shots = max(1, int(scene.get("duration_seconds", 5) / 8) + 1)
                         start_secs = self._timestamp_to_seconds_v2(scene.get("srt_start", "00:00:00,000"))
@@ -5624,7 +5641,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                     import time
                     time.sleep(1)
 
-            self.logger.info(f"\n[V2 BƯỚC 3] ✓ Tạo được {len(all_shots)} shots tổng cộng")
+            self.logger.info(f"\n[V2 BƯỚC 3] [v] Tạo được {len(all_shots)} shots tổng cộng")
 
             # === SẮP XẾP VÀ VALIDATE TIMESTAMPS ===
             # Đảm bảo thứ tự đúng và không có timestamp nhảy bất thường
@@ -5636,7 +5653,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                     return 0
 
             all_shots.sort(key=get_start_seconds)
-            self.logger.info("[V2] ✓ Đã sắp xếp shots theo timestamp")
+            self.logger.info("[V2] [v] Đã sắp xếp shots theo timestamp")
 
             # === VALIDATE: Kiểm tra timestamp không nhảy bất thường ===
             # Nếu shot N có start_time > shot N-1 end_time + 10s → cảnh báo
@@ -5656,7 +5673,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 # Kiểm tra gap bất thường
                 gap = shot_start - prev_end_seconds
                 if prev_end_seconds > 0 and gap > MAX_GAP_SECONDS:
-                    self.logger.warning(f"  ⚠️ Gap bất thường {gap:.1f}s tại {shot['srt_start']}, điều chỉnh...")
+                    self.logger.warning(f"  [WARN] Gap bất thường {gap:.1f}s tại {shot['srt_start']}, điều chỉnh...")
                     # Điều chỉnh timestamp để liên tục
                     duration = shot_end - shot_start
                     shot["srt_start"] = self._seconds_to_timestamp(prev_end_seconds)
@@ -5667,7 +5684,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 prev_end_seconds = shot_end
 
             all_shots = validated_shots
-            self.logger.info(f"[V2] ✓ Validated {len(all_shots)} shots với timestamps liên tục")
+            self.logger.info(f"[V2] [v] Validated {len(all_shots)} shots với timestamps liên tục")
 
             # BƯỚC 4: Lưu vào Excel
             self.logger.info("\n[V2 BƯỚC 4] Lưu vào Excel...")
@@ -5678,7 +5695,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
             # === CLEAR SCENES CŨ TRƯỚC KHI THÊM MỚI ===
             workbook.clear_scenes()
-            self.logger.info("[V2] ✓ Đã xóa scenes cũ")
+            self.logger.info("[V2] [v] Đã xóa scenes cũ")
 
             # Đánh số scene_id mới theo thứ tự
             for idx, shot in enumerate(all_shots):
@@ -5729,7 +5746,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
                 workbook.add_scene(scene_obj)
 
             workbook.save()
-            self.logger.info(f"[V2 BƯỚC 4] ✓ Đã lưu {len(all_shots)} shots vào Excel")
+            self.logger.info(f"[V2 BƯỚC 4] [v] Đã lưu {len(all_shots)} shots vào Excel")
 
             self.logger.info("\n" + "=" * 60)
             self.logger.info("[V2 FLOW] HOÀN THÀNH!")
@@ -6074,7 +6091,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             status="pending"
         )
         workbook.add_character(default_char)
-        self.logger.info(f"[FALLBACK] ✓ Narrator: {analysis['narrator_gender']}, {analysis['narrator_age']}")
+        self.logger.info(f"[FALLBACK] [v] Narrator: {analysis['narrator_gender']}, {analysis['narrator_age']}")
 
         # === BƯỚC 3: Tạo nhân vật dựa trên phân tích SRT ===
         # ID phải bắt đầu bằng "nv" để smart_engine nhận diện
@@ -6139,7 +6156,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             )
             workbook.add_character(char_obj)
             all_char_refs.append(f"{fc['id']}.png")
-            self.logger.info(f"[FALLBACK] ✓ {fc['id']}: {fc['name']}")
+            self.logger.info(f"[FALLBACK] [v] {fc['id']}: {fc['name']}")
 
         # === BƯỚC 4: Lưu backup_characters ===
         backup_chars = [{
@@ -6282,8 +6299,8 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
 
         workbook.save_backup_locations(backup_locs)
         for fl in flashback_locs:
-            self.logger.info(f"[FALLBACK] ✓ {fl['id']}: {fl['name']}")
-        self.logger.info(f"[FALLBACK] ✓ Tổng {len(flashback_locs)} locations từ phân tích SRT")
+            self.logger.info(f"[FALLBACK] [v] {fl['id']}: {fl['name']}")
+        self.logger.info(f"[FALLBACK] [v] Tổng {len(flashback_locs)} locations từ phân tích SRT")
 
         # === BƯỚC 6: Nhóm SRT thành scenes ===
         scenes_data = group_srt_into_scenes(
@@ -6292,7 +6309,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
             max_duration=self.max_scene_duration
         )
         total_scenes = len(scenes_data)
-        self.logger.info(f"[FALLBACK] ✓ Chia thành {total_scenes} scenes từ SRT")
+        self.logger.info(f"[FALLBACK] [v] Chia thành {total_scenes} scenes từ SRT")
 
         # === BƯỚC 7: Xác định scenes nào là Narrator (30%) ===
         # Logic: Mỗi 10 scenes có 3 Narrator ở vị trí 1, 4, 7 (tức index 0, 3, 6)
@@ -6523,7 +6540,7 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         narrator_pct = round(narrator_count / total_scenes * 100) if total_scenes > 0 else 0
         flashback_pct = round(flashback_count / total_scenes * 100) if total_scenes > 0 else 0
 
-        self.logger.info(f"[FALLBACK] ✓ Excel hoàn thành:")
+        self.logger.info(f"[FALLBACK] [v] Excel hoàn thành:")
         self.logger.info(f"[FALLBACK]   - Narrator: {narrator_count} scenes ({narrator_pct}%) - fixed character/location")
         self.logger.info(f"[FALLBACK]   - Flashback: {flashback_count} scenes ({flashback_pct}%) - có SRT content")
         self.logger.info(f"[FALLBACK]   - ALL scenes có {len(all_refs)} references (Flow tự chọn)")

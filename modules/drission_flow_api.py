@@ -11,6 +11,22 @@ Flow:
 4. Gọi API trực tiếp với captured URL + payload
 """
 
+import sys
+import os
+
+# Fix Windows encoding issues - must be at module level
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+    if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+
 import json
 import time
 import random
@@ -358,7 +374,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
 
                     // === 403 ERROR: Detect ngay và báo lỗi ===
                     if (response.status === 403 || (data.error && data.error.code === 403)) {
-                        console.log('[RESPONSE] ✗ 403 FORBIDDEN - IP blocked!');
+                        console.log('[RESPONSE] [x] 403 FORBIDDEN - IP blocked!');
                         var errorMsg = data.error ? data.error.message : 'Permission denied';
                         window._response = {error: {code: 403, message: errorMsg}};
                         window._responseError = 'Error 403: ' + errorMsg;
@@ -368,7 +384,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
 
                     // === 400 ERROR: Policy violation (prompt bị cấm) ===
                     if (response.status === 400 || (data.error && data.error.code === 400)) {
-                        console.log('[RESPONSE] ✗ 400 POLICY VIOLATION - Prompt rejected!');
+                        console.log('[RESPONSE] [x] 400 POLICY VIOLATION - Prompt rejected!');
                         var errorMsg = data.error ? data.error.message : 'Policy violation';
                         window._response = {error: {code: 400, message: errorMsg}};
                         window._responseError = 'Error 400: ' + errorMsg;
@@ -383,7 +399,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                         });
 
                         if (readyMedia.length > 0) {
-                            console.log('[RESPONSE] ✓ Got ' + readyMedia.length + ' images with fifeUrl!');
+                            console.log('[RESPONSE] [v] Got ' + readyMedia.length + ' images with fifeUrl!');
                             window._response = data;
                             window._requestPending = false;
                         } else {
@@ -648,7 +664,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
 
                             // Chỉ accept khi số ảnh ready TĂNG LÊN so với baseline
                             if (readyCount > window._lastMediaCount) {
-                                console.log('[PROJECT] ✓ New image ready! (' + window._lastMediaCount + ' → ' + readyCount + ')');
+                                console.log('[PROJECT] [v] New image ready! (' + window._lastMediaCount + ' → ' + readyCount + ')');
                                 window._response = data;
                                 window._requestPending = false;
                             }
@@ -875,7 +891,7 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
     for (var btn of buttons) {
         if (btn.textContent.includes('Cài đặt')) {
             btn.click();
-            console.log('[MODEL] [1] ✓ Clicked Cài đặt');
+            console.log('[MODEL] [1] [v] Clicked Cài đặt');
 
             setTimeout(function() {
                 // Step 2: Click dropdown "Mô hình"
@@ -883,7 +899,7 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
                 for (var combo of combos) {
                     if (combo.textContent.includes('Mô hình')) {
                         combo.click();
-                        console.log('[MODEL] [2] ✓ Clicked Mô hình dropdown');
+                        console.log('[MODEL] [2] [v] Clicked Mô hình dropdown');
 
                         setTimeout(function() {
                             // Step 3: Select "Lower Priority"
@@ -891,24 +907,24 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
                             for (var span of spans) {
                                 if (span.textContent.includes('Lower Priority')) {
                                     span.click();
-                                    console.log('[MODEL] [3] ✓ Selected Lower Priority');
+                                    console.log('[MODEL] [3] [v] Selected Lower Priority');
                                     window._modelSwitchResult = 'SUCCESS';
                                     return;
                                 }
                             }
-                            console.log('[MODEL] [3] ❌ Lower Priority not found');
+                            console.log('[MODEL] [3] [FAIL] Lower Priority not found');
                             window._modelSwitchResult = 'NOT_FOUND_OPTION';
                         }, 300);
                         return;
                     }
                 }
-                console.log('[MODEL] [2] ❌ Mô hình dropdown not found');
+                console.log('[MODEL] [2] [FAIL] Mô hình dropdown not found');
                 window._modelSwitchResult = 'NOT_FOUND_DROPDOWN';
             }, 500);
             return;
         }
     }
-    console.log('[MODEL] [1] ❌ Cài đặt button not found');
+    console.log('[MODEL] [1] [FAIL] Cài đặt button not found');
     window._modelSwitchResult = 'NOT_FOUND_SETTINGS';
 })();
 '''
@@ -1029,13 +1045,13 @@ class DrissionFlowAPI:
             # Nếu đã hết dải, quay lại đầu
             if self._rotating_session_id > range_end:
                 self._rotating_session_id = range_start
-                self.log(f"[Session] ♻️ Đã hết dải, quay lại từ đầu: {range_start}")
+                self.log(f"[Session] [RECYCLE] Đã hết dải, quay lại từ đầu: {range_start}")
             else:
-                self.log(f"[Session] ⏩ Tiếp tục từ session {self._rotating_session_id} (last={last_session})")
+                self.log(f"[Session] [>>] Tiếp tục từ session {self._rotating_session_id} (last={last_session})")
         else:
             # Bắt đầu từ đầu dải
             self._rotating_session_id = range_start
-            self.log(f"[Session] 🆕 Bắt đầu từ session {range_start}")
+            self.log(f"[Session] [NEW] Bắt đầu từ session {range_start}")
 
         self.log(f"[Session] Machine {self._machine_id}, Worker {self.worker_id}: session range {range_start}-{range_end}")
 
@@ -1051,22 +1067,22 @@ class DrissionFlowAPI:
                     self._webshare_proxy = WebshareProxy()
                     self._is_rotating_mode = True
                     rotating = manager.rotating_endpoint
-                    self.log(f"✓ Webshare: ROTATING ENDPOINT mode")
+                    self.log(f"[v] Webshare: ROTATING ENDPOINT mode")
                     self.log(f"  → {rotating.host}:{rotating.port}")
                 elif manager.proxies:
                     self._webshare_proxy = WebshareProxy()  # Wrapper cho manager
                     # Lấy proxy cho worker này (không dùng current_proxy global)
                     worker_proxy = manager.get_proxy_for_worker(self.worker_id)
                     if worker_proxy:
-                        self.log(f"✓ Webshare: {len(manager.proxies)} proxies, worker {self.worker_id}: {worker_proxy.endpoint}")
+                        self.log(f"[v] Webshare: {len(manager.proxies)} proxies, worker {self.worker_id}: {worker_proxy.endpoint}")
                     else:
-                        self.log(f"✓ Webshare: {len(manager.proxies)} proxies loaded")
+                        self.log(f"[v] Webshare: {len(manager.proxies)} proxies loaded")
                 else:
                     self._use_webshare = False
-                    self.log("⚠️ Webshare: No proxies loaded", "WARN")
+                    self.log("[WARN] Webshare: No proxies loaded", "WARN")
             except Exception as e:
                 self._use_webshare = False
-                self.log(f"⚠️ Webshare init error: {e}", "WARN")
+                self.log(f"[WARN] Webshare init error: {e}", "WARN")
 
         # Captured tokens
         self.bearer_token: Optional[str] = None
@@ -1127,7 +1143,7 @@ class DrissionFlowAPI:
         """Chuyển sang model fallback (GEM_PIX) khi quota exceeded."""
         if not self._use_fallback_model:
             self._use_fallback_model = True
-            self.log("[MODEL] 🔄 Chuyển sang Nano Banana (GEM_PIX) do quota exceeded")
+            self.log("[MODEL] [SYNC] Chuyển sang Nano Banana (GEM_PIX) do quota exceeded")
 
     def get_current_model(self) -> str:
         """Trả về model đang dùng."""
@@ -1149,31 +1165,31 @@ class DrissionFlowAPI:
                 if rotator:
                     new_ip = rotator.rotate()
                     if new_ip:
-                        self.log(f"[IPv6] ✓ Rotated to: {new_ip}")
+                        self.log(f"[IPv6] [v] Rotated to: {new_ip}")
                         return True
             except Exception as e:
                 self.log(f"[IPv6] Rotate error: {e}", "WARN")
             return False
 
-        self.log("🌐 [IPv6] ACTIVATING IPv6 MODE...")
+        self.log("[NET] [IPv6] ACTIVATING IPv6 MODE...")
 
         try:
             from modules.ipv6_rotator import get_ipv6_rotator
             rotator = get_ipv6_rotator()
 
             if not rotator or not rotator.ipv6_list:
-                self.log("[IPv6] ✗ Không có IPv6 list!", "ERROR")
+                self.log("[IPv6] [x] Không có IPv6 list!", "ERROR")
                 return False
 
             # Tìm IPv6 hoạt động
             working_ipv6 = rotator.init_with_working_ipv6()
             if not working_ipv6:
-                self.log("[IPv6] ✗ Không tìm được IPv6 hoạt động!", "ERROR")
+                self.log("[IPv6] [x] Không tìm được IPv6 hoạt động!", "ERROR")
                 return False
 
             # Set flag activated
             self._ipv6_activated = True
-            self.log(f"[IPv6] ✓ Activated với IP: {working_ipv6}")
+            self.log(f"[IPv6] [v] Activated với IP: {working_ipv6}")
             self.log("[IPv6] → Restart Chrome với IPv6 proxy...")
 
             return True
@@ -1200,7 +1216,7 @@ class DrissionFlowAPI:
         # 0. Đợi page load xong trước (tránh ContextLostError)
         self.log("   Đợi page load...")
         if not self._wait_for_page_ready(timeout=30):
-            self.log("⚠️ Page chưa sẵn sàng", "WARN")
+            self.log("[WARN] Page chưa sẵn sàng", "WARN")
 
         # 1. Đợi trang load và tìm button "Dự án mới"
         # Nếu không tìm thấy → F5 refresh và thử lại (mỗi 10s)
@@ -1213,7 +1229,7 @@ class DrissionFlowAPI:
                 try:
                     current_url = self.driver.url
                     if "/project/" in current_url:
-                        self.log("✓ Đã vào project (URL check)")
+                        self.log("[v] Đã vào project (URL check)")
                         return True
                 except:
                     pass
@@ -1221,13 +1237,13 @@ class DrissionFlowAPI:
                 try:
                     result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
                     if result == 'CLICKED':
-                        self.log("✓ Clicked 'Dự án mới'")
+                        self.log("[v] Clicked 'Dự án mới'")
                         clicked_success = True
                         time.sleep(2)
                         # Check URL ngay sau click
                         try:
                             if "/project/" in self.driver.url:
-                                self.log("✓ Đã vào project!")
+                                self.log("[v] Đã vào project!")
                                 return True
                         except:
                             pass
@@ -1239,7 +1255,7 @@ class DrissionFlowAPI:
                         # Page refresh có thể là do đang navigate vào project
                         try:
                             if "/project/" in self.driver.url:
-                                self.log("✓ Đã vào project (sau refresh)!")
+                                self.log("[v] Đã vào project (sau refresh)!")
                                 return True
                         except:
                             pass
@@ -1252,17 +1268,17 @@ class DrissionFlowAPI:
                 # Không tìm thấy button → check URL trước khi F5
                 try:
                     if "/project/" in self.driver.url:
-                        self.log("✓ Đã vào project!")
+                        self.log("[v] Đã vào project!")
                         return True
                 except:
                     pass
                 # F5 refresh
-                self.log(f"⚠️ Không tìm thấy button - F5 refresh (lần {refresh_count + 1}/{MAX_REFRESH})...")
+                self.log(f"[WARN] Không tìm thấy button - F5 refresh (lần {refresh_count + 1}/{MAX_REFRESH})...")
                 try:
                     self.driver.refresh()
                     time.sleep(3)  # Đợi page load sau refresh
                     if not self._wait_for_page_ready(timeout=15):
-                        self.log("⚠️ Page chưa sẵn sàng sau refresh", "WARN")
+                        self.log("[WARN] Page chưa sẵn sàng sau refresh", "WARN")
                 except Exception as e:
                     self.log(f"  → F5 error: {e}", "WARN")
                 continue
@@ -1274,11 +1290,11 @@ class DrissionFlowAPI:
             # Check URL lần cuối
             try:
                 if "/project/" in self.driver.url:
-                    self.log("✓ Đã vào project!")
+                    self.log("[v] Đã vào project!")
                     return True
             except:
                 pass
-            self.log(f"✗ Không tìm thấy button 'Dự án mới' sau {MAX_REFRESH} lần refresh", "ERROR")
+            self.log(f"[x] Không tìm thấy button 'Dự án mới' sau {MAX_REFRESH} lần refresh", "ERROR")
             return False
 
         # 2. Chọn "Tạo hình ảnh" từ dropdown
@@ -1286,26 +1302,26 @@ class DrissionFlowAPI:
         for i in range(10):
             result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
             if result == 'CLICKED':
-                self.log("✓ Chọn 'Tạo hình ảnh'")
+                self.log("[v] Chọn 'Tạo hình ảnh'")
                 self._image_mode_selected = True  # Đánh dấu đã chọn mode
                 time.sleep(2)
                 break
             time.sleep(0.5)
         else:
-            self.log("⚠️ Không tìm thấy dropdown - có thể đã ở mode đúng", "WARN")
+            self.log("[WARN] Không tìm thấy dropdown - có thể đã ở mode đúng", "WARN")
 
         # 3. Đợi vào project
         self.log("→ Đợi vào project...")
         for i in range(timeout):
             current_url = self.driver.url
             if "/project/" in current_url:
-                self.log(f"✓ Đã vào dự án!")
+                self.log(f"[v] Đã vào dự án!")
                 return True
             time.sleep(1)
             if i % 10 == 9:
                 self.log(f"  ... đợi {i+1}s")
 
-        self.log("✗ Timeout - chưa vào được dự án", "ERROR")
+        self.log("[x] Timeout - chưa vào được dự án", "ERROR")
         return False
 
     def _warm_up_session(self, dummy_prompt: str = "a simple test image") -> bool:
@@ -1328,7 +1344,7 @@ class DrissionFlowAPI:
         # Tìm textarea và gửi prompt
         textarea = self._find_textarea()
         if not textarea:
-            self.log("✗ Không tìm thấy textarea", "ERROR")
+            self.log("[x] Không tìm thấy textarea", "ERROR")
             return False
 
         textarea.clear()
@@ -1336,7 +1352,7 @@ class DrissionFlowAPI:
         textarea.input(dummy_prompt)
         time.sleep(0.3)
         textarea.input('\n')
-        self.log("✓ Đã gửi prompt, đợi Chrome tạo ảnh...")
+        self.log("[v] Đã gửi prompt, đợi Chrome tạo ảnh...")
 
         # Đợi ảnh được tạo - kiểm tra bằng cách tìm img elements mới
         # hoặc đợi loading indicator biến mất
@@ -1364,15 +1380,15 @@ class DrissionFlowAPI:
             """)
 
             if check_result and check_result.get('found', 0) > 0:
-                self.log(f"✓ Phát hiện {check_result['found']} ảnh!")
+                self.log(f"[v] Phát hiện {check_result['found']} ảnh!")
                 time.sleep(2)  # Đợi thêm để ổn định
-                self.log("✓ Session đã được warm up!")
+                self.log("[v] Session đã được warm up!")
                 return True
 
             if i % 5 == 4:
                 self.log(f"  ... đợi {(i+1)*2}s")
 
-        self.log("⚠️ Không phát hiện được ảnh, tiếp tục...", "WARN")
+        self.log("[WARN] Không phát hiện được ảnh, tiếp tục...", "WARN")
         return True  # Vẫn return True để tiếp tục
 
     def _is_logged_out(self) -> bool:
@@ -1414,7 +1430,7 @@ class DrissionFlowAPI:
             True nếu login thành công
         """
         self.log("=" * 50)
-        self.log("⚠️ PHÁT HIỆN BỊ LOGOUT - TỰ ĐỘNG ĐĂNG NHẬP LẠI")
+        self.log("[WARN] PHÁT HIỆN BỊ LOGOUT - TỰ ĐỘNG ĐĂNG NHẬP LẠI")
         self.log("=" * 50)
 
         try:
@@ -1429,7 +1445,7 @@ class DrissionFlowAPI:
             # 1. Detect mã máy
             machine_code = detect_machine_code()
             if not machine_code:
-                self.log("✗ Không detect được mã máy", "ERROR")
+                self.log("[x] Không detect được mã máy", "ERROR")
                 return False
 
             self.log(f"Mã máy: {machine_code}")
@@ -1438,7 +1454,7 @@ class DrissionFlowAPI:
             self.log("Đọc thông tin tài khoản từ Google Sheet...")
             account_info = get_account_info(machine_code)
             if not account_info:
-                self.log("✗ Không lấy được thông tin tài khoản", "ERROR")
+                self.log("[x] Không lấy được thông tin tài khoản", "ERROR")
                 return False
 
             self.log(f"Tài khoản: {account_info['id']}")
@@ -1455,7 +1471,7 @@ class DrissionFlowAPI:
             # cần login đúng Chrome bị logout, không phải Chrome kia
             for attempt in range(max_retries):
                 if attempt > 0:
-                    self.log(f"🔄 Retry login ({attempt + 1}/{max_retries})...")
+                    self.log(f"[SYNC] Retry login ({attempt + 1}/{max_retries})...")
                     time.sleep(3)
 
                 self.log("Bắt đầu đăng nhập Google...")
@@ -1472,29 +1488,29 @@ class DrissionFlowAPI:
                     )
 
                     if success:
-                        self.log("✓ Đăng nhập thành công!")
+                        self.log("[v] Đăng nhập thành công!")
                         # Đóng Chrome login để setup lại từ đầu
                         time.sleep(2)
                         return True
                     else:
-                        self.log(f"✗ Đăng nhập thất bại (attempt {attempt + 1}/{max_retries})", "WARN")
+                        self.log(f"[x] Đăng nhập thất bại (attempt {attempt + 1}/{max_retries})", "WARN")
                         # Kill Chrome trước khi retry
                         self._kill_chrome()
                         time.sleep(2)
 
                 except Exception as login_err:
-                    self.log(f"✗ Login error (attempt {attempt + 1}): {login_err}", "WARN")
+                    self.log(f"[x] Login error (attempt {attempt + 1}): {login_err}", "WARN")
                     self._kill_chrome()
                     time.sleep(2)
 
-            self.log("✗ Đăng nhập thất bại sau nhiều lần thử", "ERROR")
+            self.log("[x] Đăng nhập thất bại sau nhiều lần thử", "ERROR")
             return False
 
         except ImportError as e:
-            self.log(f"✗ Không import được google_login: {e}", "ERROR")
+            self.log(f"[x] Không import được google_login: {e}", "ERROR")
             return False
         except Exception as e:
-            self.log(f"✗ Lỗi auto-login: {e}", "ERROR")
+            self.log(f"[x] Lỗi auto-login: {e}", "ERROR")
             import traceback
             traceback.print_exc()
             return False
@@ -1522,7 +1538,7 @@ class DrissionFlowAPI:
                     pass
                 self._proxy_bridge = None
 
-            self.log("✓ Closed Chrome và proxy bridge của tool")
+            self.log("[v] Closed Chrome và proxy bridge của tool")
             time.sleep(1)
         except Exception as e:
             pass
@@ -1538,7 +1554,7 @@ class DrissionFlowAPI:
         import shutil
 
         try:
-            self.log("🗑️ Clearing cookies & cache (giữ login)...")
+            self.log("[DEL] Clearing cookies & cache (giữ login)...")
 
             # Đóng Chrome trước
             self._kill_chrome()
@@ -1546,7 +1562,7 @@ class DrissionFlowAPI:
 
             profile_path = self.profile_dir
             if not profile_path or not profile_path.exists():
-                self.log("⚠️ Profile directory not found", "WARN")
+                self.log("[WARN] Profile directory not found", "WARN")
                 return False
 
             # Chỉ xóa cookies, cache - KHÔNG xóa Login Data
@@ -1575,11 +1591,11 @@ class DrissionFlowAPI:
                     except:
                         pass
 
-            self.log(f"✓ Cleared {cleared} items (Login Data kept)")
+            self.log(f"[v] Cleared {cleared} items (Login Data kept)")
             return True
 
         except Exception as e:
-            self.log(f"⚠️ Clear cookies error: {e}", "WARN")
+            self.log(f"[WARN] Clear cookies error: {e}", "WARN")
             return False
 
     def clear_chrome_data(self) -> bool:
@@ -1591,10 +1607,10 @@ class DrissionFlowAPI:
             True nếu xóa thành công
         """
         try:
-            self.log("🗑️ Clearing Chrome data via UI...")
+            self.log("[DEL] Clearing Chrome data via UI...")
 
             if not self.driver:
-                self.log("⚠️ Chrome chưa mở, không thể clear data", "WARN")
+                self.log("[WARN] Chrome chưa mở, không thể clear data", "WARN")
                 return False
 
             # Mở trang Clear browsing data
@@ -1700,14 +1716,14 @@ class DrissionFlowAPI:
                 try:
                     result = self.driver.run_js(JS_CLICK_DELETE)
                     if result == 'CLICKED':
-                        self.log("✓ Clicked 'Delete from this device'")
+                        self.log("[v] Clicked 'Delete from this device'")
                         time.sleep(3)  # Đợi xóa xong
 
                         # Reset flags
                         self._t2v_mode_selected = False
                         self._image_mode_selected = False
-                        self.log("✓ Chrome data cleared!")
-                        self.log("⚠️ Cần login lại Google!")
+                        self.log("[v] Chrome data cleared!")
+                        self.log("[WARN] Cần login lại Google!")
                         return True
                     else:
                         self.log(f"  Attempt {attempt+1}: {result}")
@@ -1726,16 +1742,16 @@ class DrissionFlowAPI:
                 # Enter để confirm
                 self.driver.actions.send_keys(Keys.ENTER)
                 time.sleep(3)
-                self.log("✓ Chrome data cleared (keyboard)!")
+                self.log("[v] Chrome data cleared (keyboard)!")
                 return True
             except Exception as e:
                 self.log(f"  Keyboard shortcut failed: {e}")
 
-            self.log("⚠️ Could not clear Chrome data via UI", "WARN")
+            self.log("[WARN] Could not clear Chrome data via UI", "WARN")
             return False
 
         except Exception as e:
-            self.log(f"✗ Clear Chrome data failed: {e}", "ERROR")
+            self.log(f"[x] Clear Chrome data failed: {e}", "ERROR")
             return False
 
     def _force_kill_all_chrome(self):
@@ -1746,7 +1762,7 @@ class DrissionFlowAPI:
         import subprocess
         import platform
 
-        self.log("  🔪 Force killing ALL Chrome processes...")
+        self.log("  [KILL] Force killing ALL Chrome processes...")
 
         try:
             # 1. Đóng driver trước
@@ -1784,11 +1800,11 @@ class DrissionFlowAPI:
                     subprocess.run(['pkill', '-9', '-f', 'chromium'], capture_output=True, timeout=10)
                     time.sleep(1)
 
-            self.log("  ✓ Killed all Chrome processes")
+            self.log("  [v] Killed all Chrome processes")
             time.sleep(2)  # Đợi processes thực sự tắt
 
         except Exception as e:
-            self.log(f"  ⚠️ Kill Chrome error (không sao): {e}")
+            self.log(f"  [WARN] Kill Chrome error (không sao): {e}")
 
     def _delete_with_retry(self, path: Path, max_retries: int = 3) -> bool:
         """
@@ -1841,7 +1857,7 @@ class DrissionFlowAPI:
         """
         import shutil
 
-        self.log("🗑️ RESET Chrome Profile...")
+        self.log("[DEL] RESET Chrome Profile...")
 
         try:
             # 1. Tắt Chrome
@@ -1863,7 +1879,7 @@ class DrissionFlowAPI:
 
             # 3. Xóa các file trong Default (bỏ qua file không xóa được)
             if default_dir and default_dir.exists():
-                self.log(f"  📁 Xóa files trong: {default_dir}")
+                self.log(f"  [DIR] Xóa files trong: {default_dir}")
 
                 deleted_count = 0
                 skipped_count = 0
@@ -1883,9 +1899,9 @@ class DrissionFlowAPI:
                         skipped_count += 1
                         pass  # Bỏ qua file không xóa được
 
-                self.log(f"  ✓ Đã xóa {deleted_count} items" + (f", bỏ qua {skipped_count}" if skipped_count else ""))
+                self.log(f"  [v] Đã xóa {deleted_count} items" + (f", bỏ qua {skipped_count}" if skipped_count else ""))
             else:
-                self.log(f"  ⚠️ Không tìm thấy thư mục Default")
+                self.log(f"  [WARN] Không tìm thấy thư mục Default")
 
             # 4. Reset flags
             self._ready = False
@@ -1895,11 +1911,11 @@ class DrissionFlowAPI:
             self._cleared_data_for_403 = False
             self.driver = None
 
-            self.log("✓ Chrome TRẮNG - cần đăng nhập lại!")
+            self.log("[v] Chrome TRẮNG - cần đăng nhập lại!")
             return True
 
         except Exception as e:
-            self.log(f"✗ Reset Chrome profile failed: {e}", "ERROR")
+            self.log(f"[x] Reset Chrome profile failed: {e}", "ERROR")
             return False
 
     def full_reset_and_login(self, project_url: str = None) -> bool:
@@ -1916,11 +1932,11 @@ class DrissionFlowAPI:
         Returns:
             True nếu reset và login thành công
         """
-        self.log("🔄 FULL RESET: Xóa profile + Login lại...")
+        self.log("[SYNC] FULL RESET: Xóa profile + Login lại...")
 
         # 1. Reset profile
         if not self.reset_chrome_profile():
-            self.log("✗ Không reset được profile", "ERROR")
+            self.log("[x] Không reset được profile", "ERROR")
             return False
 
         time.sleep(2)
@@ -1938,14 +1954,14 @@ class DrissionFlowAPI:
                 success = self.setup(skip_mode_selection=True)
 
             if success:
-                self.log("✓ FULL RESET thành công!")
+                self.log("[v] FULL RESET thành công!")
                 return True
             else:
-                self.log("✗ Setup sau reset thất bại", "ERROR")
+                self.log("[x] Setup sau reset thất bại", "ERROR")
                 return False
 
         except Exception as e:
-            self.log(f"✗ Full reset failed: {e}", "ERROR")
+            self.log(f"[x] Full reset failed: {e}", "ERROR")
             return False
 
     def setup(
@@ -2097,9 +2113,9 @@ class DrissionFlowAPI:
                 options.set_argument('--window-size=1920,1080')
                 options.set_argument('--disable-popup-blocking')
                 options.set_argument('--ignore-certificate-errors')
-                self.log("🔇 Headless mode: ON (Chrome chạy ẩn)")
+                self.log("[MUTE] Headless mode: ON (Chrome chạy ẩn)")
             else:
-                self.log("👁️ Headless mode: OFF (Chrome hiển thị)")
+                self.log("[EYE] Headless mode: OFF (Chrome hiển thị)")
 
             # === IPv6 MODE - BẬT NGAY KHI MỞ CHROME ===
             # Dùng IPv6 ngay từ đầu, nếu 403 thì đổi IPv6 khác
@@ -2111,31 +2127,31 @@ class DrissionFlowAPI:
                 from modules.ipv6_rotator import get_ipv6_rotator
                 rotator = get_ipv6_rotator()
                 if rotator and rotator.enabled and rotator.ipv6_list:
-                    self.log(f"🌐 IPv6 MODE: Có {len(rotator.ipv6_list)} IPs")
+                    self.log(f"[NET] IPv6 MODE: Có {len(rotator.ipv6_list)} IPs")
 
                     # Chrome 2+: Chỉ dùng proxy, KHÔNG activate IPv6
                     if self.worker_id > 0:
-                        self.log(f"🌐 [Worker{self.worker_id}] Dùng IPv6 proxy từ Chrome 1 (port 1088)")
+                        self.log(f"[NET] [Worker{self.worker_id}] Dùng IPv6 proxy từ Chrome 1 (port 1088)")
                         working_ipv6 = rotator.current_ipv6  # Lấy IP hiện tại (Chrome 1 đã set)
                         if not working_ipv6:
                             # Nếu Chrome 1 chưa set, dùng IP đầu tiên
                             working_ipv6 = rotator.ipv6_list[0] if rotator.ipv6_list else None
-                            self.log(f"🌐 [Worker{self.worker_id}] Fallback to: {working_ipv6}")
+                            self.log(f"[NET] [Worker{self.worker_id}] Fallback to: {working_ipv6}")
                     else:
                         # Chrome 1: Activate IPv6
                         if not self._ipv6_activated:
-                            self.log(f"🌐 Activating IPv6 lần đầu...")
+                            self.log(f"[NET] Activating IPv6 lần đầu...")
                             working_ipv6 = rotator.init_with_working_ipv6()
                         else:
                             # Đã activated trước đó → giữ nguyên IP hiện tại
                             working_ipv6 = rotator.current_ipv6
                             if working_ipv6:
-                                self.log(f"🌐 Giữ nguyên IPv6: {working_ipv6}")
+                                self.log(f"[NET] Giữ nguyên IPv6: {working_ipv6}")
 
                     if working_ipv6:
                         self._ipv6_activated = True
                         self._ipv6_rotator = rotator
-                        self.log(f"🌐 IPv6 ACTIVE: {working_ipv6}")
+                        self.log(f"[NET] IPv6 ACTIVE: {working_ipv6}")
 
                         # === START LOCAL SOCKS5 PROXY - ÉP CHROME DÙNG IPv6 ===
                         # PC có cả IPv4+IPv6, Chrome mặc định dùng IPv4
@@ -2152,25 +2168,25 @@ class DrissionFlowAPI:
                                     log_func=self.log
                                 )
                                 if self._ipv6_proxy:
-                                    self.log(f"🌐 Chrome 1 started IPv6 proxy on port {proxy_port}")
+                                    self.log(f"[NET] Chrome 1 started IPv6 proxy on port {proxy_port}")
                                 else:
-                                    self.log(f"⚠️ IPv6 proxy failed to start", "WARN")
+                                    self.log(f"[WARN] IPv6 proxy failed to start", "WARN")
                             else:
-                                self.log(f"🌐 [Worker{self.worker_id}] Dùng IPv6 proxy từ Chrome 1")
+                                self.log(f"[NET] [Worker{self.worker_id}] Dùng IPv6 proxy từ Chrome 1")
                                 self._ipv6_proxy = True  # Mark as using proxy
 
                             # Cả 2 Chrome đều dùng proxy
                             options.set_argument(f'--proxy-server=socks5://127.0.0.1:{proxy_port}')
                             options.set_argument('--proxy-bypass-list=<-loopback>')
-                            self.log(f"🌐 Chrome → SOCKS5 proxy → IPv6 ONLY")
+                            self.log(f"[NET] Chrome → SOCKS5 proxy → IPv6 ONLY")
                             self.log(f"   Proxy: socks5://127.0.0.1:{proxy_port}")
                             _using_ipv6_proxy = True
                         except Exception as proxy_err:
-                            self.log(f"⚠️ IPv6 proxy error: {proxy_err}", "WARN")
+                            self.log(f"[WARN] IPv6 proxy error: {proxy_err}", "WARN")
                     else:
-                        self.log(f"⚠️ Không tìm được IPv6 hoạt động!", "WARN")
+                        self.log(f"[WARN] Không tìm được IPv6 hoạt động!", "WARN")
             except Exception as e:
-                self.log(f"⚠️ IPv6 activation error: {e}", "WARN")
+                self.log(f"[WARN] IPv6 activation error: {e}", "WARN")
 
             if not _using_ipv6_proxy and self._use_webshare and self._webshare_proxy:
                 from webshare_proxy import get_proxy_manager
@@ -2207,11 +2223,11 @@ class DrissionFlowAPI:
                         options.set_argument('--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1')
 
                         if self._is_random_ip_mode:
-                            self.log(f"🎲 RANDOM IP MODE [Worker {self.worker_id}]")
+                            self.log(f"[RAND] RANDOM IP MODE [Worker {self.worker_id}]")
                             self.log(f"  → {rotating.host}:{rotating.port}")
                             self.log(f"  → Username: {session_username} (mỗi request = IP mới)")
                         else:
-                            self.log(f"🔄 STICKY SESSION [Worker {self.worker_id}]")
+                            self.log(f"[SYNC] STICKY SESSION [Worker {self.worker_id}]")
                             self.log(f"  → {rotating.host}:{rotating.port}")
                             self.log(f"  → Session: {session_username}")
                         self.log(f"  Local: http://127.0.0.1:{bridge_port}")
@@ -2231,7 +2247,7 @@ class DrissionFlowAPI:
                         proxy = manager.get_proxy_for_worker(self.worker_id)
                         if not proxy:
                             # Không có proxy khả dụng - chạy không proxy (fallback)
-                            self.log(f"⚠️ No proxy available - running WITHOUT proxy", "WARN")
+                            self.log(f"[WARN] No proxy available - running WITHOUT proxy", "WARN")
                             self._use_webshare = False
                             # Không set proxy args - Chrome sẽ chạy direct
                         else:
@@ -2273,7 +2289,7 @@ class DrissionFlowAPI:
             elif not _using_ipv6_proxy:
                 # Không có proxy nào (không có webshare, không có IPv6)
                 self._is_rotating_mode = False
-                self.log("⚠️ Không có proxy - chạy direct connection", "WARN")
+                self.log("[WARN] Không có proxy - chạy direct connection", "WARN")
 
             # Tắt Chrome đang dùng CÙNG profile này trước (tránh conflict)
             # CHÚ Ý: Chỉ kill Chrome dùng profile này, KHÔNG kill Chrome khác
@@ -2298,7 +2314,7 @@ class DrissionFlowAPI:
             for attempt in range(max_retries):
                 try:
                     self.driver = ChromiumPage(addr_or_opts=options)
-                    self.log("✓ Chrome started")
+                    self.log("[v] Chrome started")
                     break
                 except Exception as chrome_err:
                     self.log(f"Chrome attempt {attempt+1}/{max_retries} failed: {chrome_err}", "WARN")
@@ -2322,7 +2338,7 @@ class DrissionFlowAPI:
                 self._setup_proxy_auth()
 
         except Exception as e:
-            self.log(f"✗ Chrome error: {e}", "ERROR")
+            self.log(f"[x] Chrome error: {e}", "ERROR")
             return False
 
         # 3. Vào Google Flow (hoặc project cố định nếu có) - VỚI RETRY
@@ -2341,7 +2357,7 @@ class DrissionFlowAPI:
 
                 # === F5 REFRESH ngay sau khi vào link ===
                 # Trang hay bị lag khi mới vào, refresh để load lại cho ổn định
-                self.log("🔄 Refresh trang (tránh lag)...")
+                self.log("[SYNC] Refresh trang (tránh lag)...")
                 self.driver.refresh()
                 time.sleep(wait_time)
 
@@ -2350,16 +2366,16 @@ class DrissionFlowAPI:
                 if not current_url or current_url == "about:blank" or "error" in current_url.lower():
                     raise Exception(f"Page không load được: {current_url}")
 
-                self.log(f"✓ URL: {current_url}")
+                self.log(f"[v] URL: {current_url}")
 
                 # === KIỂM TRA BỊ LOGOUT ===
                 if self._is_logged_out():
-                    self.log("⚠️ Phát hiện bị LOGOUT khỏi Google!", "WARN")
+                    self.log("[WARN] Phát hiện bị LOGOUT khỏi Google!", "WARN")
 
                     # Thử auto-login
                     if self._auto_login_google():
-                        self.log("✓ Auto-login thành công!")
-                        self.log("🔄 Restart setup từ đầu...")
+                        self.log("[v] Auto-login thành công!")
+                        self.log("[SYNC] Restart setup từ đầu...")
                         time.sleep(3)
 
                         # Gọi lại setup() từ đầu (đệ quy)
@@ -2370,7 +2386,7 @@ class DrissionFlowAPI:
                             project_url=project_url
                         )
                     else:
-                        self.log("✗ Auto-login thất bại", "ERROR")
+                        self.log("[x] Auto-login thất bại", "ERROR")
                         return False
 
                 # Lưu project_url để dùng khi retry
@@ -2383,7 +2399,7 @@ class DrissionFlowAPI:
 
             except Exception as e:
                 error_msg = str(e)
-                self.log(f"✗ Navigation error (attempt {nav_attempt+1}/{max_nav_retries}): {error_msg}", "WARN")
+                self.log(f"[x] Navigation error (attempt {nav_attempt+1}/{max_nav_retries}): {error_msg}", "WARN")
 
                 # Kiểm tra lỗi proxy/connection
                 is_proxy_error = any(x in error_msg.lower() for x in [
@@ -2410,7 +2426,7 @@ class DrissionFlowAPI:
                         self.log(f"  → Restart Chrome lỗi: {restart_err}", "ERROR")
                         continue
                 elif nav_attempt >= max_nav_retries - 1:
-                    self.log(f"✗ Navigation failed sau {max_nav_retries} lần thử", "ERROR")
+                    self.log(f"[x] Navigation failed sau {max_nav_retries} lần thử", "ERROR")
                     return False
 
         if not nav_success:
@@ -2429,12 +2445,12 @@ class DrissionFlowAPI:
                         # Xác định mode hiện tại và đổi sang mode khác
                         if hasattr(self, '_is_random_ip_mode') and self._is_random_ip_mode:
                             # Đang Random IP → thử Sticky Session
-                            self.log("⚠️ Random IP mode failed, thử STICKY SESSION mode...", "WARN")
+                            self.log("[WARN] Random IP mode failed, thử STICKY SESSION mode...", "WARN")
                             new_username = old_username.replace('-rotate', '')
                             fallback_mode = "Sticky Session"
                         else:
                             # Đang Sticky Session → thử Random IP
-                            self.log("⚠️ Sticky Session mode failed, thử RANDOM IP mode...", "WARN")
+                            self.log("[WARN] Sticky Session mode failed, thử RANDOM IP mode...", "WARN")
                             if not old_username.endswith('-rotate'):
                                 new_username = old_username + '-rotate'
                             else:
@@ -2464,7 +2480,7 @@ class DrissionFlowAPI:
                                     self.driver.get(target_url)
                                     time.sleep(3)
                                     if self.driver.url and self.driver.url != "about:blank":
-                                        self.log(f"✓ {fallback_mode} OK! URL: {self.driver.url}")
+                                        self.log(f"[v] {fallback_mode} OK! URL: {self.driver.url}")
                                         nav_success = True
                                         fallback_tried = True
                                 except Exception as e:
@@ -2476,9 +2492,9 @@ class DrissionFlowAPI:
 
             if not nav_success:
                 if fallback_tried:
-                    self.log("✗ Cả hai proxy modes đều fail!", "ERROR")
+                    self.log("[x] Cả hai proxy modes đều fail!", "ERROR")
                 else:
-                    self.log("✗ Không thể vào trang Google Flow", "ERROR")
+                    self.log("[x] Không thể vào trang Google Flow", "ERROR")
                 return False
 
         # 4. Auto setup project (click "Dự án mới" + chọn "Tạo hình ảnh")
@@ -2487,7 +2503,7 @@ class DrissionFlowAPI:
             if "/project/" not in self.driver.url:
                 # Nếu có project_url nhưng bị redirect về trang chủ → retry vào project cũ
                 if project_url and "/project/" in project_url:
-                    self.log(f"⚠️ Bị redirect, retry vào project cũ...")
+                    self.log(f"[WARN] Bị redirect, retry vào project cũ...")
                     # Retry vào project URL (max 3 lần)
                     for retry in range(3):
                         time.sleep(2)
@@ -2495,11 +2511,11 @@ class DrissionFlowAPI:
                         time.sleep(3)
                         if "/project/" in self.driver.url:
                             self._current_project_url = self.driver.url
-                            self.log(f"✓ Vào lại project thành công!")
+                            self.log(f"[v] Vào lại project thành công!")
                             break
                         self.log(f"  → Retry {retry+1}/3...")
                     else:
-                        self.log("✗ Không vào được project cũ, session có thể hết hạn", "ERROR")
+                        self.log("[x] Không vào được project cũ, session có thể hết hạn", "ERROR")
                         return False
                 else:
                     # Không có project URL → tạo mới
@@ -2511,7 +2527,7 @@ class DrissionFlowAPI:
                         self._current_project_url = self.driver.url
                         self.log(f"  → New project URL saved")
             else:
-                self.log("✓ Đã ở trong project!")
+                self.log("[v] Đã ở trong project!")
                 # F5 để load lại trang
                 self.log("   → F5 refresh...")
                 self.driver.refresh()
@@ -2523,30 +2539,30 @@ class DrissionFlowAPI:
 
         # Kiểm tra logout trước
         if self._is_logged_out():
-            self.log("[PROJECT] ⚠️ Phát hiện bị LOGOUT!")
+            self.log("[PROJECT] [WARN] Phát hiện bị LOGOUT!")
             if self._auto_login_google():
-                self.log("[PROJECT] ✓ Đã login lại, quay lại project...")
+                self.log("[PROJECT] [v] Đã login lại, quay lại project...")
                 self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
                 time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
             else:
-                self.log("[PROJECT] ✗ Login lại thất bại", "ERROR")
+                self.log("[PROJECT] [x] Login lại thất bại", "ERROR")
                 return False
 
         # Đợi textarea - tự động F5 nếu không thấy (IPv6 friendly)
         if not self._wait_for_textarea_visible():
             # Thử navigate lại project 1 lần nữa
-            self.log("[PROJECT] ⚠️ Không thấy textarea, thử load lại project...")
+            self.log("[PROJECT] [WARN] Không thấy textarea, thử load lại project...")
             try:
                 self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
                 time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
                 if not self._wait_for_textarea_visible():
-                    self.log("✗ Không thể tìm textarea sau nhiều lần thử", "ERROR")
+                    self.log("[x] Không thể tìm textarea sau nhiều lần thử", "ERROR")
                     return False
             except Exception as e:
                 self.log(f"[PROJECT] Navigate error: {e}", "ERROR")
                 return False
 
-        self.log("✓ Project đã sẵn sàng (textarea visible)!")
+        self.log("[v] Project đã sẵn sàng (textarea visible)!")
 
         # Mode đã được chọn ở _auto_setup_project()
         # Không cần chọn lại ở đây
@@ -2554,7 +2570,7 @@ class DrissionFlowAPI:
         # 6. Warm up session (tạo 1 ảnh trong Chrome để activate)
         if warm_up:
             if not self._warm_up_session():
-                self.log("⚠️ Warm up không thành công, tiếp tục...", "WARN")
+                self.log("[WARN] Warm up không thành công, tiếp tục...", "WARN")
 
         # 7. Inject interceptor (SAU khi warm up) - với xử lý ContextLostError
         self.log("Inject interceptor...")
@@ -2562,11 +2578,11 @@ class DrissionFlowAPI:
         for retry_count in range(3):
             try:
                 result = self.driver.run_js(JS_INTERCEPTOR)
-                self.log(f"✓ Interceptor: {result}")
+                self.log(f"[v] Interceptor: {result}")
                 break
             except Exception as e:
                 if ContextLostError and isinstance(e, ContextLostError):
-                    self.log(f"[PAGE] ⚠️ Page bị refresh khi inject interceptor (retry {retry_count + 1}/3)")
+                    self.log(f"[PAGE] [WARN] Page bị refresh khi inject interceptor (retry {retry_count + 1}/3)")
                     if self._wait_for_page_ready(timeout=30):
                         continue
                 else:
@@ -2600,12 +2616,12 @@ class DrissionFlowAPI:
         for refresh_count in range(max_refresh + 1):
             # === CHECK LOGOUT TRƯỚC MỖI VÒNG ===
             if self._is_logged_out():
-                self.log(f"[TEXTAREA] ⚠️ Phát hiện bị LOGOUT - auto login...")
+                self.log(f"[TEXTAREA] [WARN] Phát hiện bị LOGOUT - auto login...")
                 if self._auto_login_google():
-                    self.log(f"[TEXTAREA] ✓ Đã login lại, tiếp tục đợi textarea...")
+                    self.log(f"[TEXTAREA] [v] Đã login lại, tiếp tục đợi textarea...")
                     time.sleep(2)
                 else:
-                    self.log(f"[TEXTAREA] ✗ Login thất bại", "ERROR")
+                    self.log(f"[TEXTAREA] [x] Login thất bại", "ERROR")
                     return False
 
             self.log(f"[TEXTAREA] Đợi textarea... (timeout={timeout}s, lần {refresh_count + 1}/{max_refresh + 1})")
@@ -2631,7 +2647,7 @@ class DrissionFlowAPI:
                             # Check 3: Verify textarea vẫn còn sau khi click (page không bị redirect)
                             verify = self.driver.ele('tag:textarea', timeout=1)
                             if verify:
-                                self.log(f"[TEXTAREA] ✓ Textarea visible và interactive!")
+                                self.log(f"[TEXTAREA] [v] Textarea visible và interactive!")
                                 return True
                         except Exception as verify_err:
                             self.log(f"[TEXTAREA] Element found but not ready: {verify_err}")
@@ -2643,7 +2659,7 @@ class DrissionFlowAPI:
 
             # Timeout - thử F5 refresh nếu còn lượt
             if refresh_count < max_refresh:
-                self.log(f"[TEXTAREA] ⚠️ Không thấy textarea sẵn sàng, F5 refresh...")
+                self.log(f"[TEXTAREA] [WARN] Không thấy textarea sẵn sàng, F5 refresh...")
                 try:
                     self.driver.refresh()
                     # IPv6 cần đợi lâu hơn sau F5
@@ -2652,7 +2668,7 @@ class DrissionFlowAPI:
                 except Exception as e:
                     self.log(f"[TEXTAREA] Refresh error: {e}")
 
-        self.log("[TEXTAREA] ✗ Không tìm thấy textarea", "ERROR")
+        self.log("[TEXTAREA] [x] Không tìm thấy textarea", "ERROR")
         return False
 
     def _get_page_load_timeout(self) -> int:
@@ -2685,12 +2701,12 @@ class DrissionFlowAPI:
                 try:
                     # === KIỂM TRA LOGOUT TRƯỚC ===
                     if self._is_logged_out():
-                        self.log("[PAGE] ⚠️ Phát hiện bị LOGOUT!")
+                        self.log("[PAGE] [WARN] Phát hiện bị LOGOUT!")
                         if self._auto_login_google():
-                            self.log("[PAGE] ✓ Đã login lại thành công!")
+                            self.log("[PAGE] [v] Đã login lại thành công!")
                             return False  # Return False để trigger retry từ setup()
                         else:
-                            self.log("[PAGE] ✗ Login lại thất bại", "ERROR")
+                            self.log("[PAGE] [x] Login lại thất bại", "ERROR")
                             return False
 
                     # Kiểm tra page ready state
@@ -2698,7 +2714,7 @@ class DrissionFlowAPI:
                     if ready_state == "complete":
                         # Thử tìm element cơ bản để đảm bảo DOM sẵn sàng
                         if self._find_textarea():
-                            self.log("[PAGE] ✓ Page đã sẵn sàng!")
+                            self.log("[PAGE] [v] Page đã sẵn sàng!")
                             return True
                         # Nếu không có textarea, đợi thêm
                         time.sleep(1)
@@ -2708,24 +2724,24 @@ class DrissionFlowAPI:
 
             # === TIMEOUT: Kiểm tra logout lần cuối ===
             if self._is_logged_out():
-                self.log("[PAGE] ⚠️ Timeout do bị LOGOUT!")
+                self.log("[PAGE] [WARN] Timeout do bị LOGOUT!")
                 if self._auto_login_google():
-                    self.log("[PAGE] ✓ Đã login lại!")
+                    self.log("[PAGE] [v] Đã login lại!")
                     return False
                 else:
-                    self.log("[PAGE] ✗ Login lại thất bại", "ERROR")
+                    self.log("[PAGE] [x] Login lại thất bại", "ERROR")
                     return False
 
             # === TIMEOUT: F5 refresh nếu còn lượt ===
             if refresh_count < max_refresh:
-                self.log(f"[PAGE] ⚠️ Timeout - F5 refresh để load lại...")
+                self.log(f"[PAGE] [WARN] Timeout - F5 refresh để load lại...")
                 try:
                     self.driver.refresh()
                     time.sleep(5)  # Đợi sau F5 (IPv6 cần lâu hơn)
                 except Exception as e:
                     self.log(f"[PAGE] F5 error: {e}")
 
-        self.log("[PAGE] ⚠️ Timeout đợi page load (sau nhiều lần F5)", "WARN")
+        self.log("[PAGE] [WARN] Timeout đợi page load (sau nhiều lần F5)", "WARN")
         return False
 
     def _safe_run_js(self, script: str, max_retries: int = 3, default=None):
@@ -2776,7 +2792,7 @@ class DrissionFlowAPI:
             # 2. Tìm textarea bằng DrissionPage
             textarea = self.driver.ele('tag:textarea', timeout=10)
             if not textarea:
-                self.log("⚠️ Không tìm thấy textarea", "WARN")
+                self.log("[WARN] Không tìm thấy textarea", "WARN")
                 return False
 
             # 3. Click vào textarea để focus
@@ -2799,11 +2815,11 @@ class DrissionFlowAPI:
             textarea.input(Keys.CTRL_V)
             time.sleep(0.5)
 
-            self.log(f"→ Paste done ✓")
+            self.log(f"→ Paste done [v]")
             return True
 
         except Exception as e:
-            self.log(f"⚠️ Paste prompt failed: {e}", "WARN")
+            self.log(f"[WARN] Paste prompt failed: {e}", "WARN")
             return False
 
     def _paste_prompt_js(self, prompt: str) -> bool:
@@ -2824,11 +2840,11 @@ class DrissionFlowAPI:
                 }})();
             """)
             if result == 'ok':
-                self.log("→ Pasted with JS ✓")
+                self.log("→ Pasted with JS [v]")
                 return True
             return False
         except Exception as e:
-            self.log(f"⚠️ JS paste failed: {e}", "WARN")
+            self.log(f"[WARN] JS paste failed: {e}", "WARN")
             return False
 
     def _setup_window_layout(self):
@@ -2877,60 +2893,29 @@ class DrissionFlowAPI:
                         # Fallback: dùng JavaScript
                         self.driver.run_js(f"window.moveTo({x}, {y}); window.resizeTo({w}, {h});")
 
-            if total <= 1:
-                # 1 worker: Full màn hình (maximize)
-                self.driver.set.window.max()
-                self.log(f"📐 Window: FULL SCREEN")
-            elif total == 2:
-                # 2 workers: Chia đôi ngang
-                win_w = screen_w // 2
-                win_h = screen_h
-                win_x = screen_left + (worker * win_w)
-                win_y = screen_top
+            # Fixed Chrome window size (700x550) on right side, stacked vertically
+            # This matches the layout in vm_manager.show_chrome_windows()
+            chrome_width = 700
+            chrome_height = 550
 
-                set_window_rect(win_x, win_y, win_w, win_h)
-                pos_name = "LEFT" if worker == 0 else "RIGHT"
-                self.log(f"📐 Window: {pos_name} ({win_w}x{win_h} at {win_x},{win_y})")
-            elif total == 3:
-                # 3 workers: 2 trên + 1 dưới full
-                if worker < 2:
-                    # Top row: 2 windows
-                    win_w = screen_w // 2
-                    win_h = screen_h // 2
-                    win_x = screen_left + (worker * win_w)
-                    win_y = screen_top
-                else:
-                    # Bottom: 1 window full width
-                    win_w = screen_w
-                    win_h = screen_h // 2
-                    win_x = screen_left
-                    win_y = screen_top + screen_h // 2
+            # Position on right side of screen
+            x_start = screen_w - chrome_width - 10  # 10px from right edge
+            y_start = 50  # Start 50px from top
 
-                set_window_rect(win_x, win_y, win_w, win_h)
-                self.log(f"📐 Window: Worker {worker} ({win_w}x{win_h} at {win_x},{win_y})")
-            else:
-                # 4+ workers: Grid 2xN
-                cols = 2
-                rows = (total + 1) // 2
+            # Stack windows vertically based on worker_id
+            win_x = x_start
+            win_y = y_start + (worker * (chrome_height + 10))  # 10px gap between windows
 
-                col = worker % cols
-                row = worker // cols
+            # Make sure it doesn't go off screen
+            if win_y + chrome_height > screen_h:
+                win_y = y_start  # Reset to top if too low
 
-                win_w = screen_w // cols
-                win_h = screen_h // rows
-                win_x = screen_left + (col * win_w)
-                win_y = screen_top + (row * win_h)
-
-                set_window_rect(win_x, win_y, win_w, win_h)
-                self.log(f"📐 Window: Worker {worker} ({win_w}x{win_h} at {win_x},{win_y})")
+            set_window_rect(win_x, win_y, chrome_width, chrome_height)
+            self.log(f"[WIN] Window: Chrome {worker + 1} ({chrome_width}x{chrome_height} at {win_x},{win_y})")
 
         except Exception as e:
-            self.log(f"⚠️ Window layout error: {e}", "WARN")
-            # Fallback: maximize
-            try:
-                self.driver.set.window.max()
-            except:
-                pass
+            self.log(f"[WARN] Window layout error: {e}", "WARN")
+            # Don't fallback to maximize - keep Chrome at default size
 
     def _click_textarea(self, wait_visible: bool = True):
         """
@@ -2944,7 +2929,7 @@ class DrissionFlowAPI:
             # QUAN TRỌNG: Đợi textarea visible trước khi click
             if wait_visible:
                 if not self._wait_for_textarea_visible(timeout=10, max_refresh=2):
-                    self.log("✗ Textarea không visible sau khi refresh", "ERROR")
+                    self.log("[x] Textarea không visible sau khi refresh", "ERROR")
                     return False
 
             result = self.driver.run_js("""
@@ -2993,7 +2978,7 @@ class DrissionFlowAPI:
             """)
 
             if result == 'clicked':
-                self.log("✓ Clicked textarea (JS) - lần 1")
+                self.log("[v] Clicked textarea (JS) - lần 1")
                 # Click lần 2 sau 2s để đảm bảo focus
                 time.sleep(2)
                 result2 = self.driver.run_js("""
@@ -3014,16 +2999,16 @@ class DrissionFlowAPI:
                     })();
                 """)
                 if result2 == 'clicked':
-                    self.log("✓ Clicked textarea (JS) - lần 2")
+                    self.log("[v] Clicked textarea (JS) - lần 2")
                 time.sleep(0.3)
                 return True
             elif result == 'not_found':
-                self.log("✗ Textarea not found", "ERROR")
+                self.log("[x] Textarea not found", "ERROR")
             elif result == 'not_visible':
-                self.log("✗ Textarea not visible", "ERROR")
+                self.log("[x] Textarea not visible", "ERROR")
             return False
         except Exception as e:
-            self.log(f"⚠️ Click textarea error: {e}", "WARN")
+            self.log(f"[WARN] Click textarea error: {e}", "WARN")
             return False
 
     def _reset_tokens(self):
@@ -3071,14 +3056,14 @@ class DrissionFlowAPI:
         # Tìm và gửi prompt
         textarea = self._find_textarea()
         if not textarea:
-            self.log("✗ Không tìm thấy textarea", "ERROR")
+            self.log("[x] Không tìm thấy textarea", "ERROR")
             return False
 
         # Paste bằng Ctrl+V (tránh bot detection)
         self._paste_prompt_ctrlv(textarea, prompt)
         time.sleep(0.3)
         textarea.input('\n')  # Enter để gửi
-        self.log("    ✓ Đã gửi, đợi capture...")
+        self.log("    [v] Đã gửi, đợi capture...")
 
         # Đợi 3 giây theo hướng dẫn (giống batch_generator.py)
         time.sleep(3)
@@ -3111,15 +3096,15 @@ class DrissionFlowAPI:
                 self.x_browser_validation = tokens.get("xbv")
                 self.captured_url = tokens.get("url")
 
-                self.log("    ✓ Got Bearer token!")
-                self.log("    ✓ Got recaptchaToken!")
+                self.log("    [v] Got Bearer token!")
+                self.log("    [v] Got recaptchaToken!")
                 if self.captured_url:
-                    self.log(f"    ✓ Captured URL: {self.captured_url[:60]}...")
+                    self.log(f"    [v] Captured URL: {self.captured_url[:60]}...")
                 return True
 
             time.sleep(1)
 
-        self.log("    ✗ Không lấy được đủ tokens", "ERROR")
+        self.log("    [x] Không lấy được đủ tokens", "ERROR")
         return False
 
     def refresh_recaptcha(self, prompt: str) -> bool:
@@ -3153,11 +3138,11 @@ class DrissionFlowAPI:
             rct = self.driver.run_js("return window._rct;")
             if rct:
                 self.recaptcha_token = rct
-                self.log("    ✓ Got new recaptchaToken!")
+                self.log("    [v] Got new recaptchaToken!")
                 return True
             time.sleep(1)
 
-        self.log("    ✗ Không lấy được recaptchaToken mới", "ERROR")
+        self.log("    [x] Không lấy được recaptchaToken mới", "ERROR")
         return False
 
     def call_api(self, prompt: str = None, num_images: int = 1, image_inputs: Optional[List[Dict]] = None) -> Tuple[List[GeneratedImage], Optional[str]]:
@@ -3208,7 +3193,7 @@ class DrissionFlowAPI:
 
             original_payload = json.dumps(payload_data)
         except Exception as e:
-            self.log(f"⚠️ Không sửa được payload: {e}", "WARN")
+            self.log(f"[WARN] Không sửa được payload: {e}", "WARN")
 
         # Headers
         headers = {
@@ -3243,11 +3228,11 @@ class DrissionFlowAPI:
                 return self._parse_response(resp.json()), None
             else:
                 error = f"{resp.status_code}: {resp.text[:200]}"
-                self.log(f"✗ API Error: {error}", "ERROR")
+                self.log(f"[x] API Error: {error}", "ERROR")
                 return [], error
 
         except Exception as e:
-            self.log(f"✗ Request error: {e}", "ERROR")
+            self.log(f"[x] Request error: {e}", "ERROR")
             return [], str(e)
 
     def _parse_response(self, data: Dict) -> List[GeneratedImage]:
@@ -3283,7 +3268,7 @@ class DrissionFlowAPI:
                 if img.base64_data or img.url:
                     images.append(img)
 
-        self.log(f"✓ Parsed {len(images)} images")
+        self.log(f"[v] Parsed {len(images)} images")
         return images
 
     def generate_image_forward(
@@ -3397,7 +3382,7 @@ class DrissionFlowAPI:
 
             if result.get('error'):
                 error_msg = result['error']
-                self.log(f"✗ Browser request error: {error_msg}", "ERROR")
+                self.log(f"[x] Browser request error: {error_msg}", "ERROR")
                 return [], error_msg
 
             if result.get('response'):
@@ -3408,12 +3393,12 @@ class DrissionFlowAPI:
                     if response_data.get('error'):
                         error_info = response_data['error']
                         error_msg = f"{error_info.get('code', 'unknown')}: {error_info.get('message', str(error_info))}"
-                        self.log(f"✗ API Error: {error_msg}", "ERROR")
+                        self.log(f"[x] API Error: {error_msg}", "ERROR")
                         return [], error_msg
 
                     # Parse successful response
                     images = self._parse_response(response_data)
-                    self.log(f"✓ Got {len(images)} images from browser!")
+                    self.log(f"[v] Got {len(images)} images from browser!")
 
                     # DEBUG: Log URL của từng ảnh
                     for idx, img in enumerate(images):
@@ -3433,7 +3418,7 @@ class DrissionFlowAPI:
             # Still pending or no response yet
             time.sleep(0.5)
 
-        self.log("✗ Timeout đợi response từ browser", "ERROR")
+        self.log("[x] Timeout đợi response từ browser", "ERROR")
         return [], "Timeout waiting for browser response"
 
     def generate_image(
@@ -3468,10 +3453,10 @@ class DrissionFlowAPI:
             self.log("[Image] Chọn mode 'Tạo hình ảnh'...")
             if self.switch_to_image_mode():
                 self._image_mode_selected = True
-                self.log("[Image] ✓ Đã chọn Image mode")
+                self.log("[Image] [v] Đã chọn Image mode")
                 time.sleep(0.5)
             else:
-                self.log("[Image] ⚠️ Không chọn được mode, thử tiếp...", "WARN")
+                self.log("[Image] [WARN] Không chọn được mode, thử tiếp...", "WARN")
 
         # Nếu đang dùng fallback model (do quota), override force_model
         if self._use_fallback_model:
@@ -3513,7 +3498,7 @@ class DrissionFlowAPI:
 
                     # Retry với nano banana: đợi 5s → F5 refresh → retry
                     if attempt < effective_max_retries - 1:
-                        self.log(f"⚠️ 429 Quota - Đợi 5s, F5 refresh rồi retry...", "WARN")
+                        self.log(f"[WARN] 429 Quota - Đợi 5s, F5 refresh rồi retry...", "WARN")
                         time.sleep(5)
                         # F5 refresh page
                         try:
@@ -3527,12 +3512,12 @@ class DrissionFlowAPI:
 
                     # Hết retry trong hàm này, nhưng KHÔNG return False
                     # Để caller có thể retry tiếp với scene tiếp theo
-                    self.log(f"⚠️ 429 sau {max_retries} lần, tiếp tục scene tiếp...", "WARN")
+                    self.log(f"[WARN] 429 sau {max_retries} lần, tiếp tục scene tiếp...", "WARN")
                     return False, [], f"429 quota - tiếp tục với scene tiếp theo"
 
                 # Nếu lỗi 500 (Internal Error), retry với delay
                 if "500" in error:
-                    self.log(f"⚠️ 500 Internal Error (attempt {attempt+1}/{effective_max_retries})", "WARN")
+                    self.log(f"[WARN] 500 Internal Error (attempt {attempt+1}/{effective_max_retries})", "WARN")
                     if attempt < effective_max_retries - 1:
                         self.log(f"  → Đợi 3s rồi retry...")
                         time.sleep(3)
@@ -3547,14 +3532,14 @@ class DrissionFlowAPI:
                     policy_retry_count = getattr(self, '_policy_retry_count', 0)
                     if policy_retry_count < 1:
                         self._policy_retry_count = policy_retry_count + 1
-                        self.log(f"⚠️ 400 Policy Violation - Prompt vi phạm! Retry lần {policy_retry_count + 1}...", "WARN")
+                        self.log(f"[WARN] 400 Policy Violation - Prompt vi phạm! Retry lần {policy_retry_count + 1}...", "WARN")
                         time.sleep(2)
                         attempt += 1
                         continue
                     else:
                         # Reset counter và skip prompt này
                         self._policy_retry_count = 0
-                        self.log(f"⚠️ 400 Policy Violation - SKIP prompt này!", "WARN")
+                        self.log(f"[WARN] 400 Policy Violation - SKIP prompt này!", "WARN")
                         return False, [], "POLICY_VIOLATION: Prompt bị cấm, skip"
 
                 # === 403 ERROR HANDLING ===
@@ -3578,14 +3563,14 @@ class DrissionFlowAPI:
 
                     if self._consecutive_403 < 3 and not cleared_flag:
                         # Bước 1: Reset Chrome (lần 1 và 2)
-                        self.log(f"⚠️ 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
+                        self.log(f"[WARN] 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
                         self._kill_chrome()
                         self.close()
                         time.sleep(2)
 
                     elif self._consecutive_403 >= 3 and not cleared_flag:
                         # Bước 2: Lần 3 → XÓA TRIỆT ĐỂ PROFILE + đăng nhập lại
-                        self.log(f"⚠️ 403 lần {self._consecutive_403} → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
+                        self.log(f"[WARN] 403 lần {self._consecutive_403} → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
                         # Dùng reset_chrome_profile() - xóa hoàn toàn thư mục profile
                         self.reset_chrome_profile()
                         time.sleep(1)
@@ -3600,7 +3585,7 @@ class DrissionFlowAPI:
 
                     else:
                         # Bước 3: Đã clear data vẫn 403
-                        self.log(f"⚠️ 403 sau khi clear data (worker {self.worker_id})", "WARN")
+                        self.log(f"[WARN] 403 sau khi clear data (worker {self.worker_id})", "WARN")
 
                         # Mark ready for rotation in shared tracker
                         if tracker:
@@ -3608,7 +3593,7 @@ class DrissionFlowAPI:
 
                             # CHỈ đổi IPv6 khi CẢ 2 workers đều ready
                             if tracker.should_rotate_ipv6(self.worker_id):
-                                self.log(f"  → 🌐 CẢ {self.total_workers} Chrome đều ready → ĐỔI IPv6!", "WARN")
+                                self.log(f"  → [NET] CẢ {self.total_workers} Chrome đều ready → ĐỔI IPv6!", "WARN")
                                 self._cleared_data_for_403 = False
                                 self._consecutive_403 = 0
 
@@ -3616,22 +3601,22 @@ class DrissionFlowAPI:
                                 if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
                                     new_ip = self._ipv6_rotator.rotate()
                                     if new_ip:
-                                        self.log(f"  → 🌐 IPv6 mới: {new_ip}")
+                                        self.log(f"  → [NET] IPv6 mới: {new_ip}")
                                         if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
                                             self._ipv6_proxy.set_ipv6(new_ip)
                                     else:
-                                        self.log(f"  → ⚠️ Không rotate được IPv6!", "WARN")
+                                        self.log(f"  → [WARN] Không rotate được IPv6!", "WARN")
 
                                 # Reset all workers after rotation
                                 tracker.reset_after_rotation()
                             else:
                                 # Chưa đủ workers ready → đợi và retry
-                                self.log(f"  → ⏳ Đợi Chrome khác cũng ready... (tiếp tục retry)", "WARN")
+                                self.log(f"  → [WAIT] Đợi Chrome khác cũng ready... (tiếp tục retry)", "WARN")
                                 self._cleared_data_for_403 = False  # Reset để thử lại flow
                                 self._consecutive_403 = 0
                         else:
                             # No tracker → fallback to old behavior
-                            self.log(f"⚠️ 403 sau khi clear data → ĐỔI IPv6!", "WARN")
+                            self.log(f"[WARN] 403 sau khi clear data → ĐỔI IPv6!", "WARN")
                             self._cleared_data_for_403 = False
                             self._consecutive_403 = 0
 
@@ -3639,11 +3624,11 @@ class DrissionFlowAPI:
                             if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
                                 new_ip = self._ipv6_rotator.rotate()
                                 if new_ip:
-                                    self.log(f"  → 🌐 IPv6 mới: {new_ip}")
+                                    self.log(f"  → [NET] IPv6 mới: {new_ip}")
                                     if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
                                         self._ipv6_proxy.set_ipv6(new_ip)
                                 else:
-                                    self.log(f"  → ⚠️ Không rotate được IPv6!", "WARN")
+                                    self.log(f"  → [WARN] Không rotate được IPv6!", "WARN")
 
                     # Extend retries để đủ cho cả flow: reset x2 → clear data → IPv6 rotation
                     if effective_max_retries < 6:
@@ -3660,7 +3645,7 @@ class DrissionFlowAPI:
 
                 # === TIMEOUT ERROR: Restart Chrome và retry ===
                 if "timeout" in error.lower():
-                    self.log(f"⚠️ Timeout (attempt {attempt+1}/{effective_max_retries}) - RESTART CHROME!", "WARN")
+                    self.log(f"[WARN] Timeout (attempt {attempt+1}/{effective_max_retries}) - RESTART CHROME!", "WARN")
 
                     # Đổi proxy nếu có
                     if self._use_webshare and self._webshare_proxy:
@@ -3704,7 +3689,7 @@ class DrissionFlowAPI:
                     img_path = save_dir / f"{fname}.png"
                     img_path.write_bytes(base64.b64decode(img.base64_data))
                     img.local_path = img_path
-                    self.log(f"✓ Saved: {img_path.name}")
+                    self.log(f"[v] Saved: {img_path.name}")
                 elif img.url:
                     # Download image bằng cách mở tab mới trong Chrome
                     dl_start = time.time()
@@ -3767,7 +3752,7 @@ class DrissionFlowAPI:
                                 img_path.write_bytes(base64.b64decode(img.base64_data))
                                 img.local_path = img_path
                                 w, h = result.get('width', 0), result.get('height', 0)
-                                self.log(f"✓ Downloaded: {img_path.name} ({w}x{h}, {chrome_time:.2f}s)")
+                                self.log(f"[v] Downloaded: {img_path.name} ({w}x{h}, {chrome_time:.2f}s)")
                                 downloaded = True
                             elif result and result.get('error'):
                                 self.log(f"   [DEBUG] Chrome tab error: {result['error']}")
@@ -3791,14 +3776,14 @@ class DrissionFlowAPI:
                                 img_path.write_bytes(resp.content)
                                 img.local_path = img_path
                                 img.base64_data = base64.b64encode(resp.content).decode()
-                                self.log(f"✓ Downloaded: {img_path.name} ({len(resp.content)} bytes, {req_time:.2f}s)")
+                                self.log(f"[v] Downloaded: {img_path.name} ({len(resp.content)} bytes, {req_time:.2f}s)")
                                 downloaded = True
                         except Exception as e:
-                            self.log(f"✗ Download failed: {e}", "WARN")
+                            self.log(f"[x] Download failed: {e}", "WARN")
 
         # Restart Chrome sau mỗi ảnh (giống như 403 reset)
         # restart_chrome() đã có sẵn: navigate + inject JS
-        self.log("🔄 Restarting Chrome...")
+        self.log("[SYNC] Restarting Chrome...")
         try:
             # Đóng Chrome
             self._kill_chrome()
@@ -3807,12 +3792,12 @@ class DrissionFlowAPI:
 
             # Restart Chrome (setup() sẽ navigate + inject JS)
             if self.restart_chrome(rotate_ipv6=False):
-                self.log("✓ Chrome restarted!")
+                self.log("[v] Chrome restarted!")
             else:
-                self.log("⚠️ Restart Chrome failed", "WARN")
+                self.log("[WARN] Restart Chrome failed", "WARN")
 
         except Exception as e:
-            self.log(f"⚠️ Restart error: {e}", "WARN")
+            self.log(f"[WARN] Restart error: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
@@ -3945,16 +3930,16 @@ class DrissionFlowAPI:
                     self.log("[I2V] Capturing full tokens (bearer, project_id, recaptcha)...")
                     capture_prompt = prompt[:30] if len(prompt) > 30 else prompt
                     if self._capture_tokens(capture_prompt):
-                        self.log("[I2V] ✓ Got all tokens!")
+                        self.log("[I2V] [v] Got all tokens!")
                     else:
-                        self.log("[I2V] ⚠️ Không capture được tokens", "WARN")
+                        self.log("[I2V] [WARN] Không capture được tokens", "WARN")
                         return False, None, "Không capture được tokens từ Chrome"
                 else:
                     self.log("[I2V] Refreshing recaptcha token...")
                     if self.refresh_recaptcha(prompt[:30] if len(prompt) > 30 else prompt):
-                        self.log("[I2V] ✓ Got fresh recaptcha token")
+                        self.log("[I2V] [v] Got fresh recaptcha token")
                     else:
-                        self.log("[I2V] ⚠️ Không refresh được recaptcha", "WARN")
+                        self.log("[I2V] [WARN] Không refresh được recaptcha", "WARN")
             else:
                 self.log("[I2V] Token mode - dùng cached recaptcha")
 
@@ -4027,7 +4012,7 @@ class DrissionFlowAPI:
 
                     # === ERROR 253/403: Quota exceeded ===
                     if "253" in error or "quota" in error.lower() or "exceeds" in error.lower():
-                        self.log(f"[I2V] ⚠️ QUOTA EXCEEDED - Đổi proxy...", "WARN")
+                        self.log(f"[I2V] [WARN] QUOTA EXCEEDED - Đổi proxy...", "WARN")
 
                         self.close()  # Chỉ close driver, không kill hết Chrome
 
@@ -4054,7 +4039,7 @@ class DrissionFlowAPI:
                     if "403" in error:
                         # Tăng counter 403 liên tiếp
                         self._consecutive_403 += 1
-                        self.log(f"[I2V] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
+                        self.log(f"[I2V] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                         # Kill Chrome
                         self._kill_chrome()
@@ -4074,11 +4059,11 @@ class DrissionFlowAPI:
 
                             if not self._ipv6_activated:
                                 # Lần đầu: Activate IPv6
-                                self.log(f"[I2V] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                                self.log(f"[I2V] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
                                 self._activate_ipv6()
                             else:
                                 # Đã activate: Rotate sang IP khác
-                                self.log(f"[I2V] → 🔄 Rotate sang IPv6 khác...")
+                                self.log(f"[I2V] → [SYNC] Rotate sang IPv6 khác...")
                                 rotate_ipv6 = True
                         elif self._consecutive_403 >= self._max_403_before_ipv6:
                             self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
@@ -4111,7 +4096,7 @@ class DrissionFlowAPI:
                     if videos:
                         video_url = videos[0].get("video", {}).get("fifeUrl") or videos[0].get("fifeUrl")
                         if video_url:
-                            self.log(f"[I2V] ✓ Video ready (no poll): {video_url[:60]}...")
+                            self.log(f"[I2V] [v] Video ready (no poll): {video_url[:60]}...")
                             # Reset 403 counter khi thành công
                             if self._consecutive_403 > 0:
                                 self.log(f"[IPv6] Reset 403 counter (was {self._consecutive_403})")
@@ -4157,7 +4142,7 @@ class DrissionFlowAPI:
 
                 # Check if exception contains 403/quota error
                 if "253" in last_error or "quota" in last_error.lower() or "403" in last_error:
-                    self.log("[I2V] ⚠️ Exception with 403/quota - Đổi proxy...", "WARN")
+                    self.log("[I2V] [WARN] Exception with 403/quota - Đổi proxy...", "WARN")
                     self.close()  # Chỉ close driver
 
                     if self._use_webshare and self._webshare_proxy:
@@ -4242,7 +4227,7 @@ class DrissionFlowAPI:
                 # === 403 ERROR: RESET CHROME + IPv6 ===
                 if "403" in str(error):
                     self._consecutive_403 += 1
-                    self.log(f"[I2V-Chrome] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
+                    self.log(f"[I2V-Chrome] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                     # Kill Chrome
                     self._kill_chrome()
@@ -4260,10 +4245,10 @@ class DrissionFlowAPI:
                         self._consecutive_403 = 0  # Reset counter
 
                         if not self._ipv6_activated:
-                            self.log(f"[I2V-Chrome] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                            self.log(f"[I2V-Chrome] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
                             self._activate_ipv6()
                         else:
-                            self.log(f"[I2V-Chrome] → 🔄 Rotate sang IPv6 khác...")
+                            self.log(f"[I2V-Chrome] → [SYNC] Rotate sang IPv6 khác...")
                             rotate_ipv6 = True
                     elif self._consecutive_403 >= self._max_403_before_ipv6:
                         self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
@@ -4278,7 +4263,7 @@ class DrissionFlowAPI:
 
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
-                    self.log(f"[I2V-Chrome] ⚠️ Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+                    self.log(f"[I2V-Chrome] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
                     self._kill_chrome()
                     self.close()
                     time.sleep(2)
@@ -4293,7 +4278,7 @@ class DrissionFlowAPI:
 
                 # === 500 ERROR ===
                 if "500" in str(error):
-                    self.log(f"[I2V-Chrome] ⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
+                    self.log(f"[I2V-Chrome] [WARN] 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
                     if attempt < max_retries - 1:
                         time.sleep(3)
                         continue
@@ -4356,7 +4341,7 @@ class DrissionFlowAPI:
         }
 
         self.driver.run_js(f"window._forceVideoPayload = {json.dumps(video_payload)};")
-        self.log(f"[I2V-Chrome] ✓ FORCE payload ready (mediaId: {media_id[:40]}...)")
+        self.log(f"[I2V-Chrome] [v] FORCE payload ready (mediaId: {media_id[:40]}...)")
 
         # 3. Tìm textarea và nhập prompt
         textarea = self._find_textarea()
@@ -4404,7 +4389,7 @@ class DrissionFlowAPI:
 
             if result.get('error'):
                 error_msg = result['error']
-                self.log(f"[I2V-Chrome] ✗ Request error: {error_msg}", "ERROR")
+                self.log(f"[I2V-Chrome] [x] Request error: {error_msg}", "ERROR")
                 return False, None, error_msg
 
             if result.get('response'):
@@ -4414,7 +4399,7 @@ class DrissionFlowAPI:
                     if response_data.get('error'):
                         error_info = response_data['error']
                         error_msg = f"{error_info.get('code', 'unknown')}: {error_info.get('message', str(error_info))}"
-                        self.log(f"[I2V-Chrome] ✗ API Error: {error_msg}", "ERROR")
+                        self.log(f"[I2V-Chrome] [x] API Error: {error_msg}", "ERROR")
                         return False, None, error_msg
 
                     if "media" in response_data or "generatedVideos" in response_data:
@@ -4422,7 +4407,7 @@ class DrissionFlowAPI:
                         if videos:
                             video_url = videos[0].get("video", {}).get("fifeUrl") or videos[0].get("fifeUrl")
                             if video_url:
-                                self.log(f"[I2V-Chrome] ✓ Video ready (no poll): {video_url[:60]}...")
+                                self.log(f"[I2V-Chrome] [v] Video ready (no poll): {video_url[:60]}...")
                                 return self._download_video_if_needed(video_url, save_path)
 
                     operations = response_data.get("operations", [])
@@ -4447,7 +4432,7 @@ class DrissionFlowAPI:
                         video_url = self._poll_video_operation(op, headers, proxies, max_wait)
 
                         if video_url:
-                            self.log(f"[I2V-Chrome] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[I2V-Chrome] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
                         else:
                             return False, None, "Timeout hoặc lỗi khi poll video"
@@ -4456,7 +4441,7 @@ class DrissionFlowAPI:
 
             time.sleep(0.5)
 
-        self.log("[I2V-Chrome] ✗ Timeout đợi response từ browser", "ERROR")
+        self.log("[I2V-Chrome] [x] Timeout đợi response từ browser", "ERROR")
         return False, None, "Timeout waiting for video response"
 
     def _download_video_if_needed(
@@ -4474,7 +4459,7 @@ class DrissionFlowAPI:
                 if resp.status_code == 200:
                     save_path.parent.mkdir(parents=True, exist_ok=True)
                     save_path.write_bytes(resp.content)
-                    self.log(f"[I2V-Chrome] ✓ Downloaded: {save_path.name}")
+                    self.log(f"[I2V-Chrome] [v] Downloaded: {save_path.name}")
                     download_success = True
                     result_path = str(save_path)
                 else:
@@ -4490,20 +4475,20 @@ class DrissionFlowAPI:
         if download_success:
             try:
                 if self.driver:
-                    self.log("[VIDEO] 🔄 F5 refresh để tránh 403...")
+                    self.log("[VIDEO] [SYNC] F5 refresh để tránh 403...")
                     self.driver.refresh()
                     # Đợi textarea xuất hiện = page load xong (tự động F5 nếu không thấy)
                     if not self._wait_for_textarea_visible():
-                        self.log("[VIDEO] ⚠️ Không thấy textarea sau nhiều lần F5", "WARN")
+                        self.log("[VIDEO] [WARN] Không thấy textarea sau nhiều lần F5", "WARN")
 
                     # Re-inject JS Interceptor sau khi refresh (bị mất sau F5)
                     self._reset_tokens()
                     self.driver.run_js(JS_INTERCEPTOR)
                     # Click vào textarea để focus
                     self._click_textarea()
-                    self.log("[VIDEO] 🔄 Refreshed + ready")
+                    self.log("[VIDEO] [SYNC] Refreshed + ready")
             except Exception as e:
-                self.log(f"[VIDEO] ⚠️ Refresh warning: {e}", "WARN")
+                self.log(f"[VIDEO] [WARN] Refresh warning: {e}", "WARN")
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0:
@@ -4523,14 +4508,14 @@ class DrissionFlowAPI:
             try:
                 # === CHECK LOGOUT TRƯỚC ===
                 if self._is_logged_out():
-                    self.log("[Mode] ⚠️ Phát hiện bị LOGOUT - auto login...")
+                    self.log("[Mode] [WARN] Phát hiện bị LOGOUT - auto login...")
                     if self._auto_login_google():
-                        self.log("[Mode] ✓ Đã login lại")
+                        self.log("[Mode] [v] Đã login lại")
                         # Re-setup sau khi login
                         time.sleep(2)
                         continue
                     else:
-                        self.log("[Mode] ✗ Login thất bại", "ERROR")
+                        self.log("[Mode] [x] Login thất bại", "ERROR")
                         return False
 
                 # === CHECK COMBOBOX TỒN TẠI ===
@@ -4539,7 +4524,7 @@ class DrissionFlowAPI:
                 """)
 
                 if not has_combobox:
-                    self.log(f"[Mode] ⚠️ Không tìm thấy combobox, F5 refresh... (attempt {attempt + 1})")
+                    self.log(f"[Mode] [WARN] Không tìm thấy combobox, F5 refresh... (attempt {attempt + 1})")
                     self.driver.refresh()
                     time.sleep(3)
                     # Re-inject JS Interceptor sau refresh
@@ -4560,7 +4545,7 @@ class DrissionFlowAPI:
                 result = self.driver.run_js("return window._imageResult;")
 
                 if result == 'CLICKED':
-                    self.log("[Mode] ✓ Đã chuyển sang Image mode")
+                    self.log("[Mode] [v] Đã chuyển sang Image mode")
                     time.sleep(0.3)
                     return True
                 else:
@@ -4574,7 +4559,7 @@ class DrissionFlowAPI:
                 self.log(f"[Mode] Error: {e}", "ERROR")
                 time.sleep(0.5)
 
-        self.log("[Mode] ✗ Không thể chuyển sang Image mode sau nhiều lần thử", "ERROR")
+        self.log("[Mode] [x] Không thể chuyển sang Image mode sau nhiều lần thử", "ERROR")
         return False
 
     def switch_to_video_mode(self) -> bool:
@@ -4600,7 +4585,7 @@ class DrissionFlowAPI:
                 option_clicked = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP3)
 
                 if option_clicked == 'CLICKED':
-                    self.log("[Mode] ✓ Đã chuyển sang Video mode")
+                    self.log("[Mode] [v] Đã chuyển sang Video mode")
                     time.sleep(0.5)
                     return True
                 else:
@@ -4614,7 +4599,7 @@ class DrissionFlowAPI:
                 self.log(f"[Mode] Error: {e}", "ERROR")
                 time.sleep(0.5)
 
-        self.log("[Mode] ✗ Không thể chuyển sang Video mode sau nhiều lần thử", "ERROR")
+        self.log("[Mode] [x] Không thể chuyển sang Video mode sau nhiều lần thử", "ERROR")
         return False
 
     def generate_video_force_mode(
@@ -4691,7 +4676,7 @@ class DrissionFlowAPI:
                 # === 403 ERROR: RESET CHROME + IPv6 ===
                 if "403" in str(error):
                     self._consecutive_403 += 1
-                    self.log(f"[I2V-FORCE] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
+                    self.log(f"[I2V-FORCE] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                     # Kill Chrome
                     self._kill_chrome()
@@ -4710,11 +4695,11 @@ class DrissionFlowAPI:
 
                         if not self._ipv6_activated:
                             # Lần đầu: Activate IPv6
-                            self.log(f"[I2V-FORCE] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                            self.log(f"[I2V-FORCE] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
                             self._activate_ipv6()
                         else:
                             # Đã activate: Rotate sang IP khác
-                            self.log(f"[I2V-FORCE] → 🔄 Rotate sang IPv6 khác...")
+                            self.log(f"[I2V-FORCE] → [SYNC] Rotate sang IPv6 khác...")
                             rotate_ipv6 = True
                     elif self._consecutive_403 >= self._max_403_before_ipv6:
                         self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
@@ -4729,7 +4714,7 @@ class DrissionFlowAPI:
 
                 # === TIMEOUT ERROR: Reset Chrome ===
                 if "timeout" in str(error).lower():
-                    self.log(f"[I2V-FORCE] ⚠️ Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+                    self.log(f"[I2V-FORCE] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
 
                     self._kill_chrome()
                     self.close()
@@ -4748,7 +4733,7 @@ class DrissionFlowAPI:
 
                 # === 500 ERROR: Retry với delay ===
                 if "500" in str(error):
-                    self.log(f"[I2V-FORCE] ⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
+                    self.log(f"[I2V-FORCE] [WARN] 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
                     if attempt < max_retries - 1:
                         self.log(f"[I2V-FORCE] → Đợi 3s rồi retry...")
                         time.sleep(3)
@@ -4812,7 +4797,7 @@ class DrissionFlowAPI:
 
         # 3. Set FORCE VIDEO PAYLOAD - Interceptor sẽ đổi URL và payload
         self.driver.run_js(f"window._forceVideoPayload = {json.dumps(video_payload)};")
-        self.log(f"[I2V-FORCE] ✓ Video payload ready (mediaId: {media_id[:40]}...)")
+        self.log(f"[I2V-FORCE] [v] Video payload ready (mediaId: {media_id[:40]}...)")
         self.log(f"[I2V-FORCE] Interceptor sẽ đổi image request → video request")
 
         # 4. Gửi prompt như tạo ảnh (trigger Chrome gửi request)
@@ -4845,7 +4830,7 @@ class DrissionFlowAPI:
             pending = self.driver.run_js("return window._videoPending;")
 
             if error:
-                self.log(f"[I2V-FORCE] ✗ Error: {error}", "ERROR")
+                self.log(f"[I2V-FORCE] [x] Error: {error}", "ERROR")
                 return False, None, error
 
             if response:
@@ -4856,19 +4841,19 @@ class DrissionFlowAPI:
                     if response.get('error') and response.get('error').get('code'):
                         error_code = response['error']['code']
                         error_msg = response['error'].get('message', '')
-                        self.log(f"[I2V-FORCE] ✗ API Error {error_code}: {error_msg}", "ERROR")
+                        self.log(f"[I2V-FORCE] [x] API Error {error_code}: {error_msg}", "ERROR")
                         return False, None, f"Error {error_code}: {error_msg}"
 
                     # Check for operations (async video)
                     if response.get('operations'):
                         operation = response['operations'][0]
                         operation_name = operation.get('name', '')
-                        self.log(f"[I2V-FORCE] ✓ Video operation started: {operation_name[-30:]}...")
+                        self.log(f"[I2V-FORCE] [v] Video operation started: {operation_name[-30:]}...")
 
                         # Poll cho video hoàn thành qua Browser
                         video_url = self._poll_video_operation_browser(operation, max_wait)
                         if video_url:
-                            self.log(f"[I2V-FORCE] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[I2V-FORCE] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
                         else:
                             return False, None, "Timeout hoặc lỗi khi poll video"
@@ -4878,14 +4863,14 @@ class DrissionFlowAPI:
                         video = response['videos'][0]
                         video_url = video.get('videoUri') or video.get('uri')
                         if video_url:
-                            self.log(f"[I2V-FORCE] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[I2V-FORCE] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
 
                 return False, None, "Response không có operations/videos"
 
             time.sleep(0.5)
 
-        self.log("[I2V-FORCE] ✗ Timeout đợi video response", "ERROR")
+        self.log("[I2V-FORCE] [x] Timeout đợi video response", "ERROR")
         return False, None, "Timeout waiting for video response"
 
     def _poll_video_operation_browser(self, operation: Dict, max_wait: int = 180) -> Optional[str]:
@@ -4995,20 +4980,20 @@ class DrissionFlowAPI:
                     # Video URL ở operation.metadata.video.fifeUrl
                     video_url = op_data.get('metadata', {}).get('video', {}).get('fifeUrl')
                     if video_url:
-                        self.log(f"[I2V-FORCE] ✓ Video completed!")
+                        self.log(f"[I2V-FORCE] [v] Video completed!")
                         self.log(f"[I2V-FORCE] URL: {video_url[:80]}...")
                         return video_url
                     else:
-                        self.log(f"[I2V-FORCE] ⚠️ Video done but URL not found", "WARN")
+                        self.log(f"[I2V-FORCE] [WARN] Video done but URL not found", "WARN")
 
                 # Check error status
                 if status == 'MEDIA_GENERATION_STATUS_FAILED':
-                    self.log(f"[I2V-FORCE] ✗ Video generation failed", "ERROR")
+                    self.log(f"[I2V-FORCE] [x] Video generation failed", "ERROR")
                     return None
 
             time.sleep(poll_interval)
 
-        self.log(f"[I2V-FORCE] ✗ Timeout sau {max_wait}s", "ERROR")
+        self.log(f"[I2V-FORCE] [x] Timeout sau {max_wait}s", "ERROR")
         return None
 
     def generate_video_t2v_mode(
@@ -5076,17 +5061,17 @@ class DrissionFlowAPI:
 
                 # Restart Chrome sau mỗi video (giống image generation)
                 # Để tránh 403 cho video tiếp theo
-                self.log("[T2V→I2V] 🔄 Restart Chrome sau video thành công...")
+                self.log("[T2V→I2V] [SYNC] Restart Chrome sau video thành công...")
                 try:
                     self._kill_chrome()
                     self.close()
                     time.sleep(1)
                     if self.restart_chrome(rotate_ipv6=False):
-                        self.log("[T2V→I2V] ✓ Chrome reset xong")
+                        self.log("[T2V→I2V] [v] Chrome reset xong")
                     else:
-                        self.log("[T2V→I2V] ⚠️ Chrome restart failed", "WARN")
+                        self.log("[T2V→I2V] [WARN] Chrome restart failed", "WARN")
                 except Exception as e:
-                    self.log(f"[T2V→I2V] ⚠️ Restart error: {e}", "WARN")
+                    self.log(f"[T2V→I2V] [WARN] Restart error: {e}", "WARN")
 
                 return True, result, None
 
@@ -5101,14 +5086,14 @@ class DrissionFlowAPI:
 
                     if self._consecutive_403 <= 3 and not cleared_flag:
                         # Bước 1: Reset Chrome (tối đa 3 lần)
-                        self.log(f"[T2V→I2V] ⚠️ 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
+                        self.log(f"[T2V→I2V] [WARN] 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
                         self._kill_chrome()
                         self.close()
                         time.sleep(2)
 
                     elif self._consecutive_403 == 4 or (self._consecutive_403 > 3 and not cleared_flag):
                         # Bước 2: Sau 3 lần reset vẫn 403 → XÓA TRIỆT ĐỂ PROFILE + đăng nhập lại
-                        self.log(f"[T2V→I2V] ⚠️ 403 sau 3 lần reset → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
+                        self.log(f"[T2V→I2V] [WARN] 403 sau 3 lần reset → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
                         # Dùng reset_chrome_profile() - xóa hoàn toàn thư mục profile
                         self.reset_chrome_profile()
                         time.sleep(1)
@@ -5119,7 +5104,7 @@ class DrissionFlowAPI:
 
                     else:
                         # Bước 3: Đã clear data vẫn 403 → Đổi IPv6
-                        self.log(f"[T2V→I2V] ⚠️ 403 sau khi clear data → ĐỔI IPv6!", "WARN")
+                        self.log(f"[T2V→I2V] [WARN] 403 sau khi clear data → ĐỔI IPv6!", "WARN")
                         self._cleared_data_for_403 = False
                         self._consecutive_403 = 0
                         self._kill_chrome()
@@ -5130,7 +5115,7 @@ class DrissionFlowAPI:
                         if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
                             new_ip = self._ipv6_rotator.rotate()
                             if new_ip:
-                                self.log(f"[T2V→I2V] → 🌐 IPv6 mới: {new_ip}")
+                                self.log(f"[T2V→I2V] → [NET] IPv6 mới: {new_ip}")
                                 if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
                                     self._ipv6_proxy.set_ipv6(new_ip)
 
@@ -5146,7 +5131,7 @@ class DrissionFlowAPI:
                     timeout_count = getattr(self, '_timeout_count', 0) + 1
                     self._timeout_count = timeout_count
 
-                    self.log(f"[T2V→I2V] ⚠️ Timeout error (lần {timeout_count}) - Reset Chrome...", "WARN")
+                    self.log(f"[T2V→I2V] [WARN] Timeout error (lần {timeout_count}) - Reset Chrome...", "WARN")
 
                     if timeout_count == 1:
                         # LẦN 1: Reset Chrome và retry
@@ -5173,7 +5158,7 @@ class DrissionFlowAPI:
                         if self.restart_chrome():
                             self.log("[T2V→I2V] → Chrome reset xong, qua prompt mới")
                         else:
-                            self.log("[T2V→I2V] ⚠️ Restart Chrome fail", "WARN")
+                            self.log("[T2V→I2V] [WARN] Restart Chrome fail", "WARN")
 
                         self._timeout_count = 0  # Reset counter
                         return False, None, "Timeout 2 lần - skip prompt"
@@ -5181,7 +5166,7 @@ class DrissionFlowAPI:
                 # === 400 ERROR: Invalid argument - có thể do mediaId hết hạn hoặc payload sai ===
                 if "400" in str(error):
                     self._consecutive_403 += 1  # Dùng chung counter với 403
-                    self.log(f"[T2V→I2V] ⚠️ 400 error (lần {self._consecutive_403}) - Invalid argument!", "WARN")
+                    self.log(f"[T2V→I2V] [WARN] 400 error (lần {self._consecutive_403}) - Invalid argument!", "WARN")
                     self.log(f"[T2V→I2V] → Error details: {error}", "WARN")
 
                     # Đợi 3 giây để user thấy lỗi trước khi reset
@@ -5189,7 +5174,7 @@ class DrissionFlowAPI:
 
                     # Sau 3 lần liên tiếp, đổi IPv6 và thử lại
                     if self._consecutive_403 >= 3:
-                        self.log(f"[T2V→I2V] 🔄 {self._consecutive_403} lỗi liên tiếp → ROTATE IPv6 + RESET CHROME!")
+                        self.log(f"[T2V→I2V] [SYNC] {self._consecutive_403} lỗi liên tiếp → ROTATE IPv6 + RESET CHROME!")
 
                         self._kill_chrome()
                         self.close()
@@ -5202,10 +5187,10 @@ class DrissionFlowAPI:
                         # Rotate IPv6 - CHỈ Chrome 1 (worker_id=0) rotate
                         if self.worker_id == 0:
                             if not self._ipv6_activated:
-                                self.log(f"[T2V→I2V] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                                self.log(f"[T2V→I2V] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
                                 self._activate_ipv6()
                             else:
-                                self.log(f"[T2V→I2V] → 🔄 Rotate sang IPv6 khác...")
+                                self.log(f"[T2V→I2V] → [SYNC] Rotate sang IPv6 khác...")
                                 if self._ipv6_rotator:
                                     new_ip = self._ipv6_rotator.rotate()
                                     if new_ip and hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
@@ -5234,13 +5219,13 @@ class DrissionFlowAPI:
 
                 # === 500 ERROR ===
                 if "500" in str(error):
-                    self.log(f"[T2V→I2V] ⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
+                    self.log(f"[T2V→I2V] [WARN] 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
                     if attempt < max_retries - 1:
                         time.sleep(3)
                         continue
 
                 # === OTHER ERROR: Đợi để hiển thị lỗi trước khi return ===
-                self.log(f"[T2V→I2V] ⚠️ Error: {error}", "WARN")
+                self.log(f"[T2V→I2V] [WARN] Error: {error}", "WARN")
                 time.sleep(2)  # Đợi 2 giây để user thấy lỗi
                 return False, None, error
 
@@ -5266,7 +5251,7 @@ class DrissionFlowAPI:
 
         # Kiểm tra format media_id (thường bắt đầu bằng số hoặc có dấu /)
         if not any(c.isdigit() for c in media_id):
-            self.log(f"[T2V→I2V] ⚠️ Media ID không có số: {media_id[:50]} - có thể sai format!", "WARN")
+            self.log(f"[T2V→I2V] [WARN] Media ID không có số: {media_id[:50]} - có thể sai format!", "WARN")
 
         self.log(f"[T2V→I2V] ══════════════════════════════════════════")
         self.log(f"[T2V→I2V] Tạo video với:")
@@ -5279,7 +5264,7 @@ class DrissionFlowAPI:
         if not self._t2v_mode_selected:
             self.log("[T2V→I2V] Chuyển sang mode 'Từ văn bản sang video'...")
             if not self.switch_to_t2v_mode():
-                self.log("[T2V→I2V] ⚠️ Không chuyển được T2V mode, thử tiếp...", "WARN")
+                self.log("[T2V→I2V] [WARN] Không chuyển được T2V mode, thử tiếp...", "WARN")
 
             # 1.5. Chuyển sang Lower Priority model (tránh rate limit)
             self.log("[T2V→I2V] Chuyển sang model Lower Priority...")
@@ -5287,7 +5272,7 @@ class DrissionFlowAPI:
 
             # Đánh dấu đã chọn mode/model - không cần chọn lại
             self._t2v_mode_selected = True
-            self.log("[T2V→I2V] ✓ Mode/Model đã chọn - các video sau sẽ không chọn lại")
+            self.log("[T2V→I2V] [v] Mode/Model đã chọn - các video sau sẽ không chọn lại")
         else:
             self.log("[T2V→I2V] Mode/Model đã sẵn sàng (giữ từ lần trước)")
 
@@ -5315,7 +5300,7 @@ class DrissionFlowAPI:
         if not verify_config or not verify_config.get('mediaId'):
             return False, None, "Failed to set T2V→I2V config in browser"
 
-        self.log(f"[T2V→I2V] ✓ Config verified (mediaId: {verify_config.get('mediaId', '')[:40]}...)")
+        self.log(f"[T2V→I2V] [v] Config verified (mediaId: {verify_config.get('mediaId', '')[:40]}...)")
 
         # 3. Tìm textarea và nhập prompt
         textarea = self._find_textarea()
@@ -5342,7 +5327,7 @@ class DrissionFlowAPI:
             error = self.driver.run_js("return window._videoError;")
 
             if error:
-                self.log(f"[T2V→I2V] ✗ Error: {error}", "ERROR")
+                self.log(f"[T2V→I2V] [x] Error: {error}", "ERROR")
                 return False, None, error
 
             if response:
@@ -5352,19 +5337,19 @@ class DrissionFlowAPI:
                     if response.get('error') and response.get('error').get('code'):
                         error_code = response['error']['code']
                         error_msg = response['error'].get('message', '')
-                        self.log(f"[T2V→I2V] ✗ API Error {error_code}: {error_msg}", "ERROR")
+                        self.log(f"[T2V→I2V] [x] API Error {error_code}: {error_msg}", "ERROR")
                         return False, None, f"Error {error_code}: {error_msg}"
 
                     if response.get('operations'):
                         operation = response['operations'][0]
                         operation_name = operation.get('name', '')
-                        self.log(f"[T2V→I2V] ✓ Video operation started: {operation_name[-30:]}...")
+                        self.log(f"[T2V→I2V] [v] Video operation started: {operation_name[-30:]}...")
 
                         # Poll qua Browser (dùng Chrome's auth)
                         video_url = self._poll_video_operation_browser(operation, max_wait)
 
                         if video_url:
-                            self.log(f"[T2V→I2V] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[T2V→I2V] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
                         else:
                             return False, None, "Timeout hoặc lỗi khi poll video"
@@ -5373,14 +5358,14 @@ class DrissionFlowAPI:
                         video = response['videos'][0]
                         video_url = video.get('videoUri') or video.get('uri')
                         if video_url:
-                            self.log(f"[T2V→I2V] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[T2V→I2V] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
 
                 return False, None, "Response không có operations/videos"
 
             time.sleep(0.5)
 
-        self.log("[T2V→I2V] ✗ Timeout đợi video response", "ERROR")
+        self.log("[T2V→I2V] [x] Timeout đợi video response", "ERROR")
         return False, None, "Timeout waiting for video response"
 
     def switch_to_t2v_mode(self) -> bool:
@@ -5411,7 +5396,7 @@ class DrissionFlowAPI:
                 result = self.driver.run_js("return window._t2vResult;")
 
                 if result == 'CLICKED':
-                    self.log("[Mode] ✓ Đã chuyển sang T2V mode")
+                    self.log("[Mode] [v] Đã chuyển sang T2V mode")
                     time.sleep(0.3)
                     return True
                 elif result == 'NO_DROPDOWN':
@@ -5427,7 +5412,7 @@ class DrissionFlowAPI:
                 self.log(f"[Mode] Error: {e}", "ERROR")
                 time.sleep(0.5)
 
-        self.log("[Mode] ✗ Không thể chuyển sang T2V mode sau nhiều lần thử", "ERROR")
+        self.log("[Mode] [x] Không thể chuyển sang T2V mode sau nhiều lần thử", "ERROR")
         return False
 
     def switch_to_lower_priority_model(self) -> bool:
@@ -5458,7 +5443,7 @@ class DrissionFlowAPI:
                 result = self.driver.run_js("return window._modelSwitchResult;")
 
                 if result == 'SUCCESS':
-                    self.log("[Model] ✓ Đã chuyển sang Lower Priority")
+                    self.log("[Model] [v] Đã chuyển sang Lower Priority")
                     # Click ra ngoài để đóng dialog
                     time.sleep(0.3)
                     self.driver.run_js('document.body.click();')
@@ -5474,7 +5459,7 @@ class DrissionFlowAPI:
                 self.log(f"[Model] Error: {e}", "ERROR")
                 time.sleep(0.5)
 
-        self.log("[Model] ⚠️ Không thể chuyển Lower Priority, tiếp tục với model mặc định", "WARN")
+        self.log("[Model] [WARN] Không thể chuyển Lower Priority, tiếp tục với model mặc định", "WARN")
         return False
 
     def generate_video_pure_t2v(
@@ -5532,7 +5517,7 @@ class DrissionFlowAPI:
                 # === 403 ERROR: RESET CHROME + IPv6 ===
                 if "403" in str(error):
                     self._consecutive_403 += 1
-                    self.log(f"[T2V-PURE] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
+                    self.log(f"[T2V-PURE] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                     self._kill_chrome()
                     self.close()
@@ -5547,10 +5532,10 @@ class DrissionFlowAPI:
                     if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
                         self._consecutive_403 = 0
                         if not self._ipv6_activated:
-                            self.log(f"[T2V-PURE] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                            self.log(f"[T2V-PURE] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
                             self._activate_ipv6()
                         else:
-                            self.log(f"[T2V-PURE] → 🔄 Rotate sang IPv6 khác...")
+                            self.log(f"[T2V-PURE] → [SYNC] Rotate sang IPv6 khác...")
                             rotate_ipv6 = True
                     elif self._consecutive_403 >= self._max_403_before_ipv6:
                         self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
@@ -5564,7 +5549,7 @@ class DrissionFlowAPI:
 
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
-                    self.log(f"[T2V-PURE] ⚠️ Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+                    self.log(f"[T2V-PURE] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
                     self._kill_chrome()
                     self.close()
                     time.sleep(2)
@@ -5579,7 +5564,7 @@ class DrissionFlowAPI:
 
                 # === 500 ERROR ===
                 if "500" in str(error):
-                    self.log(f"[T2V-PURE] ⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
+                    self.log(f"[T2V-PURE] [WARN] 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
                     if attempt < max_retries - 1:
                         time.sleep(3)
                         continue
@@ -5602,7 +5587,7 @@ class DrissionFlowAPI:
         # 1. Chuyển sang T2V mode
         self.log("[T2V-PURE] Chuyển sang mode 'Từ văn bản sang video'...")
         if not self.switch_to_t2v_mode():
-            self.log("[T2V-PURE] ⚠️ Không chuyển được T2V mode, thử tiếp...", "WARN")
+            self.log("[T2V-PURE] [WARN] Không chuyển được T2V mode, thử tiếp...", "WARN")
 
         # 2. Reset video state
         self.driver.run_js("""
@@ -5614,7 +5599,7 @@ class DrissionFlowAPI:
             window._customVideoPayload = null;
             window._forceVideoPayload = null;
         """)
-        self.log("[T2V-PURE] ✓ Pure T2V mode (không convert sang I2V)")
+        self.log("[T2V-PURE] [v] Pure T2V mode (không convert sang I2V)")
 
         # 3. Tìm textarea và nhập prompt
         textarea = self._find_textarea()
@@ -5641,7 +5626,7 @@ class DrissionFlowAPI:
             error = self.driver.run_js("return window._videoError;")
 
             if error:
-                self.log(f"[T2V-PURE] ✗ Error: {error}", "ERROR")
+                self.log(f"[T2V-PURE] [x] Error: {error}", "ERROR")
                 return False, None, error
 
             if response:
@@ -5651,12 +5636,12 @@ class DrissionFlowAPI:
                     if response.get('error') and response.get('error').get('code'):
                         error_code = response['error']['code']
                         error_msg = response['error'].get('message', '')
-                        self.log(f"[T2V-PURE] ✗ API Error {error_code}: {error_msg}", "ERROR")
+                        self.log(f"[T2V-PURE] [x] API Error {error_code}: {error_msg}", "ERROR")
                         return False, None, f"Error {error_code}: {error_msg}"
 
                     if response.get('operations'):
                         operation = response['operations'][0]
-                        self.log(f"[T2V-PURE] ✓ Video operation started")
+                        self.log(f"[T2V-PURE] [v] Video operation started")
 
                         headers = {
                             "Authorization": self.bearer_token,
@@ -5675,7 +5660,7 @@ class DrissionFlowAPI:
                         video_url = self._poll_video_operation(operation, headers, proxies, max_wait)
 
                         if video_url:
-                            self.log(f"[T2V-PURE] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[T2V-PURE] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
                         else:
                             return False, None, "Timeout hoặc lỗi khi poll video"
@@ -5684,14 +5669,14 @@ class DrissionFlowAPI:
                         video = response['videos'][0]
                         video_url = video.get('videoUri') or video.get('uri')
                         if video_url:
-                            self.log(f"[T2V-PURE] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[T2V-PURE] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
 
                 return False, None, "Response không có operations/videos"
 
             time.sleep(0.5)
 
-        self.log("[T2V-PURE] ✗ Timeout đợi video response", "ERROR")
+        self.log("[T2V-PURE] [x] Timeout đợi video response", "ERROR")
         return False, None, "Timeout waiting for video response"
 
     def generate_video_modify_mode(
@@ -5755,7 +5740,7 @@ class DrissionFlowAPI:
                 # === 403 ERROR: RESET CHROME + IPv6 ===
                 if "403" in str(error):
                     self._consecutive_403 += 1
-                    self.log(f"[I2V-MODIFY] ⚠️ 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
+                    self.log(f"[I2V-MODIFY] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
 
                     self._kill_chrome()
                     self.close()
@@ -5770,10 +5755,10 @@ class DrissionFlowAPI:
                     if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
                         self._consecutive_403 = 0
                         if not self._ipv6_activated:
-                            self.log(f"[I2V-MODIFY] → 🌐 ACTIVATE IPv6 MODE (lần đầu)...")
+                            self.log(f"[I2V-MODIFY] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
                             self._activate_ipv6()
                         else:
-                            self.log(f"[I2V-MODIFY] → 🔄 Rotate sang IPv6 khác...")
+                            self.log(f"[I2V-MODIFY] → [SYNC] Rotate sang IPv6 khác...")
                             rotate_ipv6 = True
                     elif self._consecutive_403 >= self._max_403_before_ipv6:
                         self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
@@ -5787,7 +5772,7 @@ class DrissionFlowAPI:
 
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
-                    self.log(f"[I2V-MODIFY] ⚠️ Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+                    self.log(f"[I2V-MODIFY] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
                     self._kill_chrome()
                     self.close()
                     time.sleep(2)
@@ -5802,7 +5787,7 @@ class DrissionFlowAPI:
 
                 # === 500 ERROR ===
                 if "500" in str(error):
-                    self.log(f"[I2V-MODIFY] ⚠️ 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
+                    self.log(f"[I2V-MODIFY] [WARN] 500 Internal Error (attempt {attempt+1}/{max_retries})", "WARN")
                     if attempt < max_retries - 1:
                         time.sleep(3)
                         continue
@@ -5843,7 +5828,7 @@ class DrissionFlowAPI:
             }]
         }
         self.driver.run_js(f"window._modifyVideoConfig = {json.dumps(modify_config)};")
-        self.log(f"[I2V] ✓ MODIFY MODE: referenceImages ready")
+        self.log(f"[I2V] [v] MODIFY MODE: referenceImages ready")
 
         # 4. Tìm textarea và nhập prompt
         textarea = self._find_textarea()
@@ -5871,7 +5856,7 @@ class DrissionFlowAPI:
 
             if result.get('error'):
                 error_msg = result['error']
-                self.log(f"[I2V] ✗ Request error: {error_msg}", "ERROR")
+                self.log(f"[I2V] [x] Request error: {error_msg}", "ERROR")
                 return False, None, error_msg
 
             if result.get('response'):
@@ -5881,7 +5866,7 @@ class DrissionFlowAPI:
                     if response_data.get('error'):
                         error_info = response_data['error']
                         error_msg = f"{error_info.get('code', 'unknown')}: {error_info.get('message', str(error_info))}"
-                        self.log(f"[I2V] ✗ API Error: {error_msg}", "ERROR")
+                        self.log(f"[I2V] [x] API Error: {error_msg}", "ERROR")
                         return False, None, error_msg
 
                     if "media" in response_data or "generatedVideos" in response_data:
@@ -5889,20 +5874,20 @@ class DrissionFlowAPI:
                         if videos:
                             video_url = videos[0].get("video", {}).get("fifeUrl") or videos[0].get("fifeUrl")
                             if video_url:
-                                self.log(f"[I2V] ✓ Video ready (no poll): {video_url[:60]}...")
+                                self.log(f"[I2V] [v] Video ready (no poll): {video_url[:60]}...")
                                 return self._download_video_if_needed(video_url, save_path)
 
                     operations = response_data.get("operations", [])
                     if operations:
                         op = operations[0]
                         op_name = op.get('name', '')
-                        self.log(f"[I2V] ✓ Video operation started: {op_name[-30:]}...")
+                        self.log(f"[I2V] [v] Video operation started: {op_name[-30:]}...")
 
                         # Poll qua Browser (dùng Chrome's auth)
                         video_url = self._poll_video_operation_browser(op, max_wait)
 
                         if video_url:
-                            self.log(f"[I2V] ✓ Video ready: {video_url[:60]}...")
+                            self.log(f"[I2V] [v] Video ready: {video_url[:60]}...")
                             return self._download_video_if_needed(video_url, save_path)
                         else:
                             return False, None, "Timeout hoặc lỗi khi poll video"
@@ -5911,7 +5896,7 @@ class DrissionFlowAPI:
 
             time.sleep(0.5)
 
-        self.log("[I2V] ✗ Timeout đợi response từ browser", "ERROR")
+        self.log("[I2V] [x] Timeout đợi response từ browser", "ERROR")
         return False, None, "Timeout waiting for video response"
 
     def _poll_video_operation(
@@ -6208,11 +6193,11 @@ class DrissionFlowAPI:
             # Thử dùng CDP Fetch API để handle auth challenges
             try:
                 self.driver.run_cdp('Fetch.enable', handleAuthRequests=True)
-                self.log("✓ CDP Fetch.enable OK")
+                self.log("[v] CDP Fetch.enable OK")
             except Exception as e:
                 self.log(f"CDP Fetch not supported: {e}", "WARN")
 
-            self.log("✓ Proxy auth ready")
+            self.log("[v] Proxy auth ready")
             self.log("  [!] Nếu vẫn lỗi, whitelist IP trên Webshare Dashboard")
 
         except Exception as e:
@@ -6243,18 +6228,18 @@ class DrissionFlowAPI:
                 from modules.ipv6_rotator import get_ipv6_rotator
                 rotator = get_ipv6_rotator()
                 if rotator and rotator.enabled:
-                    self.log("🔄 Rotating IPv6 before restart...")
+                    self.log("[SYNC] Rotating IPv6 before restart...")
                     new_ip = rotator.rotate()
                     if new_ip:
-                        self.log(f"✓ IPv6 changed to: {new_ip}")
+                        self.log(f"[v] IPv6 changed to: {new_ip}")
                         # Cập nhật SOCKS5 proxy với IPv6 mới
                         if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
                             self._ipv6_proxy.set_ipv6(new_ip)
-                            self.log(f"✓ SOCKS5 proxy updated")
+                            self.log(f"[v] SOCKS5 proxy updated")
                     else:
-                        self.log("⚠️ IPv6 rotation failed, continuing anyway...")
+                        self.log("[WARN] IPv6 rotation failed, continuing anyway...")
             except Exception as e:
-                self.log(f"⚠️ IPv6 rotation error: {e}")
+                self.log(f"[WARN] IPv6 rotation error: {e}")
 
         if self._use_webshare:
             # Lấy proxy mới để log
@@ -6262,11 +6247,11 @@ class DrissionFlowAPI:
             manager = get_proxy_manager()
             new_proxy = manager.get_proxy_for_worker(self.worker_id)
             if new_proxy:
-                self.log(f"🔄 Restart Chrome [Worker {self.worker_id}] với proxy mới: {new_proxy.endpoint}")
+                self.log(f"[SYNC] Restart Chrome [Worker {self.worker_id}] với proxy mới: {new_proxy.endpoint}")
             else:
-                self.log(f"🔄 Restart Chrome [Worker {self.worker_id}]...")
+                self.log(f"[SYNC] Restart Chrome [Worker {self.worker_id}]...")
         else:
-            self.log("🔄 Restart Chrome...")
+            self.log("[SYNC] Restart Chrome...")
 
         # Close Chrome và proxy bridge hiện tại
         self.close()
@@ -6286,7 +6271,7 @@ class DrissionFlowAPI:
             self.log("  → Skip mode selection (video mode đã được set)")
 
         if self.setup(project_url=saved_project_url, skip_mode_selection=skip_mode):
-            self.log("✓ Chrome restarted thành công!")
+            self.log("[v] Chrome restarted thành công!")
 
             # Chọn lại mode "Tạo hình ảnh" ngay sau restart (nếu không phải video mode)
             # Đảm bảo mode được set đúng trước khi tiếp tục generate
@@ -6294,13 +6279,13 @@ class DrissionFlowAPI:
                 self.log("  → Chọn lại mode 'Tạo hình ảnh'...")
                 if self.switch_to_image_mode():
                     self._image_mode_selected = True
-                    self.log("  ✓ Image mode selected")
+                    self.log("  [v] Image mode selected")
                 else:
-                    self.log("  ⚠️ Không chọn được mode, sẽ thử lại khi generate", "WARN")
+                    self.log("  [WARN] Không chọn được mode, sẽ thử lại khi generate", "WARN")
 
             return True
         else:
-            self.log("✗ Không restart được Chrome", "ERROR")
+            self.log("[x] Không restart được Chrome", "ERROR")
             return False
 
     @property

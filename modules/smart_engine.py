@@ -13,7 +13,21 @@ Flow:
 
 __version__ = "2.0.0-browser"
 
+import sys
 import os
+
+# Fix Windows encoding issues - must be at module level
+if sys.platform == "win32":
+    if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
+    if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
+        try:
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        except:
+            pass
 import json
 import time
 import shutil
@@ -669,7 +683,7 @@ class SmartEngine:
             # QUAN TRONG: Lay token LUON phai chay Chrome HIEN THI
             # Vi Google Flow detect headless mode va block!
             # Headless chi dung cho TAO ANH, khong dung cho LAY TOKEN
-            self.log(f"[Chrome] ⚠️ Mo Chrome HIEN THI de lay token (Google block headless)")
+            self.log(f"[Chrome] [WARN] Mo Chrome HIEN THI de lay token (Google block headless)")
 
             extractor = ChromeAutoToken(
                 chrome_path=self.chrome_path,
@@ -753,7 +767,7 @@ class SmartEngine:
             )
 
             if token:
-                self.log(f"[Worker{worker_id}] ✅ Token OK!", "OK")
+                self.log(f"[Worker{worker_id}] [OK] Token OK!", "OK")
                 if project_id:
                     self.log(f"[Worker{worker_id}]   Project: {project_id[:8]}...")
 
@@ -765,11 +779,11 @@ class SmartEngine:
                     'timestamp': time.time()
                 }
             else:
-                self.log(f"[Worker{worker_id}] ❌ Token FAIL: {error}", "ERROR")
+                self.log(f"[Worker{worker_id}] [FAIL] Token FAIL: {error}", "ERROR")
                 return None
 
         except Exception as e:
-            self.log(f"[Worker{worker_id}] ❌ Exception: {e}", "ERROR")
+            self.log(f"[Worker{worker_id}] [FAIL] Exception: {e}", "ERROR")
             return None
 
         finally:
@@ -1215,7 +1229,7 @@ class SmartEngine:
                         if retry == 0:
                             self.log("[PARALLEL] Tất cả characters đã có ảnh!")
                         else:
-                            self.log(f"[PARALLEL] ✓ Retry {retry}: Tất cả characters đã có ảnh!")
+                            self.log(f"[PARALLEL] [v] Retry {retry}: Tất cả characters đã có ảnh!")
                         self._character_gen_result = {"success": total_success, "failed": 0}
                         return
 
@@ -1235,18 +1249,18 @@ class SmartEngine:
 
                     # Nếu tất cả đã thành công trong lần này → xong
                     if failed == 0:
-                        self.log(f"[PARALLEL] ✓ Tất cả characters đã tạo thành công!")
+                        self.log(f"[PARALLEL] [v] Tất cả characters đã tạo thành công!")
                         break
 
                     # Nếu còn retry và có failed → đợi rồi retry
                     if retry < MAX_RETRIES - 1:
                         wait_time = min(5 * (retry + 1), 30)  # 5s, 10s, 15s, ..., max 30s
-                        self.log(f"[PARALLEL] ⚠️ Còn {failed} characters fail - đợi {wait_time}s rồi retry...")
+                        self.log(f"[PARALLEL] [WARN] Còn {failed} characters fail - đợi {wait_time}s rồi retry...")
                         import time
                         time.sleep(wait_time)
                     else:
                         total_failed = failed
-                        self.log(f"[PARALLEL] ⚠️ Hết {MAX_RETRIES} lần retry, còn {failed} characters chưa có ảnh!", "WARN")
+                        self.log(f"[PARALLEL] [WARN] Hết {MAX_RETRIES} lần retry, còn {failed} characters chưa có ảnh!", "WARN")
 
                 self._character_gen_result = {"success": total_success, "failed": total_failed}
                 self.log(f"[PARALLEL] Hoàn thành! Total Success={total_success}, Final Failed={total_failed}")
@@ -1323,9 +1337,9 @@ class SmartEngine:
             char_failed = char_result.get('failed', 0)
             char_success = char_result.get('success', 0)
             if char_failed > 0:
-                self.log(f"[PIPELINE] ⚠️ Characters có {char_failed} ảnh fail - scenes có thể thiếu reference!", "WARN")
+                self.log(f"[PIPELINE] [WARN] Characters có {char_failed} ảnh fail - scenes có thể thiếu reference!", "WARN")
             else:
-                self.log(f"[PIPELINE] ✓ Characters OK ({char_success} ảnh) - bắt đầu scenes")
+                self.log(f"[PIPELINE] [v] Characters OK ({char_success} ảnh) - bắt đầu scenes")
 
         # Characters đã xong hoặc không có characters - bắt đầu generate scenes
         if not self._scenes_gen_started:
@@ -1906,9 +1920,9 @@ class SmartEngine:
                 # Kiểm tra: nếu có references nhưng KHÔNG có media_id nào → cảnh báo mạnh
                 if ref_prompts and ref_media_ids_created == 0 and ref_success == 0:
                     self.log("=" * 60, "WARN")
-                    self.log("⚠️ CẢNH BÁO: Không có reference nào được tạo thành công!", "WARN")
-                    self.log("⚠️ Scenes sẽ được tạo KHÔNG CÓ tham chiếu nhân vật/địa điểm!", "WARN")
-                    self.log("⚠️ Khuyến nghị: Tạo lại references trước khi tạo scenes", "WARN")
+                    self.log("[WARN] CẢNH BÁO: Không có reference nào được tạo thành công!", "WARN")
+                    self.log("[WARN] Scenes sẽ được tạo KHÔNG CÓ tham chiếu nhân vật/địa điểm!", "WARN")
+                    self.log("[WARN] Khuyến nghị: Tạo lại references trước khi tạo scenes", "WARN")
                     self.log("=" * 60, "WARN")
 
                 self.log(f"[STEP 2/2] Tạo {len(scene_prompts)} scene images...")
@@ -2448,23 +2462,23 @@ class SmartEngine:
 
         # Nếu video cuối đã tồn tại → hoàn thành rồi
         if final_video.exists():
-            self.log("✅ RESUME: Video đã hoàn thành, skip!", "OK")
+            self.log("[OK] RESUME: Video đã hoàn thành, skip!", "OK")
             return {"success": True, "skipped": "video_exists", "video": str(final_video)}
 
         # Log trạng thái resume
         resume_status = []
         if srt_path.exists():
-            resume_status.append("SRT ✓")
+            resume_status.append("SRT [v]")
         if excel_path.exists():
-            resume_status.append("Excel ✓")
+            resume_status.append("Excel [v]")
 
         img_dir = proj_dir / "img"
         existing_images = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.mp4"))) if img_dir.exists() else 0
         if existing_images > 0:
-            resume_status.append(f"Images: {existing_images} ✓")
+            resume_status.append(f"Images: {existing_images} [v]")
 
         if resume_status:
-            self.log(f"📌 RESUME: {' | '.join(resume_status)}")
+            self.log(f"[PIN] RESUME: {' | '.join(resume_status)}")
 
         # === 1. CHECK REQUIREMENTS ===
         self.log("[STEP 1] Kiem tra yeu cau...")
@@ -2491,7 +2505,7 @@ class SmartEngine:
 
             # Tao SRT (skip nếu đã có)
             if srt_path.exists():
-                self.log("  ⏭️ SRT đã tồn tại, skip!")
+                self.log("  [SKIP] SRT đã tồn tại, skip!")
             else:
                 if not self.make_srt(voice_path, srt_path):
                     return {"error": "srt_failed"}
@@ -2511,28 +2525,28 @@ class SmartEngine:
 
                 if total_scenes > 0 and scenes_with_prompts >= total_scenes:
                     # Đã có đầy đủ scenes với prompts
-                    self.log(f"  ⏭️ Excel đã có đủ {scenes_with_prompts} scene prompts, skip!")
+                    self.log(f"  [SKIP] Excel đã có đủ {scenes_with_prompts} scene prompts, skip!")
                 elif total_scenes == 0:
                     # Scenes sheet trống hoặc chưa được tạo - cần generate
-                    self.log(f"  ⚠️ Excel tồn tại nhưng CHƯA CÓ scenes - cần generate!", "WARN")
+                    self.log(f"  [WARN] Excel tồn tại nhưng CHƯA CÓ scenes - cần generate!", "WARN")
                     if srt_path.exists():
                         if not self.make_prompts(proj_dir, name, excel_path):
                             return {"error": "prompts_failed"}
                     else:
-                        self.log("  ❌ Không có SRT để tạo scene prompts!", "ERROR")
+                        self.log("  [FAIL] Không có SRT để tạo scene prompts!", "ERROR")
                         return {"error": "no_srt"}
                 else:
                     # Thiếu một số scene prompts - tiếp tục generate
                     missing = total_scenes - scenes_with_prompts
-                    self.log(f"  ⚠️ Excel thiếu {missing}/{total_scenes} scene prompts - tiếp tục generate!", "WARN")
+                    self.log(f"  [WARN] Excel thiếu {missing}/{total_scenes} scene prompts - tiếp tục generate!", "WARN")
                     if srt_path.exists():
                         if not self.make_prompts(proj_dir, name, excel_path):
                             return {"error": "prompts_failed"}
                     else:
-                        self.log("  ❌ Không có SRT để tạo scene prompts!", "ERROR")
+                        self.log("  [FAIL] Không có SRT để tạo scene prompts!", "ERROR")
                         return {"error": "no_srt"}
             except Exception as e:
-                self.log(f"  ⚠️ Check Excel lỗi: {e} - skip", "WARN")
+                self.log(f"  [WARN] Check Excel lỗi: {e} - skip", "WARN")
         else:
             if not self.make_prompts(proj_dir, name, excel_path):
                 return {"error": "prompts_failed"}
@@ -2563,14 +2577,14 @@ class SmartEngine:
             self.log(f"  [CHECK] Characters: {total_chars}, Scenes: {scenes_with_prompts}/{total_scenes}")
 
             if total_scenes == 0 or scenes_with_prompts == 0:
-                self.log("⚠️ Excel chưa có scenes! Đang tạo lại...", "WARN")
+                self.log("[WARN] Excel chưa có scenes! Đang tạo lại...", "WARN")
                 if srt_path.exists():
                     # Xóa Excel cũ và tạo mới
                     excel_path.unlink()
                     if not self.make_prompts(proj_dir, name, excel_path):
                         return {"error": "prompts_failed_no_scenes"}
                 else:
-                    self.log("❌ Không có SRT để tạo scenes!", "ERROR")
+                    self.log("[FAIL] Không có SRT để tạo scenes!", "ERROR")
                     return {"error": "no_srt_no_scenes"}
         except Exception as e:
             self.log(f"  Check Excel error: {e}", "WARN")
@@ -2579,7 +2593,7 @@ class SmartEngine:
 
         if not all_prompts:
             # Excel có 0 prompts = file bị lỗi, xóa để tạo lại và tiếp tục
-            self.log(f"⚠️ Excel có 0 prompts - xóa file lỗi và tạo lại...", "WARN")
+            self.log(f"[WARN] Excel có 0 prompts - xóa file lỗi và tạo lại...", "WARN")
             try:
                 excel_path.unlink()
                 self.log(f"   Đã xóa: {excel_path.name}")
@@ -2591,15 +2605,15 @@ class SmartEngine:
                         # Load lại prompts sau khi tạo mới
                         all_prompts = self._load_prompts(excel_path, proj_dir)
                         if all_prompts:
-                            self.log(f"   ✅ Đã tạo lại {len(all_prompts)} prompts!")
+                            self.log(f"   [OK] Đã tạo lại {len(all_prompts)} prompts!")
                         else:
-                            self.log("   ❌ Tạo lại prompts thất bại!", "ERROR")
+                            self.log("   [FAIL] Tạo lại prompts thất bại!", "ERROR")
                             return {"error": "prompts_regeneration_failed"}
                     else:
-                        self.log("   ❌ make_prompts thất bại!", "ERROR")
+                        self.log("   [FAIL] make_prompts thất bại!", "ERROR")
                         return {"error": "prompts_failed"}
                 else:
-                    self.log("   ❌ Không có SRT để tạo lại prompts!", "ERROR")
+                    self.log("   [FAIL] Không có SRT để tạo lại prompts!", "ERROR")
                     return {"error": "no_srt_for_regeneration"}
             except Exception as e:
                 self.log(f"   Không xóa được: {e}", "ERROR")
@@ -2615,7 +2629,7 @@ class SmartEngine:
             if excel_media_ids:
                 self.log(f"  [EXCEL] Loaded {len(excel_media_ids)} media_ids: {list(excel_media_ids.keys())}")
             else:
-                self.log(f"  [EXCEL] ⚠️ Không có media_id trong Excel", "WARN")
+                self.log(f"  [EXCEL] [WARN] Không có media_id trong Excel", "WARN")
 
                 # === XÓA TẤT CẢ ẢNH VÀ LÀM LẠI TỪ ĐẦU ===
                 nv_dir = proj_dir / "nv"
@@ -2624,7 +2638,7 @@ class SmartEngine:
                 # Kiểm tra có ảnh nv/loc tồn tại không
                 nv_images = list(nv_dir.glob("*.png")) if nv_dir.exists() else []
                 if nv_images:
-                    self.log(f"  ⚠️ Có {len(nv_images)} ảnh nv/loc nhưng KHÔNG có media_id!", "WARN")
+                    self.log(f"  [WARN] Có {len(nv_images)} ảnh nv/loc nhưng KHÔNG có media_id!", "WARN")
                     self.log(f"  → Xóa TẤT CẢ ảnh (nv + img) và tạo lại từ đầu!", "WARN")
 
                     # Xóa tất cả ảnh nv/loc
@@ -2633,7 +2647,7 @@ class SmartEngine:
                             img_file.unlink()
                         except:
                             pass
-                    self.log(f"  ✓ Đã xóa {len(nv_images)} ảnh nv/loc")
+                    self.log(f"  [v] Đã xóa {len(nv_images)} ảnh nv/loc")
 
                     # Xóa tất cả ảnh scene
                     if img_dir.exists():
@@ -2644,7 +2658,7 @@ class SmartEngine:
                                     img_file.unlink()
                                 except:
                                     pass
-                            self.log(f"  ✓ Đã xóa {len(scene_images)} ảnh scene")
+                            self.log(f"  [v] Đã xóa {len(scene_images)} ảnh scene")
 
         except Exception as e:
             self.log(f"  [EXCEL] Lỗi load media_ids: {e}", "WARN")
@@ -2683,8 +2697,8 @@ class SmartEngine:
         existing_count = len(all_prompts) - len(prompts)
 
         if existing_count > 0:
-            self.log(f"  ⏭️ Đã có {existing_count}/{len(all_prompts)} ảnh (resume)")
-            self.log(f"  📌 Còn {len(prompts)} ảnh cần tạo")
+            self.log(f"  [SKIP] Đã có {existing_count}/{len(all_prompts)} ảnh (resume)")
+            self.log(f"  [PIN] Còn {len(prompts)} ảnh cần tạo")
         else:
             self.log(f"  Tổng: {len(all_prompts)} prompts")
 
@@ -2720,7 +2734,7 @@ class SmartEngine:
                 self.log(f"[VIDEO] Lỗi đọc cache: {e}", "WARN")
 
         if not prompts:
-            self.log("  ✅ Tất cả ảnh đã tồn tại, skip tạo ảnh!", "OK")
+            self.log("  [OK] Tất cả ảnh đã tồn tại, skip tạo ảnh!", "OK")
 
             # === RESTART VIDEO WORKER NẾU CHƯA CHẠY (resume mode) ===
             if not self._video_worker_running:
@@ -3022,7 +3036,7 @@ class SmartEngine:
         if results.get("failed", 0) > 0 and _full_restart_count < MAX_FULL_RESTARTS:
             self._full_restart_count = _full_restart_count + 1
             self.log(f"\n{'='*60}")
-            self.log(f"🔄 FULL RESTART {self._full_restart_count}/{MAX_FULL_RESTARTS} - Còn {results['failed']} ảnh fail")
+            self.log(f"[SYNC] FULL RESTART {self._full_restart_count}/{MAX_FULL_RESTARTS} - Còn {results['failed']} ảnh fail")
             self.log(f"{'='*60}")
 
             # 1. Đóng tất cả browser
@@ -3068,7 +3082,7 @@ class SmartEngine:
             # Reset counter nếu đã thành công hết
             if results["failed"] == 0:
                 self._full_restart_count = 0
-                self.log("   ✓ Tất cả ảnh đã hoàn thành sau full restart!")
+                self.log("   [v] Tất cả ảnh đã hoàn thành sau full restart!")
 
         # === 10. DONG BROWSER ===
         self._close_browser()
@@ -3076,7 +3090,7 @@ class SmartEngine:
         # === 11. COMPOSE VIDEO (sau khi retry xong) ===
         if skip_compose:
             self.log("[STEP 11] Skip ghep video (worker mode)")
-            self.log(f"  ✅ Images/Videos created: {results.get('success', 0)}")
+            self.log(f"  [OK] Images/Videos created: {results.get('success', 0)}")
         else:
             self.log("[STEP 11] Ghep video...")
             if results.get("failed", 0) > 0:
@@ -3533,7 +3547,7 @@ class SmartEngine:
 
             if first_start > GAP_THRESHOLD:
                 # Có gap ở đầu - dùng media đầu tiên để fill
-                self.log(f"  ⚠️ Scene 1 thiếu ảnh/video! Gap từ 0:00 → {first_start:.1f}s")
+                self.log(f"  [WARN] Scene 1 thiếu ảnh/video! Gap từ 0:00 → {first_start:.1f}s")
                 self.log(f"  → Sử dụng {media_items[0]['id']} để fill gap đầu video")
 
                 # Thêm filler item ở đầu (duplicate media đầu tiên)
@@ -3589,11 +3603,11 @@ class SmartEngine:
                     item = media_items[i]
                     is_filler = item.get('is_filler', False)
                     if is_filler:
-                        media_type = "🔄"  # Filler icon
+                        media_type = "[SYNC]"  # Filler icon
                     elif item['is_video']:
-                        media_type = "🎬"
+                        media_type = "[VIDEO]"
                     else:
-                        media_type = "🖼️"
+                        media_type = "[IMG]"
                     end_time = video_time + item['duration']
                     filler_note = " [FILLER]" if is_filler else ""
                     self.log(f"    {media_type} #{item['id']}: {video_time:.1f}s → {end_time:.1f}s (srt_start={item['start']:.1f}s, dur={item['duration']:.1f}s){filler_note}")
@@ -3646,7 +3660,7 @@ class SmartEngine:
                     if "h264_nvenc" in gpu_check.stdout:
                         use_gpu = True
                         gpu_encoder = "h264_nvenc"
-                        self.log(f"  GPU Encoder: NVENC (RTX detected) ⚡")
+                        self.log(f"  GPU Encoder: NVENC (RTX detected) [RUN]")
                 except:
                     pass
 
@@ -3747,7 +3761,7 @@ class SmartEngine:
                         use_kb_for_this_clip = kb_enabled and target_duration <= MAX_KB_DURATION
 
                         if target_duration > MAX_KB_DURATION and kb_enabled:
-                            self.log(f"  ⚠️ Clip {i}: {target_duration:.1f}s > {MAX_KB_DURATION}s, skip Ken Burns", "WARN")
+                            self.log(f"  [WARN] Clip {i}: {target_duration:.1f}s > {MAX_KB_DURATION}s, skip Ken Burns", "WARN")
 
                         if use_kb_for_this_clip:
                             # Ken Burns effect (zoom/pan mượt mà)
@@ -4584,7 +4598,7 @@ class SmartEngine:
 
         # Chỉ cần project_id để xác định project
         if not project_id:
-            self.log("[VIDEO] ⚠️ Không có project_id - Skip I2V!", "WARN")
+            self.log("[VIDEO] [WARN] Không có project_id - Skip I2V!", "WARN")
             self._video_worker_running = False
             return
 
@@ -4600,7 +4614,7 @@ class SmartEngine:
         if existing_drission:
             # Reuse Chrome session từ image generator
             drission_api = existing_drission
-            self.log("[VIDEO] ✓ Reuse Chrome session từ image generator")
+            self.log("[VIDEO] [v] Reuse Chrome session từ image generator")
         else:
             # Fallback: Mở Chrome mới (GIỐNG HỆT image gen)
             try:
@@ -4635,7 +4649,7 @@ class SmartEngine:
                                 rotating_host=ws_cfg.get('rotating_host', 'p.webshare.io'),
                                 rotating_port=ws_cfg.get('rotating_port', 80)
                             )
-                            self.log("[VIDEO] ✓ Rotating Residential mode")
+                            self.log("[VIDEO] [v] Rotating Residential mode")
                         else:
                             # Direct Proxy List mode
                             proxy_file = ws_cfg.get('proxy_file', 'config/proxies.txt')
@@ -4644,9 +4658,9 @@ class SmartEngine:
                                 proxy_file=proxy_file
                             )
                             if manager.proxies:
-                                self.log(f"[VIDEO] ✓ Loaded {len(manager.proxies)} proxies")
+                                self.log(f"[VIDEO] [v] Loaded {len(manager.proxies)} proxies")
                             else:
-                                self.log("[VIDEO] ⚠️ No proxies - chạy không proxy", "WARN")
+                                self.log("[VIDEO] [WARN] No proxies - chạy không proxy", "WARN")
                                 use_webshare = False
                     except Exception as e:
                         self.log(f"[VIDEO] Proxy init error: {e}", "WARN")
@@ -4664,7 +4678,7 @@ class SmartEngine:
                             break
 
                 if not profile_dir:
-                    self.log("[VIDEO] ⚠️ Không có Chrome profile! Cần tạo ở Cài đặt tool.", "ERROR")
+                    self.log("[VIDEO] [WARN] Không có Chrome profile! Cần tạo ở Cài đặt tool.", "ERROR")
                     self._video_worker_running = False
                     return
 
@@ -4685,11 +4699,11 @@ class SmartEngine:
 
                 self.log(f"[VIDEO] Mở Chrome với profile: {profile_dir}")
                 if not drission_api.setup(project_url=project_url):
-                    self.log("[VIDEO] ⚠️ Không setup được Chrome - Skip I2V!", "WARN")
+                    self.log("[VIDEO] [WARN] Không setup được Chrome - Skip I2V!", "WARN")
                     self._video_worker_running = False
                     return
 
-                self.log("[VIDEO] ✓ Chrome ready - Bắt đầu tạo video...")
+                self.log("[VIDEO] [v] Chrome ready - Bắt đầu tạo video...")
 
             except Exception as e:
                 self.log(f"[VIDEO] Failed to setup Chrome: {e}", "ERROR")
@@ -4888,7 +4902,7 @@ class SmartEngine:
             self.log(f"[PARALLEL-VIDEO]   Check: {path}")
             if path.exists():
                 chrome2_portable = str(path)
-                self.log(f"[PARALLEL-VIDEO]   ✓ Found Chrome 2!")
+                self.log(f"[PARALLEL-VIDEO]   [v] Found Chrome 2!")
                 break
 
         if not chrome2_portable:
@@ -5011,9 +5025,9 @@ if (btn) {
 
             result = drission_api.driver.run_js("return window._t2vResult || 'PENDING'")
             if result == 'CLICKED':
-                self.log("[PARALLEL-VIDEO] ✓ Đã chuyển sang T2V mode!")
+                self.log("[PARALLEL-VIDEO] [v] Đã chuyển sang T2V mode!")
             else:
-                self.log(f"[PARALLEL-VIDEO] ⚠️ T2V switch result: {result}", "WARN")
+                self.log(f"[PARALLEL-VIDEO] [WARN] T2V switch result: {result}", "WARN")
 
             self.log("[PARALLEL-VIDEO] Chrome 2 ready - Bắt đầu theo dõi Excel...")
 
@@ -5075,7 +5089,7 @@ if (btn) {
                     if ok:
                         video_count_created += 1
                         processed_scenes.add(scene_id)
-                        self.log(f"[PARALLEL-VIDEO] ✓ Video OK: {scene_id} ({video_count_created} videos)")
+                        self.log(f"[PARALLEL-VIDEO] [v] Video OK: {scene_id} ({video_count_created} videos)")
 
                         # Xóa ảnh gốc nếu cần
                         if video_cfg.get('replace_image', True):
@@ -5087,7 +5101,7 @@ if (btn) {
                                     pass
                     else:
                         processed_scenes.add(scene_id)  # Đánh dấu đã xử lý (tránh retry liên tục)
-                        self.log(f"[PARALLEL-VIDEO] ✗ Video FAILED: {scene_id} - {error}", "WARN")
+                        self.log(f"[PARALLEL-VIDEO] [x] Video FAILED: {scene_id} - {error}", "WARN")
 
             except Exception as e:
                 self.log(f"[PARALLEL-VIDEO] Error: {e}", "WARN")
