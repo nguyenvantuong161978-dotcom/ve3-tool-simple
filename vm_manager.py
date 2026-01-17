@@ -1674,6 +1674,78 @@ class VMManager:
         w.restart_count += 1
         self.log(f"{worker_id} restarted (count: {w.restart_count})", worker_id, "SUCCESS")
 
+    def check_and_auto_recover(self) -> bool:
+        """Check for connection errors and auto-recover if needed.
+
+        Returns True if recovery was triggered.
+        """
+        # Check each Chrome worker's recent logs for connection errors
+        error_threshold = 5  # Number of consecutive errors to trigger recovery
+
+        for worker_id in self.workers:
+            if not worker_id.startswith("chrome_"):
+                continue
+
+            logs = self.get_worker_log_file(worker_id, lines=20)
+            if not logs:
+                continue
+
+            # Count recent connection errors
+            connection_errors = 0
+            for line in logs[-10:]:  # Check last 10 lines
+                if "connection" in line.lower() and ("disconnected" in line.lower() or "lost" in line.lower()):
+                    connection_errors += 1
+                elif "RETRY" in line and connection_errors > 0:
+                    connection_errors += 1
+
+            if connection_errors >= error_threshold:
+                self.log(f"[AUTO-RECOVERY] Detected {connection_errors} connection errors in {worker_id}", "SYSTEM", "WARN")
+                self.log("[AUTO-RECOVERY] Killing all Chrome and restarting workers...", "SYSTEM", "WARN")
+
+                # Kill all Chrome
+                self.kill_all_chrome()
+                time.sleep(2)
+
+                # Restart all Chrome workers
+                for wid in list(self.workers.keys()):
+                    if wid.startswith("chrome_"):
+                        self.stop_worker(wid)
+
+                time.sleep(3)
+
+                for wid in list(self.workers.keys()):
+                    if wid.startswith("chrome_"):
+                        self.start_worker(wid, gui_mode=self.gui_mode)
+                        time.sleep(2)
+
+                self.log("[AUTO-RECOVERY] Chrome workers restarted!", "SYSTEM", "SUCCESS")
+                return True
+
+        return False
+
+    def restart_all_chrome(self):
+        """Restart all Chrome workers (kill Chrome first)."""
+        self.log("Restarting all Chrome workers...", "SYSTEM", "WARN")
+
+        # Kill all Chrome processes
+        self.kill_all_chrome()
+        time.sleep(2)
+
+        # Stop all Chrome workers
+        for wid in list(self.workers.keys()):
+            if wid.startswith("chrome_"):
+                self.stop_worker(wid)
+
+        time.sleep(3)
+
+        # Start all Chrome workers
+        for wid in list(self.workers.keys()):
+            if wid.startswith("chrome_"):
+                self.start_worker(wid, gui_mode=self.gui_mode)
+                time.sleep(2)
+
+        self.log("All Chrome workers restarted!", "SYSTEM", "SUCCESS")
+
     def start_all(self, gui_mode: bool = False):
         """Start all workers.
 

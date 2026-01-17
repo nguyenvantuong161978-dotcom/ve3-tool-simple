@@ -1157,6 +1157,9 @@ class VMManagerGUI:
         self.show_chrome_btn = ttk.Button(row2, text="[Show] Chrome", command=self._show_chrome, width=14)
         self.show_chrome_btn.pack(side="left", padx=5)
 
+        self.restart_chrome_btn = ttk.Button(row2, text="[Fix] Chrome", command=self._restart_all_chrome, width=12)
+        self.restart_chrome_btn.pack(side="left", padx=5)
+
         ttk.Separator(row2, orient="vertical").pack(side="left", fill="y", padx=10)
 
         self.settings_btn = ttk.Button(row2, text="[Settings]", command=self._open_settings, width=12)
@@ -1507,6 +1510,14 @@ class VMManagerGUI:
         if self.manager and worker_id in self.manager.workers:
             self._log(f"Stopping {worker_id}...")
             threading.Thread(target=lambda: self.manager.stop_worker(worker_id), daemon=True).start()
+
+    def _restart_all_chrome(self):
+        """Restart all Chrome workers (fix connection issues)."""
+        if self.manager:
+            self._log("[Fix] Restarting all Chrome workers...")
+            threading.Thread(target=self.manager.restart_all_chrome, daemon=True).start()
+        else:
+            messagebox.showwarning("Warning", "Manager not started")
 
     def _rotate_ipv6(self):
         """Rotate IPv6."""
@@ -2018,6 +2029,18 @@ class VMManagerGUI:
         self._update_scene_project_list()  # Update scenes project combo
         self._update_refs_project_list()  # Update references project combo
         self._update_scenes_if_active()  # Auto-refresh scenes tab
+
+        # Auto-recovery check every 10 seconds (20 x 500ms)
+        if not hasattr(self, '_recovery_counter'):
+            self._recovery_counter = 0
+        self._recovery_counter += 1
+        if self._recovery_counter >= 20 and self.running and self.manager:
+            self._recovery_counter = 0
+            try:
+                if self.manager.check_and_auto_recover():
+                    self._log("[AUTO-RECOVERY] Chrome workers restarted due to connection errors")
+            except Exception as e:
+                pass  # Ignore recovery errors
 
         # Schedule next update - 500ms for real-time feel
         self.root.after(500, self._update_loop)
