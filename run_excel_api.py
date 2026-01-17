@@ -3,7 +3,7 @@
 Run Excel API - Tạo Excel prompts từ SRT bằng API.
 
 =============================================================
-  EXCEL API WORKER - Standalone Mode
+  EXCEL API WORKER - Standalone Mode with Agent Protocol
 =============================================================
 
 Chạy riêng biệt với Chrome workers, có thể:
@@ -32,6 +32,17 @@ from typing import Optional, List, Callable
 TOOL_DIR = Path(__file__).parent
 sys.path.insert(0, str(TOOL_DIR))
 
+# Agent Protocol - giao tiếp với VM Manager
+try:
+    from modules.agent_protocol import AgentWorker, ErrorType
+    AGENT_ENABLED = True
+except ImportError:
+    AGENT_ENABLED = False
+    AgentWorker = None
+
+# Global agent instance
+_agent: Optional['AgentWorker'] = None
+
 # ================================================================================
 # CONFIGURATION
 # ================================================================================
@@ -54,7 +65,8 @@ POSSIBLE_AUTO_PATHS = [
 # ================================================================================
 
 def log(msg: str, level: str = "INFO"):
-    """Log với timestamp."""
+    """Log với timestamp và gửi đến Agent."""
+    global _agent
     timestamp = datetime.now().strftime("%H:%M:%S")
     prefix = {
         "INFO": "   ",
@@ -63,6 +75,13 @@ def log(msg: str, level: str = "INFO"):
         "SUCCESS": " ✅",
     }.get(level, "   ")
     print(f"[{timestamp}]{prefix} {msg}")
+
+    # Gửi đến Agent nếu có
+    if _agent and AGENT_ENABLED:
+        if level == "ERROR":
+            _agent.log_error(msg)
+        else:
+            _agent.log(msg, level)
 
 
 def safe_path_exists(path: Path) -> bool:
@@ -312,9 +331,11 @@ def needs_api_completion(project_dir: Path, name: str) -> bool:
 # ================================================================================
 
 class ExcelAPIWorker:
-    """Worker để quét và tạo Excel."""
+    """Worker để quét và tạo Excel với Agent Protocol."""
 
     def __init__(self):
+        global _agent
+
         self.auto_path = detect_auto_path()
         self.channel = get_channel_from_folder()
 
@@ -324,6 +345,19 @@ class ExcelAPIWorker:
             self.master_projects = None
 
         self.local_projects = TOOL_DIR / "PROJECTS"
+
+        # Khởi tạo Agent để giao tiếp với VM Manager
+        if AGENT_ENABLED:
+            _agent = AgentWorker("excel")
+            _agent.start_status_updater(interval=5)
+            _agent.update_status(state="idle")
+            log("Agent Protocol enabled - connected to VM Manager")
+        else:
+            _agent = None
+
+        # Statistics
+        self.completed_count = 0
+        self.failed_count = 0
 
     def scan_projects_needing_excel(self) -> List[tuple]:
         """
@@ -383,18 +417,72 @@ class ExcelAPIWorker:
         return results
 
     def process_project(self, project_dir: Path, name: str, status: str) -> bool:
-        """Process a single project."""
+        """Process a single project với Agent Protocol."""
+        global _agent
+
         log(f"")
         log(f"{'='*60}")
         log(f"Processing: {name} ({status})")
         log(f"{'='*60}")
 
-        if status == "no_excel":
-            return create_excel_with_api(project_dir, name, log)
-        elif status == "needs_fix":
-            return fix_excel_with_api(project_dir, name, log)
-        else:
-            return False
+        # Update agent status
+        task_id = f"excel_{name}_{datetime.now().strftime('%H%M%S')}"
+        start_time = time.time()
+
+        if _agent:
+            _agent.update_status(
+                state="working",
+                current_project=name,
+                current_task=task_id,
+                progress=0
+            )
+
+        # Process
+        success = False
+        error_msg = ""
+        try:
+            if status == "no_excel":
+                success = create_excel_with_api(project_dir, name, log)
+            elif status == "needs_fix":
+                success = fix_excel_with_api(project_dir, name, log)
+        except Exception as e:
+            error_msg = str(e)
+            log(f"Exception: {e}", "ERROR")
+
+        # Calculate duration
+        duration = time.time() - start_time
+
+        # Report result to Agent
+        if _agent:
+            if success:
+                self.completed_count += 1
+                _agent.report_success(
+                    task_id=task_id,
+                    project_code=name,
+                    task_type="excel",
+                    duration=duration,
+                    details={"status": status}
+                )
+            else:
+                self.failed_count += 1
+                _agent.report_failure(
+                    task_id=task_id,
+                    project_code=name,
+                    task_type="excel",
+                    error=error_msg or f"Failed to process {status}",
+                    duration=duration,
+                    details={"status": status}
+                )
+
+            # Update status back to idle
+            _agent.update_status(
+                state="idle",
+                current_project="",
+                current_task="",
+                progress=100 if success else 0
+            )
+
+        return success
 
     def run_once(self) -> int:
         """
@@ -431,34 +519,44 @@ class ExcelAPIWorker:
         return processed
 
     def run_loop(self):
-        """Run continuous scan loop."""
+        """Run continuous scan loop với Agent Protocol."""
+        global _agent
+
         log(f"")
         log(f"{'='*60}")
         log(f"  EXCEL API WORKER - Continuous Mode")
         log(f"{'='*60}")
         log(f"  Channel: {self.channel or 'ALL'}")
         log(f"  Scan interval: {SCAN_INTERVAL}s")
+        log(f"  Agent: {'Enabled' if _agent else 'Disabled'}")
         log(f"{'='*60}")
 
         cycle = 0
-        while True:
-            cycle += 1
-            log(f"")
-            log(f"[CYCLE {cycle}] Starting scan...")
+        try:
+            while True:
+                cycle += 1
+                log(f"")
+                log(f"[CYCLE {cycle}] Starting scan...")
 
-            try:
-                self.run_once()
-            except Exception as e:
-                log(f"Scan error: {e}", "ERROR")
+                try:
+                    self.run_once()
+                except Exception as e:
+                    log(f"Scan error: {e}", "ERROR")
 
-            log(f"")
-            log(f"Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+                log(f"")
+                log(f"Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
 
-            try:
-                time.sleep(SCAN_INTERVAL)
-            except KeyboardInterrupt:
-                log("Stopped by user")
-                break
+                try:
+                    time.sleep(SCAN_INTERVAL)
+                except KeyboardInterrupt:
+                    log("Stopped by user")
+                    break
+
+        finally:
+            # Cleanup agent khi thoát
+            if _agent:
+                log("Closing agent connection...")
+                _agent.close()
 
 
 # ================================================================================

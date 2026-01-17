@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-VE3 Tool - Worker PIC BASIC Mode
-================================
-Phiên bản đơn giản:
-- KHÔNG đổi IP - dùng IP máy có sẵn
-- KHÔNG giới hạn 8s - theo nội dung segment
-- Số ảnh = số ảnh từ Step 1.5 (story segments)
-- Duration = duration của segment / số ảnh
+VE3 Tool - Worker PIC BASIC Mode with Agent Protocol
+=====================================================
+Chrome Worker 1 - Xử lý scenes chẵn (2, 4, 6, ...)
+
+Tích hợp Agent Protocol để:
+- Báo cáo trạng thái cho VM Manager
+- Ghi log chi tiết
+- Báo cáo kết quả thành công/thất bại
 
 Usage:
-    python run_worker_pic_basic.py                     (quét và xử lý tự động)
-    python run_worker_pic_basic.py AR47-0028           (chạy 1 project cụ thể)
+    python _run_chrome1.py                     (quét và xử lý tự động)
+    python _run_chrome1.py AR47-0028           (chạy 1 project cụ thể)
 """
 
 import sys
@@ -18,10 +19,59 @@ import os
 import time
 import shutil
 from pathlib import Path
+from datetime import datetime
 
 # Add current directory to path
 TOOL_DIR = Path(__file__).parent
 sys.path.insert(0, str(TOOL_DIR))
+
+# ================================================================================
+# AGENT PROTOCOL
+# ================================================================================
+
+# Worker ID for this Chrome worker
+WORKER_ID = "chrome_1"
+
+# Agent Protocol - giao tiếp với VM Manager
+try:
+    from modules.agent_protocol import AgentWorker, ErrorType
+    AGENT_ENABLED = True
+except ImportError:
+    AGENT_ENABLED = False
+    AgentWorker = None
+
+# Global agent instance
+_agent = None
+
+
+def init_agent():
+    """Khởi tạo Agent Protocol."""
+    global _agent
+    if AGENT_ENABLED and _agent is None:
+        _agent = AgentWorker(WORKER_ID)
+        _agent.start_status_updater(interval=5)
+        _agent.update_status(state="idle")
+        print(f"[{WORKER_ID}] Agent Protocol enabled")
+    return _agent
+
+
+def close_agent():
+    """Đóng Agent Protocol."""
+    global _agent
+    if _agent:
+        _agent.close()
+        _agent = None
+
+
+def agent_log(msg: str, level: str = "INFO"):
+    """Log và gửi đến Agent."""
+    global _agent
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+    if _agent:
+        if level == "ERROR":
+            _agent.log_error(msg)
+        else:
+            _agent.log(msg, level)
 
 # Import từ run_worker (dùng chung logic)
 from run_worker import (
@@ -501,14 +551,114 @@ def run_scan_loop():
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='VE3 Worker PIC BASIC - No IP Rotation')
+    parser = argparse.ArgumentParser(description='VE3 Worker PIC BASIC - Chrome 1')
     parser.add_argument('project', nargs='?', default=None, help='Project code')
     args = parser.parse_args()
 
-    if args.project:
-        process_project_pic_basic(args.project)
-    else:
-        run_scan_loop()
+    # Khởi tạo Agent Protocol
+    init_agent()
+
+    try:
+        if args.project:
+            # Single project mode
+            success = process_project_with_agent(args.project)
+            sys.exit(0 if success else 1)
+        else:
+            # Loop mode
+            run_scan_loop_with_agent()
+    finally:
+        # Cleanup
+        close_agent()
+
+
+def process_project_with_agent(code: str) -> bool:
+    """Process project với Agent Protocol."""
+    global _agent
+
+    task_id = f"image_{code}_{datetime.now().strftime('%H%M%S')}"
+    start_time = time.time()
+
+    # Update agent status
+    if _agent:
+        _agent.update_status(
+            state="working",
+            current_project=code,
+            current_task=task_id,
+            progress=0
+        )
+
+    # Process
+    try:
+        success = process_project_pic_basic(code)
+        duration = time.time() - start_time
+
+        # Report result
+        if _agent:
+            if success:
+                _agent.report_success(
+                    task_id=task_id,
+                    project_code=code,
+                    task_type="image",
+                    duration=duration
+                )
+            else:
+                _agent.report_failure(
+                    task_id=task_id,
+                    project_code=code,
+                    task_type="image",
+                    error="Processing failed",
+                    duration=duration
+                )
+            _agent.update_status(state="idle", current_project="", current_task="")
+
+        return success
+
+    except Exception as e:
+        duration = time.time() - start_time
+        if _agent:
+            _agent.report_failure(
+                task_id=task_id,
+                project_code=code,
+                task_type="image",
+                error=str(e),
+                duration=duration
+            )
+            _agent.update_status(state="error", current_project="", current_task="")
+        raise
+
+
+def run_scan_loop_with_agent():
+    """Run scan loop với Agent Protocol."""
+    global _agent
+
+    print(f"\n{'='*60}")
+    print(f"  CHROME WORKER 1 - PIC BASIC MODE")
+    print(f"  Agent: {'Enabled' if _agent else 'Disabled'}")
+    print(f"{'='*60}\n")
+
+    cycle = 0
+    try:
+        while True:
+            cycle += 1
+            print(f"\n[CYCLE {cycle}] Scanning...")
+
+            # Tìm projects cần xử lý
+            projects = scan_pending_projects()
+
+            if projects:
+                for code in projects:
+                    try:
+                        process_project_with_agent(code)
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception as e:
+                        agent_log(f"Error processing {code}: {e}", "ERROR")
+
+            print(f"\nWaiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+            time.sleep(SCAN_INTERVAL)
+
+    except KeyboardInterrupt:
+        print("\n\nStopped by user.")
 
 
 if __name__ == "__main__":

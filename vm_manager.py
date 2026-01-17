@@ -28,6 +28,13 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import re
 
+# Import Agent Protocol for worker monitoring
+try:
+    from modules.agent_protocol import AgentManager as AgentProtocolManager, WorkerStatus as AgentWorkerStatus
+    AGENT_PROTOCOL_ENABLED = True
+except ImportError:
+    AGENT_PROTOCOL_ENABLED = False
+
 TOOL_DIR = Path(__file__).parent
 AGENT_DIR = TOOL_DIR / ".agent"
 TASKS_DIR = AGENT_DIR / "tasks"
@@ -414,16 +421,34 @@ class Dashboard:
                 "error": "❌"
             }.get(w.status.value, "❓")
 
-            task = ""
-            if w.current_task:
-                task = f" → {w.current_task[:30]}"
+            # Get detailed info from Agent Protocol if available
+            details = self.manager.get_worker_details(wid)
+            task_info = ""
+            progress_info = ""
+
+            if details:
+                # Progress bar cho working state
+                if details.get("current_scene") and details.get("total_scenes"):
+                    progress = int(details["current_scene"] / details["total_scenes"] * 100)
+                    progress_info = f"[{progress:>3}%]"
+
+                # Task info
+                if details.get("current_project"):
+                    task_info = f"→ {details['current_project']}"
+                    if details.get("current_scene"):
+                        task_info += f" scene {details['current_scene']}/{details['total_scenes']}"
+            elif w.current_task:
+                task_info = f"→ {w.current_task[:25]}"
 
             uptime = ""
-            if w.start_time:
+            if details and details.get("uptime_seconds"):
+                mins = details["uptime_seconds"] // 60
+                uptime = f"({mins}m)"
+            elif w.start_time:
                 mins = int((datetime.now() - w.start_time).total_seconds() // 60)
-                uptime = f" ({mins}m)"
+                uptime = f"({mins}m)"
 
-            line = f"║    {emoji} {wid:<12} {w.status.value:<10} done:{w.completed_tasks:<3} fail:{w.failed_tasks:<3}{uptime}{task}"
+            line = f"║    {emoji} {wid:<12} {w.status.value:<8} done:{w.completed_tasks:<3} fail:{w.failed_tasks:<3} {uptime:<6} {progress_info} {task_info}"
             lines.append(f"{line:<76}║")
 
         lines.append("╠═══════════════════════════════════════════════════════════════════════════╣")
@@ -484,19 +509,32 @@ class Dashboard:
     def _render_errors(self) -> List[str]:
         lines = ["║  RECENT ERRORS:                                                           ║"]
 
-        errors = []
-        for w in self.manager.workers.values():
-            if w.last_error:
-                errors.append((w.worker_id, w.last_error[:50]))
+        # Get error summary from Agent Protocol
+        error_summary = self.manager.get_error_summary()
+        if error_summary:
+            summary_parts = [f"{k}:{v}" for k, v in error_summary.items()]
+            summary_line = f"║    Summary: {' | '.join(summary_parts)}"
+            lines.append(f"{summary_line:<76}║")
 
+        errors = []
+
+        # Collect errors from Agent Protocol
+        for wid in self.manager.workers:
+            details = self.manager.get_worker_details(wid)
+            if details and details.get("last_error"):
+                error_type = details.get("last_error_type", "")
+                error_msg = details["last_error"][:40]
+                errors.append((wid, f"[{error_type}] {error_msg}"))
+
+        # Collect errors from tasks
         for t in list(self.manager.tasks.values())[-3:]:
             if t.error:
-                errors.append((t.task_id[:15], t.error[:50]))
+                errors.append((t.task_id[:12], t.error[:45]))
 
-        if not errors:
+        if not errors and not error_summary:
             lines.append("║    (No errors)                                                            ║")
         else:
-            for source, error in errors[-3:]:
+            for source, error in errors[-4:]:
                 line = f"║    [{source}] {error}"
                 lines.append(f"{line:<76}║")
 
@@ -509,6 +547,7 @@ class Dashboard:
             "║    status    - Refresh     │ restart      - Restart all                  ║",
             "║    tasks     - Show tasks  │ restart N    - Restart Chrome N             ║",
             "║    scan      - Scan new    │ scale N      - Scale to N Chrome            ║",
+            "║    logs N    - Worker logs │ errors       - Show all errors              ║",
             "║    set       - Settings    │ quit         - Exit                         ║",
             "╚═══════════════════════════════════════════════════════════════════════════╝",
         ]
@@ -528,6 +567,12 @@ class VMManager:
         # Setup
         self._setup_agent_dirs()
         self.settings = SettingsManager()
+
+        # Agent Protocol for worker monitoring
+        if AGENT_PROTOCOL_ENABLED:
+            self.agent_protocol = AgentProtocolManager()
+        else:
+            self.agent_protocol = None
 
         # Workers
         self.workers: Dict[str, WorkerInfo] = {}
@@ -585,6 +630,97 @@ class VMManager:
         timestamp = datetime.now().strftime("%H:%M:%S")
         emoji = {"INFO": "  ", "WARN": "⚠️", "ERROR": "❌", "SUCCESS": "✅", "TASK": "📋"}.get(level, "  ")
         print(f"[{timestamp}] [{source}] {emoji} {msg}")
+
+    # ================================================================================
+    # AGENT PROTOCOL INTEGRATION
+    # ================================================================================
+
+    def sync_worker_status(self):
+        """Đồng bộ trạng thái worker từ Agent Protocol."""
+        if not self.agent_protocol:
+            return
+
+        for worker_id, worker in self.workers.items():
+            agent_status = self.agent_protocol.get_worker_status(worker_id)
+            if agent_status:
+                # Cập nhật status từ agent protocol
+                if agent_status.state == "working":
+                    worker.status = WorkerStatus.WORKING
+                elif agent_status.state == "idle":
+                    worker.status = WorkerStatus.IDLE
+                elif agent_status.state == "error":
+                    worker.status = WorkerStatus.ERROR
+                    worker.last_error = agent_status.last_error
+                elif agent_status.state == "stopped":
+                    worker.status = WorkerStatus.STOPPED
+
+                # Cập nhật task info
+                if agent_status.current_task:
+                    worker.current_task = agent_status.current_task
+                worker.completed_tasks = agent_status.completed_count
+                worker.failed_tasks = agent_status.failed_count
+
+    def check_worker_health(self) -> List[str]:
+        """Kiểm tra health của workers, trả về danh sách workers cần restart."""
+        workers_to_restart = []
+
+        if not self.agent_protocol:
+            return workers_to_restart
+
+        for worker_id, worker in self.workers.items():
+            if worker.status == WorkerStatus.STOPPED:
+                continue
+
+            # Check if worker is alive (updated status within last 30s)
+            if not self.agent_protocol.is_worker_alive(worker_id, timeout_seconds=60):
+                self.log(f"{worker_id} không phản hồi (timeout 60s)", worker_id, "WARN")
+                workers_to_restart.append(worker_id)
+                continue
+
+            # Check for critical errors
+            agent_status = self.agent_protocol.get_worker_status(worker_id)
+            if agent_status and agent_status.last_error_type:
+                error_type = agent_status.last_error_type
+                if error_type in ("chrome_crash", "chrome_403"):
+                    self.log(f"{worker_id} lỗi nghiêm trọng: {error_type}", worker_id, "ERROR")
+                    workers_to_restart.append(worker_id)
+
+        return workers_to_restart
+
+    def get_worker_details(self, worker_id: str) -> Optional[Dict]:
+        """Lấy thông tin chi tiết của worker từ Agent Protocol."""
+        if not self.agent_protocol:
+            return None
+
+        agent_status = self.agent_protocol.get_worker_status(worker_id)
+        if not agent_status:
+            return None
+
+        return {
+            "state": agent_status.state,
+            "progress": agent_status.progress,
+            "current_project": agent_status.current_project,
+            "current_task": agent_status.current_task,
+            "current_scene": agent_status.current_scene,
+            "total_scenes": agent_status.total_scenes,
+            "completed_count": agent_status.completed_count,
+            "failed_count": agent_status.failed_count,
+            "last_error": agent_status.last_error,
+            "last_error_type": agent_status.last_error_type,
+            "uptime_seconds": agent_status.uptime_seconds,
+        }
+
+    def get_worker_logs(self, worker_id: str, lines: int = 20) -> List[str]:
+        """Lấy log gần nhất của worker."""
+        if not self.agent_protocol:
+            return []
+        return self.agent_protocol.get_recent_logs(worker_id, lines)
+
+    def get_error_summary(self) -> Dict[str, int]:
+        """Lấy tóm tắt các loại lỗi từ tất cả workers."""
+        if not self.agent_protocol:
+            return {}
+        return self.agent_protocol.get_error_summary()
 
     # ================================================================================
     # TASK MANAGEMENT
@@ -822,20 +958,38 @@ class VMManager:
 
     def orchestrate(self):
         self.log("Orchestration started", "MANAGER")
+        health_check_counter = 0
+
         while not self._stop_flag:
             try:
+                # 1. Sync worker status từ Agent Protocol
+                self.sync_worker_status()
+
+                # 2. Collect results từ workers
                 self.collect_results()
 
+                # 3. Health check mỗi 30s (6 vòng x 5s)
+                health_check_counter += 1
+                if health_check_counter >= 6:
+                    health_check_counter = 0
+                    workers_to_restart = self.check_worker_health()
+                    for wid in workers_to_restart:
+                        self.log(f"Auto-restarting {wid}...", "MANAGER", "WARN")
+                        self.restart_worker(wid)
+
+                # 4. Check completed tasks và retry nếu cần
                 for task in list(self.tasks.values()):
                     if task.status == TaskStatus.COMPLETED:
                         retry = self.check_and_retry(task)
                         if retry:
                             task.status = TaskStatus.FAILED
 
+                # 5. Scan projects mới và tạo tasks
                 for project in self.scan_projects():
                     if project not in self.project_tasks:
                         self.create_tasks_for_project(project)
 
+                # 6. Assign pending tasks cho workers
                 for task in self.get_pending_tasks(TaskType.EXCEL):
                     wid = self.get_idle_worker("excel")
                     if wid:
@@ -905,6 +1059,41 @@ class VMManager:
                             print(f"  Scaled to {num} Chrome workers")
                         except:
                             pass
+                    elif cmd.startswith("logs "):
+                        try:
+                            parts = cmd.split()
+                            if len(parts) >= 2:
+                                target = parts[1]
+                                if target.isdigit():
+                                    worker_id = f"chrome_{target}"
+                                elif target == "excel":
+                                    worker_id = "excel"
+                                else:
+                                    worker_id = target
+                                logs = self.get_worker_logs(worker_id, 20)
+                                print(f"\n  LOGS [{worker_id}]:")
+                                for log in logs:
+                                    print(f"    {log.strip()}")
+                                if not logs:
+                                    print("    (No logs available)")
+                        except Exception as e:
+                            print(f"  Error: {e}")
+                    elif cmd == "logs":
+                        print("\n  Usage: logs <worker_id>  (e.g., logs 1, logs excel)")
+                    elif cmd == "errors":
+                        print("\n  ERROR SUMMARY:")
+                        error_summary = self.get_error_summary()
+                        if error_summary:
+                            for error_type, count in error_summary.items():
+                                print(f"    {error_type}: {count}")
+                        else:
+                            print("    (No errors)")
+
+                        print("\n  WORKER ERRORS:")
+                        for wid in self.workers:
+                            details = self.get_worker_details(wid)
+                            if details and details.get("last_error"):
+                                print(f"    [{wid}] {details['last_error_type']}: {details['last_error'][:60]}")
                     elif cmd == "set":
                         print(f"\n  SETTINGS:")
                         for k, v in self.settings.get_summary().items():
@@ -912,7 +1101,7 @@ class VMManager:
                     elif cmd in ("quit", "exit", "q"):
                         break
                     else:
-                        print("  Commands: status, tasks, scan, restart, scale, set, quit")
+                        print("  Commands: status, tasks, scan, restart, scale, logs, errors, set, quit")
 
                 except (EOFError, KeyboardInterrupt):
                     break
