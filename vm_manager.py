@@ -1470,9 +1470,9 @@ class VMManager:
             screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
             screen_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
 
-            # Chrome window size (small, on right side)
-            chrome_width = 500
-            chrome_height = 400
+            # Chrome window size (bigger for better visibility, on right side)
+            chrome_width = 700
+            chrome_height = 550
 
             # Position on right side, stacked vertically
             x_start = screen_width - chrome_width - 10  # 10px from right edge

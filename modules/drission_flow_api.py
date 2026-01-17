@@ -2877,52 +2877,25 @@ class DrissionFlowAPI:
                         # Fallback: dùng JavaScript
                         self.driver.run_js(f"window.moveTo({x}, {y}); window.resizeTo({w}, {h});")
 
-            if total <= 1:
-                # 1 worker: Full màn hình (maximize)
-                self.driver.set.window.max()
-                self.log(f"[WIN] Window: FULL SCREEN")
-            elif total == 2:
-                # 2 workers: Chia đôi ngang
-                win_w = screen_w // 2
-                win_h = screen_h
-                win_x = screen_left + (worker * win_w)
-                win_y = screen_top
+            # Fixed Chrome window size (700x550) on right side, stacked vertically
+            # This matches the layout in vm_manager.show_chrome_windows()
+            chrome_width = 700
+            chrome_height = 550
 
-                set_window_rect(win_x, win_y, win_w, win_h)
-                pos_name = "LEFT" if worker == 0 else "RIGHT"
-                self.log(f"[WIN] Window: {pos_name} ({win_w}x{win_h} at {win_x},{win_y})")
-            elif total == 3:
-                # 3 workers: 2 trên + 1 dưới full
-                if worker < 2:
-                    # Top row: 2 windows
-                    win_w = screen_w // 2
-                    win_h = screen_h // 2
-                    win_x = screen_left + (worker * win_w)
-                    win_y = screen_top
-                else:
-                    # Bottom: 1 window full width
-                    win_w = screen_w
-                    win_h = screen_h // 2
-                    win_x = screen_left
-                    win_y = screen_top + screen_h // 2
+            # Position on right side of screen
+            x_start = screen_w - chrome_width - 10  # 10px from right edge
+            y_start = 50  # Start 50px from top
 
-                set_window_rect(win_x, win_y, win_w, win_h)
-                self.log(f"[WIN] Window: Worker {worker} ({win_w}x{win_h} at {win_x},{win_y})")
-            else:
-                # 4+ workers: Grid 2xN
-                cols = 2
-                rows = (total + 1) // 2
+            # Stack windows vertically based on worker_id
+            win_x = x_start
+            win_y = y_start + (worker * (chrome_height + 10))  # 10px gap between windows
 
-                col = worker % cols
-                row = worker // cols
+            # Make sure it doesn't go off screen
+            if win_y + chrome_height > screen_h:
+                win_y = y_start  # Reset to top if too low
 
-                win_w = screen_w // cols
-                win_h = screen_h // rows
-                win_x = screen_left + (col * win_w)
-                win_y = screen_top + (row * win_h)
-
-                set_window_rect(win_x, win_y, win_w, win_h)
-                self.log(f"[WIN] Window: Worker {worker} ({win_w}x{win_h} at {win_x},{win_y})")
+            set_window_rect(win_x, win_y, chrome_width, chrome_height)
+            self.log(f"[WIN] Window: Chrome {worker + 1} ({chrome_width}x{chrome_height} at {win_x},{win_y})")
 
         except Exception as e:
             self.log(f"[WARN] Window layout error: {e}", "WARN")

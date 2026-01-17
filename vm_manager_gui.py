@@ -729,11 +729,13 @@ class ChromeLogWindow(tk.Toplevel):
         screen_height = self.winfo_screenheight()
 
         # Position: below Chrome windows on the right side
-        # Chrome windows: 500x400 at x = screen_width - 510
-        log_width = 500
+        # Chrome windows: 700x550 at x = screen_width - 710
+        log_width = 700
         log_height = 300
         x = screen_width - log_width - 10
-        y = 50 + 400 + 10 + 400 + 10  # Below 2 Chrome windows
+        # y = below 2 Chrome windows (50 + 550 + 10 + 550 + 10)
+        # If that's too low, we'll cap it in the if statement below
+        y = 50 + 550 + 10 + 550 + 10  # Below 2 Chrome windows
 
         # If too low, position it differently
         if y + log_height > screen_height:
