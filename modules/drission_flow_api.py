@@ -2899,11 +2899,7 @@ class DrissionFlowAPI:
 
         except Exception as e:
             self.log(f"[WARN] Window layout error: {e}", "WARN")
-            # Fallback: maximize
-            try:
-                self.driver.set.window.max()
-            except:
-                pass
+            # Don't fallback to maximize - keep Chrome at default size
 
     def _click_textarea(self, wait_visible: bool = True):
         """
