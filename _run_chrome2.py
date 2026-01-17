@@ -100,7 +100,7 @@ def safe_path_exists(path: Path) -> bool:
         # WinError 1167: The device is not connected
         # WinError 53: The network path was not found
         # WinError 64: The specified network name is no longer available
-        print(f"  ⚠️ Network error checking path: {e}")
+        print(f"  [WARN] Network error checking path: {e}")
         return False
 
 
@@ -114,7 +114,7 @@ def safe_iterdir(path: Path) -> list:
             return []
         return list(path.iterdir())
     except (OSError, PermissionError) as e:
-        print(f"  ⚠️ Network error listing directory: {e}")
+        print(f"  [WARN] Network error listing directory: {e}")
         return []
 
 # Detect paths
@@ -371,12 +371,12 @@ def scan_master_projects() -> list:
                     print(f"    - {code}: has SRT")
                     pending.append(code)
             except (OSError, PermissionError) as e:
-                print(f"  ⚠️ Network error checking {code}: {e}")
+                print(f"  [WARN] Network error checking {code}: {e}")
                 continue
 
         except (OSError, PermissionError) as e:
             # Network disconnected while iterating
-            print(f"  ⚠️ Network error scanning: {e}")
+            print(f"  [WARN] Network error scanning: {e}")
             break
 
     return sorted(pending)

@@ -3059,11 +3059,11 @@ class BrowserFlowGenerator:
                     val = row[1].value
                     if key == 'flow_project_url' and val and '/project/' in str(val):
                         saved_project_url = str(val)
-                        self._log(f"📂 Project URL từ Excel: {saved_project_url[:50]}...")
+                        self._log(f"[FOUND] Project URL từ Excel: {saved_project_url[:50]}...")
                         break
                     elif key == 'flow_project_id' and val and not saved_project_url:
                         saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{val}"
-                        self._log(f"📂 Project ID từ Excel: {val[:20]}...")
+                        self._log(f"[FOUND] Project ID từ Excel: {val[:20]}...")
             wb.close()
         except Exception as e:
             self._log(f"Đọc Excel config error: {e}", "warn")
@@ -3080,7 +3080,7 @@ class BrowserFlowGenerator:
                     cached_id = cache_data.get('_project_id', '')
                     if cached_url and '/project/' in cached_url:
                         saved_project_url = cached_url
-                        self._log(f"📂 Project URL từ cache: {saved_project_url[:50]}...")
+                        self._log(f"[FOUND] Project URL từ cache: {saved_project_url[:50]}...")
                     elif cached_id:
                         saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{cached_id}"
                 except:
@@ -3330,7 +3330,7 @@ class BrowserFlowGenerator:
                                 # Direct URL match
                                 if '/project/' in cell_str and cell_str.startswith('http'):
                                     saved_project_url = cell_str
-                                    self._log(f"📂 Tìm thấy project URL: {saved_project_url[:60]}...")
+                                    self._log(f"[FOUND] Tìm thấy project URL: {saved_project_url[:60]}...")
                                     break
 
                         if saved_project_url:
@@ -3343,16 +3343,16 @@ class BrowserFlowGenerator:
                             config_keys_found.append(key)
                             if key == 'flow_project_url' and val and '/project/' in val:
                                 saved_project_url = val
-                                self._log(f"📂 Tìm thấy project URL từ Excel: {saved_project_url[:50]}...")
+                                self._log(f"[FOUND] Tìm thấy project URL từ Excel: {saved_project_url[:50]}...")
                             elif key == 'flow_project_id' and val and not saved_project_url:
                                 # Nếu chỉ có project_id, tạo URL
                                 saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{val}"
-                                self._log(f"📂 Tìm thấy project_id từ Excel: {val[:20]}...")
+                                self._log(f"[FOUND] Tìm thấy project_id từ Excel: {val[:20]}...")
                             elif key == 'chrome_profile_path' and val:
                                 # Đọc Chrome profile đã dùng cho dự án này
                                 if Path(val).exists():
                                     saved_chrome_profile = val
-                                    self._log(f"📂 Tìm thấy Chrome profile từ Excel: {val}")
+                                    self._log(f"[FOUND] Tìm thấy Chrome profile từ Excel: {val}")
 
                     if not saved_project_url:
                         self._log(f"[DEBUG] Config keys: {config_keys_found}")
@@ -3413,10 +3413,10 @@ class BrowserFlowGenerator:
                     cached_id = cache_data.get('_project_id', '')
                     if cached_url and '/project/' in cached_url:
                         saved_project_url = cached_url
-                        self._log(f"📂 Tìm thấy project URL từ cache: {saved_project_url[:50]}...")
+                        self._log(f"[FOUND] Tìm thấy project URL từ cache: {saved_project_url[:50]}...")
                     elif cached_id:
                         saved_project_url = f"https://labs.google/fx/vi/tools/flow/project/{cached_id}"
-                        self._log(f"📂 Tìm thấy project_id từ cache: {cached_id[:20]}...")
+                        self._log(f"[FOUND] Tìm thấy project_id từ cache: {cached_id[:20]}...")
                 except Exception as e:
                     self._log(f"⚠️ Không đọc được cache: {e}", "warn")
             else:

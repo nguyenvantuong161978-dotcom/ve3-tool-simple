@@ -48,7 +48,7 @@ def safe_path_exists(path: Path) -> bool:
         # WinError 1167: The device is not connected
         # WinError 53: The network path was not found
         # WinError 64: The specified network name is no longer available
-        print(f"  ⚠️ Network error checking path: {e}")
+        print(f"  [WARN] Network error checking path: {e}")
         return False
 
 
@@ -62,7 +62,7 @@ def safe_iterdir(path: Path) -> list:
             return []
         return list(path.iterdir())
     except (OSError, PermissionError) as e:
-        print(f"  ⚠️ Network error listing directory: {e}")
+        print(f"  [WARN] Network error listing directory: {e}")
         return []
 
 # Detect paths
@@ -155,7 +155,7 @@ def create_videos_for_project_parallel(project_dir: Path, code: str, callback=No
             log(f"  Video error: {result.get('error')}", "ERROR")
             return False
 
-        log(f"  ✅ Videos (chẵn) created!")
+        log(f"  [OK] Videos (chẵn) created!")
         return True
 
     except Exception as e:
@@ -284,9 +284,9 @@ def process_project_full(code: str, callback=None) -> bool:
     if is_local_pic_complete(local_dir, code):
         log(f"\n[STEP 6] Creating videos (PARALLEL - Chrome 1 = chẵn)...")
         if create_videos_for_project_parallel(local_dir, code, callback):
-            log(f"  ✅ Videos (chẵn) done!")
+            log(f"  [OK] Videos (chẵn) done!")
         else:
-            log(f"  ⚠️ Video creation failed", "WARN")
+            log(f"  [WARN] Video creation failed", "WARN")
 
         # Step 7: Đợi Chrome 2 xong video
         log(f"\n[STEP 7] Waiting for Chrome 2 videos...")
@@ -297,12 +297,12 @@ def process_project_full(code: str, callback=None) -> bool:
         # Step 8: Copy to VISUAL
         log(f"\n[STEP 8] Copying to VISUAL...")
         if copy_to_visual(code):
-            log(f"  ✅ Copied to VISUAL!")
+            log(f"  [OK] Copied to VISUAL!")
             delete_local_project(code)
-            log(f"  ✅ Deleted local project")
+            log(f"  [OK] Deleted local project")
             return True
         else:
-            log(f"  ⚠️ Failed to copy to VISUAL", "WARN")
+            log(f"  [WARN] Failed to copy to VISUAL", "WARN")
             return True
 
     log(f"  Images incomplete", "WARN")
@@ -374,12 +374,12 @@ def scan_master_projects() -> list:
                     print(f"    - {code}: has SRT")
                     pending.append(code)
             except (OSError, PermissionError) as e:
-                print(f"  ⚠️ Network error checking {code}: {e}")
+                print(f"  [WARN] Network error checking {code}: {e}")
                 continue
 
         except (OSError, PermissionError) as e:
             # Network disconnected while iterating
-            print(f"  ⚠️ Network error scanning: {e}")
+            print(f"  [WARN] Network error scanning: {e}")
             break
 
     return sorted(pending)

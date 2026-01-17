@@ -46,7 +46,7 @@ def safe_path_exists(path: Path) -> bool:
         # WinError 1167: The device is not connected
         # WinError 53: The network path was not found
         # WinError 64: The specified network name is no longer available
-        print(f"  ⚠️ Network error checking path: {e}")
+        print(f"  [WARN] Network error checking path: {e}")
         return False
 
 
@@ -60,7 +60,7 @@ def safe_iterdir(path: Path) -> list:
             return []
         return list(path.iterdir())
     except (OSError, PermissionError) as e:
-        print(f"  ⚠️ Network error listing directory: {e}")
+        print(f"  [WARN] Network error listing directory: {e}")
         return []
 
 # Detect paths
@@ -175,7 +175,7 @@ def create_videos_for_project_chrome2(project_dir: Path, code: str, chrome2_path
             log(f"  Video error: {result.get('error')}", "ERROR")
             return False
 
-        log(f"  ✅ Videos (lẻ) created!")
+        log(f"  [OK] Videos (lẻ) created!")
         return True
 
     except Exception as e:
@@ -312,12 +312,12 @@ def process_project_full_chrome2(code: str, callback=None) -> bool:
     if is_local_pic_complete(local_dir, code):
         log(f"\n[STEP 6] Creating videos (Chrome 2 = scenes lẻ)...")
         if create_videos_for_project_chrome2(local_dir, code, chrome2_path, callback):
-            log(f"  ✅ Videos (lẻ) done!")
+            log(f"  [OK] Videos (lẻ) done!")
         else:
-            log(f"  ⚠️ Video creation failed", "WARN")
+            log(f"  [WARN] Video creation failed", "WARN")
 
     # Chrome 2 không copy VISUAL - Chrome 1 sẽ làm
-    log(f"\n  ✅ Chrome 2 FULL done! (Chrome 1 sẽ copy VISUAL)")
+    log(f"\n  [OK] Chrome 2 FULL done! (Chrome 1 sẽ copy VISUAL)")
     return True
 
 
@@ -386,12 +386,12 @@ def scan_master_projects() -> list:
                     print(f"    - {code}: has SRT")
                     pending.append(code)
             except (OSError, PermissionError) as e:
-                print(f"  ⚠️ Network error checking {code}: {e}")
+                print(f"  [WARN] Network error checking {code}: {e}")
                 continue
 
         except (OSError, PermissionError) as e:
             # Network disconnected while iterating
-            print(f"  ⚠️ Network error scanning: {e}")
+            print(f"  [WARN] Network error scanning: {e}")
             break
 
     return sorted(pending)

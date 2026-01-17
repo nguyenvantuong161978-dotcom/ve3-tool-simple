@@ -708,22 +708,26 @@ class ProjectCard(ttk.Frame):
 
 
 class CurrentActivityPanel(ttk.LabelFrame):
-    """Panel hiển thị hoạt động hiện tại của từng worker - real-time."""
+    """Panel hiển thị hoạt động hiện tại - real-time với đầy đủ thông tin."""
 
     def __init__(self, parent):
-        super().__init__(parent, text="🔴 LIVE - Current Activity", padding=10)
+        super().__init__(parent, text="[LIVE] Real-time Activity", padding=10)
         self.activity_labels = {}
         self._build_ui()
 
     def _build_ui(self):
-        # Header
+        # Header row
         header = ttk.Frame(self)
         header.pack(fill="x")
-        ttk.Label(header, text="Worker", width=12, font=("Arial", 9, "bold")).pack(side="left")
-        ttk.Label(header, text="Status", width=10, font=("Arial", 9, "bold")).pack(side="left")
-        ttk.Label(header, text="Project", width=15, font=("Arial", 9, "bold")).pack(side="left")
-        ttk.Label(header, text="Scene", width=10, font=("Arial", 9, "bold")).pack(side="left")
-        ttk.Label(header, text="Current Prompt", font=("Arial", 9, "bold")).pack(side="left", fill="x", expand=True)
+
+        # Column headers
+        cols = [
+            ("Worker", 10), ("Status", 8), ("Project", 12),
+            ("Excel", 8), ("Images", 10), ("Videos", 10),
+            ("Current Task", 30), ("Last Result", 12)
+        ]
+        for col_name, width in cols:
+            ttk.Label(header, text=col_name, width=width, font=("Arial", 9, "bold")).pack(side="left", padx=1)
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", pady=5)
 
@@ -731,9 +735,11 @@ class CurrentActivityPanel(ttk.LabelFrame):
         self.container = ttk.Frame(self)
         self.container.pack(fill="both", expand=True)
 
-    def update_worker(self, worker_id: str, status: str, project: str, scene: int,
-                      total_scenes: int, current_prompt: str, progress: int):
-        """Update a worker's activity display."""
+    def update_worker(self, worker_id: str, status: str, project: str,
+                      total_scenes: int, images_done: int, images_total: int,
+                      videos_done: int, videos_total: int,
+                      current_task: str, last_result: str, progress: int):
+        """Update a worker's activity display with full info."""
         if worker_id not in self.activity_labels:
             # Create new row
             row = ttk.Frame(self.container)
@@ -744,35 +750,53 @@ class CurrentActivityPanel(ttk.LabelFrame):
             worker_frame.pack(side="left")
 
             indicator = tk.Canvas(worker_frame, width=10, height=10, highlightthickness=0)
-            indicator.pack(side="left", padx=(0, 5))
+            indicator.pack(side="left", padx=(0, 3))
 
-            worker_label = ttk.Label(worker_frame, text=worker_id, width=10, font=("Consolas", 9))
+            worker_label = ttk.Label(worker_frame, text=worker_id, width=8, font=("Consolas", 9))
             worker_label.pack(side="left")
 
-            status_label = ttk.Label(row, text="-", width=10, font=("Consolas", 9))
-            status_label.pack(side="left")
+            status_label = ttk.Label(row, text="-", width=8, font=("Consolas", 9))
+            status_label.pack(side="left", padx=1)
 
-            project_label = ttk.Label(row, text="-", width=15, font=("Consolas", 9, "bold"))
-            project_label.pack(side="left")
+            project_label = ttk.Label(row, text="-", width=12, font=("Consolas", 9, "bold"))
+            project_label.pack(side="left", padx=1)
 
-            scene_label = ttk.Label(row, text="-", width=10, font=("Consolas", 9))
-            scene_label.pack(side="left")
+            excel_label = ttk.Label(row, text="-", width=8, font=("Consolas", 9))
+            excel_label.pack(side="left", padx=1)
 
-            # Progress bar
-            progress_bar = ttk.Progressbar(row, length=80, maximum=100, mode="determinate")
-            progress_bar.pack(side="left", padx=5)
+            # Images with mini progress bar
+            img_frame = ttk.Frame(row)
+            img_frame.pack(side="left", padx=1)
+            img_label = ttk.Label(img_frame, text="0/0", width=6, font=("Consolas", 9))
+            img_label.pack(side="left")
+            img_bar = ttk.Progressbar(img_frame, length=40, maximum=100, mode="determinate")
+            img_bar.pack(side="left")
 
-            # Prompt (truncated)
-            prompt_label = ttk.Label(row, text="-", font=("Consolas", 8), wraplength=400, anchor="w")
-            prompt_label.pack(side="left", fill="x", expand=True)
+            # Videos with mini progress bar
+            vid_frame = ttk.Frame(row)
+            vid_frame.pack(side="left", padx=1)
+            vid_label = ttk.Label(vid_frame, text="0/0", width=6, font=("Consolas", 9))
+            vid_label.pack(side="left")
+            vid_bar = ttk.Progressbar(vid_frame, length=40, maximum=100, mode="determinate")
+            vid_bar.pack(side="left")
+
+            task_label = ttk.Label(row, text="-", width=30, font=("Consolas", 8), anchor="w")
+            task_label.pack(side="left", padx=1)
+
+            result_label = ttk.Label(row, text="-", width=12, font=("Consolas", 9))
+            result_label.pack(side="left", padx=1)
 
             self.activity_labels[worker_id] = {
                 "indicator": indicator,
                 "status": status_label,
                 "project": project_label,
-                "scene": scene_label,
-                "progress": progress_bar,
-                "prompt": prompt_label
+                "excel": excel_label,
+                "img_label": img_label,
+                "img_bar": img_bar,
+                "vid_label": vid_label,
+                "vid_bar": vid_bar,
+                "task": task_label,
+                "result": result_label
             }
 
         # Update values
@@ -787,19 +811,42 @@ class CurrentActivityPanel(ttk.LabelFrame):
         labels["status"].configure(text=status)
         labels["project"].configure(text=project or "-")
 
-        if scene and total_scenes:
-            labels["scene"].configure(text=f"{scene}/{total_scenes}")
+        # Excel scenes
+        if total_scenes > 0:
+            labels["excel"].configure(text=f"{total_scenes} sc")
         else:
-            labels["scene"].configure(text="-")
+            labels["excel"].configure(text="-")
 
-        labels["progress"]["value"] = progress
-
-        # Truncate prompt for display
-        if current_prompt:
-            display_prompt = current_prompt[:80] + "..." if len(current_prompt) > 80 else current_prompt
-            labels["prompt"].configure(text=display_prompt)
+        # Images progress
+        labels["img_label"].configure(text=f"{images_done}/{images_total}")
+        if images_total > 0:
+            labels["img_bar"]["value"] = int(images_done / images_total * 100)
         else:
-            labels["prompt"].configure(text="-")
+            labels["img_bar"]["value"] = 0
+
+        # Videos progress
+        labels["vid_label"].configure(text=f"{videos_done}/{videos_total}")
+        if videos_total > 0:
+            labels["vid_bar"]["value"] = int(videos_done / videos_total * 100)
+        else:
+            labels["vid_bar"]["value"] = 0
+
+        # Current task (truncated)
+        if current_task:
+            display_task = current_task[:28] + ".." if len(current_task) > 30 else current_task
+            labels["task"].configure(text=display_task)
+        else:
+            labels["task"].configure(text="-")
+
+        # Last result with color
+        labels["result"].configure(text=last_result or "-")
+        if last_result:
+            if "OK" in last_result or "success" in last_result.lower():
+                labels["result"].configure(foreground="green")
+            elif "FAIL" in last_result or "error" in last_result.lower():
+                labels["result"].configure(foreground="red")
+            else:
+                labels["result"].configure(foreground="black")
 
 
 class VMManagerGUI:
@@ -1331,41 +1378,60 @@ class VMManagerGUI:
         self.root.after(500, self._update_loop)
 
     def _update_activity_panel(self):
-        """Update the real-time activity panel."""
+        """Update the real-time activity panel with full project info."""
         if not self.manager:
             return
 
         for wid, w in self.manager.workers.items():
             details = self.manager.get_worker_details(wid) or {}
-
-            # Get current prompt from project if available
-            current_prompt = ""
             project_code = details.get("current_project", "")
-            current_scene = details.get("current_scene", 0)
 
-            if project_code and current_scene:
+            # Default values
+            total_scenes = 0
+            images_done = 0
+            images_total = 0
+            videos_done = 0
+            videos_total = 0
+            current_task = ""
+            last_result = ""
+
+            if project_code:
                 try:
-                    # Try to get the current prompt being processed
-                    from modules.excel_manager import PromptWorkbook
-                    project_dir = Path(__file__).parent / "PROJECTS" / project_code
-                    excel_path = project_dir / f"{project_code}_prompts.xlsx"
-                    if excel_path.exists():
-                        wb = PromptWorkbook(str(excel_path))
-                        scenes = wb.get_scenes()
-                        for scene in scenes:
-                            if scene.scene_number == current_scene:
-                                current_prompt = scene.img_prompt or ""
-                                break
+                    # Get project status from quality checker
+                    status = self.manager.quality_checker.get_project_status(project_code)
+                    total_scenes = status.total_scenes
+                    images_done = status.images_done
+                    images_total = status.total_scenes
+                    videos_done = status.videos_done
+                    videos_total = status.total_scenes
+
+                    # Current task from details
+                    current_scene = details.get("current_scene", 0)
+                    if current_scene > 0:
+                        current_task = f"Scene {current_scene}/{total_scenes}"
+                    else:
+                        current_task = details.get("current_task", "") or status.current_step
                 except:
                     pass
+
+            # Get last result from worker
+            if w.completed_tasks > 0 or w.failed_tasks > 0:
+                if w.last_error:
+                    last_result = "[FAIL]"
+                elif w.completed_tasks > 0:
+                    last_result = "[OK]"
 
             self.activity_panel.update_worker(
                 worker_id=wid,
                 status=w.status.value,
                 project=project_code,
-                scene=current_scene,
-                total_scenes=details.get("total_scenes", 0),
-                current_prompt=current_prompt,
+                total_scenes=total_scenes,
+                images_done=images_done,
+                images_total=images_total,
+                videos_done=videos_done,
+                videos_total=videos_total,
+                current_task=current_task,
+                last_result=last_result,
                 progress=details.get("progress", 0)
             )
 
@@ -1503,10 +1569,29 @@ def main():
 
     app = VMManagerGUI(root)
 
-    # Handle close
+    # Handle close - kill all child processes
     def on_closing():
         if app.manager:
+            print("[GUI] Stopping all workers...")
             app.manager.stop_all()
+            print("[GUI] Killing Chrome processes...")
+            app.manager.kill_all_chrome()
+
+        # Also kill any remaining Python processes started by this tool
+        import subprocess
+        import sys
+        if sys.platform == "win32":
+            # Kill worker scripts specifically
+            try:
+                for script in ["_run_chrome1.py", "_run_chrome2.py", "run_excel_api.py"]:
+                    subprocess.run(
+                        f'wmic process where "commandline like \'%{script}%\'" call terminate',
+                        shell=True, capture_output=True, timeout=5
+                    )
+            except:
+                pass
+
+        print("[GUI] Cleanup done, exiting...")
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
