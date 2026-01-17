@@ -1119,12 +1119,12 @@ class VMManagerGUI:
             self.log_worker_combo.configure(values=worker_list)
 
         self.running = True
-        self._log("Starting all workers (CMD minimized, Chrome visible)...")
+        self._log("Starting all workers...")
 
         def start_thread():
-            # Start in GUI mode - CMD windows minimized, Chrome still visible for CAPTCHA
-            # Chrome can be hidden/shown later using Hide/Show Chrome buttons
-            self.manager.start_all(gui_mode=True)
+            # Start normally - CMD windows visible, Chrome visible
+            # Use Hide/Show Chrome buttons to hide Chrome windows later
+            self.manager.start_all(gui_mode=False)
             # Start orchestration in background
             threading.Thread(target=self.manager.orchestrate, daemon=True).start()
 
