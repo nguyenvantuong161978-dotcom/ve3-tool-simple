@@ -418,6 +418,62 @@ class ProjectDetailDialog(tk.Toplevel):
         self.chrome2_status_var = tk.StringVar(value="idle")
         ttk.Label(c2_frame, textvariable=self.chrome2_status_var, width=60).pack(side="left")
 
+        # ===== EXCEL WORKFLOW STATUS =====
+        workflow_frame = ttk.LabelFrame(self, text="Excel Workflow Status", padding=5)
+        workflow_frame.pack(fill="x", padx=10, pady=5)
+
+        # Row 1: SRT + Characters
+        row1 = ttk.Frame(workflow_frame)
+        row1.pack(fill="x", pady=2)
+
+        # SRT Status
+        ttk.Label(row1, text="SRT:", width=8).pack(side="left")
+        self.srt_status_var = tk.StringVar(value="...")
+        self.srt_status_label = ttk.Label(row1, textvariable=self.srt_status_var, width=12)
+        self.srt_status_label.pack(side="left")
+
+        ttk.Label(row1, text="  |  ").pack(side="left")
+
+        # Characters Status
+        ttk.Label(row1, text="Characters:", width=10).pack(side="left")
+        self.chars_status_var = tk.StringVar(value="...")
+        self.chars_status_label = ttk.Label(row1, textvariable=self.chars_status_var, width=25)
+        self.chars_status_label.pack(side="left")
+
+        ttk.Label(row1, text="  |  ").pack(side="left")
+
+        # NV Images
+        ttk.Label(row1, text="NV Images:", width=10).pack(side="left")
+        self.nv_count_var = tk.StringVar(value="...")
+        ttk.Label(row1, textvariable=self.nv_count_var, width=8).pack(side="left")
+
+        # Row 2: Prompts + Excel Status
+        row2 = ttk.Frame(workflow_frame)
+        row2.pack(fill="x", pady=2)
+
+        # Prompts Status
+        ttk.Label(row2, text="Prompts:", width=8).pack(side="left")
+        self.prompts_status_var = tk.StringVar(value="...")
+        self.prompts_status_label = ttk.Label(row2, textvariable=self.prompts_status_var, width=25)
+        self.prompts_status_label.pack(side="left")
+
+        ttk.Label(row2, text="  |  ").pack(side="left")
+
+        # Excel Overall Status
+        ttk.Label(row2, text="Excel Status:", width=12).pack(side="left")
+        self.excel_status_var = tk.StringVar(value="...")
+        self.excel_status_label = ttk.Label(row2, textvariable=self.excel_status_var, width=15,
+                                             font=("Arial", 9, "bold"))
+        self.excel_status_label.pack(side="left")
+
+        ttk.Label(row2, text="  |  ").pack(side="left")
+
+        # Current Step
+        ttk.Label(row2, text="Step:", width=5).pack(side="left")
+        self.current_step_var = tk.StringVar(value="...")
+        ttk.Label(row2, textvariable=self.current_step_var, width=10,
+                  font=("Arial", 9, "bold")).pack(side="left")
+
         # ===== MAIN: Notebook with tabs =====
         main_notebook = ttk.Notebook(self)
         main_notebook.pack(fill="both", expand=True, padx=10, pady=5)
@@ -566,9 +622,11 @@ class ProjectDetailDialog(tk.Toplevel):
                 f"Total: {status.total_scenes} scenes\n"
                 f"Prompts: {status.img_prompts_count}/{status.total_scenes}\n"
                 f"Images: {status.images_done}/{status.total_scenes}\n"
-                f"Videos: {status.videos_done}/{status.total_scenes}\n"
-                f"Status: {status.excel_status}"
+                f"Videos: {status.videos_done}/{status.total_scenes}"
             )
+
+            # Update Excel Workflow Status
+            self._update_workflow_status(status)
 
             # Update worker status
             self._update_worker_status()
@@ -799,6 +857,65 @@ class ProjectDetailDialog(tk.Toplevel):
         except Exception as e:
             self.chrome1_status_var.set(f"Error: {str(e)[:30]}")
             self.chrome2_status_var.set("")
+
+    def _update_workflow_status(self, status):
+        """Update the Excel workflow status display."""
+        # SRT Status
+        if status.srt_exists:
+            self.srt_status_var.set(f"OK ({status.srt_scene_count})")
+        else:
+            self.srt_status_var.set("MISSING")
+
+        # Characters Status
+        if status.characters_count == 0:
+            self.chars_status_var.set("No characters")
+        else:
+            refs = status.characters_with_ref
+            total = status.characters_count
+            if refs == total:
+                self.chars_status_var.set(f"OK ({total} chars, all refs)")
+            elif refs > 0:
+                missing = len(status.characters_missing_ref)
+                self.chars_status_var.set(f"{refs}/{total} refs (miss: {missing})")
+            else:
+                self.chars_status_var.set(f"{total} chars, NO refs!")
+
+        # NV Images count
+        self.nv_count_var.set(str(status.nv_images_count))
+
+        # Prompts Status
+        prompts = status.img_prompts_count
+        total = status.total_scenes
+        fallback = status.fallback_prompts
+        if prompts == 0:
+            self.prompts_status_var.set("No prompts")
+        elif prompts == total and fallback == 0:
+            self.prompts_status_var.set(f"OK ({prompts}/{total})")
+        elif fallback > 0:
+            self.prompts_status_var.set(f"{prompts}/{total} ({fallback} FALLBACK)")
+        else:
+            missing = len(status.missing_img_prompts)
+            self.prompts_status_var.set(f"{prompts}/{total} (miss: {missing})")
+
+        # Excel Overall Status
+        excel_status_map = {
+            "none": "NO FILE",
+            "empty": "EMPTY",
+            "mismatch": "MISMATCH!",
+            "fallback": "HAS FALLBACK",
+            "partial": "PARTIAL",
+            "complete": "COMPLETE"
+        }
+        self.excel_status_var.set(excel_status_map.get(status.excel_status, status.excel_status))
+
+        # Current Step
+        step_map = {
+            "excel": "EXCEL",
+            "image": "IMAGE",
+            "video": "VIDEO",
+            "done": "DONE"
+        }
+        self.current_step_var.set(step_map.get(status.current_step, status.current_step))
 
 
 class WorkerCard(ttk.LabelFrame):
@@ -1048,8 +1165,9 @@ class ChromeLogWindow(tk.Toplevel):
 def _cap_build_ui(self):
     header = ttk.Frame(self)
     header.pack(fill="x")
+    # Note: For Excel worker, "Img/Pmt" shows Prompts, "Vid/Chr" shows Characters with refs
     cols = [("Worker", 10), ("Status", 8), ("Project", 12), ("Pending", 7),
-            ("Images", 10), ("Videos", 10), ("Current Task", 28), ("Last Result", 12)]
+            ("Img/Pmt", 10), ("Vid/Chr", 10), ("Current Task", 28), ("Last Result", 12)]
     for col_name, width in cols:
         ttk.Label(header, text=col_name, width=width, font=("Arial", 9, "bold")).pack(side="left", padx=1)
     ttk.Separator(self, orient="horizontal").pack(fill="x", pady=5)
@@ -2278,13 +2396,23 @@ class VMManagerGUI:
                         # Excel worker - show prompts done / total (use Images column for Prompts)
                         images_done = status.img_prompts_count
                         images_total = status.total_scenes
-                        videos_done = 0  # N/A for Excel
-                        videos_total = 0
-                        # Show Excel-specific status
+                        # Use Videos column for Characters status
+                        videos_done = status.characters_with_ref
+                        videos_total = status.characters_count
+                        # Show detailed Excel-specific status
                         if status.excel_status == "complete":
-                            current_task = "Prompts ready"
-                        elif status.excel_status == "needs_prompts":
-                            current_task = f"Need {status.total_scenes - status.img_prompts_count} prompts"
+                            current_task = "READY - All prompts OK"
+                        elif status.excel_status == "fallback":
+                            current_task = f"FALLBACK: {status.fallback_prompts} need fix"
+                        elif status.excel_status == "partial":
+                            missing = len(status.missing_img_prompts)
+                            current_task = f"PARTIAL: miss {missing} prompts"
+                        elif status.excel_status == "mismatch":
+                            current_task = f"MISMATCH: SRT={status.srt_scene_count} Excel={status.excel_scene_count}"
+                        elif status.excel_status == "empty":
+                            current_task = "EMPTY - No prompts"
+                        elif status.excel_status == "none":
+                            current_task = "NO FILE - Create Excel"
                         else:
                             current_task = status.excel_status or "Scanning..."
                     else:

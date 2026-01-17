@@ -155,6 +155,17 @@ class ProjectStatus:
     # Chi tiết fallback
     fallback_scenes: List[int] = field(default_factory=list)  # Scenes có [FALLBACK]
 
+    # Characters & References (pre-Excel steps)
+    characters_count: int = 0  # Số nhân vật trong Excel
+    characters_with_ref: int = 0  # Số nhân vật có ảnh tham chiếu trong nv/
+    characters_missing_ref: List[str] = field(default_factory=list)  # IDs nhân vật thiếu ảnh
+    nv_images_count: int = 0  # Tổng số ảnh trong nv/ folder
+
+    # Pre-Excel workflow steps
+    step_srt: str = "pending"  # pending/done/error
+    step_characters: str = "pending"  # pending/partial/done
+    step_prompts: str = "pending"  # pending/partial/done
+
     # Images & Videos
     images_done: int = 0
     images_missing: List[int] = field(default_factory=list)
@@ -326,6 +337,50 @@ class QualityChecker:
                     status.missing_video_prompts.append(scene_num)
 
             status.prompts_count = status.img_prompts_count
+
+            # Check characters from Excel
+            try:
+                characters = wb.get_characters()
+                status.characters_count = len(characters)
+
+                # Check nv/ folder for reference images
+                nv_dir = project_dir / "nv"
+                if nv_dir.exists():
+                    nv_images = list(nv_dir.glob("*.png")) + list(nv_dir.glob("*.jpg")) + list(nv_dir.glob("*.jpeg"))
+                    status.nv_images_count = len(nv_images)
+                    nv_image_names = {img.stem.lower() for img in nv_images}
+
+                    # Check which characters have reference images
+                    for char in characters:
+                        char_id = char.id.lower() if char.id else ""
+                        if char_id in nv_image_names:
+                            status.characters_with_ref += 1
+                        elif char.image_file and (nv_dir / char.image_file).exists():
+                            status.characters_with_ref += 1
+                        else:
+                            if char.id:
+                                status.characters_missing_ref.append(char.id)
+            except:
+                pass
+
+            # Set pre-Excel workflow steps
+            status.step_srt = "done" if status.srt_exists else "pending"
+
+            if status.characters_count == 0:
+                status.step_characters = "pending"
+            elif status.characters_with_ref == status.characters_count:
+                status.step_characters = "done"
+            elif status.characters_with_ref > 0:
+                status.step_characters = "partial"
+            else:
+                status.step_characters = "pending"
+
+            if status.img_prompts_count == 0:
+                status.step_prompts = "pending"
+            elif status.img_prompts_count == status.total_scenes and status.fallback_prompts == 0:
+                status.step_prompts = "done"
+            else:
+                status.step_prompts = "partial"
 
             # Excel status - chi tiết hơn
             if status.prompts_count == 0:
