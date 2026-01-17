@@ -117,6 +117,19 @@ def main():
     print("  VE3 Tool - Auto Updater")
     print("=" * 40)
 
+    # Clear Python cache to prevent stale bytecode issues
+    print("[*] Clearing Python cache...")
+    for cache_dir in TOOL_DIR.rglob("__pycache__"):
+        try:
+            shutil.rmtree(cache_dir)
+        except:
+            pass
+    for pyc_file in TOOL_DIR.rglob("*.pyc"):
+        try:
+            pyc_file.unlink()
+        except:
+            pass
+
     # Check for branch argument
     if len(sys.argv) > 1:
         branch = sys.argv[1]
