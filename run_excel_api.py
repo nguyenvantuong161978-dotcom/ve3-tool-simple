@@ -70,9 +70,9 @@ def log(msg: str, level: str = "INFO"):
     timestamp = datetime.now().strftime("%H:%M:%S")
     prefix = {
         "INFO": "   ",
-        "WARN": " ⚠️",
-        "ERROR": " ❌",
-        "SUCCESS": " ✅",
+        "WARN": " [WARN]",
+        "ERROR": " [FAIL]",
+        "SUCCESS": " [OK]",
     }.get(level, "   ")
     print(f"[{timestamp}]{prefix} {msg}")
 

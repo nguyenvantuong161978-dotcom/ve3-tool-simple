@@ -47,7 +47,7 @@ def detect_auto_path() -> Path:
         try:
             path = Path(path_str)
             if path.exists():
-                print(f"  ✓ Found AUTO at: {path}")
+                print(f"  [v] Found AUTO at: {path}")
                 return path
         except Exception:
             continue
@@ -229,7 +229,7 @@ def create_excel_with_api(project_dir: Path, name: str) -> bool:
 
     # === PHƯƠNG ÁN 1: Progressive API (từng step, lưu ngay) ===
     if has_api_keys:
-        print(f"  🌐 Using Progressive API (step-by-step, save immediately)...")
+        print(f"  [NET] Using Progressive API (step-by-step, save immediately)...")
 
         try:
             from modules.progressive_prompts import ProgressivePromptsGenerator
@@ -443,7 +443,7 @@ def copy_to_visual(code: str, local_dir: Path) -> bool:
     """Copy completed project to VISUAL folder on master."""
     dst = MASTER_VISUAL / code
 
-    print(f"  📤 Copying to VISUAL: {code}")
+    print(f"  [OUT] Copying to VISUAL: {code}")
 
     try:
         # Create VISUAL dir on master
@@ -744,7 +744,7 @@ def scan_master_projects() -> list:
 
             # Skip if already in VISUAL
             if is_project_complete_on_master(code):
-                print(f"    - {code}: already in VISUAL ✓")
+                print(f"    - {code}: already in VISUAL [v]")
                 continue
 
             # Check if has Excel or SRT
@@ -754,7 +754,7 @@ def scan_master_projects() -> list:
             # Wrap network path checks in try-except
             try:
                 if has_excel_with_prompts(item, code):
-                    print(f"    - {code}: ready (has prompts) ✓")
+                    print(f"    - {code}: ready (has prompts) [v]")
                     pending.append(code)
                 elif srt_path.exists():
                     # Có SRT nhưng không có Excel - worker sẽ tự tạo
@@ -853,16 +853,16 @@ def run_scan_loop():
 
     # Re-detect AUTO path nếu chưa có
     if not AUTO_PATH:
-        print(f"\n  🔍 Detecting network path to \\AUTO...")
+        print(f"\n  [SEARCH] Detecting network path to \\AUTO...")
         AUTO_PATH = detect_auto_path()
         if AUTO_PATH:
             MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
             MASTER_VISUAL = AUTO_PATH / "VISUAL"
 
     if AUTO_PATH:
-        print(f"  ✓ AUTO path:     {AUTO_PATH}")
+        print(f"  [v] AUTO path:     {AUTO_PATH}")
     else:
-        print(f"  ✗ AUTO path:     NOT FOUND")
+        print(f"  [x] AUTO path:     NOT FOUND")
 
     print(f"  Master PROJECTS: {MASTER_PROJECTS}")
     print(f"  Master VISUAL:   {MASTER_VISUAL}")
@@ -900,7 +900,7 @@ def run_scan_loop():
         # === SYNC: Copy local projects đã có ảnh sang VISUAL ===
         synced = sync_local_to_visual()
         if synced > 0:
-            print(f"  📤 Synced {synced} local projects to VISUAL")
+            print(f"  [OUT] Synced {synced} local projects to VISUAL")
 
         # Find incomplete local projects (đã copy về nhưng chưa xong)
         incomplete_local = scan_incomplete_local_projects()

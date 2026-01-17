@@ -348,7 +348,7 @@ class GoogleFlowAPI:
         # Thêm recaptcha vào main context (Direct mode)
         if recaptcha_token:
             main_context["recaptchaToken"] = recaptcha_token
-            self._log("🆓 Direct mode: Using captured recaptchaToken")
+            self._log("[FREE] Direct mode: Using captured recaptchaToken")
 
         payload = {
             "clientContext": main_context,
@@ -418,7 +418,7 @@ class GoogleFlowAPI:
             images = self._parse_image_response(result, prompt, aspect_ratio.value)
             
             if images:
-                self._log(f"✓ Generated {len(images)} images successfully")
+                self._log(f"[v] Generated {len(images)} images successfully")
                 return True, images, ""
             else:
                 # Check if we need to poll for results
@@ -685,7 +685,7 @@ class GoogleFlowAPI:
                     )
                     if img.has_data:
                         images.append(img)
-                        self._log(f"  ✓ Parsed image: seed={img.seed}, has_url={bool(img.url)}, has_b64={bool(img.base64_data)}")
+                        self._log(f"  [v] Parsed image: seed={img.seed}, has_url={bool(img.url)}, has_b64={bool(img.base64_data)}")
                         if media_name:
                             self._log(f"  -> media_name (for I2V): {media_name[:80]}..." if len(media_name) > 80 else f"  -> media_name (for I2V): {media_name}")
         
@@ -849,7 +849,7 @@ class GoogleFlowAPI:
                     with open(output_path, "wb") as f:
                         f.write(response.content)
                     image.local_path = output_path
-                    self._log(f"✓ Saved to {output_path}")
+                    self._log(f"[v] Saved to {output_path}")
                     return output_path
                 else:
                     self._log(f"URL download failed ({response.status_code}), trying base64...")
@@ -872,7 +872,7 @@ class GoogleFlowAPI:
                     f.write(img_bytes)
                 
                 image.local_path = output_path
-                self._log(f"✓ Saved to {output_path}")
+                self._log(f"[v] Saved to {output_path}")
                 return output_path
             
             self._log("No URL or base64 data available")
@@ -1022,7 +1022,7 @@ class GoogleFlowAPI:
                 media_name = result["mediaName"]
 
             if media_name:
-                self._log(f"✓ Upload successful, media_name: {media_name[:50]}...")
+                self._log(f"[v] Upload successful, media_name: {media_name[:50]}...")
                 return True, ImageInput(name=media_name, input_type=image_type), ""
             else:
                 # Log full response for debugging
@@ -1810,7 +1810,7 @@ class GoogleFlowAPI:
         )
 
         if status == "completed" and video_url:
-            self._log(f"✓ Video generated: {video_url[:60]}...")
+            self._log(f"[v] Video generated: {video_url[:60]}...")
             return True, result, ""
         elif operation_id:
             self._log(f"Video generation started, operation: {operation_id[:40]}...")
@@ -1980,7 +1980,7 @@ class GoogleFlowAPI:
                         f.write(chunk)
 
                 video_result.local_path = output_path
-                self._log(f"✓ Saved to {output_path}")
+                self._log(f"[v] Saved to {output_path}")
                 return output_path
             else:
                 self._log(f"Download failed: {response.status_code}")
@@ -2211,7 +2211,7 @@ def quick_generate_video(
 
     # If async, need to poll
     if result.operation_id:
-        print(f"⏳ Video generation started, operation: {result.operation_id}")
+        print(f"[WAIT] Video generation started, operation: {result.operation_id}")
         print("   Đang đợi... (video generation có thể mất vài phút)")
 
         poll_success, poll_result, poll_error = client.poll_video_status(
@@ -2292,13 +2292,13 @@ if __name__ == "__main__":
         token = sys.argv[2]
         prompt = sys.argv[3]
 
-        print(f"\n🎨 Generating images for: {prompt}")
+        print(f"\n[GEN] Generating images for: {prompt}")
         paths = quick_generate(prompt, token)
 
         if paths:
             print(f"\n[OK] Generated {len(paths)} images:")
             for p in paths:
-                print(f"   📁 {p}")
+                print(f"   [DIR] {p}")
         else:
             print("\n[FAIL] Image generation failed")
 

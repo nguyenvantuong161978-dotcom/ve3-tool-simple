@@ -194,7 +194,7 @@ class FlowImageGenerator:
                         self.stats["characters_success"] += 1
                         continue
 
-                self._log(f"\n🎨 Generating image for character: {char_id}")
+                self._log(f"\n[GEN] Generating image for character: {char_id}")
                 self._log(f"   Prompt: {prompt[:80]}...")
                 
                 # Generate image
@@ -238,7 +238,7 @@ class FlowImageGenerator:
             
             # Save workbook
             wb.save(excel_path)
-            self._log(f"\n💾 Excel updated: {excel_path}")
+            self._log(f"\n[SAVE] Excel updated: {excel_path}")
             
         except Exception as e:
             errors.append(f"Excel error: {str(e)}")
@@ -383,7 +383,7 @@ class FlowImageGenerator:
             
             # Save workbook
             wb.save(excel_path)
-            self._log(f"\n💾 Excel updated: {excel_path}")
+            self._log(f"\n[SAVE] Excel updated: {excel_path}")
             
         except Exception as e:
             errors.append(f"Excel error: {str(e)}")

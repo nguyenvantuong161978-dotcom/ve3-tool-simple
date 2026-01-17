@@ -507,11 +507,11 @@ class Dashboard:
         s = self.manager.settings.get_summary()
         api_status = []
         if s['api_keys']['deepseek']:
-            api_status.append("DeepSeek✓")
+            api_status.append("DeepSeek[v]")
         if s['api_keys']['groq']:
-            api_status.append("Groq✓")
+            api_status.append("Groq[v]")
         if s['api_keys']['gemini']:
-            api_status.append("Gemini✓")
+            api_status.append("Gemini[v]")
 
         ipv6_info = f"IPv6: {'ON' if s['ipv6_enabled'] else 'OFF'}"
         if s['ipv6_enabled']:
@@ -531,11 +531,11 @@ class Dashboard:
 
         for wid, w in self.manager.workers.items():
             emoji = {
-                "stopped": "⏹️ ",
-                "idle": "😴",
-                "working": "⚡",
-                "error": "❌"
-            }.get(w.status.value, "❓")
+                "stopped": "[STOP]️ ",
+                "idle": "[IDLE]",
+                "working": "[RUN]",
+                "error": "[FAIL]"
+            }.get(w.status.value, "[?]")
 
             # Get detailed info from Agent Protocol if available
             details = self.manager.get_worker_details(wid)
@@ -582,18 +582,18 @@ class Dashboard:
 
                 # Excel status
                 excel_emoji = {
-                    "none": "❌",
-                    "empty": "❌",
-                    "fallback": "⚠️",
-                    "partial": "⚠️",
-                    "complete": "✅"
-                }.get(status.excel_status, "❓")
+                    "none": "[FAIL]",
+                    "empty": "[FAIL]",
+                    "fallback": "[WARN]",
+                    "partial": "[WARN]",
+                    "complete": "[OK]"
+                }.get(status.excel_status, "[?]")
 
                 # Progress
                 img_pct = (status.images_done / status.total_scenes * 100) if status.total_scenes else 0
                 vid_pct = (status.videos_done / status.total_scenes * 100) if status.total_scenes else 0
 
-                step_emoji = {"excel": "📋", "image": "🖼️", "video": "🎬", "done": "✅"}.get(status.current_step, "❓")
+                step_emoji = {"excel": "[LIST]", "image": "[IMG]", "video": "[VIDEO]", "done": "[OK]"}.get(status.current_step, "[?]")
 
                 line = (
                     f"║    {code:<12} │ "
@@ -618,7 +618,7 @@ class Dashboard:
 
         return [
             "║  TASKS:                                                                   ║",
-            f"║    ⏳ Pending: {pending:<5}  ⚡ Running: {running:<5}  ✅ Done: {completed:<5}  ❌ Failed: {failed:<5}    ║",
+            f"║    [WAIT] Pending: {pending:<5}  [RUN] Running: {running:<5}  [OK] Done: {completed:<5}  [FAIL] Failed: {failed:<5}    ║",
             "╠═══════════════════════════════════════════════════════════════════════════╣",
         ]
 
@@ -948,7 +948,7 @@ class VMManager:
 
     def log(self, msg: str, source: str = "MANAGER", level: str = "INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
-        emoji = {"INFO": "  ", "WARN": "⚠️", "ERROR": "❌", "SUCCESS": "✅", "TASK": "📋"}.get(level, "  ")
+        emoji = {"INFO": "  ", "WARN": "[WARN]", "ERROR": "[FAIL]", "SUCCESS": "[OK]", "TASK": "[LIST]"}.get(level, "  ")
         print(f"[{timestamp}] [{source}] {emoji} {msg}")
 
     # ================================================================================

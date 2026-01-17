@@ -229,7 +229,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
     # Step 3.5: BẮT BUỘC đợi Chrome 1 bắt đầu tạo ảnh SCENE (có media_id cho references)
     # KHÔNG CÓ TIMEOUT - phải đợi cho đến khi Chrome 1 bắt đầu tạo scene
     img_dir = local_dir / "img"
-    log(f"  ⏳ WAITING for Chrome 1 to START creating scene images...")
+    log(f"  [WAIT] WAITING for Chrome 1 to START creating scene images...")
     log(f"     (Chrome 2 cần media_id từ references đã upload)")
 
     wait_interval = 10
@@ -250,7 +250,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                     scene_files.append(f)
 
             if scene_files:
-                log(f"  ✓ Chrome 1 đã bắt đầu tạo scenes! Found {len(scene_files)} scene images")
+                log(f"  [v] Chrome 1 đã bắt đầu tạo scenes! Found {len(scene_files)} scene images")
                 log(f"     → Chrome 2 bắt đầu tạo scenes lẻ...")
                 time.sleep(3)  # Đợi thêm chút để chắc chắn
                 break
@@ -259,7 +259,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         if waited % 30 == 0:
             nv_count = len(list(img_dir.glob("nv_*"))) if img_dir.exists() else 0
             loc_count = len(list(img_dir.glob("loc_*"))) if img_dir.exists() else 0
-            log(f"  ⏳ Waiting... ({waited}s) - References: {nv_count} nv, {loc_count} loc")
+            log(f"  [WAIT] Waiting... ({waited}s) - References: {nv_count} nv, {loc_count} loc")
 
         time.sleep(wait_interval)
         waited += wait_interval

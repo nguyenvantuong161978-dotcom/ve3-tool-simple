@@ -142,8 +142,8 @@ ERROR_PATTERNS = {
     ErrorType.CHROME_CRASH: [
         r"Chrome attempt \d+/\d+ failed",
         r"The browser connection fails",
-        r"✗ Chrome error",
-        r"✗ Không restart được Chrome",
+        r"[x] Chrome error",
+        r"[x] Không restart được Chrome",
     ],
     ErrorType.CHROME_403: [
         r"403.*reCAPTCHA",

@@ -464,9 +464,9 @@ class ProjectDetailDialog(tk.Toplevel):
             self.scene_listbox.delete(0, "end")
             for scene in self.scenes:
                 # Status icons
-                img_icon = "✓" if scene.img_local_path and Path(scene.img_local_path).exists() else "○"
-                vid_icon = "✓" if scene.video_local_path and Path(scene.video_local_path).exists() else "○"
-                prompt_icon = "✓" if scene.img_prompt else "○"
+                img_icon = "[v]" if scene.img_local_path and Path(scene.img_local_path).exists() else "○"
+                vid_icon = "[v]" if scene.video_local_path and Path(scene.video_local_path).exists() else "○"
+                prompt_icon = "[v]" if scene.img_prompt else "○"
 
                 self.scene_listbox.insert("end",
                     f"Scene {scene.scene_number:03d} │ P:{prompt_icon} I:{img_icon} V:{vid_icon}")
@@ -684,7 +684,7 @@ class ProjectCard(ttk.Frame):
         ttk.Label(self, textvariable=self.status_var, width=10).pack(side="left")
 
         # Detail button
-        ttk.Button(self, text="📋", width=3, command=self._on_click).pack(side="right", padx=2)
+        ttk.Button(self, text="[LIST]", width=3, command=self._on_click).pack(side="right", padx=2)
 
         # Make entire row clickable
         self.bind("<Double-Button-1>", self._on_click)

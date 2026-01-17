@@ -1228,7 +1228,7 @@ class BrowserFlowGenerator:
 
             if reference_files:
                 if has_annotations:
-                    self._log(f"[ANNOTATION] ✓ Prompt DA CO annotations", "success")
+                    self._log(f"[ANNOTATION] [v] Prompt DA CO annotations", "success")
                 else:
                     self._log(f"[ANNOTATION] [WARN] Prompt CHUA CO annotations - them vao cuoi...", "warn")
                     # Them annotation neu chua co
@@ -3110,7 +3110,7 @@ class BrowserFlowGenerator:
         if not drission_api.setup(project_url=saved_project_url):
             return {"success": False, "error": "Không setup được Chrome"}
 
-        self._log("✓ Chrome sẵn sàng - bắt đầu tạo video...")
+        self._log("[v] Chrome sẵn sàng - bắt đầu tạo video...")
 
         # Output folder
         output_dir = Path(self.project_path) / "img"
@@ -3140,7 +3140,7 @@ class BrowserFlowGenerator:
                 )
 
                 if success:
-                    self._log(f"   ✓ OK: {video_file.name}")
+                    self._log(f"   [v] OK: {video_file.name}")
                     video_success += 1
                     self.stats["success"] += 1
 
@@ -3157,12 +3157,12 @@ class BrowserFlowGenerator:
                     workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
                     workbook.save()
                 else:
-                    self._log(f"   ✗ Failed: {error}", "warn")
+                    self._log(f"   [x] Failed: {error}", "warn")
                     video_failed += 1
                     self.stats["failed"] += 1
 
             except Exception as e:
-                self._log(f"   ✗ Error: {e}", "error")
+                self._log(f"   [x] Error: {e}", "error")
                 video_failed += 1
                 self.stats["failed"] += 1
 
@@ -3253,7 +3253,7 @@ class BrowserFlowGenerator:
 
                 # === ROTATING RESIDENTIAL MODE ===
                 if proxy_mode == "rotating":
-                    self._log(f"🌍 ROTATING RESIDENTIAL mode")
+                    self._log(f"[GLOBE] ROTATING RESIDENTIAL mode")
                     self._log(f"   → {rotating_host}:{rotating_port}")
                     self._log(f"   → User: {rotating_username}")
                     self._log(f"   → Mỗi request sẽ tự động đổi IP!")
@@ -3284,9 +3284,9 @@ class BrowserFlowGenerator:
 
                 # Verify initialization
                 if manager.is_rotating_mode():
-                    self._log(f"✓ Rotating Endpoint ready")
+                    self._log(f"[v] Rotating Endpoint ready")
                 elif manager.proxies:
-                    self._log(f"✓ Loaded {len(manager.proxies)} proxies")
+                    self._log(f"[v] Loaded {len(manager.proxies)} proxies")
                     self._log(f"  Current: {manager.current_proxy.endpoint}")
                 else:
                     self._log("[WARN] No proxies loaded - chạy không có proxy", "WARN")
@@ -3365,10 +3365,10 @@ class BrowserFlowGenerator:
         # Chọn profile: ưu tiên saved profile từ Excel, fallback về default
         if saved_chrome_profile:
             profile_to_use = saved_chrome_profile
-            self._log(f"🔄 Dùng Chrome profile đã lưu: {profile_to_use}")
+            self._log(f"[SYNC] Dùng Chrome profile đã lưu: {profile_to_use}")
         else:
             profile_to_use = self._get_profile_path() or "./chrome_profile"
-            self._log(f"📁 Dùng Chrome profile mặc định: {profile_to_use}")
+            self._log(f"[DIR] Dùng Chrome profile mặc định: {profile_to_use}")
 
         # Đọc setting headless từ config (default: True = chạy ẩn)
         # Dùng chung setting 'browser_headless' với Selenium mode
@@ -3389,11 +3389,11 @@ class BrowserFlowGenerator:
             chrome_portable=chrome_portable  # Chrome portable đã đăng nhập
         )
 
-        self._log("🚀 DrissionPage + Interceptor")
+        self._log("[START] DrissionPage + Interceptor")
         if use_webshare:
             manager = get_proxy_manager()
             if manager.is_rotating_mode():
-                self._log(f"   Proxy: 🔄 ROTATING ENDPOINT (auto IP change)")
+                self._log(f"   Proxy: [SYNC] ROTATING ENDPOINT (auto IP change)")
             else:
                 self._log(f"   Proxy: Webshare Pool ({len(manager.proxies)} proxies)")
         else:
@@ -3423,9 +3423,9 @@ class BrowserFlowGenerator:
                 self._log(f"[DEBUG] Cache file không tồn tại")
 
         if saved_project_url:
-            self._log(f"🔄 Sẽ vào lại project cũ để giữ media_id...")
+            self._log(f"[SYNC] Sẽ vào lại project cũ để giữ media_id...")
         else:
-            self._log(f"📝 Sẽ tạo project mới...")
+            self._log(f"[NOTE] Sẽ tạo project mới...")
 
         # Setup Chrome và đợi user chọn project (với retry + IP rotation)
         MAX_SETUP_RETRIES = 3
@@ -3500,7 +3500,7 @@ class BrowserFlowGenerator:
 
                         wb.save(excel_path)
                         wb.close()
-                        self._log(f"✓ Lưu project URL vào Excel: {new_project_url[:50]}...")
+                        self._log(f"[v] Lưu project URL vào Excel: {new_project_url[:50]}...")
                     except Exception as e:
                         self._log(f"[WARN] Không lưu được project URL: {e}", "warn")
 
@@ -3510,14 +3510,14 @@ class BrowserFlowGenerator:
 
                 if setup_attempt < MAX_SETUP_RETRIES - 1:
                     # Rotate IP và restart Chrome
-                    self._log("🔄 Đang rotate IP và restart Chrome...", "warn")
+                    self._log("[SYNC] Đang rotate IP và restart Chrome...", "warn")
                     if use_webshare:
                         try:
                             manager = get_proxy_manager()
                             success, msg = manager.rotate_worker_proxy(self.worker_id, "setup_timeout")
                             self._log(f"   → {msg}")
                             if success and drission_api.restart_chrome():
-                                self._log("✓ Chrome restarted với IP mới")
+                                self._log("[v] Chrome restarted với IP mới")
                                 import time
                                 time.sleep(3)
                                 continue
@@ -3803,7 +3803,7 @@ class BrowserFlowGenerator:
                             "name": media_id,
                             "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
                         })
-                        self._log(f"   [REF] ✓ {ref_id} → {media_id[:30]}... (Excel)")
+                        self._log(f"   [REF] [v] {ref_id} → {media_id[:30]}... (Excel)")
                     elif ref_id_lower in cached_media_names_lower:
                         # Fallback to cache (case-insensitive)
                         media_info = cached_media_names_lower[ref_id_lower]
@@ -3813,10 +3813,10 @@ class BrowserFlowGenerator:
                                 "name": media_name,
                                 "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
                             })
-                            self._log(f"   [REF] ✓ {ref_id} → {media_name[:30]}... (cache)")
+                            self._log(f"   [REF] [v] {ref_id} → {media_name[:30]}... (cache)")
                     else:
                         missing_refs.append(ref_id)
-                        self._log(f"   [REF] ✗ {ref_id} - KHÔNG CÓ MEDIA_ID!", "warn")
+                        self._log(f"   [REF] [x] {ref_id} - KHÔNG CÓ MEDIA_ID!", "warn")
 
                 if missing_refs:
                     self._log(f"   [REF] [WARN] THIẾU {len(missing_refs)} media_id: {missing_refs}", "warn")
@@ -3841,7 +3841,7 @@ class BrowserFlowGenerator:
                 )
 
                 if success and images:
-                    self._log(f"   ✓ Thành công! Saved {len(images)} image(s)")
+                    self._log(f"   [v] Thành công! Saved {len(images)} image(s)")
                     self.stats["success"] += 1
                     consecutive_403 = 0  # Reset counter on success
 
@@ -3900,7 +3900,7 @@ class BrowserFlowGenerator:
                     elif images[0].media_name:
                         self._log(f"   Media name: {images[0].media_name[:40]}...")
                 else:
-                    self._log(f"   ✗ Thất bại: {error}", "error")
+                    self._log(f"   [x] Thất bại: {error}", "error")
                     self.stats["failed"] += 1
 
                     # Đánh dấu lỗi với ChromeManager để giám sát
@@ -3913,13 +3913,13 @@ class BrowserFlowGenerator:
                         if not chrome_mgr.is_healthy(self.worker_id):
                             self._log(f"[Manager] Chrome {self.worker_id} bị lỗi nhiều, đang restart...")
                             if chrome_mgr.restart_chrome(self.worker_id):
-                                self._log(f"[Manager] ✓ Chrome {self.worker_id} đã restart")
+                                self._log(f"[Manager] [v] Chrome {self.worker_id} đã restart")
                                 # Cập nhật reference
                                 worker = chrome_mgr.workers.get(self.worker_id)
                                 if worker and worker.drission_api:
                                     drission_api = worker.drission_api
                             else:
-                                self._log(f"[Manager] ✗ Restart Chrome {self.worker_id} thất bại", "warn")
+                                self._log(f"[Manager] [x] Restart Chrome {self.worker_id} thất bại", "warn")
                     except Exception as mgr_e:
                         pass  # Silent fail - fallback to original logic
 
@@ -3936,19 +3936,19 @@ class BrowserFlowGenerator:
                                     image_inputs=image_inputs if image_inputs else None
                                 )
                                 if success2 and images2:
-                                    self._log(f"   ✓ Retry thành công!")
+                                    self._log(f"   [v] Retry thành công!")
                                     self.stats["success"] += 1
                                     self.stats["failed"] -= 1
                                     consecutive_errors = 0
                                     continue
                                 else:
-                                    self._log(f"   ✗ Retry vẫn thất bại - skip scene {pid}, tiếp tục...", "warn")
+                                    self._log(f"   [x] Retry vẫn thất bại - skip scene {pid}, tiếp tục...", "warn")
                                     # Không break, để RETRY PHASE xử lý sau
                             else:
-                                self._log(f"✗ Không restart được Chrome - skip scene {pid}", "warn")
+                                self._log(f"[x] Không restart được Chrome - skip scene {pid}", "warn")
                                 # Không break, tiếp tục với scene khác
                         except Exception as e:
-                            self._log(f"✗ Refresh token error: {e} - skip scene {pid}", "warn")
+                            self._log(f"[x] Refresh token error: {e} - skip scene {pid}", "warn")
                             # Không break, tiếp tục với scene khác
 
                     # Check for 429 - Quota exceeded, cần đổi proxy/tài khoản
@@ -3964,17 +3964,17 @@ class BrowserFlowGenerator:
                                     image_inputs=image_inputs if image_inputs else None
                                 )
                                 if success2 and images2:
-                                    self._log(f"   ✓ Retry thành công!")
+                                    self._log(f"   [v] Retry thành công!")
                                     self.stats["success"] += 1
                                     self.stats["failed"] -= 1
                                     consecutive_errors = 0
                                     continue
                                 else:
-                                    self._log(f"   ✗ Retry vẫn thất bại: {error2}", "warn")
+                                    self._log(f"   [x] Retry vẫn thất bại: {error2}", "warn")
                             else:
-                                self._log("✗ Không restart được Chrome", "error")
+                                self._log("[x] Không restart được Chrome", "error")
                         except Exception as e:
-                            self._log(f"✗ Restart error: {e}", "error")
+                            self._log(f"[x] Restart error: {e}", "error")
 
                     # Check for POLICY_VIOLATION - Skip prompt immediately (đã retry trong drission_flow_api)
                     if error and "POLICY_VIOLATION" in str(error):
@@ -3997,15 +3997,15 @@ class BrowserFlowGenerator:
                                     image_inputs=None  # No reference images
                                 )
                                 if success2 and images2:
-                                    self._log(f"   ✓ Retry (no ref) thành công!")
+                                    self._log(f"   [v] Retry (no ref) thành công!")
                                     self.stats["success"] += 1
                                     self.stats["failed"] -= 1  # Undo fail count
                                     consecutive_errors = 0
                                     continue  # Move to next prompt
                                 else:
-                                    self._log(f"   ✗ Retry (no ref) thất bại: {error2}", "warn")
+                                    self._log(f"   [x] Retry (no ref) thất bại: {error2}", "warn")
                         except Exception as e:
-                            self._log(f"   ✗ Retry exception: {e}", "error")
+                            self._log(f"   [x] Retry exception: {e}", "error")
 
                     # Check for 403 - restart Chrome với proxy mới
                     if error and "403" in str(error):
@@ -4022,7 +4022,7 @@ class BrowserFlowGenerator:
                                     image_inputs=image_inputs if image_inputs else None
                                 )
                                 if success2 and images2:
-                                    self._log(f"   ✓ Retry thành công! Saved {len(images2)} image(s)")
+                                    self._log(f"   [v] Retry thành công! Saved {len(images2)} image(s)")
                                     self.stats["success"] += 1
                                     self.stats["failed"] -= 1  # Undo the fail count
                                     # Save media_id for scene images
@@ -4057,16 +4057,16 @@ class BrowserFlowGenerator:
                                     elif images2[0].media_name:
                                         self._log(f"   Media name: {images2[0].media_name[:40]}...")
                                 else:
-                                    self._log(f"   ✗ Retry vẫn thất bại - skip scene {pid}", "warn")
+                                    self._log(f"   [x] Retry vẫn thất bại - skip scene {pid}", "warn")
                             else:
-                                self._log(f"✗ Không restart được Chrome - skip scene {pid}", "warn")
+                                self._log(f"[x] Không restart được Chrome - skip scene {pid}", "warn")
                                 # Không break, tiếp tục với scene khác
                         except Exception as e:
-                            self._log(f"✗ Restart error: {e} - skip scene {pid}", "warn")
+                            self._log(f"[x] Restart error: {e} - skip scene {pid}", "warn")
                             # Không break, tiếp tục với scene khác
 
             except Exception as e:
-                self._log(f"   ✗ Exception: {e}", "error")
+                self._log(f"   [x] Exception: {e}", "error")
                 self.stats["failed"] += 1
 
             # Rate limit
@@ -4115,12 +4115,12 @@ class BrowserFlowGenerator:
                         self._log("[RETRY] API chưa sẵn sàng, restart Chrome...")
                         try:
                             if drission_api.restart_chrome():
-                                self._log("[RETRY] ✓ Chrome restarted")
+                                self._log("[RETRY] [v] Chrome restarted")
                             else:
-                                self._log("[RETRY] ✗ Không restart được Chrome, bỏ qua retry phase", "warn")
+                                self._log("[RETRY] [x] Không restart được Chrome, bỏ qua retry phase", "warn")
                                 break
                         except Exception as e:
-                            self._log(f"[RETRY] ✗ Restart error: {e}", "warn")
+                            self._log(f"[RETRY] [x] Restart error: {e}", "warn")
                             break
 
                     still_missing = []
@@ -4166,15 +4166,15 @@ class BrowserFlowGenerator:
                             )
 
                             if success and images:
-                                self._log(f"   ✓ Retry OK: {pid}")
+                                self._log(f"   [v] Retry OK: {pid}")
                                 self.stats["success"] += 1
                                 self.stats["failed"] -= 1
                             else:
-                                self._log(f"   ✗ Retry fail: {error}", "warn")
+                                self._log(f"   [x] Retry fail: {error}", "warn")
                                 still_missing.append(prompt_data)
 
                         except Exception as e:
-                            self._log(f"   ✗ Retry error: {e}", "error")
+                            self._log(f"   [x] Retry error: {e}", "error")
                             still_missing.append(prompt_data)
 
                         time.sleep(2)
@@ -4198,7 +4198,7 @@ class BrowserFlowGenerator:
                             break
 
                         self._log(f"\n{'='*60}")
-                        self._log(f"🔄 FULL RESTART {restart_count + 1}/{MAX_FULL_RESTARTS} - Tắt Chrome, mở lại")
+                        self._log(f"[SYNC] FULL RESTART {restart_count + 1}/{MAX_FULL_RESTARTS} - Tắt Chrome, mở lại")
                         self._log(f"{'='*60}")
 
                         try:
@@ -4211,12 +4211,12 @@ class BrowserFlowGenerator:
                             self._log("   → Mở lại Chrome...")
                             saved_url = getattr(drission_api, '_current_project_url', None)
                             if drission_api.setup(project_url=saved_url):
-                                self._log("   ✓ Chrome đã sẵn sàng!")
+                                self._log("   [v] Chrome đã sẵn sàng!")
 
                                 # 3. Chọn mode tạo hình ảnh
                                 if drission_api.switch_to_image_mode():
                                     drission_api._image_mode_selected = True
-                                    self._log("   ✓ Image mode selected")
+                                    self._log("   [v] Image mode selected")
 
                                 # 4. Thử lại các ảnh thiếu
                                 still_missing = []
@@ -4237,7 +4237,7 @@ class BrowserFlowGenerator:
                                         )
 
                                         if success and images:
-                                            self._log(f"      ✓ OK!")
+                                            self._log(f"      [v] OK!")
                                             self.stats["success"] += 1
                                             self.stats["failed"] -= 1
 
@@ -4250,11 +4250,11 @@ class BrowserFlowGenerator:
                                                 except:
                                                     pass
                                         else:
-                                            self._log(f"      ✗ {error}", "warn")
+                                            self._log(f"      [x] {error}", "warn")
                                             still_missing.append(prompt_data)
 
                                     except Exception as e:
-                                        self._log(f"      ✗ Error: {e}", "error")
+                                        self._log(f"      [x] Error: {e}", "error")
                                         still_missing.append(prompt_data)
 
                                     time.sleep(2)
@@ -4262,13 +4262,13 @@ class BrowserFlowGenerator:
                                 missing_prompts = still_missing
 
                                 if not missing_prompts:
-                                    self._log("   ✓ Tất cả ảnh đã hoàn thành sau full restart!")
+                                    self._log("   [v] Tất cả ảnh đã hoàn thành sau full restart!")
                                     break
                             else:
-                                self._log("   ✗ Không thể mở lại Chrome", "error")
+                                self._log("   [x] Không thể mở lại Chrome", "error")
 
                         except Exception as e:
-                            self._log(f"   ✗ Full restart error: {e}", "error")
+                            self._log(f"   [x] Full restart error: {e}", "error")
 
                         # Đợi trước khi thử lại
                         if missing_prompts and restart_count < MAX_FULL_RESTARTS - 1:
@@ -4401,7 +4401,7 @@ class BrowserFlowGenerator:
                 self._log(f"[I2V] Warning: Cannot check pending scenes: {e}", "warn")
 
         if not all_images_done:
-            self._log(f"[I2V] ⏳ SKIP - Còn {len(pending_scenes)} scene chưa có ảnh: {pending_scenes[:10]}...")
+            self._log(f"[I2V] [WAIT] SKIP - Còn {len(pending_scenes)} scene chưa có ảnh: {pending_scenes[:10]}...")
             self._log(f"[I2V] Video sẽ được tạo sau khi tất cả ảnh scene hoàn thành")
         elif video_count > 0 and drission_api._ready:
             self._log("")
@@ -4490,7 +4490,7 @@ class BrowserFlowGenerator:
                         )
 
                         if success:
-                            self._log(f"   ✓ OK: {video_file.name}")
+                            self._log(f"   [v] OK: {video_file.name}")
                             video_success += 1
 
                             # Xóa ảnh sau khi tạo video thành công (tiết kiệm dung lượng)
@@ -4507,11 +4507,11 @@ class BrowserFlowGenerator:
                                 workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
                                 workbook.save()
                         else:
-                            self._log(f"   ✗ Failed: {error}", "warn")
+                            self._log(f"   [x] Failed: {error}", "warn")
                             video_failed += 1
 
                     except Exception as e:
-                        self._log(f"   ✗ Error: {e}", "error")
+                        self._log(f"   [x] Error: {e}", "error")
                         video_failed += 1
 
                     # Delay giữa các video

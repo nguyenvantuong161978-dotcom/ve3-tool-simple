@@ -102,7 +102,7 @@ class VoiceToSrt:
             return
 
         self.logger.info(f"Loading Whisper model: {self.model_name}")
-        print(f"  ⏳ Loading Whisper model '{self.model_name}'... (this may take a moment)")
+        print(f"  [WAIT] Loading Whisper model '{self.model_name}'... (this may take a moment)")
 
         if self.use_timestamped:
             import whisper_timestamped
@@ -155,7 +155,7 @@ class VoiceToSrt:
         self._load_model()
 
         self.logger.info(f"Transcribing: {input_audio_path}")
-        print(f"  ⏳ Transcribing audio... (may take 1-2 minutes for long files)")
+        print(f"  [WAIT] Transcribing audio... (may take 1-2 minutes for long files)")
 
         # Transcribe
         try:

@@ -307,7 +307,7 @@ class ParallelFlowGenerator:
                     # Đảm bảo chỉ 1 browser download tại 1 thời điểm
                     # =========================================================
                     with self._download_lock:
-                        self._log(f"[{thread_name}] 🔒 Bắt đầu generate + download: {pid}")
+                        self._log(f"[{thread_name}] [LOCK] Bắt đầu generate + download: {pid}")
 
                         # Gọi VE3.run()
                         ref_json = json.dumps(ref_files if ref_files else [])
@@ -352,7 +352,7 @@ class ParallelFlowGenerator:
                             failed += 1
                             self._log(f"[{thread_name}] [FAIL] FAIL: {pid}", "error")
 
-                        self._log(f"[{thread_name}] 🔓 Xong download: {pid}")
+                        self._log(f"[{thread_name}] [UNLOCK] Xong download: {pid}")
 
                     # Delay
                     time.sleep(2)

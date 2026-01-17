@@ -192,7 +192,7 @@ class ChromeManager:
         worker.status = ChromeStatus.RESTARTING
         worker.restart_count += 1
 
-        self.log(f"🔄 Restarting Chrome {worker_id} (lần {worker.restart_count})...")
+        self.log(f"[SYNC] Restarting Chrome {worker_id} (lần {worker.restart_count})...")
 
         try:
             api = worker.drission_api
@@ -217,13 +217,13 @@ class ChromeManager:
                 if hasattr(api, 'switch_to_image_mode'):
                     if api.switch_to_image_mode():
                         api._image_mode_selected = True
-                        self.log(f"   ✓ Image mode selected")
+                        self.log(f"   [v] Image mode selected")
 
                 worker.status = ChromeStatus.RUNNING
                 worker.error_count = 0
                 worker.last_success_time = time.time()
 
-                self.log(f"   ✓ Chrome {worker_id} restarted thành công!")
+                self.log(f"   [v] Chrome {worker_id} restarted thành công!")
 
                 # Gọi callback nếu có
                 if worker.on_restart:
@@ -234,12 +234,12 @@ class ChromeManager:
 
                 return True
             else:
-                self.log(f"   ✗ Chrome {worker_id} restart thất bại", "ERROR")
+                self.log(f"   [x] Chrome {worker_id} restart thất bại", "ERROR")
                 worker.status = ChromeStatus.ERROR
                 return False
 
         except Exception as e:
-            self.log(f"   ✗ Restart error: {e}", "ERROR")
+            self.log(f"   [x] Restart error: {e}", "ERROR")
             worker.status = ChromeStatus.ERROR
             return False
 
