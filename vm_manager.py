@@ -166,11 +166,18 @@ class ProjectStatus:
     step_characters: str = "pending"  # pending/partial/done
     step_prompts: str = "pending"  # pending/partial/done
 
+    # Video mode & Segment 1 (for BASIC mode)
+    video_mode: str = "full"  # "basic" or "full"
+    segment1_scenes: List[int] = field(default_factory=list)  # Scene IDs in Segment 1
+    segment1_end_srt: int = 0  # Last SRT entry of Segment 1
+
     # Images & Videos
     images_done: int = 0
     images_missing: List[int] = field(default_factory=list)
     videos_done: int = 0
     videos_missing: List[int] = field(default_factory=list)
+    # Videos needed based on mode (basic = only Segment 1, full = all)
+    videos_needed: List[int] = field(default_factory=list)
     current_step: str = ""  # "excel", "image", "video", "done"
     errors: List[str] = field(default_factory=list)
 
@@ -423,8 +430,59 @@ class QualityChecker:
                 else:
                     status.videos_missing.append(scene.scene_id)
 
+            # Get video_mode from settings and determine videos_needed
+            try:
+                config_path = project_dir.parent.parent / "config" / "settings.yaml"
+                if config_path.exists():
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = yaml.safe_load(f) or {}
+                    status.video_mode = config.get('video_mode', 'full')
+            except:
+                status.video_mode = "full"
+
+            # Get Segment 1 info for BASIC mode
+            try:
+                segments = wb.get_story_segments()
+                if segments:
+                    seg1 = segments[0]  # First segment
+                    status.segment1_end_srt = seg1.get('srt_range_end', 0)
+
+                    # Find scenes that belong to Segment 1
+                    srt_start = seg1.get('srt_range_start', 1)
+                    srt_end = seg1.get('srt_range_end', 0)
+
+                    for scene in scenes:
+                        # Scene belongs to Segment 1 if its scene_id is within SRT range
+                        if srt_start <= scene.scene_id <= srt_end:
+                            status.segment1_scenes.append(scene.scene_id)
+            except:
+                pass
+
+            # Determine videos_needed based on mode
+            if status.video_mode == "basic" or "basic" in status.video_mode.lower():
+                # BASIC mode: only videos for Segment 1 scenes that have images
+                for scene_id in status.segment1_scenes:
+                    if scene_id not in status.images_missing:  # Has image
+                        if scene_id in status.videos_missing:  # Needs video
+                            status.videos_needed.append(scene_id)
+            else:
+                # FULL mode: all scenes that have images need videos
+                for scene_id in status.videos_missing:
+                    if scene_id not in status.images_missing:  # Has image
+                        status.videos_needed.append(scene_id)
+
+            # Determine completion based on mode
+            if status.video_mode == "basic" or "basic" in status.video_mode.lower():
+                # BASIC: done when all Segment 1 videos are complete
+                seg1_videos_done = len([s for s in status.segment1_scenes if s not in status.videos_missing])
+                seg1_videos_needed = len(status.segment1_scenes)
+                videos_complete = (seg1_videos_done >= seg1_videos_needed) if seg1_videos_needed > 0 else True
+            else:
+                # FULL: done when all videos are complete
+                videos_complete = (status.videos_done == status.total_scenes)
+
             if status.images_done == status.total_scenes:
-                if status.videos_done == status.total_scenes:
+                if videos_complete:
                     status.current_step = "done"
                 else:
                     status.current_step = "video"
@@ -1425,8 +1483,9 @@ class VMManager:
             self.create_task(TaskType.EXCEL, project_code)
         elif status.current_step == "image" and status.images_missing:
             self._distribute_tasks(TaskType.IMAGE, project_code, status.images_missing)
-        elif status.current_step == "video" and status.videos_missing:
-            self._distribute_tasks(TaskType.VIDEO, project_code, status.videos_missing)
+        elif status.current_step == "video" and status.videos_needed:
+            # Use videos_needed which is filtered by video_mode (basic = Segment 1 only)
+            self._distribute_tasks(TaskType.VIDEO, project_code, status.videos_needed)
 
     def _distribute_tasks(self, task_type: TaskType, project_code: str, scenes: List[int]):
         n = self.num_chrome_workers

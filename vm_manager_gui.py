@@ -474,6 +474,31 @@ class ProjectDetailDialog(tk.Toplevel):
         ttk.Label(row2, textvariable=self.current_step_var, width=10,
                   font=("Arial", 9, "bold")).pack(side="left")
 
+        # Row 3: Video Mode + Segment 1 info
+        row3 = ttk.Frame(workflow_frame)
+        row3.pack(fill="x", pady=2)
+
+        # Video Mode
+        ttk.Label(row3, text="Video Mode:", width=11).pack(side="left")
+        self.video_mode_var = tk.StringVar(value="...")
+        self.video_mode_label = ttk.Label(row3, textvariable=self.video_mode_var, width=10,
+                                           font=("Arial", 9, "bold"))
+        self.video_mode_label.pack(side="left")
+
+        ttk.Label(row3, text="  |  ").pack(side="left")
+
+        # Segment 1 info
+        ttk.Label(row3, text="Seg.1 Scenes:", width=12).pack(side="left")
+        self.seg1_scenes_var = tk.StringVar(value="...")
+        ttk.Label(row3, textvariable=self.seg1_scenes_var, width=15).pack(side="left")
+
+        ttk.Label(row3, text="  |  ").pack(side="left")
+
+        # Videos Needed
+        ttk.Label(row3, text="Videos Need:", width=12).pack(side="left")
+        self.videos_need_var = tk.StringVar(value="...")
+        ttk.Label(row3, textvariable=self.videos_need_var, width=15).pack(side="left")
+
         # ===== MAIN: Notebook with tabs =====
         main_notebook = ttk.Notebook(self)
         main_notebook.pack(fill="both", expand=True, padx=10, pady=5)
@@ -916,6 +941,29 @@ class ProjectDetailDialog(tk.Toplevel):
             "done": "DONE"
         }
         self.current_step_var.set(step_map.get(status.current_step, status.current_step))
+
+        # Video Mode
+        video_mode = status.video_mode.upper() if status.video_mode else "FULL"
+        self.video_mode_var.set(video_mode)
+
+        # Segment 1 info
+        seg1_count = len(status.segment1_scenes)
+        if seg1_count > 0:
+            self.seg1_scenes_var.set(f"1-{status.segment1_end_srt} ({seg1_count} scenes)")
+        else:
+            self.seg1_scenes_var.set("N/A")
+
+        # Videos Needed based on mode
+        videos_need = len(status.videos_needed)
+        videos_done = status.videos_done
+        if status.video_mode == "basic" or "basic" in (status.video_mode or "").lower():
+            # BASIC mode: only Segment 1 videos
+            total_videos = seg1_count
+            self.videos_need_var.set(f"{videos_need}/{total_videos} (Seg.1)")
+        else:
+            # FULL mode: all videos
+            total_videos = status.total_scenes
+            self.videos_need_var.set(f"{videos_need}/{total_videos}")
 
 
 class WorkerCard(ttk.LabelFrame):
