@@ -230,6 +230,20 @@ class SettingsManager:
         self.config['excel_mode'] = value
         self.save_config()
 
+    @property
+    def video_mode(self) -> str:
+        return self.config.get('video_mode', 'full')  # "full" or "basic"
+
+    @video_mode.setter
+    def video_mode(self, value: str):
+        # Normalize value (remove "(8s)" suffix if present)
+        if "basic" in value.lower():
+            value = "basic"
+        else:
+            value = "full"
+        self.config['video_mode'] = value
+        self.save_config()
+
     # IPv6 settings
     @property
     def ipv6_enabled(self) -> bool:
@@ -430,13 +444,10 @@ class QualityChecker:
                 else:
                     status.videos_missing.append(scene.scene_id)
 
-            # Get video_mode from settings and determine videos_needed
+            # Get video_mode from SettingsManager
             try:
-                config_path = project_dir.parent.parent / "config" / "settings.yaml"
-                if config_path.exists():
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config = yaml.safe_load(f) or {}
-                    status.video_mode = config.get('video_mode', 'full')
+                settings = SettingsManager()
+                status.video_mode = settings.video_mode
             except:
                 status.video_mode = "full"
 

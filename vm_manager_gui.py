@@ -1774,7 +1774,8 @@ class VMManagerGUI:
     def _on_video_mode_change(self, event=None):
         mode = self.video_mode_var.get()
         self._log(f"Video mode changed to: {mode}")
-        # TODO: Update video mode in settings
+        if self.manager:
+            self.manager.settings.video_mode = mode
 
     def _on_chrome_count_change(self):
         try:
@@ -1797,6 +1798,11 @@ class VMManagerGUI:
             # Update worker combo values
             worker_list = ["all", "excel"] + [f"chrome_{i}" for i in range(1, chrome_count + 1)]
             self.log_worker_combo.configure(values=worker_list)
+
+        # Sync settings from GUI to manager
+        self.manager.settings.excel_mode = self.excel_mode_var.get()
+        self.manager.settings.video_mode = self.video_mode_var.get()
+        self._log(f"Mode: Excel={self.manager.settings.excel_mode}, Video={self.manager.settings.video_mode}")
 
         self.running = True
         self._log("Starting all workers...")
@@ -1954,6 +1960,12 @@ class VMManagerGUI:
                 # Update UI
                 self.chrome_count_var.set(str(self.manager.settings.chrome_count))
                 self.excel_mode_var.set(self.manager.settings.excel_mode)
+                # Load video_mode - convert to display format
+                vm = self.manager.settings.video_mode
+                if vm == "basic":
+                    self.video_mode_var.set("basic (8s)")
+                else:
+                    self.video_mode_var.set("full")
                 self._create_worker_cards(self.manager.settings.chrome_count)
 
     # ================================================================================
