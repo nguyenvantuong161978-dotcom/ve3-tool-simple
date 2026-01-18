@@ -37,7 +37,7 @@ from typing import Dict, Optional
 
 # Import VM Manager
 try:
-    from vm_manager import VMManager, WorkerStatus, TaskStatus, TaskType
+    from vm_manager import VMManager, WorkerStatus, TaskStatus, TaskType, SettingsManager
     VM_MANAGER_AVAILABLE = True
 except ImportError:
     VM_MANAGER_AVAILABLE = False
@@ -1769,21 +1769,27 @@ class VMManagerGUI:
         mode = self.excel_mode_var.get()
         self._log(f"Excel mode changed to: {mode}")
         # Save immediately (even without manager)
-        from vm_manager import SettingsManager
-        settings = SettingsManager()
-        settings.excel_mode = mode
-        if self.manager:
-            self.manager.settings = settings
+        try:
+            settings = SettingsManager()
+            settings.excel_mode = mode
+            self._log(f"Excel mode saved: {mode}")
+            if self.manager:
+                self.manager.settings = settings
+        except Exception as e:
+            self._log(f"Error saving excel_mode: {e}")
 
     def _on_video_mode_change(self, event=None):
         mode = self.video_mode_var.get()
         self._log(f"Video mode changed to: {mode}")
         # Save immediately (even without manager)
-        from vm_manager import SettingsManager
-        settings = SettingsManager()
-        settings.video_mode = mode
-        if self.manager:
-            self.manager.settings = settings
+        try:
+            settings = SettingsManager()
+            settings.video_mode = mode
+            self._log(f"Video mode saved: {mode}")
+            if self.manager:
+                self.manager.settings = settings
+        except Exception as e:
+            self._log(f"Error saving video_mode: {e}")
 
     def _on_chrome_count_change(self):
         try:
