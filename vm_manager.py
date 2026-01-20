@@ -339,7 +339,7 @@ class QualityChecker:
 
             # Chi tiết từng loại prompt
             for scene in scenes:
-                scene_num = scene.scene_number
+                scene_num = scene.scene_id
 
                 # Check img_prompt
                 if scene.img_prompt and scene.img_prompt.strip():
@@ -1338,13 +1338,49 @@ class VMManager:
         if not w:
             return False
 
-        # Xóa profile nếu có
-        # TODO: Implement Chrome profile clearing based on settings
-        # For now, just restart and reset error count
+        # Xóa data Chrome Portable - giữ lại First Run để không bị thông báo lần đầu
+        try:
+            # Determine which Chrome folder based on worker_id
+            if worker_id == "chrome_1":
+                chrome_data = TOOL_DIR / "GoogleChromePortable" / "Data"
+            else:
+                chrome_data = TOOL_DIR / "GoogleChromePortable - Copy" / "Data"
+
+            if chrome_data.exists():
+                self.log(f"Deleting Chrome data: {chrome_data}", worker_id, "WARN")
+
+                profile_dir = chrome_data / "profile"
+                first_run_file = profile_dir / "First Run"
+
+                # Backup First Run if exists
+                first_run_backup = None
+                if first_run_file.exists():
+                    first_run_backup = first_run_file.read_bytes() if first_run_file.stat().st_size > 0 else b''
+
+                # Delete everything in Data folder
+                for item in chrome_data.iterdir():
+                    try:
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                        self.log(f"  Deleted: {item.name}", worker_id)
+                    except Exception as e:
+                        self.log(f"  Failed to delete {item.name}: {e}", worker_id, "WARN")
+
+                # Restore First Run to avoid first-run prompts
+                profile_dir.mkdir(parents=True, exist_ok=True)
+                first_run_file.touch()
+                if first_run_backup:
+                    first_run_file.write_bytes(first_run_backup)
+                self.log(f"  Restored: profile/First Run", worker_id)
+        except Exception as e:
+            self.log(f"Error clearing Chrome data: {e}", worker_id, "ERROR")
+
         self.reset_error_tracking(worker_id)
 
         time.sleep(3)
-        self.start_worker(worker_id)
+        self.start_worker(worker_id, gui_mode=self.gui_mode)
 
         self.log(f"Chrome data cleared, {worker_id} restarted", worker_id, "SUCCESS")
         return True
@@ -2005,11 +2041,18 @@ class VMManager:
                 continue
 
             # Count recent connection errors
+            # Detect both English and Chinese error messages
             connection_errors = 0
             for line in logs[-10:]:  # Check last 10 lines
-                if "connection" in line.lower() and ("disconnected" in line.lower() or "lost" in line.lower()):
+                line_lower = line.lower()
+                # English: "connection disconnected/lost"
+                if "connection" in line_lower and ("disconnected" in line_lower or "lost" in line_lower):
                     connection_errors += 1
-                elif "RETRY" in line and connection_errors > 0:
+                # Chinese: "与页面的连接已断开" (DrissionPage error)
+                elif "与页面的连接已断开" in line:
+                    connection_errors += 1
+                # Also detect consecutive RETRY errors
+                elif "RETRY" in line and "error" in line_lower:
                     connection_errors += 1
 
             if connection_errors >= error_threshold:
@@ -2106,6 +2149,11 @@ class VMManager:
                         # Sử dụng handle_worker_error thay vì restart trực tiếp
                         # Hàm này sẽ quyết định: restart, clear data, hoặc IPv6 rotation
                         self.handle_worker_error(wid, error_type)
+
+                    # Auto-recovery for Chrome connection lost errors
+                    if self.check_and_auto_recover():
+                        # If recovery was triggered, skip this iteration
+                        continue
 
                 # 4. Check completed tasks và retry nếu cần
                 for task in list(self.tasks.values()):

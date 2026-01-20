@@ -858,8 +858,9 @@ class SimpleGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("VE3 Dashboard")
-        self.geometry("1400x850")
+        self.geometry("1600x900")
         self.configure(bg='#1a1a2e')
+        self.minsize(1400, 800)
 
         # Khoi tao manager ngay de hien projects
         self.manager = VMManager(num_chrome_workers=2)
@@ -982,7 +983,7 @@ class SimpleGUI(tk.Tk):
         # Header
         header = tk.Frame(projects, bg='#0f3460')
         header.pack(fill="x")
-        for txt, w in [("Code", 10), ("Excel", 7), ("Anh", 8), ("Video", 8), ("Status", 10)]:
+        for txt, w in [("Code", 10), ("Excel", 6), ("NV", 5), ("Anh", 7), ("Video", 7), ("Status", 8)]:
             tk.Label(header, text=txt, width=w, bg='#0f3460', fg='white',
                      font=("Arial", 9, "bold")).pack(side="left", padx=2, pady=5)
 
@@ -999,9 +1000,9 @@ class SimpleGUI(tk.Tk):
 
         self.project_rows: Dict[str, dict] = {}
 
-        # Right panel - CHI TIET PROJECT (hien khi click project)
+        # Right panel - CHI TIET PROJECT (hien khi click project) - width lon hon de hien prompt
         right = tk.Frame(main, bg='#1a1a2e')
-        main.add(right, width=550)
+        main.add(right, width=750)
 
         # Header - ten project dang xem
         self.detail_header = tk.Frame(right, bg='#0f3460', height=40)
@@ -1025,17 +1026,17 @@ class SimpleGUI(tk.Tk):
             lbl.pack(side="left")
             self.excel_step_labels.append(lbl)
 
-        # === REFERENCE IMAGES (NV) - dang danh sach ===
-        ref_frame = tk.LabelFrame(right, text=" ANH THAM CHIEU (NV/) ", bg='#16213e', fg='#ff6b6b',
+        # === CHARACTERS - dang danh sach tu Excel ===
+        ref_frame = tk.LabelFrame(right, text=" CHARACTERS (tu Excel) ", bg='#16213e', fg='#ff6b6b',
                                   font=("Arial", 9, "bold"), padx=5, pady=3)
         ref_frame.pack(fill="x", padx=5, pady=3, ipady=2)
 
         # Header
         ref_header = tk.Frame(ref_frame, bg='#0f3460')
         ref_header.pack(fill="x")
-        tk.Label(ref_header, text="#", width=3, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
+        tk.Label(ref_header, text="ID", width=6, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
         tk.Label(ref_header, text="Thumb", width=6, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
-        tk.Label(ref_header, text="Ten file", width=25, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
+        tk.Label(ref_header, text="Character Description", width=50, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
 
         # Scrollable list
         self.ref_canvas = tk.Canvas(ref_frame, bg='#1a1a2e', highlightthickness=0, height=150)
@@ -1067,18 +1068,23 @@ class SimpleGUI(tk.Tk):
         tk.Label(header_row, text="Img", width=5, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
         tk.Label(header_row, text="Vid", width=5, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
 
-        # Scrollable scene list
-        self.scene_canvas = tk.Canvas(scenes_frame, bg='#1a1a2e', highlightthickness=0)
-        scene_scrollbar = ttk.Scrollbar(scenes_frame, orient="vertical", command=self.scene_canvas.yview)
+        # Scrollable scene list - them horizontal scrollbar
+        scene_scroll_frame = tk.Frame(scenes_frame, bg='#1a1a2e')
+        scene_scroll_frame.pack(fill="both", expand=True)
+
+        self.scene_canvas = tk.Canvas(scene_scroll_frame, bg='#1a1a2e', highlightthickness=0)
+        scene_scrollbar_y = ttk.Scrollbar(scene_scroll_frame, orient="vertical", command=self.scene_canvas.yview)
+        scene_scrollbar_x = ttk.Scrollbar(scenes_frame, orient="horizontal", command=self.scene_canvas.xview)
         self.scenes_list_frame = tk.Frame(self.scene_canvas, bg='#1a1a2e')
 
         self.scenes_list_frame.bind("<Configure>",
             lambda e: self.scene_canvas.configure(scrollregion=self.scene_canvas.bbox("all")))
         self.scene_canvas.create_window((0, 0), window=self.scenes_list_frame, anchor="nw")
-        self.scene_canvas.configure(yscrollcommand=scene_scrollbar.set)
+        self.scene_canvas.configure(yscrollcommand=scene_scrollbar_y.set, xscrollcommand=scene_scrollbar_x.set)
 
-        scene_scrollbar.pack(side="right", fill="y")
+        scene_scrollbar_y.pack(side="right", fill="y")
         self.scene_canvas.pack(fill="both", expand=True)
+        scene_scrollbar_x.pack(fill="x")
 
         # Enable mouse wheel scrolling
         def _on_mousewheel(event):
@@ -1103,6 +1109,242 @@ class SimpleGUI(tk.Tk):
         self.detail_title_var.set(f"Project: {code}")
         self._load_project_detail(code)
 
+    def _show_excel_detail(self, code: str):
+        """Show popup with detailed Excel status."""
+        if not self.manager:
+            return
+
+        status = self.manager.quality_checker.get_project_status(code)
+        if not status:
+            return
+
+        popup = tk.Toplevel(self)
+        popup.title(f"Excel Detail - {code}")
+        popup.geometry("450x380")
+        popup.configure(bg='#1a1a2e')
+        popup.transient(self)
+        popup.grab_set()
+
+        # Header
+        tk.Label(popup, text=f"EXCEL STATUS: {code}", bg='#0f3460', fg='#00ff88',
+                 font=("Arial", 12, "bold"), pady=10).pack(fill="x")
+
+        # Content frame
+        content = tk.Frame(popup, bg='#1a1a2e', padx=20, pady=10)
+        content.pack(fill="both", expand=True)
+
+        # Get values from ProjectStatus
+        excel_status = getattr(status, 'excel_status', 'none')
+        total_scenes = getattr(status, 'total_scenes', 0)
+        img_prompts = getattr(status, 'img_prompts_count', 0)
+        video_prompts = getattr(status, 'video_prompts_count', 0)
+        fallback_prompts = getattr(status, 'fallback_prompts', 0)
+        missing_img = getattr(status, 'missing_img_prompts', [])
+        characters_count = getattr(status, 'characters_count', 0)
+        characters_with_ref = getattr(status, 'characters_with_ref', 0)
+
+        # Status rows
+        rows_data = [
+            ("SRT file", "OK" if getattr(status, 'srt_exists', False) else "--"),
+            ("Excel file", "OK" if getattr(status, 'excel_exists', False) else "--"),
+            ("Total Scenes", str(total_scenes)),
+            ("Characters", f"{characters_count}" if characters_count else "--"),
+            ("Char with NV", f"{characters_with_ref}/{characters_count}" if characters_count else "--"),
+            ("Img Prompts", f"{img_prompts}/{total_scenes}" if total_scenes else "--"),
+            ("Video Prompts", f"{video_prompts}/{total_scenes}" if total_scenes else "--"),
+            ("Fallback", str(fallback_prompts) if fallback_prompts > 0 else "0"),
+        ]
+
+        for name, value in rows_data:
+            row = tk.Frame(content, bg='#1a1a2e')
+            row.pack(fill="x", pady=3)
+
+            # Determine color based on value
+            if value == "OK" or (value.endswith(f"/{total_scenes}") and value.startswith(str(total_scenes))):
+                color = '#00ff88'
+            elif value == "--" or value == "0":
+                color = '#666'
+            elif "/" in value:  # partial like "5/10"
+                color = '#00d9ff'
+            else:
+                color = 'white'
+
+            tk.Label(row, text=name, width=15, bg='#1a1a2e', fg='white',
+                     font=("Consolas", 10), anchor="w").pack(side="left")
+            tk.Label(row, text=value, width=12, bg='#1a1a2e', fg=color,
+                     font=("Consolas", 10, "bold")).pack(side="left")
+
+        # Summary
+        if excel_status == "complete":
+            summary = "HOAN THANH" + (" (co Fallback)" if fallback_prompts > 0 else "")
+            summary_color = '#00ff88'
+        elif excel_status == "partial":
+            pct = int(img_prompts * 100 / total_scenes) if total_scenes > 0 else 0
+            summary = f"Dang tao: {pct}%"
+            summary_color = '#00d9ff'
+        elif excel_status == "fallback":
+            summary = "Co Fallback - can API"
+            summary_color = '#ffd93d'
+        else:
+            summary = "Chua co Excel"
+            summary_color = '#ff6b6b'
+
+        tk.Label(content, text=summary, bg='#1a1a2e', fg=summary_color,
+                 font=("Arial", 11, "bold"), pady=10).pack()
+
+        # Close button
+        tk.Button(popup, text="Dong", command=popup.destroy, bg='#0f3460', fg='white',
+                  font=("Arial", 10), padx=20).pack(pady=10)
+
+    def _show_nv_detail(self, code: str):
+        """Show popup with detailed NV (reference images) status."""
+        if not self.manager:
+            return
+
+        status = self.manager.quality_checker.get_project_status(code)
+        project_dir = TOOL_DIR / "PROJECTS" / code
+        nv_dir = project_dir / "nv"
+
+        popup = tk.Toplevel(self)
+        popup.title(f"NV Detail - {code}")
+        popup.geometry("500x400")
+        popup.configure(bg='#1a1a2e')
+        popup.transient(self)
+        popup.grab_set()
+
+        # Header
+        tk.Label(popup, text=f"ANH THAM CHIEU (NV): {code}", bg='#0f3460', fg='#ff6b6b',
+                 font=("Arial", 12, "bold"), pady=10).pack(fill="x")
+
+        # Content frame with scrollbar
+        canvas = tk.Canvas(popup, bg='#1a1a2e', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(popup, orient="vertical", command=canvas.yview)
+        content = tk.Frame(canvas, bg='#1a1a2e')
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(fill="both", expand=True, padx=10, pady=5)
+        canvas.create_window((0, 0), window=content, anchor="nw")
+        content.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        # Get characters from Excel
+        excel_path = project_dir / f"{code}_prompts.xlsx"
+        characters = []
+        if excel_path.exists():
+            try:
+                from openpyxl import load_workbook
+                wb = load_workbook(excel_path, read_only=True)
+                if "Characters" in wb.sheetnames:
+                    ws = wb["Characters"]
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if row and row[0]:
+                            char_id = str(row[0]).strip()
+                            if char_id:
+                                characters.append(char_id)
+                wb.close()
+            except:
+                pass
+
+        if not characters:
+            tk.Label(content, text="Khong co Characters trong Excel", bg='#1a1a2e', fg='#666',
+                     font=("Consolas", 10), pady=20).pack()
+        else:
+            # Header row
+            header = tk.Frame(content, bg='#0f3460')
+            header.pack(fill="x", pady=(0, 5))
+            tk.Label(header, text="ID", width=15, bg='#0f3460', fg='white',
+                     font=("Consolas", 9, "bold")).pack(side="left", padx=5)
+            tk.Label(header, text="Status", width=10, bg='#0f3460', fg='white',
+                     font=("Consolas", 9, "bold")).pack(side="left", padx=5)
+
+            # List each character
+            done_count = 0
+            for i, char_id in enumerate(characters):
+                bg = '#1a1a2e' if i % 2 == 0 else '#16213e'
+                row = tk.Frame(content, bg=bg)
+                row.pack(fill="x", pady=1)
+
+                # Check if image exists
+                has_image = False
+                for ext in ['.png', '.jpg', '.jpeg', '.webp']:
+                    if (nv_dir / f"{char_id}{ext}").exists():
+                        has_image = True
+                        done_count += 1
+                        break
+
+                tk.Label(row, text=char_id, width=15, bg=bg, fg='white',
+                         font=("Consolas", 10), anchor="w").pack(side="left", padx=5)
+
+                status_text = "OK" if has_image else "Thieu"
+                status_color = '#00ff88' if has_image else '#ff6b6b'
+                tk.Label(row, text=status_text, width=10, bg=bg, fg=status_color,
+                         font=("Consolas", 10, "bold")).pack(side="left", padx=5)
+
+            # Summary
+            total = len(characters)
+            summary_frame = tk.Frame(content, bg='#1a1a2e')
+            summary_frame.pack(fill="x", pady=10)
+
+            if done_count >= total:
+                summary = f"HOAN THANH: {done_count}/{total}"
+                summary_color = '#00ff88'
+            else:
+                summary = f"CON THIEU: {total - done_count}/{total}"
+                summary_color = '#ff6b6b'
+
+            tk.Label(summary_frame, text=summary, bg='#1a1a2e', fg=summary_color,
+                     font=("Arial", 11, "bold")).pack()
+
+        # Close button
+        tk.Button(popup, text="Dong", command=popup.destroy, bg='#0f3460', fg='white',
+                  font=("Arial", 10), padx=20).pack(pady=10)
+
+    def _show_prompt_popup(self, scene_id, prompt_text: str):
+        """Show popup with full prompt text and copy button."""
+        popup = tk.Toplevel(self)
+        popup.title(f"Prompt - Scene {scene_id}")
+        popup.geometry("600x400")
+        popup.configure(bg='#1a1a2e')
+        popup.transient(self)
+        popup.grab_set()
+
+        # Header
+        tk.Label(popup, text=f"PROMPT - Scene {scene_id}", bg='#0f3460', fg='#ffd93d',
+                 font=("Arial", 12, "bold"), pady=10).pack(fill="x")
+
+        # Text widget with scrollbar
+        text_frame = tk.Frame(popup, bg='#1a1a2e')
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        text_widget = tk.Text(text_frame, wrap="word", bg='#16213e', fg='white',
+                              font=("Consolas", 10), yscrollcommand=scrollbar.set,
+                              padx=10, pady=10)
+        text_widget.pack(fill="both", expand=True)
+        text_widget.insert("1.0", prompt_text)
+        text_widget.config(state="disabled")
+
+        scrollbar.config(command=text_widget.yview)
+
+        # Button frame
+        btn_frame = tk.Frame(popup, bg='#1a1a2e')
+        btn_frame.pack(pady=10)
+
+        def copy_to_clipboard():
+            self.clipboard_clear()
+            self.clipboard_append(prompt_text)
+            copy_btn.config(text="Da copy!")
+            popup.after(1500, lambda: copy_btn.config(text="Copy"))
+
+        copy_btn = tk.Button(btn_frame, text="Copy", command=copy_to_clipboard,
+                             bg='#00d9ff', fg='black', font=("Arial", 10), padx=20)
+        copy_btn.pack(side="left", padx=5)
+
+        tk.Button(btn_frame, text="Dong", command=popup.destroy,
+                  bg='#0f3460', fg='white', font=("Arial", 10), padx=20).pack(side="left", padx=5)
+
     def _load_project_detail(self, code: str):
         """Load chi tiet project vao panel phai."""
         project_dir = TOOL_DIR / "PROJECTS" / code
@@ -1116,55 +1358,117 @@ class SimpleGUI(tk.Tk):
         self._load_scenes_list(code)
 
     def _load_reference_images(self, project_code: str):
-        """Load anh tham chieu tu thu muc NV - dang danh sach."""
+        """Load characters tu Excel - hien thi ID, ten file va character lock."""
         for widget in self.ref_images_frame.winfo_children():
             widget.destroy()
         self.ref_photo_refs = []
 
-        nv_dir = TOOL_DIR / "PROJECTS" / project_code / "nv"
-        if not nv_dir.exists() or not PIL_AVAILABLE:
-            tk.Label(self.ref_images_frame, text="Khong co NV/", bg='#1a1a2e', fg='#666',
+        project_dir = TOOL_DIR / "PROJECTS" / project_code
+        excel_path = project_dir / f"{project_code}_prompts.xlsx"
+        nv_dir = project_dir / "nv"
+
+        if not excel_path.exists():
+            tk.Label(self.ref_images_frame, text="Chua co Excel", bg='#1a1a2e', fg='#666',
                      font=("Consolas", 10)).pack(pady=5)
             return
 
-        image_files = []
-        for ext in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
-            image_files.extend(nv_dir.glob(ext))
-        image_files.sort()
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(str(excel_path))
 
-        if not image_files:
-            tk.Label(self.ref_images_frame, text="Chua co anh", bg='#1a1a2e', fg='#666',
-                     font=("Consolas", 10)).pack(pady=5)
-            return
+            # Tim sheet characters
+            char_sheet = None
+            for name in wb.sheetnames:
+                if name.lower() == 'characters':
+                    char_sheet = name
+                    break
 
-        for i, img_path in enumerate(image_files[:20]):  # Max 20 anh
-            try:
-                bg = '#1a1a2e' if i % 2 == 0 else '#16213e'
-                row = tk.Frame(self.ref_images_frame, bg=bg, height=40)
+            if not char_sheet:
+                tk.Label(self.ref_images_frame, text="Khong co sheet characters", bg='#1a1a2e', fg='#666',
+                         font=("Consolas", 10)).pack(pady=5)
+                wb.close()
+                return
+
+            ws = wb[char_sheet]
+            headers = [cell.value for cell in ws[1]]
+
+            # Tim index cua cac cot quan trong
+            id_idx = headers.index('id') if 'id' in headers else 0
+            name_idx = headers.index('name') if 'name' in headers else 1
+            lock_idx = headers.index('character_lock') if 'character_lock' in headers else 2
+            file_idx = headers.index('image_file') if 'image_file' in headers else -1
+
+            characters = []
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if row[id_idx] is None:
+                    continue
+                characters.append({
+                    'id': row[id_idx],
+                    'name': row[name_idx] if name_idx < len(row) else '',
+                    'lock': row[lock_idx] if lock_idx < len(row) else '',
+                    'file': row[file_idx] if file_idx >= 0 and file_idx < len(row) else ''
+                })
+
+            wb.close()
+
+            if not characters:
+                tk.Label(self.ref_images_frame, text="Chua co characters", bg='#1a1a2e', fg='#666',
+                         font=("Consolas", 10)).pack(pady=5)
+                return
+
+            # Hien thi header info
+            tk.Label(self.ref_images_frame, text=f"Tim thay {len(characters)} characters",
+                     bg='#1a1a2e', fg='#00ff88', font=("Consolas", 9, "bold")).pack(pady=2)
+
+            ROW_WIDTH = 700
+
+            for i, char in enumerate(characters[:20]):  # Max 20
+                bg_color = '#1a1a2e' if i % 2 == 0 else '#16213e'
+                row = tk.Frame(self.ref_images_frame, bg=bg_color, height=40, width=ROW_WIDTH)
                 row.pack(fill="x", pady=1)
                 row.pack_propagate(False)
 
-                # So thu tu
-                tk.Label(row, text=str(i+1), width=3, bg=bg, fg='#00d9ff',
-                         font=("Consolas", 10, "bold")).pack(side="left", padx=3)
+                # ID
+                tk.Label(row, text=str(char['id']), width=6, bg=bg_color, fg='#00d9ff',
+                         font=("Consolas", 9, "bold")).pack(side="left", padx=3)
 
-                # Thumbnail (35x35)
-                img = Image.open(img_path)
-                img.thumbnail((35, 35))
-                photo = ImageTk.PhotoImage(img)
-                self.ref_photo_refs.append(photo)
+                # Thumbnail neu co file
+                thumb_frame = tk.Frame(row, bg=bg_color, width=40, height=35)
+                thumb_frame.pack(side="left", padx=2)
+                thumb_frame.pack_propagate(False)
 
-                thumb_lbl = tk.Label(row, image=photo, bg=bg, cursor="hand2")
-                thumb_lbl.pack(side="left", padx=3)
-                thumb_lbl.bind("<Button-1>", lambda e, p=img_path: os.startfile(str(p)))
+                img_file = char.get('file', '')
+                if img_file and nv_dir.exists() and PIL_AVAILABLE:
+                    img_path = nv_dir / img_file
+                    if img_path.exists():
+                        try:
+                            img = Image.open(img_path)
+                            img.thumbnail((35, 35))
+                            photo = ImageTk.PhotoImage(img)
+                            self.ref_photo_refs.append(photo)
+                            thumb_lbl = tk.Label(thumb_frame, image=photo, bg=bg_color, cursor="hand2")
+                            thumb_lbl.pack(expand=True)
+                            thumb_lbl.bind("<Button-1>", lambda e, p=img_path: os.startfile(str(p)))
+                        except:
+                            tk.Label(thumb_frame, text="--", bg=bg_color, fg='#444',
+                                     font=("Consolas", 8)).pack(expand=True)
+                    else:
+                        tk.Label(thumb_frame, text="--", bg=bg_color, fg='#444',
+                                 font=("Consolas", 8)).pack(expand=True)
+                else:
+                    tk.Label(thumb_frame, text="--", bg=bg_color, fg='#444',
+                             font=("Consolas", 8)).pack(expand=True)
 
-                # Ten file
-                name = img_path.name[:25] + "..." if len(img_path.name) > 25 else img_path.name
-                tk.Label(row, text=name, bg=bg, fg='#c8d6e5',
-                         font=("Consolas", 9), anchor="w").pack(side="left", padx=5)
+                # Character lock (truncated) - noi dung chinh
+                lock_text = char.get('lock', '') or ''
+                lock_display = lock_text[:50] + "..." if len(lock_text) > 50 else lock_text or "--"
+                tk.Label(row, text=lock_display, width=50, bg=bg_color, fg='#c8d6e5',
+                         font=("Consolas", 8), anchor="w").pack(side="left", padx=3)
 
-            except:
-                pass
+        except Exception as e:
+            tk.Label(self.ref_images_frame, text=f"Loi: {str(e)[:30]}", bg='#1a1a2e', fg='#ff6b6b',
+                     font=("Consolas", 9)).pack(pady=5)
+            print(f"[ERROR] Load characters: {e}")
 
     def _load_scenes_list(self, project_code: str):
         """Load danh sach scenes tu Excel - voi thumbnail va SRT time."""
@@ -1199,11 +1503,15 @@ class SimpleGUI(tk.Tk):
             img_dir = project_dir / "img"
             vid_dir = project_dir / "vid"
 
+            # Tinh toan width cho row: ID(4) + Thumb(6) + SRT(18) + Prompt(45) + Img(5) + Vid(5) = 83 chars
+            # Font Consolas 9 ~ 7px/char => 83*7 + padding = ~650px
+            ROW_WIDTH = 750
+
             for i, scene in enumerate(scenes[:150]):  # Max 150 scenes
                 bg = '#1a1a2e' if i % 2 == 0 else '#16213e'
-                row = tk.Frame(self.scenes_list_frame, bg=bg, height=50)
+                row = tk.Frame(self.scenes_list_frame, bg=bg, height=50, width=ROW_WIDTH)
                 row.pack(fill="x", pady=1)
-                row.pack_propagate(False)  # Fixed height
+                row.pack_propagate(False)  # Fixed height and width
 
                 # Scene ID - font to hon
                 tk.Label(row, text=str(scene.scene_id), width=4, bg=bg, fg='#00d9ff',
@@ -1236,10 +1544,32 @@ class SimpleGUI(tk.Tk):
                 srt_start = getattr(scene, 'srt_start', '') or ''
                 srt_end = getattr(scene, 'srt_end', '') or ''
 
+                # Debug 3 scenes dau
+                if i < 3:
+                    print(f"[DEBUG SRT] Scene {scene.scene_id}: start={repr(srt_start)}, end={repr(srt_end)}")
+
+                # Convert to string neu la datetime.time hoac timedelta
+                if hasattr(srt_start, 'strftime'):
+                    srt_start = srt_start.strftime('%H:%M:%S')
+                elif hasattr(srt_start, 'total_seconds'):  # timedelta
+                    total = int(srt_start.total_seconds())
+                    h, m, s = total // 3600, (total % 3600) // 60, total % 60
+                    srt_start = f"{h:02d}:{m:02d}:{s:02d}"
+
+                if hasattr(srt_end, 'strftime'):
+                    srt_end = srt_end.strftime('%H:%M:%S')
+                elif hasattr(srt_end, 'total_seconds'):  # timedelta
+                    total = int(srt_end.total_seconds())
+                    h, m, s = total // 3600, (total % 3600) // 60, total % 60
+                    srt_end = f"{h:02d}:{m:02d}:{s:02d}"
+
+                srt_start = str(srt_start) if srt_start else ''
+                srt_end = str(srt_end) if srt_end else ''
+
                 if srt_start and srt_end:
                     # Format: "00:01:23" thay vi "00:01:23,456"
-                    start_short = srt_start.split(',')[0] if ',' in srt_start else srt_start
-                    end_short = srt_end.split(',')[0] if ',' in srt_end else srt_end
+                    start_short = srt_start.split(',')[0] if ',' in str(srt_start) else str(srt_start)
+                    end_short = srt_end.split(',')[0] if ',' in str(srt_end) else str(srt_end)
                     srt_text = f"{start_short} - {end_short}"
                 else:
                     srt_text = "--"
@@ -1247,11 +1577,14 @@ class SimpleGUI(tk.Tk):
                 tk.Label(row, text=srt_text, width=18, bg=bg, fg='#ffd93d',
                          font=("Consolas", 9)).pack(side="left", padx=3)
 
-                # Prompt (truncated) - width lon hon de hien thi nhieu hon
+                # Prompt (truncated) - click de xem day du
                 prompt_text = scene.img_prompt or ""
-                prompt = prompt_text[:50] + "..." if len(prompt_text) > 50 else prompt_text or "--"
-                tk.Label(row, text=prompt, width=45, bg=bg, fg='#c8d6e5',
-                         font=("Consolas", 9), anchor="w").pack(side="left", padx=3)
+                prompt_display = prompt_text[:50] + "..." if len(prompt_text) > 50 else prompt_text or "--"
+                prompt_label = tk.Label(row, text=prompt_display, width=45, bg=bg, fg='#c8d6e5',
+                         font=("Consolas", 9), anchor="w", cursor="hand2" if prompt_text else "")
+                prompt_label.pack(side="left", padx=3)
+                if prompt_text:
+                    prompt_label.bind("<Button-1>", lambda e, p=prompt_text, sid=scene.scene_id: self._show_prompt_popup(sid, p))
 
                 # Image status
                 if img_path:
@@ -1347,12 +1680,36 @@ class SimpleGUI(tk.Tk):
                 if status:
                     labels = self.project_rows[code]['labels']
 
-                    # Excel status
-                    excel_complete = getattr(status, 'excel_complete', False)
-                    if excel_complete:
-                        labels['excel'].config(text="OK", fg='#00ff88')
+                    # Excel status - show OK or %
+                    excel_status = getattr(status, 'excel_status', '')
+                    fallback_prompts = getattr(status, 'fallback_prompts', 0)
+
+                    if excel_status == "complete":
+                        text = "OK*" if fallback_prompts > 0 else "OK"
+                        labels['excel'].config(text=text, fg='#00ff88')
+                    elif excel_status == "partial":
+                        img_prompts = getattr(status, 'img_prompts_count', 0)
+                        total = getattr(status, 'total_scenes', 0)
+                        if total > 0:
+                            pct = int(img_prompts * 100 / total)
+                            labels['excel'].config(text=f"{pct}%", fg='#00d9ff')
+                        else:
+                            labels['excel'].config(text="--", fg='#666')
+                    elif excel_status == "fallback":
+                        labels['excel'].config(text="FB", fg='#ffd93d')
                     else:
                         labels['excel'].config(text="--", fg='#666')
+
+                    # NV status - reference images (characters with ref)
+                    nv_done = getattr(status, 'characters_with_ref', 0)
+                    nv_total = getattr(status, 'characters_count', 0)
+                    if nv_total > 0:
+                        if nv_done >= nv_total:
+                            labels['nv'].config(text="OK", fg='#00ff88')
+                        else:
+                            labels['nv'].config(text=f"{nv_done}/{nv_total}", fg='#ff6b6b')
+                    else:
+                        labels['nv'].config(text="--", fg='#666')
 
                     # Images
                     img_done = getattr(status, 'images_done', 0)
@@ -1707,16 +2064,36 @@ class SimpleGUI(tk.Tk):
                 if status:
                     labels = self.project_rows[code]['labels']
 
-                    # Excel
-                    excel_complete = getattr(status, 'excel_complete', False)
-                    excel_step = getattr(status, 'excel_current_step', 0)
+                    # Excel - show OK or %
+                    excel_status = getattr(status, 'excel_status', '')
+                    fallback_prompts = getattr(status, 'fallback_prompts', 0)
 
-                    if excel_complete:
-                        labels['excel'].config(text="OK", fg='#00ff88')
-                    elif excel_step > 0:
-                        labels['excel'].config(text=f"{excel_step}/7", fg='#00d9ff')
+                    if excel_status == "complete":
+                        text = "OK*" if fallback_prompts > 0 else "OK"
+                        labels['excel'].config(text=text, fg='#00ff88')
+                    elif excel_status == "partial":
+                        img_prompts = getattr(status, 'img_prompts_count', 0)
+                        total = getattr(status, 'total_scenes', 0)
+                        if total > 0:
+                            pct = int(img_prompts * 100 / total)
+                            labels['excel'].config(text=f"{pct}%", fg='#00d9ff')
+                        else:
+                            labels['excel'].config(text="--", fg='#666')
+                    elif excel_status == "fallback":
+                        labels['excel'].config(text="FB", fg='#ffd93d')
                     else:
                         labels['excel'].config(text="--", fg='#666')
+
+                    # NV status - reference images (characters with ref)
+                    nv_done = getattr(status, 'characters_with_ref', 0)
+                    nv_total = getattr(status, 'characters_count', 0)
+                    if nv_total > 0:
+                        if nv_done >= nv_total:
+                            labels['nv'].config(text="OK", fg='#00ff88')
+                        else:
+                            labels['nv'].config(text=f"{nv_done}/{nv_total}", fg='#ff6b6b')
+                    else:
+                        labels['nv'].config(text="--", fg='#666')
 
                     # Images
                     img_done = getattr(status, 'images_done', 0)
@@ -1744,11 +2121,11 @@ class SimpleGUI(tk.Tk):
                     # Status
                     next_action = getattr(status, 'next_action', '')
                     if next_action == 'create_excel':
-                        labels['status'].config(text="Tao Excel")
+                        labels['status'].config(text="Excel")
                     elif next_action == 'create_images':
-                        labels['status'].config(text="Tao anh")
+                        labels['status'].config(text="Anh")
                     elif next_action == 'create_videos':
-                        labels['status'].config(text="Tao video")
+                        labels['status'].config(text="Video")
                     elif next_action == 'copy_to_visual':
                         labels['status'].config(text="XONG")
                     else:
@@ -1769,16 +2146,21 @@ class SimpleGUI(tk.Tk):
         labels['code'].pack(side="left", padx=2)
         labels['code'].bind("<Button-1>", lambda e, c=code: self._select_project(c))
 
-        labels['excel'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
+        labels['excel'] = tk.Label(row, text="--", width=6, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
         labels['excel'].pack(side="left", padx=2)
+        labels['excel'].bind("<Button-1>", lambda e, c=code: self._show_excel_detail(c))
 
-        labels['images'] = tk.Label(row, text="--", width=8, bg=bg, fg='#666', font=("Consolas", 10))
+        labels['nv'] = tk.Label(row, text="--", width=5, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
+        labels['nv'].pack(side="left", padx=2)
+        labels['nv'].bind("<Button-1>", lambda e, c=code: self._show_nv_detail(c))
+
+        labels['images'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
         labels['images'].pack(side="left", padx=2)
 
-        labels['videos'] = tk.Label(row, text="--", width=8, bg=bg, fg='#666', font=("Consolas", 10))
+        labels['videos'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
         labels['videos'].pack(side="left", padx=2)
 
-        labels['status'] = tk.Label(row, text="--", width=10, bg=bg, fg='#aaa', font=("Consolas", 10))
+        labels['status'] = tk.Label(row, text="--", width=8, bg=bg, fg='#aaa', font=("Consolas", 10))
         labels['status'].pack(side="left", padx=2)
 
         self.project_rows[code] = {'row': row, 'labels': labels, 'bg': bg}
