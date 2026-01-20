@@ -79,9 +79,10 @@ class SettingsWindow(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("CAU HINH - Settings")
-        self.geometry("700x600")
+        self.geometry("750x700")
         self.configure(bg='#1a1a2e')
-        self.resizable(False, False)
+        self.resizable(True, True)
+        self.minsize(700, 650)
 
         self._build()
         self._load_settings()
