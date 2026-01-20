@@ -1444,14 +1444,47 @@ class SimpleGUI(tk.Tk):
         """Cap nhat code tu GitHub."""
         import subprocess
 
+        GITHUB_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-v2.git"
+
         def do_update():
             self.update_btn.config(state="disabled", text="DANG CAP NHAT...", bg='#666')
             self.status_var.set("Dang cap nhat tu GitHub...")
 
             try:
+                # Kiem tra git co san khong
+                result = subprocess.run(
+                    ["git", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode != 0:
+                    raise Exception("Git chua duoc cai dat! Hay cai Git truoc.")
+
+                # Kiem tra remote origin
+                result = subprocess.run(
+                    ["git", "remote", "get-url", "origin"],
+                    cwd=str(TOOL_DIR),
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+
+                if result.returncode != 0:
+                    # Chua co remote origin, them vao
+                    self.status_var.set("Dang them remote origin...")
+                    subprocess.run(
+                        ["git", "remote", "add", "origin", GITHUB_URL],
+                        cwd=str(TOOL_DIR),
+                        capture_output=True,
+                        timeout=10
+                    )
+
                 # Fetch va reset ve main branch
+                self.status_var.set("Dang tai code moi...")
                 cmds = [
                     ["git", "fetch", "origin", "main"],
+                    ["git", "checkout", "main"],
                     ["git", "reset", "--hard", "origin/main"]
                 ]
 
@@ -1461,10 +1494,12 @@ class SimpleGUI(tk.Tk):
                         cwd=str(TOOL_DIR),
                         capture_output=True,
                         text=True,
-                        timeout=60
+                        timeout=120
                     )
-                    if result.returncode != 0:
-                        raise Exception(result.stderr or "Git command failed")
+                    # Ignore checkout error if already on main
+                    if result.returncode != 0 and "checkout" not in cmd:
+                        error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                        raise Exception(f"Git error: {error_msg}")
 
                 self.status_var.set("Cap nhat xong! Khoi dong lai tool.")
                 self.update_btn.config(text="XONG", bg='#00ff88')
@@ -1477,9 +1512,13 @@ class SimpleGUI(tk.Tk):
                     os.execv(sys.executable, [sys.executable] + sys.argv)
 
             except Exception as e:
-                self.status_var.set(f"Loi: {e}")
+                self.status_var.set(f"Loi: {str(e)[:50]}")
                 self.update_btn.config(text="LOI", bg='#e94560')
                 print(f"Update error: {e}")
+
+                # Hien thi huong dan
+                from tkinter import messagebox
+                messagebox.showerror("Loi cap nhat", f"Loi: {e}\n\nThu chay thu cong:\ngit pull origin main")
             finally:
                 self.after(3000, lambda: self.update_btn.config(state="normal", text="UPDATE", bg='#0984e3'))
 
