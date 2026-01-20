@@ -1038,7 +1038,7 @@ class SimpleGUI(tk.Tk):
         tk.Label(ref_header, text="Ten file", width=25, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
 
         # Scrollable list
-        self.ref_canvas = tk.Canvas(ref_frame, bg='#1a1a2e', highlightthickness=0, height=90)
+        self.ref_canvas = tk.Canvas(ref_frame, bg='#1a1a2e', highlightthickness=0, height=150)
         ref_scrollbar = ttk.Scrollbar(ref_frame, orient="vertical", command=self.ref_canvas.yview)
         self.ref_images_frame = tk.Frame(self.ref_canvas, bg='#1a1a2e')
 
@@ -1063,7 +1063,7 @@ class SimpleGUI(tk.Tk):
         tk.Label(header_row, text="ID", width=4, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
         tk.Label(header_row, text="Thumb", width=6, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
         tk.Label(header_row, text="SRT Time", width=18, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
-        tk.Label(header_row, text="Prompt", width=25, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+        tk.Label(header_row, text="Prompt", width=45, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
         tk.Label(header_row, text="Img", width=5, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
         tk.Label(header_row, text="Vid", width=5, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
 
@@ -1186,6 +1186,16 @@ class SimpleGUI(tk.Tk):
             wb.load_or_create()
             scenes = wb.get_scenes()
 
+            # Hien thi so luong scenes
+            if not scenes:
+                tk.Label(self.scenes_list_frame, text="Khong tim thay scenes trong Excel",
+                         bg='#1a1a2e', fg='#ffd93d', font=("Consolas", 10)).pack(pady=10)
+                return
+
+            info_label = tk.Label(self.scenes_list_frame, text=f"Tim thay {len(scenes)} scenes",
+                                  bg='#1a1a2e', fg='#00ff88', font=("Consolas", 10, "bold"))
+            info_label.pack(pady=3)
+
             img_dir = project_dir / "img"
             vid_dir = project_dir / "vid"
 
@@ -1237,10 +1247,10 @@ class SimpleGUI(tk.Tk):
                 tk.Label(row, text=srt_text, width=18, bg=bg, fg='#ffd93d',
                          font=("Consolas", 9)).pack(side="left", padx=3)
 
-                # Prompt (truncated) - font to hon
+                # Prompt (truncated) - width lon hon de hien thi nhieu hon
                 prompt_text = scene.img_prompt or ""
-                prompt = prompt_text[:28] + "..." if len(prompt_text) > 28 else prompt_text or "--"
-                tk.Label(row, text=prompt, width=25, bg=bg, fg='#c8d6e5',
+                prompt = prompt_text[:50] + "..." if len(prompt_text) > 50 else prompt_text or "--"
+                tk.Label(row, text=prompt, width=45, bg=bg, fg='#c8d6e5',
                          font=("Consolas", 9), anchor="w").pack(side="left", padx=3)
 
                 # Image status
