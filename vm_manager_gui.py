@@ -1512,8 +1512,15 @@ class SimpleGUI(tk.Tk):
                     zip_path = TOOL_DIR / "update_temp.zip"
                     extract_dir = TOOL_DIR / "update_temp"
 
-                    # Download
-                    urllib.request.urlretrieve(GITHUB_ZIP_URL, str(zip_path))
+                    # Download - bo qua SSL certificate
+                    import ssl
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+
+                    with urllib.request.urlopen(GITHUB_ZIP_URL, context=ssl_context) as response:
+                        with open(str(zip_path), 'wb') as out_file:
+                            out_file.write(response.read())
 
                     self.status_var.set("Dang giai nen...")
 
