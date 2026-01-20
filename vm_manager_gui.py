@@ -1441,65 +1441,123 @@ class SimpleGUI(tk.Tk):
         return True  # Mac dinh enabled
 
     def _run_update(self):
-        """Cap nhat code tu GitHub."""
+        """Cap nhat code tu GitHub - ho tro ca khi khong co Git."""
         import subprocess
+        import urllib.request
+        import zipfile
+        import shutil
 
-        GITHUB_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-v2.git"
+        GITHUB_ZIP_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-v2/archive/refs/heads/main.zip"
+        GITHUB_GIT_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-v2.git"
 
         def do_update():
             self.update_btn.config(state="disabled", text="DANG CAP NHAT...", bg='#666')
-            self.status_var.set("Dang cap nhat tu GitHub...")
+            self.status_var.set("Dang kiem tra...")
 
             try:
                 # Kiem tra git co san khong
-                result = subprocess.run(
-                    ["git", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode != 0:
-                    raise Exception("Git chua duoc cai dat! Hay cai Git truoc.")
-
-                # Kiem tra remote origin
-                result = subprocess.run(
-                    ["git", "remote", "get-url", "origin"],
-                    cwd=str(TOOL_DIR),
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-
-                if result.returncode != 0:
-                    # Chua co remote origin, them vao
-                    self.status_var.set("Dang them remote origin...")
-                    subprocess.run(
-                        ["git", "remote", "add", "origin", GITHUB_URL],
-                        cwd=str(TOOL_DIR),
+                git_available = False
+                try:
+                    result = subprocess.run(
+                        ["git", "--version"],
                         capture_output=True,
+                        text=True,
                         timeout=10
                     )
+                    git_available = (result.returncode == 0)
+                except:
+                    git_available = False
 
-                # Fetch va reset ve main branch
-                self.status_var.set("Dang tai code moi...")
-                cmds = [
-                    ["git", "fetch", "origin", "main"],
-                    ["git", "checkout", "main"],
-                    ["git", "reset", "--hard", "origin/main"]
-                ]
+                if git_available:
+                    # === DUNG GIT ===
+                    self.status_var.set("Dang cap nhat qua Git...")
 
-                for cmd in cmds:
+                    # Kiem tra remote origin
                     result = subprocess.run(
-                        cmd,
+                        ["git", "remote", "get-url", "origin"],
                         cwd=str(TOOL_DIR),
                         capture_output=True,
                         text=True,
-                        timeout=120
+                        timeout=10
                     )
-                    # Ignore checkout error if already on main
-                    if result.returncode != 0 and "checkout" not in cmd:
-                        error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                        raise Exception(f"Git error: {error_msg}")
+
+                    if result.returncode != 0:
+                        subprocess.run(
+                            ["git", "remote", "add", "origin", GITHUB_GIT_URL],
+                            cwd=str(TOOL_DIR),
+                            capture_output=True,
+                            timeout=10
+                        )
+
+                    # Fetch va reset
+                    cmds = [
+                        ["git", "fetch", "origin", "main"],
+                        ["git", "checkout", "main"],
+                        ["git", "reset", "--hard", "origin/main"]
+                    ]
+
+                    for cmd in cmds:
+                        result = subprocess.run(
+                            cmd,
+                            cwd=str(TOOL_DIR),
+                            capture_output=True,
+                            text=True,
+                            timeout=120
+                        )
+                else:
+                    # === KHONG CO GIT - TAI ZIP ===
+                    self.status_var.set("Dang tai ZIP tu GitHub...")
+
+                    # Tai file zip
+                    zip_path = TOOL_DIR / "update_temp.zip"
+                    extract_dir = TOOL_DIR / "update_temp"
+
+                    # Download
+                    urllib.request.urlretrieve(GITHUB_ZIP_URL, str(zip_path))
+
+                    self.status_var.set("Dang giai nen...")
+
+                    # Giai nen
+                    with zipfile.ZipFile(str(zip_path), 'r') as zip_ref:
+                        zip_ref.extractall(str(extract_dir))
+
+                    # Tim thu muc da giai nen (ve3-v2-main)
+                    extracted_folder = extract_dir / "ve3-v2-main"
+
+                    self.status_var.set("Dang cap nhat files...")
+
+                    # Copy files moi (chi copy .py va modules/)
+                    files_to_update = [
+                        "vm_manager.py",
+                        "vm_manager_gui.py",
+                        "run_excel_api.py",
+                        "run_worker.py",
+                        "START.py",
+                        "START.bat",
+                        "requirements.txt",
+                        "_run_chrome1.py",
+                        "_run_chrome2.py",
+                        "google_login.py",
+                    ]
+
+                    for f in files_to_update:
+                        src = extracted_folder / f
+                        dst = TOOL_DIR / f
+                        if src.exists():
+                            shutil.copy2(str(src), str(dst))
+
+                    # Copy modules folder
+                    src_modules = extracted_folder / "modules"
+                    dst_modules = TOOL_DIR / "modules"
+                    if src_modules.exists():
+                        for py_file in src_modules.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_modules / py_file.name))
+
+                    # Xoa temp files
+                    if zip_path.exists():
+                        zip_path.unlink()
+                    if extract_dir.exists():
+                        shutil.rmtree(str(extract_dir))
 
                 self.status_var.set("Cap nhat xong! Khoi dong lai tool.")
                 self.update_btn.config(text="XONG", bg='#00ff88')
@@ -1507,18 +1565,16 @@ class SimpleGUI(tk.Tk):
                 # Hoi co muon khoi dong lai khong
                 from tkinter import messagebox
                 if messagebox.askyesno("Cap nhat xong", "Da cap nhat xong!\nBan co muon khoi dong lai tool?"):
-                    # Khoi dong lai
                     import os
                     os.execv(sys.executable, [sys.executable] + sys.argv)
 
             except Exception as e:
-                self.status_var.set(f"Loi: {str(e)[:50]}")
+                self.status_var.set(f"Loi: {str(e)[:40]}")
                 self.update_btn.config(text="LOI", bg='#e94560')
                 print(f"Update error: {e}")
 
-                # Hien thi huong dan
                 from tkinter import messagebox
-                messagebox.showerror("Loi cap nhat", f"Loi: {e}\n\nThu chay thu cong:\ngit pull origin main")
+                messagebox.showerror("Loi cap nhat", f"Loi: {e}\n\nThu tai thu cong:\n{GITHUB_ZIP_URL}")
             finally:
                 self.after(3000, lambda: self.update_btn.config(state="normal", text="UPDATE", bg='#0984e3'))
 
