@@ -70,6 +70,236 @@ except:
 
 
 # ================================================================================
+# SETTINGS WINDOW - Cau hinh va kiem tra tai nguyen
+# ================================================================================
+
+class SettingsWindow(tk.Toplevel):
+    """Cua so cau hinh - kiem tra va thiet lap tai nguyen."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("CAU HINH - Settings")
+        self.geometry("700x600")
+        self.configure(bg='#1a1a2e')
+        self.resizable(False, False)
+
+        self._build()
+        self._load_settings()
+        self._check_resources()
+
+    def _build(self):
+        # Header
+        header = tk.Frame(self, bg='#e94560', height=50)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        tk.Label(header, text="CAU HINH HE THONG", bg='#e94560', fg='white',
+                 font=("Arial", 14, "bold")).pack(pady=12)
+
+        # Main content with scroll
+        main_frame = tk.Frame(self, bg='#1a1a2e')
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # === KIEM TRA TAI NGUYEN ===
+        check_frame = tk.LabelFrame(main_frame, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
+                                    font=("Arial", 10, "bold"), padx=10, pady=10)
+        check_frame.pack(fill="x", pady=5)
+
+        self.resource_labels = {}
+        resources = [
+            ("chrome", "Chrome Portable", "Trinh duyet de tao anh/video"),
+            ("api_key", "API Key (Gemini/DeepSeek)", "De tao noi dung Excel"),
+            ("proxy_token", "Proxy API Token", "De tao video qua API"),
+            ("projects", "Thu muc PROJECTS", "Chua cac du an"),
+        ]
+
+        for res_id, name, desc in resources:
+            row = tk.Frame(check_frame, bg='#16213e')
+            row.pack(fill="x", pady=3)
+
+            # Status icon
+            status_lbl = tk.Label(row, text="?", width=3, bg='#16213e', fg='#ffd93d',
+                                  font=("Arial", 12, "bold"))
+            status_lbl.pack(side="left", padx=5)
+            self.resource_labels[res_id] = status_lbl
+
+            # Name and desc
+            tk.Label(row, text=name, width=25, bg='#16213e', fg='white',
+                     font=("Arial", 10), anchor="w").pack(side="left", padx=5)
+            tk.Label(row, text=desc, bg='#16213e', fg='#888',
+                     font=("Arial", 9), anchor="w").pack(side="left", padx=5)
+
+        # Refresh button
+        tk.Button(check_frame, text="Kiem tra lai", command=self._check_resources,
+                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=10).pack(pady=5)
+
+        # === API KEYS ===
+        api_frame = tk.LabelFrame(main_frame, text=" API KEYS ", bg='#16213e', fg='#ffd93d',
+                                  font=("Arial", 10, "bold"), padx=10, pady=10)
+        api_frame.pack(fill="x", pady=5)
+
+        # DeepSeek API Key
+        tk.Label(api_frame, text="DeepSeek API Key:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w")
+        self.deepseek_var = tk.StringVar()
+        deepseek_entry = tk.Entry(api_frame, textvariable=self.deepseek_var, width=60,
+                                  font=("Consolas", 10), bg='#0f3460', fg='white',
+                                  insertbackground='white')
+        deepseek_entry.pack(fill="x", pady=2)
+
+        # Gemini API Key
+        tk.Label(api_frame, text="Gemini API Key:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w", pady=(10, 0))
+        self.gemini_var = tk.StringVar()
+        gemini_entry = tk.Entry(api_frame, textvariable=self.gemini_var, width=60,
+                                font=("Consolas", 10), bg='#0f3460', fg='white',
+                                insertbackground='white')
+        gemini_entry.pack(fill="x", pady=2)
+
+        # Proxy API Token
+        tk.Label(api_frame, text="Proxy API Token (Video):", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w", pady=(10, 0))
+        self.proxy_token_var = tk.StringVar()
+        proxy_entry = tk.Entry(api_frame, textvariable=self.proxy_token_var, width=60,
+                               font=("Consolas", 10), bg='#0f3460', fg='white',
+                               insertbackground='white')
+        proxy_entry.pack(fill="x", pady=2)
+
+        # === CHROME ===
+        chrome_frame = tk.LabelFrame(main_frame, text=" CHROME PORTABLE ", bg='#16213e', fg='#00d9ff',
+                                     font=("Arial", 10, "bold"), padx=10, pady=10)
+        chrome_frame.pack(fill="x", pady=5)
+
+        tk.Label(chrome_frame, text="Duong dan Chrome 1:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w")
+        self.chrome1_var = tk.StringVar()
+        chrome1_row = tk.Frame(chrome_frame, bg='#16213e')
+        chrome1_row.pack(fill="x", pady=2)
+        tk.Entry(chrome1_row, textvariable=self.chrome1_var, width=50,
+                 font=("Consolas", 9), bg='#0f3460', fg='white',
+                 insertbackground='white').pack(side="left", fill="x", expand=True)
+        tk.Button(chrome1_row, text="Chon...", command=lambda: self._browse_chrome(1),
+                  bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
+
+        tk.Label(chrome_frame, text="Duong dan Chrome 2:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w", pady=(10, 0))
+        self.chrome2_var = tk.StringVar()
+        chrome2_row = tk.Frame(chrome_frame, bg='#16213e')
+        chrome2_row.pack(fill="x", pady=2)
+        tk.Entry(chrome2_row, textvariable=self.chrome2_var, width=50,
+                 font=("Consolas", 9), bg='#0f3460', fg='white',
+                 insertbackground='white').pack(side="left", fill="x", expand=True)
+        tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
+                  bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
+
+        # === BUTTONS ===
+        btn_frame = tk.Frame(self, bg='#1a1a2e')
+        btn_frame.pack(fill="x", padx=10, pady=10)
+
+        tk.Button(btn_frame, text="LUU CAU HINH", command=self._save_settings,
+                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 11, "bold"),
+                  relief="flat", padx=20, pady=5).pack(side="left", padx=5)
+
+        tk.Button(btn_frame, text="DONG", command=self.destroy,
+                  bg='#e94560', fg='white', font=("Arial", 11, "bold"),
+                  relief="flat", padx=20, pady=5).pack(side="right", padx=5)
+
+    def _load_settings(self):
+        """Load settings tu file."""
+        try:
+            import yaml
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f) or {}
+
+                self.deepseek_var.set(config.get('deepseek_api_key', ''))
+                gemini_keys = config.get('gemini_api_keys', [''])
+                self.gemini_var.set(gemini_keys[0] if gemini_keys else '')
+                self.proxy_token_var.set(config.get('proxy_api_token', ''))
+                self.chrome1_var.set(config.get('chrome_portable', ''))
+                self.chrome2_var.set(config.get('chrome_portable_2', ''))
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+
+    def _save_settings(self):
+        """Luu settings vao file."""
+        try:
+            import yaml
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+
+            # Doc config hien tai
+            config = {}
+            if settings_path.exists():
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f) or {}
+
+            # Update
+            config['deepseek_api_key'] = self.deepseek_var.get().strip()
+            gemini_key = self.gemini_var.get().strip()
+            config['gemini_api_keys'] = [gemini_key] if gemini_key else ['']
+            config['proxy_api_token'] = self.proxy_token_var.get().strip()
+            config['chrome_portable'] = self.chrome1_var.get().strip()
+            config['chrome_portable_2'] = self.chrome2_var.get().strip()
+
+            # Luu
+            with open(settings_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
+
+            # Thong bao
+            from tkinter import messagebox
+            messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
+            self._check_resources()
+
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Loi", f"Khong the luu: {e}")
+
+    def _check_resources(self):
+        """Kiem tra cac tai nguyen."""
+        # Chrome
+        chrome1 = self.chrome1_var.get()
+        chrome2 = self.chrome2_var.get()
+        chrome_ok = (chrome1 and Path(chrome1).exists()) or (chrome2 and Path(chrome2).exists())
+        self._set_status("chrome", chrome_ok)
+
+        # API Keys
+        deepseek = self.deepseek_var.get().strip()
+        gemini = self.gemini_var.get().strip()
+        api_ok = bool(deepseek) or bool(gemini)
+        self._set_status("api_key", api_ok)
+
+        # Proxy Token
+        proxy_token = self.proxy_token_var.get().strip()
+        self._set_status("proxy_token", bool(proxy_token))
+
+        # Projects folder
+        projects_dir = TOOL_DIR / "PROJECTS"
+        self._set_status("projects", projects_dir.exists())
+
+    def _set_status(self, res_id: str, ok: bool):
+        """Set status icon."""
+        if res_id in self.resource_labels:
+            if ok:
+                self.resource_labels[res_id].config(text="OK", fg='#00ff88')
+            else:
+                self.resource_labels[res_id].config(text="X", fg='#e94560')
+
+    def _browse_chrome(self, num: int):
+        """Chon file Chrome."""
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            title=f"Chon Chrome Portable {num}",
+            filetypes=[("Executable", "*.exe"), ("All files", "*.*")]
+        )
+        if path:
+            if num == 1:
+                self.chrome1_var.set(path)
+            else:
+                self.chrome2_var.set(path)
+            self._check_resources()
+
+
+# ================================================================================
 # PROJECT DETAIL - Hiển thị chi tiết từng scene
 # ================================================================================
 
@@ -686,10 +916,10 @@ class SimpleGUI(tk.Tk):
                   activebackground='#0f3460', activeforeground='#00ff88')
         self.ipv6_check.pack(side="left", padx=15)
 
-        # Setup button - cai thu vien
-        self.setup_btn = tk.Button(top, text="SETUP", command=self._run_setup,
+        # Settings button - cau hinh
+        self.settings_btn = tk.Button(top, text="SETTINGS", command=self._open_settings,
                   bg='#ff9f43', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
-        self.setup_btn.pack(side="left", padx=5)
+        self.settings_btn.pack(side="left", padx=5)
 
         # Update button - cap nhat tu GitHub
         self.update_btn = tk.Button(top, text="UPDATE", command=self._run_update,
@@ -1255,42 +1485,9 @@ class SimpleGUI(tk.Tk):
 
         threading.Thread(target=do_update, daemon=True).start()
 
-    def _run_setup(self):
-        """Chay pip install de cai thu vien."""
-        import subprocess
-
-        def do_setup():
-            self.setup_btn.config(state="disabled", text="DANG CAI...", bg='#666')
-            self.status_var.set("Dang cai thu vien...")
-
-            try:
-                # Chay pip install
-                req_file = TOOL_DIR / "requirements.txt"
-                if req_file.exists():
-                    result = subprocess.run(
-                        [sys.executable, "-m", "pip", "install", "-r", str(req_file)],
-                        capture_output=True,
-                        text=True,
-                        timeout=300  # 5 phut
-                    )
-
-                    if result.returncode == 0:
-                        self.status_var.set("Cai xong! Khoi dong lai de ap dung.")
-                        self.setup_btn.config(text="XONG", bg='#00ff88')
-                    else:
-                        self.status_var.set("Loi khi cai!")
-                        self.setup_btn.config(text="LOI", bg='#e94560')
-                        print(f"Setup error: {result.stderr}")
-                else:
-                    self.status_var.set("Khong tim thay requirements.txt!")
-                    self.setup_btn.config(text="LOI", bg='#e94560')
-            except Exception as e:
-                self.status_var.set(f"Loi: {e}")
-                self.setup_btn.config(text="LOI", bg='#e94560')
-            finally:
-                self.after(3000, lambda: self.setup_btn.config(state="normal", text="SETUP", bg='#ff9f43'))
-
-        threading.Thread(target=do_setup, daemon=True).start()
+    def _open_settings(self):
+        """Mo cua so Settings."""
+        SettingsWindow(self)
 
     def _toggle_ipv6(self):
         """Bat/tat IPv6 va luu vao settings.yaml."""
