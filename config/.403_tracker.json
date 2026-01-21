@@ -1,0 +1,12 @@
+{
+  "workers": {
+    "0": {
+      "ready_for_rotation": false,
+      "cleared_data": false,
+      "403_count": 0,
+      "last_403": null
+    }
+  },
+  "last_ipv6_rotation": null,
+  "total_workers": 2
+}
