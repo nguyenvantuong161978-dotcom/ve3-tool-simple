@@ -933,6 +933,11 @@ class SimpleGUI(tk.Tk):
                   bg='#a29bfe', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
         self.setup_vm_btn.pack(side="left", padx=5)
 
+        # Git version info
+        git_info = self._get_git_version()
+        tk.Label(top, text=git_info, bg='#0f3460', fg='#888',
+                 font=("Consolas", 8)).pack(side="right", padx=10)
+
         # Status
         self.status_var = tk.StringVar(value="San sang")
         tk.Label(top, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
@@ -1797,6 +1802,27 @@ class SimpleGUI(tk.Tk):
             self.manager.show_chrome_with_cmd()
             self.toggle_btn.config(text="AN CMD", bg='#00b894')
             self.windows_visible = True
+
+    def _get_git_version(self) -> str:
+        """Lay thong tin git commit cuoi cung."""
+        try:
+            import subprocess
+            # Get commit hash (short)
+            result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
+                                  capture_output=True, text=True, cwd=TOOL_DIR, timeout=2)
+            if result.returncode == 0:
+                commit_hash = result.stdout.strip()
+
+                # Get commit date
+                result2 = subprocess.run(['git', 'log', '-1', '--format=%cd', '--date=format:%Y-%m-%d %H:%M'],
+                                       capture_output=True, text=True, cwd=TOOL_DIR, timeout=2)
+                if result2.returncode == 0:
+                    commit_date = result2.stdout.strip()
+                    return f"v{commit_hash} | {commit_date}"
+                return f"v{commit_hash}"
+        except:
+            pass
+        return "version: unknown"
 
     def _get_ipv6_setting(self) -> bool:
         """Doc IPv6 enabled tu settings.yaml. Mac dinh la True."""
