@@ -894,6 +894,14 @@ class SimpleGUI(tk.Tk):
         )
         self.stop_btn.pack(side="left", padx=5, pady=12)
 
+        # Reset Workers button
+        self.reset_btn = tk.Button(
+            top, text="RESET", command=self._reset_workers,
+            bg='#ff6348', fg='white', font=("Arial", 12, "bold"),
+            relief="flat", padx=15, pady=5
+        )
+        self.reset_btn.pack(side="left", padx=5, pady=12)
+
         # Mode
         mode_frame = tk.Frame(top, bg='#0f3460')
         mode_frame.pack(side="left", padx=30)
@@ -1785,6 +1793,56 @@ class SimpleGUI(tk.Tk):
                 self.manager.kill_all_chrome()
             threading.Thread(target=stop_and_kill, daemon=True).start()
             self.start_btn.config(bg='#00ff88', state="normal")
+
+    def _reset_workers(self):
+        """Reset workers: Kill all Chrome + CMD, then restart workers."""
+        if not self.manager:
+            return
+
+        from tkinter import messagebox
+        if not messagebox.askyesno("Reset Workers",
+                                   "Reset tat ca Chrome workers?\n\n"
+                                   "- Tat CMD va Chrome\n"
+                                   "- Khoi dong lai workers\n\n"
+                                   "Tiep tuc?"):
+            return
+
+        self.status_var.set("Dang reset workers...")
+        self.reset_btn.config(bg='#666', state="disabled")
+
+        def do_reset():
+            try:
+                # Log
+                if LOGGER_AVAILABLE:
+                    from modules.central_logger import log
+                    log("main", "=== RESET WORKERS ===", "INFO")
+
+                # 1. Stop all workers
+                self.manager.stop_all()
+                time.sleep(2)
+
+                # 2. Kill all Chrome + CMD
+                self.manager.kill_all_chrome()
+                time.sleep(2)
+
+                # 3. Restart Chrome workers
+                chrome_workers = [wid for wid in self.manager.workers if wid.startswith("chrome_")]
+                for wid in chrome_workers:
+                    self.manager.start_worker(wid)
+                    time.sleep(2)
+
+                # Update status
+                self.status_var.set("Reset xong!")
+                messagebox.showinfo("Reset Complete", "Workers da duoc reset thanh cong!")
+
+            except Exception as e:
+                self.status_var.set(f"Loi reset: {str(e)[:40]}")
+                messagebox.showerror("Reset Error", f"Loi: {e}")
+
+            finally:
+                self.reset_btn.config(bg='#ff6348', state="normal")
+
+        threading.Thread(target=do_reset, daemon=True).start()
 
     def _toggle_windows(self):
         """Toggle CMD+Chrome windows visibility."""
