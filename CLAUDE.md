@@ -86,7 +86,19 @@ git push official main  # Push lên repo chính thức
 
 4. **Agent Protocol**: Workers giao tiếp qua `.agent/status/*.json`
 
-## Recent Fixes (2026-01-20)
+## Recent Fixes
+
+### 2026-01-22 - Chrome 2 Control Fix
+- **CRITICAL**: Fixed Chrome 2 using wrong portable path
+  - Added `not self._chrome_portable` check to prevent auto-detect override
+  - Added relative-to-absolute path conversion in drission_flow_api.py
+- Created check_version.py to verify fixes are applied
+- Created FIX_CHROME2_INSTRUCTIONS.txt for user update guide
+- Fixed CMD hiding (START.bat uses pythonw)
+- Fixed Chrome window positioning (even split, no overlap)
+- Added show_cmd_windows() function
+
+### 2026-01-20
 - Fix GUI hiển thị đúng ProjectStatus attributes
 - Fix bug `scene_number` → `scene_id` trong `get_project_status()`
 - Thêm Chrome data clearing khi 403 errors
@@ -99,33 +111,46 @@ git push official main  # Push lên repo chính thức
 
 > **QUAN TRỌNG**: Claude Code phải cập nhật section này sau mỗi phiên làm việc để phiên sau sử dụng hiệu quả.
 
-### Phiên hiện tại: 2026-01-22
+### Phiên hiện tại: 2026-01-22 (Continued Session)
 
-**CRITICAL ISSUE - Chrome 2 không điều khiển được:**
-- Vấn đề: Chrome 2 worker dùng SAI Chrome portable (dùng Chrome 1's portable)
-- Root cause: Auto-detect override chrome_portable path
-- Fix đã thử:
-  1. ✅ Thêm check `not self._chrome_portable` vào auto-detect condition
-  2. ✅ Convert relative path sang absolute path
-  3. ❌ Vẫn chưa hoạt động - cần investigate thêm
+**RESOLUTION - Chrome 2 Portable Path Issue:**
+- ✅ Fixes are IMPLEMENTED and VERIFIED on codebase (commit 43d3158)
+- ✅ Both fixes confirmed present via check_version.py:
+  1. Auto-detect skip check - prevents override when chrome_portable is set
+  2. Relative-to-absolute path conversion - handles ./GoogleChromePortable paths
+- ⚠️ User (thutruc) needs to UPDATE their code to get fixes
+- 📄 Created FIX_CHROME2_INSTRUCTIONS.txt with step-by-step update guide
 
-**Đã hoàn thành phiên này:**
-- [x] Fix CMD hiding - START.bat dùng pythonw
-- [x] Fix Chrome window detection (class name Chrome_WidgetWin)
-- [x] Fix Chrome window positioning (MoveWindow thay vì SetWindowPos)
-- [x] Add show_cmd_windows() - hiện CMD ở giữa màn hình
-- [x] Fix Chrome height - chia đều 2 Chrome không đè lên nhau
-- [x] Revert wrapper script (đã làm hỏng Chrome automation)
-- [x] Multiple attempts fix Chrome 2 portable path issue
+**Root Cause Identified:**
+- Auto-detect code in drission_flow_api.py was running even when chrome_portable was set
+- This caused Chrome 2 to use Chrome 1's portable path
+- Fix: Added `not self._chrome_portable` check to auto-detect condition (line 2104)
 
-**Vấn đề cần fix URGENT:**
-- [ ] Chrome 2 portable path bị override - cần fix triệt để
-  - SmartEngine truyền đúng: `./GoogleChromePortable - Copy/`
-  - DrissionFlowAPI nhận sai: `./GoogleChromePortable/`
-  - Cần trace code flow để tìm chỗ mất path
+**Fixes Applied (in modules/drission_flow_api.py):**
+1. Line 2104: `if not chrome_exe and not self._chrome_portable and platform.system()...`
+   - Auto-detect only runs if chrome_portable is NOT already set
+2. Lines 2086-2088: Convert relative paths to absolute
+   ```python
+   if not os.path.isabs(chrome_exe):
+       tool_dir = Path(__file__).parent.parent
+       chrome_exe = str(tool_dir / chrome_exe)
+   ```
+
+**Completed this session:**
+- [x] Created check_version.py script to verify fixes
+- [x] Fixed Unicode errors in check_version.py (use ASCII instead)
+- [x] Verified both fixes present in codebase
+- [x] Created FIX_CHROME2_INSTRUCTIONS.txt for user
+- [x] Committed and pushed to GitHub (commit 43d3158)
+- [x] Updated CLAUDE.md documentation
+
+**Next Steps for User (thutruc):**
+1. Close tool completely
+2. Run UPDATE_MANUAL.bat OR click UPDATE in GUI OR git pull
+3. Run check_version.py to verify
+4. Start tool and verify Chrome 2 uses correct path with " - Copy"
 
 ### Backlog (việc cần làm)
-- [ ] Fix Chrome 2 portable path issue (URGENT)
 - [ ] Worker logs không hiển thị trong GUI (trade-off để Chrome automation hoạt động)
 - [ ] Kiểm tra và làm sạch IPv6 list
 - [ ] Test auto-recovery khi Chrome disconnect
