@@ -3157,14 +3157,21 @@ class BrowserFlowGenerator:
                     video_success += 1
                     self.stats["success"] += 1
 
-                    # Xóa ảnh sau khi tạo video thành công
+                    # Di chuyển ảnh vào img_backup/ sau khi tạo video thành công
+                    # (Giữ lại để hiển thị thumbnail trong GUI)
                     image_file = output_dir / f"{scene_id}.png"
                     if image_file.exists():
                         try:
-                            image_file.unlink()
-                            self._log(f"   [DEL] Deleted image: {image_file.name}")
+                            # Tạo folder backup nếu chưa có
+                            backup_dir = output_dir.parent / "img_backup"
+                            backup_dir.mkdir(exist_ok=True)
+
+                            # Di chuyển ảnh vào backup
+                            backup_file = backup_dir / image_file.name
+                            image_file.rename(backup_file)
+                            self._log(f"   [MOVE] Moved image to backup: {image_file.name}")
                         except Exception as e:
-                            self._log(f"   [WARN] Cannot delete image: {e}", "warn")
+                            self._log(f"   [WARN] Cannot move image: {e}", "warn")
 
                     # Update Excel
                     workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
@@ -4567,14 +4574,21 @@ class BrowserFlowGenerator:
                             self._log(f"   [v] OK: {video_file.name}")
                             video_success += 1
 
-                            # Xóa ảnh sau khi tạo video thành công (tiết kiệm dung lượng)
+                            # Di chuyển ảnh vào img_backup/ sau khi tạo video thành công
+                            # (Giữ lại để hiển thị thumbnail trong GUI)
                             image_file = video_dir / f"{scene_id}.png"
                             if image_file.exists():
                                 try:
-                                    image_file.unlink()
-                                    self._log(f"   [DEL] Deleted image: {image_file.name}")
+                                    # Tạo folder backup nếu chưa có
+                                    backup_dir = video_dir.parent / "img_backup"
+                                    backup_dir.mkdir(exist_ok=True)
+
+                                    # Di chuyển ảnh vào backup
+                                    backup_file = backup_dir / image_file.name
+                                    image_file.rename(backup_file)
+                                    self._log(f"   [MOVE] Moved image to backup: {image_file.name}")
                                 except Exception as e:
-                                    self._log(f"   [WARN] Cannot delete image: {e}", "warn")
+                                    self._log(f"   [WARN] Cannot move image: {e}", "warn")
 
                             # Update Excel
                             if workbook:

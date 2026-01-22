@@ -50,14 +50,69 @@ except ImportError:
 
 # Central Logger - để log hiển thị trong GUI
 try:
-    from modules.central_logger import log as central_log
-    CENTRAL_LOGGER = True
+    from modules.central_logger import get_logger
+    _logger = get_logger(WORKER_ID)
 except ImportError:
-    CENTRAL_LOGGER = False
-    central_log = None
+    class FakeLogger:
+        def info(self, msg): print(f"[{WORKER_ID}] {msg}")
+        def warn(self, msg): print(f"[{WORKER_ID}] WARN: {msg}")
+        def error(self, msg): print(f"[{WORKER_ID}] ERROR: {msg}")
+    _logger = FakeLogger()
 
 # Global agent instance
 _agent = None
+
+
+# Override print CHÍNH XÁC - tránh recursion với central_logger
+import builtins
+_original_print = builtins.print
+
+# Flag để tránh recursion khi central_logger gọi print
+_in_logger = False
+
+def _logger_print(*args, **kwargs):
+    """Override print() to log to central_logger (tránh recursion)."""
+    global _in_logger
+
+    # Nếu đang trong logger, dùng print gốc
+    if _in_logger:
+        _original_print(*args, **kwargs)
+        return
+
+    try:
+        _in_logger = True
+        msg = ' '.join(str(arg) for arg in args)
+
+        # Remove timestamp prefix if present (avoid duplication)
+        if msg.startswith('[') and ']' in msg[:12]:
+            msg = msg.split(']', 1)[-1].strip()
+
+        if msg.strip():
+            _logger.info(msg)
+    finally:
+        _in_logger = False
+
+builtins.print = _logger_print
+
+
+def log(msg: str, level: str = "INFO"):
+    """Log to console + central logger + agent."""
+    global _agent
+
+    # Log to central logger (cho GUI)
+    if level == "ERROR":
+        _logger.error(msg)
+    elif level == "WARN":
+        _logger.warn(msg)
+    else:
+        _logger.info(msg)
+
+    # Gửi đến Agent nếu có
+    if _agent:
+        if level == "ERROR":
+            _agent.log_error(msg)
+        else:
+            _agent.log(msg, level)
 
 
 def init_agent():

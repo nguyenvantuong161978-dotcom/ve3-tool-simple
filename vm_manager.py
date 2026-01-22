@@ -420,29 +420,35 @@ class QualityChecker:
                 status.excel_status = "complete"
                 status.current_step = "image"
 
-            # Check images - use actual img/{scene_id}.png path
+            # Check images and videos
+            # Images can be in img/ (active) or img_backup/ (moved after video creation)
+            # Videos are .mp4 files in img/
             img_dir = project_dir / "img"
+            img_backup_dir = project_dir / "img_backup"
+
             for scene in scenes:
-                actual_img = img_dir / f"{scene.scene_id}.png"
-                if actual_img.exists():
+                scene_id = scene.scene_id
+                actual_img = img_dir / f"{scene_id}.png"
+                backup_img = img_backup_dir / f"{scene_id}.png"
+                actual_vid = img_dir / f"{scene_id}.mp4"
+
+                # Check if has image in img/ or img_backup/
+                if actual_img.exists() or backup_img.exists():
                     status.images_done += 1
                 else:
-                    status.images_missing.append(scene.scene_id)
+                    status.images_missing.append(scene_id)
+
+                # Check video separately
+                if actual_vid.exists():
+                    status.videos_done += 1
+                else:
+                    status.videos_missing.append(scene_id)
 
             if status.excel_status == "complete":
                 if status.images_done == status.total_scenes:
                     status.current_step = "video"
                 else:
                     status.current_step = "image"
-
-            # Check videos - use actual video/{scene_id}.mp4 path
-            video_dir = project_dir / "video"
-            for scene in scenes:
-                actual_vid = video_dir / f"{scene.scene_id}.mp4"
-                if actual_vid.exists():
-                    status.videos_done += 1
-                else:
-                    status.videos_missing.append(scene.scene_id)
 
             # Get video_mode from SettingsManager
             try:
@@ -2066,7 +2072,7 @@ class VMManager:
                     pass  # Ignore if can't clear
 
             if sys.platform == "win32":
-                # Windows - start with cmd window and redirect output to log
+                # Windows - start with cmd window
                 title = f"{w.worker_type.upper()} {w.worker_num or ''}"
                 cmd_args = f"python -X utf8 {script.name}"
                 if args:
@@ -2079,7 +2085,7 @@ class VMManager:
 
                 if gui_mode:
                     # GUI mode - start with visible CMD, will be moved off-screen later
-                    # Log viewing is handled by GUI reading log files written by workers
+                    # Workers use central_logger to write to logs/central.log
                     cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
 
@@ -2090,6 +2096,7 @@ class VMManager:
                     threading.Thread(target=move_cmd_offscreen, daemon=True).start()
                 else:
                     # Normal mode - visible CMD window with UTF-8 code page
+                    # Workers use central_logger to write to logs/central.log
                     cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
             else:

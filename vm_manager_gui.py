@@ -310,22 +310,36 @@ def find_scene_image(img_folder: Path, scene_id: int) -> Path | None:
     - scene_001.png (format chuẩn)
     - 1.png (format đơn giản)
     - scene_1.png (không padding)
+
+    Tìm trong img/ trước, nếu không có thì tìm trong img_backup/
+    (Ảnh được di chuyển vào backup sau khi tạo video)
     """
     if not img_folder or not img_folder.exists():
         return None
 
     # Các format có thể có
-    candidates = [
-        img_folder / f"scene_{scene_id:03d}.png",  # scene_001.png
-        img_folder / f"{scene_id}.png",             # 1.png
-        img_folder / f"scene_{scene_id}.png",       # scene_1.png
-        img_folder / f"scene_{scene_id:03d}.jpg",  # scene_001.jpg
-        img_folder / f"{scene_id}.jpg",             # 1.jpg
+    formats = [
+        f"scene_{scene_id:03d}.png",  # scene_001.png
+        f"{scene_id}.png",             # 1.png
+        f"scene_{scene_id}.png",       # scene_1.png
+        f"scene_{scene_id:03d}.jpg",  # scene_001.jpg
+        f"{scene_id}.jpg",             # 1.jpg
     ]
 
-    for path in candidates:
+    # Tìm trong img/ trước
+    for fmt in formats:
+        path = img_folder / fmt
         if path.exists():
             return path
+
+    # Nếu không có trong img/, tìm trong img_backup/
+    backup_folder = img_folder.parent / "img_backup"
+    if backup_folder.exists():
+        for fmt in formats:
+            path = backup_folder / fmt
+            if path.exists():
+                return path
+
     return None
 
 
@@ -1202,8 +1216,8 @@ class SimpleGUI(tk.Tk):
             self.log_text.insert('1.0', f"[{worker_id}] Manager not started\n")
             return
 
-        # Read log file
-        log_file = TOOL_DIR / ".agent" / "logs" / f"{worker_id}.log"
+        # Read from central log file and filter by worker_id
+        log_file = TOOL_DIR / "logs" / "central.log"
         if not log_file.exists():
             self.log_text.delete('1.0', tk.END)
             self.log_text.insert('1.0', f"[{worker_id}] No log file yet\n")
@@ -1211,13 +1225,21 @@ class SimpleGUI(tk.Tk):
 
         try:
             with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                # Read last 500 lines
-                lines = f.readlines()
-                recent_lines = lines[-500:] if len(lines) > 500 else lines
+                # Read all lines and filter by worker_id
+                all_lines = f.readlines()
+
+                # Filter lines containing this worker_id
+                worker_lines = [line for line in all_lines if f"[{worker_id:10}]" in line or f"[{worker_id}]" in line]
+
+                # Get last 500 lines for this worker
+                recent_lines = worker_lines[-500:] if len(worker_lines) > 500 else worker_lines
                 log_content = ''.join(recent_lines)
 
             self.log_text.delete('1.0', tk.END)
-            self.log_text.insert('1.0', log_content)
+            if log_content:
+                self.log_text.insert('1.0', log_content)
+            else:
+                self.log_text.insert('1.0', f"[{worker_id}] No logs yet\n")
             self.log_text.see(tk.END)  # Auto-scroll to bottom
 
         except Exception as e:

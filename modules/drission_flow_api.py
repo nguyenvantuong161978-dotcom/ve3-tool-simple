@@ -2661,6 +2661,13 @@ class DrissionFlowAPI:
                     self.log(f"[PAGE] Lỗi inject: {e}", "WARN")
                     break
 
+        # === ĐẢM BẢO WINDOW SIZE ĐỒNG NHẤT ===
+        # Sau khi setup xong, set lại window layout để Chrome có kích thước đúng
+        # (Tránh trường hợp Chrome bị thu nhỏ sau khi reset hoặc navigate)
+        if not self._headless and self._total_workers > 0:
+            self.log("[WIN] Đảm bảo window size đồng nhất...")
+            self._setup_window_layout()
+
         self._ready = True
         return True
 
@@ -2867,12 +2874,75 @@ class DrissionFlowAPI:
                 self.log("[WARN] Không tìm thấy textarea", "WARN")
                 return False
 
-            # 3. Click vào textarea để focus
-            try:
-                textarea.click()
-                time.sleep(0.5)
-            except:
-                pass
+            # 3. Click vào textarea để focus (2 lần + verify) - RETRY nếu fail
+            focus_ok = False
+            max_retry = 3
+
+            for attempt in range(max_retry):
+                try:
+                    if attempt > 0:
+                        self.log(f"    → Retry click {attempt + 1}/{max_retry}...")
+
+                    # Click lần 1
+                    textarea.click()
+                    time.sleep(0.3)
+
+                    # Click lần 2 để đảm bảo focus
+                    textarea.click()
+                    time.sleep(0.2)
+
+                    # VERIFY: Kiểm tra focus bằng cách điền text test
+                    try:
+                        verify_result = self.driver.run_js("""
+                            (function() {
+                                try {
+                                    var textarea = document.querySelector('textarea');
+                                    if (!textarea) return 'not_found';
+
+                                    // Lưu value cũ
+                                    var oldValue = textarea.value;
+
+                                    // Test: Điền text thử
+                                    textarea.value = '__FOCUS_TEST__';
+
+                                    // Check có điền được không
+                                    var success = (textarea.value === '__FOCUS_TEST__');
+
+                                    // Restore value cũ
+                                    textarea.value = oldValue;
+
+                                    return success ? 'focus_ok' : 'focus_failed';
+                                } catch(e) {
+                                    return 'js_error: ' + e.message;
+                                }
+                            })();
+                        """)
+
+                        if verify_result == 'focus_ok':
+                            self.log("    → Focus verified OK")
+                            focus_ok = True
+                            break  # Thành công, thoát loop
+                        elif verify_result is None:
+                            self.log("    → [WARN] Focus verify: None (clicked wrong place?)")
+                        else:
+                            self.log(f"    → [WARN] Focus verify: {verify_result}")
+
+                    except Exception as verify_err:
+                        self.log(f"    → [WARN] Verify error: {verify_err}")
+
+                    # Nếu đến đây mà chưa break → verify fail → retry
+                    if attempt < max_retry - 1:
+                        time.sleep(0.5)
+
+                except Exception as e:
+                    self.log(f"    → [WARN] Click error: {e}")
+                    if attempt < max_retry - 1:
+                        time.sleep(0.5)
+
+            # Nếu sau 3 lần vẫn không verify OK → cảnh báo nhưng vẫn thử paste
+            if not focus_ok:
+                self.log("    → [WARN] Focus NOT verified after retries, continue anyway...")
+
 
             # 4. Clear nội dung cũ bằng Ctrl+A
             from DrissionPage.common import Keys
@@ -2965,22 +3035,27 @@ class DrissionFlowAPI:
                         # Fallback: dùng JavaScript
                         self.driver.run_js(f"window.moveTo({x}, {y}); window.resizeTo({w}, {h});")
 
-            # Fixed Chrome window size (700x550) on right side, stacked vertically
-            # This matches the layout in vm_manager.show_chrome_windows()
-            chrome_width = 700
-            chrome_height = 550
+            # Chrome window size - match vm_manager.show_chrome_windows() layout
+            # Each Chrome takes ~1/2 screen height, stacked vertically on right side
+            gap = 20  # Gap between windows and screen edges
+            chrome_width = max(int(screen_w * 0.55), 1200)  # 55% screen width, min 1200
+            chrome_height = (screen_h - gap * 3) // 2  # Half screen height
+            chrome_height = max(chrome_height, 600)  # Min 600px
 
             # Position on right side of screen
-            x_start = screen_w - chrome_width - 10  # 10px from right edge
-            y_start = 50  # Start 50px from top
+            x_pos = screen_w - chrome_width - 10  # 10px from right edge
 
-            # Stack windows vertically based on worker_id
-            win_x = x_start
-            win_y = y_start + (worker * (chrome_height + 10))  # 10px gap between windows
+            # Stack vertically: Chrome 1 top, Chrome 2 bottom
+            if worker == 0:
+                # Chrome 1 - Top half
+                y_pos = gap
+            else:
+                # Chrome 2 - Bottom half
+                y_pos = gap + chrome_height + gap
 
-            # Make sure it doesn't go off screen
-            if win_y + chrome_height > screen_h:
-                win_y = y_start  # Reset to top if too low
+            # Set window position and size
+            win_x = x_pos
+            win_y = y_pos
 
             set_window_rect(win_x, win_y, chrome_width, chrome_height)
             self.log(f"[WIN] Window: Chrome {worker + 1} ({chrome_width}x{chrome_height} at {win_x},{win_y})")
@@ -2989,13 +3064,15 @@ class DrissionFlowAPI:
             self.log(f"[WARN] Window layout error: {e}", "WARN")
             # Don't fallback to maximize - keep Chrome at default size
 
-    def _click_textarea(self, wait_visible: bool = True):
+    def _click_textarea(self, wait_visible: bool = True, max_retry: int = 3):
         """
         Click vào textarea để focus - QUAN TRỌNG để nhập prompt.
         Đợi textarea visible trước khi click, nếu không thấy sẽ F5 refresh.
+        VERIFY focus bằng cách điền text test và đọc lại.
 
         Args:
             wait_visible: True = đợi textarea visible trước khi click
+            max_retry: Số lần retry nếu click nhầm chỗ (default: 3)
         """
         try:
             # QUAN TRỌNG: Đợi textarea visible trước khi click
@@ -3004,81 +3081,133 @@ class DrissionFlowAPI:
                     self.log("[x] Textarea không visible sau khi refresh", "ERROR")
                     return False
 
-            result = self.driver.run_js("""
-                (function() {
-                    var textarea = document.querySelector('textarea');
-                    if (!textarea) return 'not_found';
+            # RETRY LOOP: Click và verify focus
+            for attempt in range(max_retry):
+                self.log(f"[CLICK] Attempt {attempt + 1}/{max_retry}...")
 
-                    // Kiểm tra visible lần cuối trước khi click
-                    var rect = textarea.getBoundingClientRect();
-                    if (rect.width <= 0 || rect.height <= 0) return 'not_visible';
-
-                    // Scroll vào view
-                    textarea.scrollIntoView({block: 'center', behavior: 'instant'});
-
-                    // Lấy vị trí giữa textarea
-                    rect = textarea.getBoundingClientRect();
-                    var centerX = rect.left + rect.width / 2;
-                    var centerY = rect.top + rect.height / 2;
-
-                    // Tạo và dispatch mousedown event
-                    var mousedown = new MouseEvent('mousedown', {
-                        bubbles: true, cancelable: true, view: window,
-                        clientX: centerX, clientY: centerY
-                    });
-                    textarea.dispatchEvent(mousedown);
-
-                    // Tạo và dispatch mouseup event
-                    var mouseup = new MouseEvent('mouseup', {
-                        bubbles: true, cancelable: true, view: window,
-                        clientX: centerX, clientY: centerY
-                    });
-                    textarea.dispatchEvent(mouseup);
-
-                    // Tạo và dispatch click event
-                    var click = new MouseEvent('click', {
-                        bubbles: true, cancelable: true, view: window,
-                        clientX: centerX, clientY: centerY
-                    });
-                    textarea.dispatchEvent(click);
-
-                    // Focus
-                    textarea.focus();
-
-                    return 'clicked';
-                })();
-            """)
-
-            if result == 'clicked':
-                self.log("[v] Clicked textarea (JS) - lần 1")
-                # Click lần 2 sau 2s để đảm bảo focus
-                time.sleep(2)
-                result2 = self.driver.run_js("""
+                # === BƯỚC 1: CLICK VÀO TEXTAREA (2 LẦN ĐỂ ĐẢM BẢO FOCUS) ===
+                click_js = """
                     (function() {
                         var textarea = document.querySelector('textarea');
                         if (!textarea) return 'not_found';
-                        textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                        // Kiểm tra visible lần cuối trước khi click
                         var rect = textarea.getBoundingClientRect();
+                        if (rect.width <= 0 || rect.height <= 0) return 'not_visible';
+
+                        // Scroll vào view
+                        textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                        // Lấy vị trí giữa textarea
+                        rect = textarea.getBoundingClientRect();
                         var centerX = rect.left + rect.width / 2;
                         var centerY = rect.top + rect.height / 2;
+
+                        // Tạo và dispatch mousedown event
+                        var mousedown = new MouseEvent('mousedown', {
+                            bubbles: true, cancelable: true, view: window,
+                            clientX: centerX, clientY: centerY
+                        });
+                        textarea.dispatchEvent(mousedown);
+
+                        // Tạo và dispatch mouseup event
+                        var mouseup = new MouseEvent('mouseup', {
+                            bubbles: true, cancelable: true, view: window,
+                            clientX: centerX, clientY: centerY
+                        });
+                        textarea.dispatchEvent(mouseup);
+
+                        // Tạo và dispatch click event
                         var click = new MouseEvent('click', {
                             bubbles: true, cancelable: true, view: window,
                             clientX: centerX, clientY: centerY
                         });
                         textarea.dispatchEvent(click);
+
+                        // Focus
                         textarea.focus();
+
                         return 'clicked';
                     })();
-                """)
-                if result2 == 'clicked':
-                    self.log("[v] Clicked textarea (JS) - lần 2")
+                """
+
+                # Click lần 1
+                result = self.driver.run_js(click_js)
+
+                if result == 'not_found':
+                    self.log("[x] Textarea not found", "ERROR")
+                    return False
+                elif result == 'not_visible':
+                    self.log("[x] Textarea not visible", "ERROR")
+                    return False
+                elif result != 'clicked':
+                    self.log(f"[x] Click failed: {result}", "WARN")
+                    time.sleep(1)
+                    continue
+
+                self.log("    → Clicked 1st time")
                 time.sleep(0.3)
-                return True
-            elif result == 'not_found':
-                self.log("[x] Textarea not found", "ERROR")
-            elif result == 'not_visible':
-                self.log("[x] Textarea not visible", "ERROR")
+
+                # Click lần 2 để đảm bảo focus
+                result2 = self.driver.run_js(click_js)
+                if result2 == 'clicked':
+                    self.log("    → Clicked 2nd time")
+
+                time.sleep(0.5)
+
+                # === BƯỚC 2: VERIFY FOCUS bằng cách điền text test ===
+                self.log("[VERIFY] Testing focus by typing test text...")
+                verify_result = self.driver.run_js("""
+                    (function() {
+                        var textarea = document.querySelector('textarea');
+                        if (!textarea) return 'not_found';
+
+                        // Lưu value cũ
+                        var oldValue = textarea.value;
+
+                        // Clear và điền text test
+                        textarea.value = '__FOCUS_TEST__';
+
+                        // Trigger input event
+                        textarea.dispatchEvent(new Event('input', {bubbles: true}));
+
+                        // Đợi một chút
+                        var result = '';
+                        setTimeout(function() {
+                            // Đọc lại value
+                            var newValue = textarea.value;
+
+                            // Restore old value
+                            textarea.value = oldValue;
+                            textarea.dispatchEvent(new Event('input', {bubbles: true}));
+                        }, 50);
+
+                        // Check ngay lập tức
+                        if (textarea.value === '__FOCUS_TEST__') {
+                            // Restore luôn
+                            textarea.value = oldValue;
+                            return 'focus_ok';
+                        } else {
+                            return 'focus_failed';
+                        }
+                    })();
+                """)
+
+                time.sleep(0.2)
+
+                # === BƯỚC 3: KIỂM TRA KẾT QUẢ ===
+                if verify_result == 'focus_ok':
+                    self.log(f"[v] Textarea focused correctly! (attempt {attempt + 1})")
+                    return True
+                else:
+                    self.log(f"[x] Focus verification FAILED!", "WARN")
+                    self.log(f"    → Likely clicked wrong place, retry {attempt + 2}/{max_retry}...", "WARN")
+                    time.sleep(1)
+
+            # Hết retry
+            self.log("[x] Failed to focus textarea after all retries!", "ERROR")
             return False
+
         except Exception as e:
             self.log(f"[WARN] Click textarea error: {e}", "WARN")
             return False
