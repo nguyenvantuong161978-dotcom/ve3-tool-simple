@@ -1851,7 +1851,11 @@ class SimpleGUI(tk.Tk):
             self.manager.start_all(gui_mode=True)  # True = ẩn CMD windows
             threading.Thread(target=self.manager.orchestrate, daemon=True).start()
 
-            # Auto-hide CMD windows after 3 seconds
+            # Auto-hide CMD windows after workers start
+            time.sleep(5)  # Wait for workers to fully start
+            self.after(0, lambda: self._auto_hide_windows())
+
+            # Retry after another 3 seconds to make sure
             time.sleep(3)
             self.after(0, lambda: self._auto_hide_windows())
 
@@ -1992,10 +1996,16 @@ class SimpleGUI(tk.Tk):
 
     def _auto_hide_windows(self):
         """Auto-hide Chrome and CMD windows when GUI starts."""
-        if self.manager and not self.windows_visible:
-            self.manager.hide_cmd_windows()
-            self.manager.hide_chrome_windows()
-            self.toggle_btn.config(text="HIEN CHROME", bg='#6c5ce7')
+        if self.manager:
+            try:
+                print("[GUI] Auto-hiding CMD and Chrome windows...")
+                self.manager.hide_cmd_windows()
+                self.manager.hide_chrome_windows()
+                self.toggle_btn.config(text="HIEN CHROME", bg='#6c5ce7')
+                self.windows_visible = False
+                print("[GUI] Windows hidden successfully")
+            except Exception as e:
+                print(f"[GUI] Error hiding windows: {e}")
 
     def _get_git_version(self) -> str:
         """Lay thong tin git commit cuoi cung."""
