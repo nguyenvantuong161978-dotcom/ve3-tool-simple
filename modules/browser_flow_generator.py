@@ -3157,14 +3157,21 @@ class BrowserFlowGenerator:
                     video_success += 1
                     self.stats["success"] += 1
 
-                    # Xóa ảnh sau khi tạo video thành công
+                    # Di chuyển ảnh vào img_backup/ sau khi tạo video thành công
+                    # (Giữ lại để hiển thị thumbnail trong GUI)
                     image_file = output_dir / f"{scene_id}.png"
                     if image_file.exists():
                         try:
-                            image_file.unlink()
-                            self._log(f"   [DEL] Deleted image: {image_file.name}")
+                            # Tạo folder backup nếu chưa có
+                            backup_dir = output_dir.parent / "img_backup"
+                            backup_dir.mkdir(exist_ok=True)
+
+                            # Di chuyển ảnh vào backup
+                            backup_file = backup_dir / image_file.name
+                            image_file.rename(backup_file)
+                            self._log(f"   [MOVE] Moved image to backup: {image_file.name}")
                         except Exception as e:
-                            self._log(f"   [WARN] Cannot delete image: {e}", "warn")
+                            self._log(f"   [WARN] Cannot move image: {e}", "warn")
 
                     # Update Excel
                     workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
@@ -3994,6 +4001,16 @@ class BrowserFlowGenerator:
                         self._log(f"[WARN] POLICY VIOLATION - Prompt vi phạm nội dung! SKIP {pid}", "warn")
                         self.stats["skipped"] = self.stats.get("skipped", 0) + 1
                         self.stats["failed"] -= 1  # Undo fail count (đã đánh dấu failed trước đó)
+
+                        # GHI VÀO EXCEL: status_img = "skip" để không retry lại
+                        if not is_reference_image and workbook:
+                            try:
+                                workbook.update_scene(int(pid), status_img="skip")
+                                workbook.save()
+                                self._log(f"   [EXCEL] Đánh dấu scene {pid} SKIP (policy violation)", "info")
+                            except Exception as e:
+                                self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
+
                         continue  # Skip to next prompt
 
                     # Check for 400 - Invalid argument (reference image expired or invalid prompt)
@@ -4071,15 +4088,45 @@ class BrowserFlowGenerator:
                                         self._log(f"   Media name: {images2[0].media_name[:40]}...")
                                 else:
                                     self._log(f"   [x] Retry vẫn thất bại - skip scene {pid}", "warn")
+                                    self.stats["failed"] = self.stats.get("failed", 0) + 1
+
+                                    # GHI VÀO EXCEL: Đánh dấu scene này skip vì 403 retry thất bại
+                                    if not is_reference_image and workbook:
+                                        try:
+                                            workbook.update_scene(int(pid), status_img="error_403")
+                                            workbook.save()
+                                            self._log(f"   [EXCEL] Đánh dấu scene {pid} ERROR_403 (403 retry failed)", "info")
+                                        except Exception as e:
+                                            self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
                             else:
                                 self._log(f"[x] Không restart được Chrome - skip scene {pid}", "warn")
                                 # Không break, tiếp tục với scene khác
+
+                                # GHI VÀO EXCEL: Đánh dấu scene này skip vì không restart được Chrome
+                                if not is_reference_image and workbook:
+                                    try:
+                                        workbook.update_scene(int(pid), status_img="error_403")
+                                        workbook.save()
+                                        self._log(f"   [EXCEL] Đánh dấu scene {pid} ERROR_403 (Chrome restart failed)", "info")
+                                    except Exception as e:
+                                        self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
                         except Exception as e:
                             self._log(f"[x] Restart error: {e} - skip scene {pid}", "warn")
                             # Không break, tiếp tục với scene khác
 
+                            # GHI VÀO EXCEL: Đánh dấu scene này skip vì restart lỗi
+                            if not is_reference_image and workbook:
+                                try:
+                                    workbook.update_scene(int(pid), status_img="error_403")
+                                    workbook.save()
+                                    self._log(f"   [EXCEL] Đánh dấu scene {pid} ERROR_403 (restart exception)", "info")
+                                except Exception as e2:
+                                    self._log(f"   [EXCEL] Lỗi update Excel: {e2}", "warn")
+
             except Exception as e:
-                self._log(f"   [x] Exception: {e}", "error")
+                import traceback
+                self._log(f"   [x] Exception: {type(e).__name__}: {str(e)}", "error")
+                self._log(f"   Traceback: {traceback.format_exc()}", "error")
                 self.stats["failed"] += 1
 
             # Rate limit
@@ -4098,7 +4145,7 @@ class BrowserFlowGenerator:
             self._log("RETRY PHASE - Tìm ảnh còn thiếu")
             self._log("=" * 60)
 
-            # Tìm những prompts chưa có ảnh
+            # Tìm những prompts chưa có ảnh (và chưa bị skip/error)
             missing_prompts = []
             for prompt_data in prompts:
                 pid = str(prompt_data.get('id', ''))
@@ -4109,8 +4156,24 @@ class BrowserFlowGenerator:
                 save_dir = self.nv_path if is_reference else output_dir
                 output_file = save_dir / f"{pid}.png"
 
-                if not output_file.exists():
-                    missing_prompts.append(prompt_data)
+                # Skip nếu file đã tồn tại
+                if output_file.exists():
+                    continue
+
+                # Skip nếu đã đánh dấu skip/error trong Excel
+                if workbook and not is_reference:
+                    try:
+                        scene = workbook.get_scene(int(pid))
+                        if scene:
+                            status = getattr(scene, 'status_img', '') or ''
+                            # Bỏ qua scenes đã skip hoặc có error
+                            if status in ['skip', 'error_403', 'error']:
+                                self._log(f"[RETRY] Skip scene {pid} - status={status}", "info")
+                                continue
+                    except:
+                        pass
+
+                missing_prompts.append(prompt_data)
 
             if missing_prompts:
                 self._log(f"Tìm thấy {len(missing_prompts)} ảnh thiếu, đang retry...")
@@ -4187,7 +4250,9 @@ class BrowserFlowGenerator:
                                 still_missing.append(prompt_data)
 
                         except Exception as e:
-                            self._log(f"   [x] Retry error: {e}", "error")
+                            import traceback
+                            self._log(f"   [x] Retry error: {type(e).__name__}: {str(e)}", "error")
+                            self._log(f"   Traceback: {traceback.format_exc()}", "error")
                             still_missing.append(prompt_data)
 
                         time.sleep(2)
@@ -4406,10 +4471,17 @@ class BrowserFlowGenerator:
                     status_img = getattr(scene, 'status_img', '') or ''
                     prompt = getattr(scene, 'prompt', '') or ''
 
-                    # Nếu có prompt và chưa done → chưa xong
-                    if prompt and prompt.strip().upper() != 'DO_NOT_GENERATE' and status_img != 'done':
-                        all_images_done = False
-                        pending_scenes.append(scene_id)
+                    # Nếu có prompt và chưa done (bỏ qua skip/error) → chưa xong
+                    # Skip/error không cần chờ vì không thể tạo được
+                    if prompt and prompt.strip().upper() != 'DO_NOT_GENERATE':
+                        if status_img == 'done':
+                            pass  # OK
+                        elif status_img in ['skip', 'error_403', 'error']:
+                            pass  # Bỏ qua, không cần chờ
+                        else:
+                            # pending hoặc trống → chưa xong
+                            all_images_done = False
+                            pending_scenes.append(scene_id)
             except Exception as e:
                 self._log(f"[I2V] Warning: Cannot check pending scenes: {e}", "warn")
 
@@ -4506,14 +4578,21 @@ class BrowserFlowGenerator:
                             self._log(f"   [v] OK: {video_file.name}")
                             video_success += 1
 
-                            # Xóa ảnh sau khi tạo video thành công (tiết kiệm dung lượng)
+                            # Di chuyển ảnh vào img_backup/ sau khi tạo video thành công
+                            # (Giữ lại để hiển thị thumbnail trong GUI)
                             image_file = video_dir / f"{scene_id}.png"
                             if image_file.exists():
                                 try:
-                                    image_file.unlink()
-                                    self._log(f"   [DEL] Deleted image: {image_file.name}")
+                                    # Tạo folder backup nếu chưa có
+                                    backup_dir = video_dir.parent / "img_backup"
+                                    backup_dir.mkdir(exist_ok=True)
+
+                                    # Di chuyển ảnh vào backup
+                                    backup_file = backup_dir / image_file.name
+                                    image_file.rename(backup_file)
+                                    self._log(f"   [MOVE] Moved image to backup: {image_file.name}")
                                 except Exception as e:
-                                    self._log(f"   [WARN] Cannot delete image: {e}", "warn")
+                                    self._log(f"   [WARN] Cannot move image: {e}", "warn")
 
                             # Update Excel
                             if workbook:
