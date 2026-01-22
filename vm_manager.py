@@ -1683,7 +1683,7 @@ class VMManager:
     # ================================================================================
 
     def get_chrome_windows(self) -> List[int]:
-        """Lấy danh sách handle của các cửa sổ Chrome."""
+        """Lấy danh sách handle của các cửa sổ Chrome (kể cả khi bị move off-screen)."""
         if sys.platform != "win32":
             return []
 
@@ -1695,14 +1695,21 @@ class VMManager:
             chrome_windows = []
 
             def enum_windows_callback(hwnd, lParam):
+                # Check visible state (even if off-screen)
                 if user32.IsWindowVisible(hwnd):
-                    length = user32.GetWindowTextLengthW(hwnd)
-                    if length > 0:
-                        title = ctypes.create_unicode_buffer(length + 1)
-                        user32.GetWindowTextW(hwnd, title, length + 1)
-                        # Chrome windows usually have " - Google Chrome" in title
-                        if "Chrome" in title.value or "chrome" in title.value.lower():
-                            chrome_windows.append(hwnd)
+                    # Get class name
+                    class_name = ctypes.create_unicode_buffer(256)
+                    user32.GetClassNameW(hwnd, class_name, 256)
+
+                    # Chrome browser windows have class "Chrome_WidgetWin_*"
+                    if class_name.value.startswith("Chrome_WidgetWin"):
+                        length = user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            title = ctypes.create_unicode_buffer(length + 1)
+                            user32.GetWindowTextW(hwnd, title, length + 1)
+                            # Skip Chrome.exe windows (only get browser windows)
+                            if "chrome.exe" not in title.value.lower():
+                                chrome_windows.append(hwnd)
                 return True
 
             WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
@@ -1744,7 +1751,9 @@ class VMManager:
 
     def show_chrome_windows(self):
         """
-        Hiện các cửa sổ Chrome - đặt bên phải màn hình, size nhỏ.
+        Hiện các cửa sổ Chrome - đặt bên phải màn hình, TO HƠN để dễ quan sát.
+        Chrome 1: Phía trên bên phải
+        Chrome 2: Phía dưới bên phải
         """
         if sys.platform != "win32":
             self.log("Window showing only supported on Windows", "CHROME", "WARN")
@@ -1763,27 +1772,33 @@ class VMManager:
             screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
             screen_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
 
-            # Chrome window size (bigger for better visibility, on right side)
-            chrome_width = 700
-            chrome_height = 550
+            # Chrome window size - TO HƠN để dễ quan sát
+            chrome_width = max(int(screen_width * 0.55), 1200)  # 55% màn hình, tối thiểu 1200
+            chrome_height = max(int(screen_height * 0.45), 800)  # 45% màn hình, tối thiểu 800
 
-            # Position on right side, stacked vertically
-            x_start = screen_width - chrome_width - 10  # 10px from right edge
-            y_start = 50
+            # SW_RESTORE = 9 (restore if minimized)
+            # HWND_TOPMOST = -1, HWND_NOTOPMOST = -2
+            # SWP_SHOWWINDOW = 0x0040, SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001
 
             for i, hwnd in enumerate(chrome_windows):
-                x = x_start
-                y = y_start + (i * (chrome_height + 10))  # Stack vertically with 10px gap
+                # Restore window if minimized
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
 
-                # Make sure it doesn't go off screen
-                if y + chrome_height > screen_height:
-                    y = y_start
+                if i == 0:
+                    # Chrome 1 - Top-right
+                    x = screen_width - chrome_width - 10
+                    y = 10
+                else:
+                    # Chrome 2 - Bottom-right
+                    x = screen_width - chrome_width - 10
+                    y = screen_height - chrome_height - 50
 
-                # SWP_NOZORDER = 0x0004 (don't change z-order)
-                # Move and resize
-                user32.SetWindowPos(hwnd, 0, x, y, chrome_width, chrome_height, 0x0004)
+                # Set TOPMOST first to bring to front
+                user32.SetWindowPos(hwnd, -1, x, y, chrome_width, chrome_height, 0x0040)  # TOPMOST + SHOWWINDOW
+                # Then remove TOPMOST
+                user32.SetWindowPos(hwnd, -2, x, y, chrome_width, chrome_height, 0x0040 | 0x0002 | 0x0001)  # NOTOPMOST + SHOWWINDOW + NOMOVE + NOSIZE
 
-            self.log(f"Shown {len(chrome_windows)} Chrome windows (right side)", "CHROME", "SUCCESS")
+            self.log(f"Shown {len(chrome_windows)} Chrome windows (right side, large)", "CHROME", "SUCCESS")
             return True
         except Exception as e:
             self.log(f"Error showing Chrome windows: {e}", "CHROME", "ERROR")
