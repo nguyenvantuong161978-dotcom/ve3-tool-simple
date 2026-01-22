@@ -1801,9 +1801,10 @@ class SimpleGUI(tk.Tk):
 
         from tkinter import messagebox
         if not messagebox.askyesno("Reset Workers",
-                                   "Reset tat ca Chrome workers?\n\n"
-                                   "- Tat CMD va Chrome\n"
-                                   "- Khoi dong lai workers\n\n"
+                                   "Reset tat ca workers?\n\n"
+                                   "- Tat tat ca CMD (Excel + Chrome)\n"
+                                   "- Kill Chrome processes\n"
+                                   "- Khoi dong lai tat ca workers\n\n"
                                    "Tiep tuc?"):
             return
 
@@ -1825,15 +1826,14 @@ class SimpleGUI(tk.Tk):
                 self.manager.kill_all_chrome()
                 time.sleep(2)
 
-                # 3. Restart Chrome workers
-                chrome_workers = [wid for wid in self.manager.workers if wid.startswith("chrome_")]
-                for wid in chrome_workers:
+                # 3. Restart ALL workers (Excel + Chrome)
+                for wid in self.manager.workers:
                     self.manager.start_worker(wid)
                     time.sleep(2)
 
                 # Update status
                 self.status_var.set("Reset xong!")
-                messagebox.showinfo("Reset Complete", "Workers da duoc reset thanh cong!")
+                messagebox.showinfo("Reset Complete", "Tat ca workers da duoc reset thanh cong!")
 
             except Exception as e:
                 self.status_var.set(f"Loi reset: {str(e)[:40]}")
