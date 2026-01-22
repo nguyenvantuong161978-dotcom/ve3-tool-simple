@@ -6179,51 +6179,51 @@ NOW CREATE {num_shots} SHOTS that VISUALLY TELL THIS STORY MOMENT: "{scene_summa
         location_prompts = {
             "Home Interior": {
                 "lock": "American suburban home interior, comfortable sofa, family photos, warm lighting, modern decor",
-                "english_prompt": "Photorealistic American home interior. Spacious living room with comfortable leather sofa, family photos on mantle, warm lamp lighting, hardwood floors. Cozy suburban atmosphere, 8K cinematic quality."
+                "english_prompt": "Photorealistic American home interior. Spacious living room with comfortable leather sofa, family photos on mantle, warm lamp lighting, hardwood floors. Cozy suburban atmosphere, empty room, 8K cinematic quality."
             },
             "School": {
                 "lock": "American high school, lockers in hallway, classroom with desks, bright fluorescent lighting",
-                "english_prompt": "Photorealistic American school scene. High school hallway with metal lockers, classroom with individual desks, American flag, bright lighting. Typical US school atmosphere, 8K cinematic quality."
+                "english_prompt": "Photorealistic American school scene. Empty high school hallway with metal lockers, classroom with individual desks, American flag, bright lighting. Typical US school atmosphere, no people, 8K cinematic quality."
             },
             "Hospital": {
-                "lock": "modern American hospital, clean corridors, medical equipment, professional healthcare",
-                "english_prompt": "Photorealistic American hospital scene. Modern medical facility with clean white corridors, advanced equipment, professional staff atmosphere. Contemporary healthcare setting, 8K cinematic quality."
+                "lock": "modern American hospital, clean corridors, medical equipment, professional healthcare facility",
+                "english_prompt": "Photorealistic American hospital scene. Modern medical facility with clean white corridors, advanced equipment, empty professional healthcare environment. Contemporary healthcare setting, no people, 8K cinematic quality."
             },
             "Park/Garden": {
-                "lock": "American city park, green lawn, oak trees, park benches, joggers",
-                "english_prompt": "Photorealistic American park scene. Beautiful city park with manicured lawns, tall oak trees, wooden benches, people jogging. Central Park style atmosphere, 8K cinematic quality."
+                "lock": "American city park, green lawn, oak trees, park benches, peaceful atmosphere",
+                "english_prompt": "Photorealistic American park scene. Beautiful city park with manicured lawns, tall oak trees, empty wooden benches. Central Park style atmosphere, peaceful and serene, no people, 8K cinematic quality."
             },
             "Beach/Ocean": {
-                "lock": "California beach, golden sand, Pacific ocean waves, palm trees, surfers",
-                "english_prompt": "Photorealistic California beach scene. Golden sandy beach, Pacific ocean waves, palm trees swaying, surfers in distance. West coast vibes, sunset lighting, 8K cinematic quality."
+                "lock": "California beach, golden sand, Pacific ocean waves, palm trees, pristine coastline",
+                "english_prompt": "Photorealistic California beach scene. Golden sandy beach, Pacific ocean waves, palm trees swaying in breeze. West coast vibes, sunset lighting, pristine empty beach, no people, 8K cinematic quality."
             },
             "Mountain": {
                 "lock": "Rocky Mountains landscape, snow-capped peaks, pine forests, vast American wilderness",
-                "english_prompt": "Photorealistic Rocky Mountains landscape. Majestic snow-capped peaks, dense pine forests, crystal clear lake, American wilderness. Epic national park scenery, 8K cinematic quality."
+                "english_prompt": "Photorealistic Rocky Mountains landscape. Majestic snow-capped peaks, dense pine forests, crystal clear lake, American wilderness. Epic national park scenery, untouched nature, no people, 8K cinematic quality."
             },
             "City": {
-                "lock": "New York City street, skyscrapers, yellow taxis, busy sidewalks, urban energy",
-                "english_prompt": "Photorealistic New York City scene. Iconic Manhattan street with towering skyscrapers, yellow taxi cabs, busy pedestrians, steam rising from manholes. Iconic American urban atmosphere, 8K cinematic quality."
+                "lock": "New York City street, skyscrapers, yellow taxis, urban architecture",
+                "english_prompt": "Photorealistic New York City scene. Iconic Manhattan street with towering skyscrapers, yellow taxi cabs parked, steam rising from manholes. Iconic American urban atmosphere, empty street, no people, 8K cinematic quality."
             },
             "Village/Countryside": {
                 "lock": "American countryside, farmland, red barn, white picket fence, rolling hills",
-                "english_prompt": "Photorealistic American countryside scene. Peaceful farmland with iconic red barn, white picket fence, golden wheat fields, rolling green hills. Heartland America atmosphere, 8K cinematic quality."
+                "english_prompt": "Photorealistic American countryside scene. Peaceful farmland with iconic red barn, white picket fence, golden wheat fields, rolling green hills. Heartland America atmosphere, serene landscape, no people, 8K cinematic quality."
             },
             "Restaurant/Cafe": {
-                "lock": "American diner or coffee shop, booth seating, neon signs, classic Americana",
-                "english_prompt": "Photorealistic American diner scene. Classic 50s-style diner with red leather booths, chrome counter stools, neon signs, coffee and pie. Nostalgic Americana atmosphere, 8K cinematic quality."
+                "lock": "American diner or coffee shop, booth seating, neon signs, classic Americana interior",
+                "english_prompt": "Photorealistic American diner scene. Classic 50s-style diner with red leather booths, chrome counter stools, neon signs glowing, coffee and pie on counter. Nostalgic Americana atmosphere, empty establishment, no people, 8K cinematic quality."
             },
             "Office": {
-                "lock": "modern American corporate office, glass walls, ergonomic desks, Silicon Valley style",
-                "english_prompt": "Photorealistic American office scene. Modern open-plan workspace with glass partitions, standing desks, tech startup vibes. Contemporary corporate America, 8K cinematic quality."
+                "lock": "modern American corporate office, glass walls, ergonomic desks, Silicon Valley style workspace",
+                "english_prompt": "Photorealistic American office scene. Modern open-plan workspace with glass partitions, standing desks, tech startup aesthetic. Contemporary corporate America, empty office space, no people, 8K cinematic quality."
             },
             "Night Scene": {
-                "lock": "American city at night, neon lights, downtown nightlife, urban noir atmosphere",
-                "english_prompt": "Photorealistic American city night scene. Downtown at night with neon signs, streetlights reflecting on wet pavement, late-night diners glowing. Cinematic noir atmosphere, 8K quality."
+                "lock": "American city at night, neon lights, downtown nightlife district, urban noir atmosphere",
+                "english_prompt": "Photorealistic American city night scene. Downtown at night with neon signs, streetlights reflecting on wet pavement, late-night diners glowing. Cinematic noir atmosphere, empty street, no people, 8K quality."
             },
             "Rainy Scene": {
-                "lock": "rainy American city, wet streets, umbrellas, yellow taxis, reflections",
-                "english_prompt": "Photorealistic rainy New York scene. Rain falling on city streets, yellow taxis with headlights, people with umbrellas, reflections in puddles. Melancholic urban beauty, 8K cinematic quality."
+                "lock": "rainy American city, wet streets, yellow taxis, reflections on pavement",
+                "english_prompt": "Photorealistic rainy New York scene. Rain falling on city streets, yellow taxis with headlights, reflections in puddles, glistening wet pavement. Melancholic urban beauty, empty street, no people, 8K cinematic quality."
             },
         }
 

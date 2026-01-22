@@ -310,22 +310,36 @@ def find_scene_image(img_folder: Path, scene_id: int) -> Path | None:
     - scene_001.png (format chuẩn)
     - 1.png (format đơn giản)
     - scene_1.png (không padding)
+
+    Tìm trong img/ trước, nếu không có thì tìm trong img_backup/
+    (Ảnh được di chuyển vào backup sau khi tạo video)
     """
     if not img_folder or not img_folder.exists():
         return None
 
     # Các format có thể có
-    candidates = [
-        img_folder / f"scene_{scene_id:03d}.png",  # scene_001.png
-        img_folder / f"{scene_id}.png",             # 1.png
-        img_folder / f"scene_{scene_id}.png",       # scene_1.png
-        img_folder / f"scene_{scene_id:03d}.jpg",  # scene_001.jpg
-        img_folder / f"{scene_id}.jpg",             # 1.jpg
+    formats = [
+        f"scene_{scene_id:03d}.png",  # scene_001.png
+        f"{scene_id}.png",             # 1.png
+        f"scene_{scene_id}.png",       # scene_1.png
+        f"scene_{scene_id:03d}.jpg",  # scene_001.jpg
+        f"{scene_id}.jpg",             # 1.jpg
     ]
 
-    for path in candidates:
+    # Tìm trong img/ trước
+    for fmt in formats:
+        path = img_folder / fmt
         if path.exists():
             return path
+
+    # Nếu không có trong img/, tìm trong img_backup/
+    backup_folder = img_folder.parent / "img_backup"
+    if backup_folder.exists():
+        for fmt in formats:
+            path = backup_folder / fmt
+            if path.exists():
+                return path
+
     return None
 
 
@@ -862,6 +876,9 @@ class SimpleGUI(tk.Tk):
         self.configure(bg='#1a1a2e')
         self.minsize(1400, 800)
 
+        # Hide current CMD window if running from CMD
+        self._hide_current_cmd_window()
+
         # Khoi tao manager ngay de hien projects
         self.manager = VMManager(num_chrome_workers=2)
         self.running = False
@@ -872,6 +889,24 @@ class SimpleGUI(tk.Tk):
         self._build()
         self._load_projects_on_startup()  # Load projects ngay khi mo
         self._update_loop()
+
+    def _hide_current_cmd_window(self):
+        """Hide the CMD window that launched this GUI."""
+        try:
+            import win32gui
+            import win32con
+            import ctypes
+
+            # Get console window handle
+            kernel32 = ctypes.windll.kernel32
+            hwnd = kernel32.GetConsoleWindow()
+
+            if hwnd:
+                # Hide it
+                win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
+                print("[GUI] Hidden launch CMD window")
+        except Exception as e:
+            print(f"[GUI] Could not hide CMD window: {e}")
 
     def _build(self):
         # === TOP: Controls ===
@@ -894,6 +929,14 @@ class SimpleGUI(tk.Tk):
         )
         self.stop_btn.pack(side="left", padx=5, pady=12)
 
+        # Reset Workers button
+        self.reset_btn = tk.Button(
+            top, text="RESET", command=self._reset_workers,
+            bg='#ff6348', fg='white', font=("Arial", 12, "bold"),
+            relief="flat", padx=15, pady=5
+        )
+        self.reset_btn.pack(side="left", padx=5, pady=12)
+
         # Mode
         mode_frame = tk.Frame(top, bg='#0f3460')
         mode_frame.pack(side="left", padx=30)
@@ -904,9 +947,9 @@ class SimpleGUI(tk.Tk):
         tk.Radiobutton(mode_frame, text="Full", variable=self.mode_var, value="full",
                        bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
 
-        # Show/Hide CMD+Chrome button
+        # Show/Hide Chrome button (CMD already hidden, shown in log viewer)
         self.windows_visible = False  # Start hidden
-        self.toggle_btn = tk.Button(top, text="HIEN CMD", command=self._toggle_windows,
+        self.toggle_btn = tk.Button(top, text="HIEN CHROME", command=self._toggle_windows,
                   bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
         self.toggle_btn.pack(side="left", padx=10)
 
@@ -927,6 +970,16 @@ class SimpleGUI(tk.Tk):
         self.update_btn = tk.Button(top, text="UPDATE", command=self._run_update,
                   bg='#0984e3', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
         self.update_btn.pack(side="left", padx=5)
+
+        # Setup VM button - cai dat SMB share cho may ao
+        self.setup_vm_btn = tk.Button(top, text="SETUP VM", command=self._setup_vm,
+                  bg='#a29bfe', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
+        self.setup_vm_btn.pack(side="left", padx=5)
+
+        # Git version info
+        git_info = self._get_git_version()
+        tk.Label(top, text=git_info, bg='#0f3460', fg='#888',
+                 font=("Consolas", 8)).pack(side="right", padx=10)
 
         # Status
         self.status_var = tk.StringVar(value="San sang")
@@ -974,6 +1027,46 @@ class SimpleGUI(tk.Tk):
 
             self.worker_labels[wid] = {'name': name_lbl, 'project': proj_lbl, 'status': status_lbl}
             self.worker_rows[wid] = frame
+
+        # === WORKER LOGS VIEWER ===
+        logs_frame = tk.LabelFrame(left, text=" WORKER LOGS ", bg='#16213e', fg='#00d9ff',
+                                   font=("Arial", 10, "bold"), padx=5, pady=5)
+        logs_frame.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        # Tab selector
+        tab_frame = tk.Frame(logs_frame, bg='#0f3460')
+        tab_frame.pack(fill="x", pady=(0, 5))
+
+        self.log_tab_var = tk.StringVar(value="excel")
+        self.log_tab_buttons = {}
+
+        for wid, label in [("excel", "EXCEL"), ("chrome_1", "CHROME 1"), ("chrome_2", "CHROME 2")]:
+            btn = tk.Radiobutton(tab_frame, text=label, variable=self.log_tab_var, value=wid,
+                                command=lambda w=wid: self._switch_log_tab(w),
+                                bg='#0f3460', fg='white', selectcolor='#1a1a2e',
+                                font=("Arial", 9, "bold"), indicatoron=False,
+                                padx=10, pady=3)
+            btn.pack(side="left", padx=2)
+            self.log_tab_buttons[wid] = btn
+
+        # Log text area
+        log_text_frame = tk.Frame(logs_frame, bg='#1a1a2e')
+        log_text_frame.pack(fill="both", expand=True)
+
+        log_scrollbar = tk.Scrollbar(log_text_frame)
+        log_scrollbar.pack(side="right", fill="y")
+
+        self.log_text = tk.Text(log_text_frame, bg='#0a0a0a', fg='#00ff88',
+                               font=("Consolas", 8), wrap="none",
+                               yscrollcommand=log_scrollbar.set,
+                               height=15)
+        self.log_text.pack(fill="both", expand=True)
+        log_scrollbar.config(command=self.log_text.yview)
+
+        # Horizontal scrollbar
+        log_scrollbar_x = tk.Scrollbar(logs_frame, orient="horizontal", command=self.log_text.xview)
+        log_scrollbar_x.pack(fill="x")
+        self.log_text.config(xscrollcommand=log_scrollbar_x.set)
 
         # === PROJECTS ===
         projects = tk.LabelFrame(left, text=" PROJECTS (click de xem) ", bg='#16213e', fg='white',
@@ -1108,6 +1201,50 @@ class SimpleGUI(tk.Tk):
         self.selected_project = code
         self.detail_title_var.set(f"Project: {code}")
         self._load_project_detail(code)
+
+    def _switch_log_tab(self, worker_id: str):
+        """Switch log tab to show different worker."""
+        self._update_worker_logs(worker_id)
+
+    def _update_worker_logs(self, worker_id: str = None):
+        """Update log display for current worker tab."""
+        if worker_id is None:
+            worker_id = self.log_tab_var.get()
+
+        if not self.manager:
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', f"[{worker_id}] Manager not started\n")
+            return
+
+        # Read from central log file and filter by worker_id
+        log_file = TOOL_DIR / "logs" / "central.log"
+        if not log_file.exists():
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', f"[{worker_id}] No log file yet\n")
+            return
+
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                # Read all lines and filter by worker_id
+                all_lines = f.readlines()
+
+                # Filter lines containing this worker_id
+                worker_lines = [line for line in all_lines if f"[{worker_id:10}]" in line or f"[{worker_id}]" in line]
+
+                # Get last 500 lines for this worker
+                recent_lines = worker_lines[-500:] if len(worker_lines) > 500 else worker_lines
+                log_content = ''.join(recent_lines)
+
+            self.log_text.delete('1.0', tk.END)
+            if log_content:
+                self.log_text.insert('1.0', log_content)
+            else:
+                self.log_text.insert('1.0', f"[{worker_id}] No logs yet\n")
+            self.log_text.see(tk.END)  # Auto-scroll to bottom
+
+        except Exception as e:
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', f"[{worker_id}] Error reading log: {e}\n")
 
     def _show_excel_detail(self, code: str):
         """Show popup with detailed Excel status."""
@@ -1757,6 +1894,14 @@ class SimpleGUI(tk.Tk):
             self.manager.start_all(gui_mode=True)  # True = ẩn CMD windows
             threading.Thread(target=self.manager.orchestrate, daemon=True).start()
 
+            # Auto-hide CMD windows after workers start
+            time.sleep(5)  # Wait for workers to fully start
+            self.after(0, lambda: self._auto_hide_windows())
+
+            # Retry after another 3 seconds to make sure
+            time.sleep(3)
+            self.after(0, lambda: self._auto_hide_windows())
+
         threading.Thread(target=run, daemon=True).start()
 
     def _stop(self):
@@ -1776,22 +1921,108 @@ class SimpleGUI(tk.Tk):
             threading.Thread(target=stop_and_kill, daemon=True).start()
             self.start_btn.config(bg='#00ff88', state="normal")
 
+    def _reset_workers(self):
+        """Reset workers: Kill all Chrome + CMD, then restart workers."""
+        if not self.manager:
+            return
+
+        from tkinter import messagebox
+        if not messagebox.askyesno("Reset Workers",
+                                   "Reset tat ca workers?\n\n"
+                                   "- Tat tat ca CMD (Excel + Chrome)\n"
+                                   "- Kill Chrome processes\n"
+                                   "- Khoi dong lai tat ca workers\n\n"
+                                   "Tiep tuc?"):
+            return
+
+        self.status_var.set("Dang reset workers...")
+        self.reset_btn.config(bg='#666', state="disabled")
+
+        def do_reset():
+            try:
+                # Log
+                if LOGGER_AVAILABLE:
+                    from modules.central_logger import log
+                    log("main", "=== RESET WORKERS ===", "INFO")
+
+                # 1. Stop all workers
+                self.manager.stop_all()
+                time.sleep(2)
+
+                # 2. Kill all Chrome + CMD
+                self.manager.kill_all_chrome()
+                time.sleep(2)
+
+                # 3. Restart ALL workers (Excel + Chrome)
+                for wid in self.manager.workers:
+                    self.manager.start_worker(wid)
+                    time.sleep(2)
+
+                # Update status
+                self.status_var.set("Reset xong!")
+                messagebox.showinfo("Reset Complete", "Tat ca workers da duoc reset thanh cong!")
+
+            except Exception as e:
+                self.status_var.set(f"Loi reset: {str(e)[:40]}")
+                messagebox.showerror("Reset Error", f"Loi: {e}")
+
+            finally:
+                self.reset_btn.config(bg='#ff6348', state="normal")
+
+        threading.Thread(target=do_reset, daemon=True).start()
+
     def _toggle_windows(self):
-        """Toggle CMD+Chrome windows visibility."""
+        """Toggle Chrome and CMD windows visibility."""
         if not self.manager:
             return
 
         if self.windows_visible:
-            # Hide - move off screen
-            self.manager.hide_cmd_windows()
+            # Hide both Chrome and CMD
             self.manager.hide_chrome_windows()
-            self.toggle_btn.config(text="HIEN CMD", bg='#6c5ce7')
+            self.manager.hide_cmd_windows()
+            self.toggle_btn.config(text="HIEN CHROME", bg='#6c5ce7')
             self.windows_visible = False
         else:
-            # Show - arrange on screen
-            self.manager.show_chrome_with_cmd()
-            self.toggle_btn.config(text="AN CMD", bg='#00b894')
+            # Show both Chrome and CMD
+            self.manager.show_chrome_windows()
+            self.manager.show_cmd_windows()
+            self.toggle_btn.config(text="AN CHROME", bg='#00b894')
             self.windows_visible = True
+
+
+    def _auto_hide_windows(self):
+        """Auto-hide Chrome and CMD windows when GUI starts."""
+        if self.manager:
+            try:
+                print("[GUI] Auto-hiding CMD and Chrome windows...")
+                self.manager.hide_cmd_windows()
+                self.manager.hide_chrome_windows()
+                self.toggle_btn.config(text="HIEN CHROME", bg='#6c5ce7')
+                self.windows_visible = False
+                print("[GUI] Windows hidden successfully")
+            except Exception as e:
+                print(f"[GUI] Error hiding windows: {e}")
+
+    def _get_git_version(self) -> str:
+        """Lay thong tin git commit cuoi cung."""
+        try:
+            import subprocess
+            # Get commit hash (short)
+            result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
+                                  capture_output=True, text=True, cwd=str(TOOL_DIR), timeout=2)
+            if result.returncode == 0:
+                commit_hash = result.stdout.strip()
+
+                # Get commit date
+                result2 = subprocess.run(['git', 'log', '-1', '--format=%cd', '--date=format:%Y-%m-%d_%H:%M'],
+                                       capture_output=True, text=True, cwd=str(TOOL_DIR), timeout=2)
+                if result2.returncode == 0:
+                    commit_date = result2.stdout.strip()
+                    return f"v{commit_hash} | {commit_date}"
+                return f"v{commit_hash}"
+        except Exception as e:
+            print(f"[GUI] Git version error: {e}")
+        return "unknown"
 
     def _get_ipv6_setting(self) -> bool:
         """Doc IPv6 enabled tu settings.yaml. Mac dinh la True."""
@@ -1815,8 +2046,8 @@ class SimpleGUI(tk.Tk):
         import zipfile
         import shutil
 
-        GITHUB_ZIP_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-v2/archive/refs/heads/main.zip"
-        GITHUB_GIT_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-v2.git"
+        GITHUB_ZIP_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple/archive/refs/heads/main.zip"
+        GITHUB_GIT_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple.git"
 
         def do_update():
             self.update_btn.config(state="disabled", text="DANG CAP NHAT...", bg='#666')
@@ -1882,11 +2113,16 @@ class SimpleGUI(tk.Tk):
 
                     # Download - bo qua SSL certificate
                     import ssl
+                    import time
                     ssl_context = ssl.create_default_context()
                     ssl_context.check_hostname = False
                     ssl_context.verify_mode = ssl.CERT_NONE
 
-                    with urllib.request.urlopen(GITHUB_ZIP_URL, context=ssl_context) as response:
+                    # Cache-busting: them timestamp vao URL
+                    cache_buster = f"?t={int(time.time())}"
+                    download_url = GITHUB_ZIP_URL + cache_buster
+
+                    with urllib.request.urlopen(download_url, context=ssl_context) as response:
                         with open(str(zip_path), 'wb') as out_file:
                             out_file.write(response.read())
 
@@ -1896,8 +2132,8 @@ class SimpleGUI(tk.Tk):
                     with zipfile.ZipFile(str(zip_path), 'r') as zip_ref:
                         zip_ref.extractall(str(extract_dir))
 
-                    # Tim thu muc da giai nen (ve3-v2-main)
-                    extracted_folder = extract_dir / "ve3-v2-main"
+                    # Tim thu muc da giai nen (ve3-tool-simple-main)
+                    extracted_folder = extract_dir / "ve3-tool-simple-main"
 
                     self.status_var.set("Dang cap nhat files...")
 
@@ -1934,12 +2170,16 @@ class SimpleGUI(tk.Tk):
                     if extract_dir.exists():
                         shutil.rmtree(str(extract_dir))
 
+                # Lay version moi sau khi update
+                new_version = self._get_git_version()
+
                 self.status_var.set("Cap nhat xong! Khoi dong lai tool.")
                 self.update_btn.config(text="XONG", bg='#00ff88')
 
                 # Hoi co muon khoi dong lai khong
                 from tkinter import messagebox
-                if messagebox.askyesno("Cap nhat xong", "Da cap nhat xong!\nBan co muon khoi dong lai tool?"):
+                update_msg = f"Da cap nhat xong!\n\nPhien ban moi: {new_version}\n\nBan co muon khoi dong lai tool?"
+                if messagebox.askyesno("Cap nhat xong", update_msg):
                     import os
                     os.execv(sys.executable, [sys.executable] + sys.argv)
 
@@ -1958,6 +2198,140 @@ class SimpleGUI(tk.Tk):
     def _open_settings(self):
         """Mo cua so Settings."""
         SettingsWindow(self)
+
+    def _setup_vm(self):
+        """Setup SMB share cho may ao - ket noi Z: den may chu."""
+        import tkinter.messagebox as msgbox
+
+        # Default settings - co the thay doi trong popup
+        default_ip = "192.168.88.254"
+        default_share = "D"
+        default_user = "smbuser"
+        default_pass = "159753"
+
+        # Tao popup de nhap thong tin
+        popup = tk.Toplevel(self)
+        popup.title("Setup VM - Ket noi o mang")
+        popup.geometry("400x300")
+        popup.configure(bg='#1a1a2e')
+        popup.transient(self)
+        popup.grab_set()
+
+        # Center popup
+        popup.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 400) // 2
+        y = self.winfo_y() + (self.winfo_height() - 300) // 2
+        popup.geometry(f"+{x}+{y}")
+
+        # Title
+        tk.Label(popup, text="KET NOI O MANG (SMB SHARE)",
+                bg='#1a1a2e', fg='#00ff88', font=("Arial", 12, "bold")).pack(pady=10)
+
+        tk.Label(popup, text="Map o Z: den may chu de copy du lieu on dinh hon",
+                bg='#1a1a2e', fg='#aaa', font=("Arial", 9)).pack()
+
+        # Form frame
+        form = tk.Frame(popup, bg='#1a1a2e')
+        form.pack(pady=15, padx=20, fill="x")
+
+        # IP
+        tk.Label(form, text="IP May chu:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=0, column=0, sticky="e", pady=5)
+        ip_var = tk.StringVar(value=default_ip)
+        tk.Entry(form, textvariable=ip_var, width=25, font=("Arial", 10)).grid(row=0, column=1, pady=5, padx=5)
+
+        # Share name
+        tk.Label(form, text="Ten Share:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=1, column=0, sticky="e", pady=5)
+        share_var = tk.StringVar(value=default_share)
+        tk.Entry(form, textvariable=share_var, width=25, font=("Arial", 10)).grid(row=1, column=1, pady=5, padx=5)
+
+        # Username
+        tk.Label(form, text="Username:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=2, column=0, sticky="e", pady=5)
+        user_var = tk.StringVar(value=default_user)
+        tk.Entry(form, textvariable=user_var, width=25, font=("Arial", 10)).grid(row=2, column=1, pady=5, padx=5)
+
+        # Password
+        tk.Label(form, text="Password:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=3, column=0, sticky="e", pady=5)
+        pass_var = tk.StringVar(value=default_pass)
+        tk.Entry(form, textvariable=pass_var, width=25, font=("Arial", 10), show="*").grid(row=3, column=1, pady=5, padx=5)
+
+        # Status label
+        status_var = tk.StringVar(value="")
+        status_lbl = tk.Label(popup, textvariable=status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
+        status_lbl.pack(pady=5)
+
+        def do_setup():
+            """Thuc hien ket noi SMB."""
+            ip = ip_var.get().strip()
+            share = share_var.get().strip()
+            user = user_var.get().strip()
+            passwd = pass_var.get().strip()
+
+            if not all([ip, share, user, passwd]):
+                status_var.set("Vui long nhap day du thong tin!")
+                status_lbl.config(fg='#e94560')
+                return
+
+            status_var.set("Dang ket noi...")
+            status_lbl.config(fg='#ffd93d')
+            popup.update()
+
+            try:
+                import subprocess
+
+                # Xoa mapping cu neu co
+                subprocess.run(['net', 'use', 'Z:', '/delete', '/y'],
+                             capture_output=True, text=True)
+
+                # Tao mapping moi
+                cmd = ['net', 'use', 'Z:', f'\\\\{ip}\\{share}',
+                       f'/user:{user}', passwd, '/persistent:yes']
+                result = subprocess.run(cmd, capture_output=True, text=True)
+
+                if result.returncode == 0:
+                    # Kiem tra Z:\AUTO
+                    from pathlib import Path
+                    auto_path = Path("Z:\\AUTO")
+                    if auto_path.exists():
+                        status_var.set("THANH CONG! Z:\\AUTO da san sang")
+                        status_lbl.config(fg='#00ff88')
+                        msgbox.showinfo("Thanh cong",
+                            f"Da ket noi Z: den \\\\{ip}\\{share}\n\n"
+                            f"Z:\\AUTO da san sang su dung!")
+                    else:
+                        status_var.set(f"Da ket noi Z: nhung khong tim thay AUTO")
+                        status_lbl.config(fg='#ffd93d')
+                        msgbox.showwarning("Canh bao",
+                            f"Da ket noi Z: den \\\\{ip}\\{share}\n\n"
+                            f"Nhung khong tim thay thu muc AUTO.\n"
+                            f"Kiem tra lai may chu.")
+                else:
+                    error_msg = result.stderr or result.stdout or "Loi khong xac dinh"
+                    status_var.set(f"LOI: {error_msg[:50]}")
+                    status_lbl.config(fg='#e94560')
+                    msgbox.showerror("Loi ket noi",
+                        f"Khong the ket noi den \\\\{ip}\\{share}\n\n"
+                        f"Loi: {error_msg}\n\n"
+                        f"Kiem tra:\n"
+                        f"1. May chu {ip} co dang chay?\n"
+                        f"2. Thu muc {share} da share chua?\n"
+                        f"3. User {user} co quyen truy cap?")
+
+            except Exception as e:
+                status_var.set(f"LOI: {str(e)[:50]}")
+                status_lbl.config(fg='#e94560')
+                msgbox.showerror("Loi", f"Loi khi setup: {e}")
+
+        # Buttons
+        btn_frame = tk.Frame(popup, bg='#1a1a2e')
+        btn_frame.pack(pady=15)
+
+        tk.Button(btn_frame, text="KET NOI", command=do_setup,
+                 bg='#00ff88', fg='#1a1a2e', font=("Arial", 10, "bold"),
+                 relief="flat", padx=20, pady=5).pack(side="left", padx=10)
+
+        tk.Button(btn_frame, text="DONG", command=popup.destroy,
+                 bg='#e94560', fg='white', font=("Arial", 10, "bold"),
+                 relief="flat", padx=20, pady=5).pack(side="left", padx=10)
 
     def _toggle_ipv6(self):
         """Bat/tat IPv6 va luu vao settings.yaml."""
@@ -1995,6 +2369,7 @@ class SimpleGUI(tk.Tk):
         self._update_workers()
         self._update_projects()
         self._update_detail_panel()
+        self._update_worker_logs()  # Auto-update logs
         self.after(1000, self._update_loop)
 
     def _update_workers(self):

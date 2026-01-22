@@ -35,14 +35,15 @@ sys.path.insert(0, str(TOOL_DIR))
 
 # === AUTO-DETECT NETWORK PATH ===
 # Các đường dẫn có thể có đến \AUTO (tùy máy chủ)
+# Ưu tiên SMB share (Z:) trước vì ổn định hơn tsclient khi copy file lớn
 POSSIBLE_AUTO_PATHS = [
+    r"Z:\AUTO",                                    # SMB Share (ưu tiên - ổn định nhất)
+    r"Y:\AUTO",                                    # Mapped drive
     r"\\tsclient\D\AUTO",                          # RDP từ Windows
     r"\\tsclient\C\AUTO",                          # RDP từ Windows (ổ C)
     r"\\vmware-host\Shared Folders\D\AUTO",        # VMware Workstation
     r"\\vmware-host\Shared Folders\AUTO",          # VMware Workstation (direct)
     r"\\VBOXSVR\AUTO",                             # VirtualBox
-    r"Z:\AUTO",                                    # Mapped drive
-    r"Y:\AUTO",                                    # Mapped drive
     r"D:\AUTO",                                    # Direct access (same machine)
 ]
 

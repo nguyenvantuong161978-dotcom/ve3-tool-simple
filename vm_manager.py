@@ -420,29 +420,35 @@ class QualityChecker:
                 status.excel_status = "complete"
                 status.current_step = "image"
 
-            # Check images - use actual img/{scene_id}.png path
+            # Check images and videos
+            # Images can be in img/ (active) or img_backup/ (moved after video creation)
+            # Videos are .mp4 files in img/
             img_dir = project_dir / "img"
+            img_backup_dir = project_dir / "img_backup"
+
             for scene in scenes:
-                actual_img = img_dir / f"{scene.scene_id}.png"
-                if actual_img.exists():
+                scene_id = scene.scene_id
+                actual_img = img_dir / f"{scene_id}.png"
+                backup_img = img_backup_dir / f"{scene_id}.png"
+                actual_vid = img_dir / f"{scene_id}.mp4"
+
+                # Check if has image in img/ or img_backup/
+                if actual_img.exists() or backup_img.exists():
                     status.images_done += 1
                 else:
-                    status.images_missing.append(scene.scene_id)
+                    status.images_missing.append(scene_id)
+
+                # Check video separately
+                if actual_vid.exists():
+                    status.videos_done += 1
+                else:
+                    status.videos_missing.append(scene_id)
 
             if status.excel_status == "complete":
                 if status.images_done == status.total_scenes:
                     status.current_step = "video"
                 else:
                     status.current_step = "image"
-
-            # Check videos - use actual video/{scene_id}.mp4 path
-            video_dir = project_dir / "video"
-            for scene in scenes:
-                actual_vid = video_dir / f"{scene.scene_id}.mp4"
-                if actual_vid.exists():
-                    status.videos_done += 1
-                else:
-                    status.videos_missing.append(scene.scene_id)
 
             # Get video_mode from SettingsManager
             try:
@@ -852,7 +858,16 @@ class VMManager:
         self.consecutive_403_count = 0  # Tổng 403 liên tiếp (all workers)
         self.worker_error_counts: Dict[str, int] = {}  # Per-worker consecutive errors
         self.max_403_before_ipv6 = 5  # Đổi IPv6 sau 5 lần 403
-        self.max_errors_before_clear = 3  # Xóa data Chrome sau 3 lần lỗi liên tiếp
+        self.max_errors_before_clear = 3  # Xóa data Chrome sau 3 lần lỗi liên tiếu tiếp
+
+        # Auto-restart Chrome workers
+        self.chrome_restart_interval = 3600  # 1 tiếng = 3600 giây
+        self.chrome_last_restart = time.time()
+
+        # Project timeout
+        self.project_timeout = 6 * 3600  # 6 tiếng = 21600 giây
+        self.project_start_time = None
+        self.current_project_code = None
 
         # Auto-detect
         self.auto_path = self._detect_auto_path()
@@ -1523,8 +1538,45 @@ class VMManager:
                     projects.append(code)
         return sorted(projects)
 
+    def copy_project_to_master(self, project_code: str):
+        """Copy project folder to master (AUTO path)."""
+        if not self.auto_path:
+            self.log("No AUTO path detected, skip copy", "SYSTEM", "WARN")
+            return
+
+        src_dir = TOOL_DIR / "PROJECTS" / project_code
+        if not src_dir.exists():
+            self.log(f"Project {project_code} not found in PROJECTS/", "SYSTEM", "ERROR")
+            return
+
+        # Đích: AUTO/{project_code}/
+        dest_dir = self.auto_path / project_code
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy tất cả files và folders
+        import shutil
+        for item in src_dir.iterdir():
+            dest_item = dest_dir / item.name
+            try:
+                if item.is_dir():
+                    if dest_item.exists():
+                        shutil.rmtree(str(dest_item))
+                    shutil.copytree(str(item), str(dest_item))
+                else:
+                    shutil.copy2(str(item), str(dest_item))
+            except Exception as e:
+                self.log(f"Failed to copy {item.name}: {e}", "SYSTEM", "ERROR")
+
+        self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
+
     def create_tasks_for_project(self, project_code: str):
         status = self.quality_checker.get_project_status(project_code)
+
+        # Start project timer nếu đây là project mới
+        if self.current_project_code != project_code:
+            self.current_project_code = project_code
+            self.project_start_time = time.time()
+            self.log(f"Started tracking project {project_code} (6h timeout)", "MANAGER")
 
         if status.current_step == "excel":
             self.create_task(TaskType.EXCEL, project_code)
@@ -1637,7 +1689,7 @@ class VMManager:
     # ================================================================================
 
     def get_chrome_windows(self) -> List[int]:
-        """Lấy danh sách handle của các cửa sổ Chrome."""
+        """Lấy danh sách handle của các cửa sổ Chrome (kể cả khi bị move off-screen)."""
         if sys.platform != "win32":
             return []
 
@@ -1649,14 +1701,32 @@ class VMManager:
             chrome_windows = []
 
             def enum_windows_callback(hwnd, lParam):
-                if user32.IsWindowVisible(hwnd):
-                    length = user32.GetWindowTextLengthW(hwnd)
-                    if length > 0:
-                        title = ctypes.create_unicode_buffer(length + 1)
-                        user32.GetWindowTextW(hwnd, title, length + 1)
-                        # Chrome windows usually have " - Google Chrome" in title
-                        if "Chrome" in title.value or "chrome" in title.value.lower():
-                            chrome_windows.append(hwnd)
+                try:
+                    # Check visible state (even if off-screen)
+                    if user32.IsWindowVisible(hwnd):
+                        # Get class name
+                        class_name = ctypes.create_unicode_buffer(256)
+                        user32.GetClassNameW(hwnd, class_name, 256)
+
+                        # Chrome browser windows have class "Chrome_WidgetWin_*"
+                        if class_name.value.startswith("Chrome_WidgetWin"):
+                            # Get title (safe)
+                            skip = False
+                            length = user32.GetWindowTextLengthW(hwnd)
+                            if length > 0:
+                                try:
+                                    title = ctypes.create_unicode_buffer(length + 1)
+                                    user32.GetWindowTextW(hwnd, title, length + 1)
+                                    # Skip Chrome.exe windows (only get browser windows)
+                                    if "chrome.exe" in title.value.lower():
+                                        skip = True
+                                except:
+                                    pass  # If error reading title, still include window
+
+                            if not skip:
+                                chrome_windows.append(hwnd)
+                except:
+                    pass  # Ignore errors in callback
                 return True
 
             WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
@@ -1698,7 +1768,9 @@ class VMManager:
 
     def show_chrome_windows(self):
         """
-        Hiện các cửa sổ Chrome - đặt bên phải màn hình, size nhỏ.
+        Hiện các cửa sổ Chrome - đặt bên phải màn hình, TO HƠN để dễ quan sát.
+        Chrome 1: Phía trên bên phải
+        Chrome 2: Phía dưới bên phải
         """
         if sys.platform != "win32":
             self.log("Window showing only supported on Windows", "CHROME", "WARN")
@@ -1717,27 +1789,37 @@ class VMManager:
             screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
             screen_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
 
-            # Chrome window size (bigger for better visibility, on right side)
-            chrome_width = 700
-            chrome_height = 550
+            # Chrome window size - Chia đều chiều cao cho 2 Chrome
+            chrome_width = max(int(screen_width * 0.55), 1200)  # 55% màn hình, tối thiểu 1200
 
-            # Position on right side, stacked vertically
-            x_start = screen_width - chrome_width - 10  # 10px from right edge
-            y_start = 50
+            # Mỗi Chrome chiếm 1/2 chiều cao màn hình, trừ đi khoảng cách
+            gap = 20  # Khoảng cách giữa 2 Chrome và với viền màn hình
+            chrome_height = (screen_height - gap * 3) // 2  # Chia đều cho 2 Chrome
+
+            # Tối thiểu 600px
+            chrome_height = max(chrome_height, 600)
 
             for i, hwnd in enumerate(chrome_windows):
-                x = x_start
-                y = y_start + (i * (chrome_height + 10))  # Stack vertically with 10px gap
+                # Restore window if minimized
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
 
-                # Make sure it doesn't go off screen
-                if y + chrome_height > screen_height:
-                    y = y_start
+                # Chiều rộng giống nhau, bên phải màn hình
+                x = screen_width - chrome_width - 10
 
-                # SWP_NOZORDER = 0x0004 (don't change z-order)
-                # Move and resize
-                user32.SetWindowPos(hwnd, 0, x, y, chrome_width, chrome_height, 0x0004)
+                if i == 0:
+                    # Chrome 1 - Top half (nửa trên)
+                    y = gap
+                else:
+                    # Chrome 2 - Bottom half (nửa dưới)
+                    y = gap + chrome_height + gap
 
-            self.log(f"Shown {len(chrome_windows)} Chrome windows (right side)", "CHROME", "SUCCESS")
+                # Use MoveWindow (works better than SetWindowPos)
+                user32.MoveWindow(hwnd, x, y, chrome_width, chrome_height, True)
+
+                # Bring to front
+                user32.SetForegroundWindow(hwnd)
+
+            self.log(f"Shown {len(chrome_windows)} Chrome windows (right side, large)", "CHROME", "SUCCESS")
             return True
         except Exception as e:
             self.log(f"Error showing Chrome windows: {e}", "CHROME", "ERROR")
@@ -1803,6 +1885,48 @@ class VMManager:
             return True
         except Exception as e:
             self.log(f"Error hiding CMD windows: {e}", "CHROME", "ERROR")
+            return False
+
+    def show_cmd_windows(self):
+        """Hiện các cửa sổ CMD ở giữa màn hình, xếp chồng nhau."""
+        if sys.platform != "win32":
+            return False
+
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+
+            cmd_windows = self.get_cmd_windows()
+            if not cmd_windows:
+                return False
+
+            # Get screen size
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+
+            # CMD window size - nhỏ hơn Chrome
+            cmd_width = 800
+            cmd_height = 600
+
+            # Position ở giữa màn hình, xếp chồng với offset
+            x_start = (screen_width - cmd_width) // 2
+            y_start = (screen_height - cmd_height) // 2
+
+            for i, hwnd in enumerate(cmd_windows):
+                # Restore if minimized
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+
+                # Xếp chồng với offset nhỏ để dễ phân biệt
+                x = x_start + (i * 30)
+                y = y_start + (i * 30)
+
+                # Move to position
+                user32.MoveWindow(hwnd, x, y, cmd_width, cmd_height, True)
+
+            self.log(f"Shown {len(cmd_windows)} CMD windows (center)", "CHROME", "SUCCESS")
+            return True
+        except Exception as e:
+            self.log(f"Error showing CMD windows: {e}", "CHROME", "ERROR")
             return False
 
     def show_chrome_with_cmd(self):
@@ -1939,6 +2063,14 @@ class VMManager:
             log_dir.mkdir(parents=True, exist_ok=True)
             log_file = log_dir / f"{worker_id}.log"
 
+            # Clear old log file for fresh start
+            if log_file.exists():
+                try:
+                    with open(log_file, 'w', encoding='utf-8') as f:
+                        f.write(f"[{datetime.now().strftime('%H:%M:%S')}] Worker {worker_id} started (fresh session)\n")
+                except:
+                    pass  # Ignore if can't clear
+
             if sys.platform == "win32":
                 # Windows - start with cmd window
                 title = f"{w.worker_type.upper()} {w.worker_num or ''}"
@@ -1953,6 +2085,7 @@ class VMManager:
 
                 if gui_mode:
                     # GUI mode - start with visible CMD, will be moved off-screen later
+                    # Workers use central_logger to write to logs/central.log
                     cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
 
@@ -1963,6 +2096,7 @@ class VMManager:
                     threading.Thread(target=move_cmd_offscreen, daemon=True).start()
                 else:
                     # Normal mode - visible CMD window with UTF-8 code page
+                    # Workers use central_logger to write to logs/central.log
                     cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
             else:
@@ -2023,6 +2157,83 @@ class VMManager:
         w.last_restart_time = datetime.now()
         w.restart_count += 1
         self.log(f"{worker_id} restarted (count: {w.restart_count})", worker_id, "SUCCESS")
+
+    def auto_restart_chrome_workers(self):
+        """Tự động restart Chrome workers mỗi 1 tiếng để tránh lỗi."""
+        self.log("=" * 60, "SYSTEM")
+        self.log("AUTO-RESTART CHROME WORKERS (1 TIẾNG)", "SYSTEM")
+        self.log("=" * 60, "SYSTEM")
+
+        # 1. Stop tất cả Chrome workers
+        chrome_workers = [wid for wid in self.workers if wid.startswith("chrome_")]
+        for wid in chrome_workers:
+            self.log(f"Stopping {wid}...", wid)
+            self.stop_worker(wid)
+
+        # 2. Kill all Chrome processes
+        self.log("Killing all Chrome processes...", "SYSTEM")
+        self.kill_all_chrome()
+        time.sleep(2)
+
+        # 3. Restart Chrome workers
+        for wid in chrome_workers:
+            self.log(f"Starting {wid}...", wid)
+            time.sleep(2)
+            self.start_worker(wid, gui_mode=self.gui_mode)
+
+            # Track restart
+            w = self.workers[wid]
+            w.last_restart_time = datetime.now()
+            w.restart_count += 1
+
+        self.log("Chrome workers restarted successfully", "SYSTEM", "SUCCESS")
+
+    def handle_project_timeout(self, project_code: str):
+        """Xử lý khi project quá 6 tiếng: Copy kết quả về máy chủ và chuyển project tiếp theo."""
+        self.log("=" * 60, "SYSTEM")
+        self.log(f"PROJECT TIMEOUT: {project_code} (6 TIẾNG)", "SYSTEM", "WARN")
+        self.log("=" * 60, "SYSTEM")
+
+        # 1. Stop tất cả workers
+        self.log("Stopping all workers...", "SYSTEM")
+        for wid in self.workers:
+            self.stop_worker(wid)
+
+        # 2. Copy kết quả về máy chủ (nếu có AUTO path)
+        if self.auto_path:
+            try:
+                self.log(f"Copying {project_code} to master...", "SYSTEM")
+                self.copy_project_to_master(project_code)
+                self.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
+            except Exception as e:
+                self.log(f"Failed to copy {project_code}: {e}", "SYSTEM", "ERROR")
+
+        # 3. Mark project as completed (timeout)
+        if project_code in self.project_tasks:
+            for task_id in self.project_tasks[project_code]:
+                if task_id in self.tasks:
+                    task = self.tasks[task_id]
+                    if task.status != TaskStatus.COMPLETED:
+                        task.status = TaskStatus.COMPLETED
+                        task.note = "TIMEOUT_6H"
+
+        # 4. Kill all Chrome
+        self.log("Killing all Chrome processes...", "SYSTEM")
+        self.kill_all_chrome()
+        time.sleep(2)
+
+        # 5. Restart Chrome workers
+        chrome_workers = [wid for wid in self.workers if wid.startswith("chrome_")]
+        for wid in chrome_workers:
+            self.log(f"Restarting {wid}...", wid)
+            time.sleep(2)
+            self.start_worker(wid, gui_mode=self.gui_mode)
+
+        # 6. Reset project timer
+        self.project_start_time = None
+        self.current_project_code = None
+
+        self.log("Ready for next project", "SYSTEM", "SUCCESS")
 
     def check_and_auto_recover(self) -> bool:
         """Check for connection errors and auto-recover if needed.
@@ -2134,6 +2345,19 @@ class VMManager:
 
         while not self._stop_flag:
             try:
+                # 0. Check auto-restart Chrome workers (mỗi 1 tiếng)
+                if time.time() - self.chrome_last_restart >= self.chrome_restart_interval:
+                    self.log("Auto-restart Chrome workers (1 tiếng)", "MANAGER")
+                    self.auto_restart_chrome_workers()
+                    self.chrome_last_restart = time.time()
+
+                # 0b. Check project timeout (6 tiếng)
+                if self.project_start_time and self.current_project_code:
+                    elapsed = time.time() - self.project_start_time
+                    if elapsed >= self.project_timeout:
+                        self.log(f"Project {self.current_project_code} timeout (6 tiếng) - Moving to next", "MANAGER")
+                        self.handle_project_timeout(self.current_project_code)
+
                 # 1. Sync worker status từ Agent Protocol
                 self.sync_worker_status()
 

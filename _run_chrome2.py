@@ -51,14 +51,69 @@ except ImportError:
 
 # Central Logger - để log hiển thị trong GUI
 try:
-    from modules.central_logger import log as central_log
-    CENTRAL_LOGGER = True
+    from modules.central_logger import get_logger
+    _logger = get_logger(WORKER_ID)
 except ImportError:
-    CENTRAL_LOGGER = False
-    central_log = None
+    class FakeLogger:
+        def info(self, msg): print(f"[{WORKER_ID}] {msg}")
+        def warn(self, msg): print(f"[{WORKER_ID}] WARN: {msg}")
+        def error(self, msg): print(f"[{WORKER_ID}] ERROR: {msg}")
+    _logger = FakeLogger()
 
 # Global agent instance
 _agent = None
+
+
+# Override print CHÍNH XÁC - tránh recursion với central_logger
+import builtins
+_original_print = builtins.print
+
+# Flag để tránh recursion khi central_logger gọi print
+_in_logger = False
+
+def _logger_print(*args, **kwargs):
+    """Override print() to log to central_logger (tránh recursion)."""
+    global _in_logger
+
+    # Nếu đang trong logger, dùng print gốc
+    if _in_logger:
+        _original_print(*args, **kwargs)
+        return
+
+    try:
+        _in_logger = True
+        msg = ' '.join(str(arg) for arg in args)
+
+        # Remove timestamp prefix if present (avoid duplication)
+        if msg.startswith('[') and ']' in msg[:12]:
+            msg = msg.split(']', 1)[-1].strip()
+
+        if msg.strip():
+            _logger.info(msg)
+    finally:
+        _in_logger = False
+
+builtins.print = _logger_print
+
+
+def log(msg: str, level: str = "INFO"):
+    """Log to console + central logger + agent."""
+    global _agent
+
+    # Log to central logger (cho GUI)
+    if level == "ERROR":
+        _logger.error(msg)
+    elif level == "WARN":
+        _logger.warn(msg)
+    else:
+        _logger.info(msg)
+
+    # Gửi đến Agent nếu có
+    if _agent:
+        if level == "ERROR":
+            _agent.log_error(msg)
+        else:
+            _agent.log(msg, level)
 
 
 def init_agent():
@@ -262,11 +317,205 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             log(f"  No Excel after 120s, skip!")
             return False
 
-    # Step 3.5: BẮT BUỘC đợi Chrome 1 bắt đầu tạo ảnh SCENE (có media_id cho references)
-    # KHÔNG CÓ TIMEOUT - phải đợi cho đến khi Chrome 1 bắt đầu tạo scene
+    # Step 3.5: VALIDATOR - Kiểm tra tất cả NV references trước khi tạo scenes
+    log(f"  ============================================================")
+    log(f"  STEP 3.5: REFERENCE VALIDATOR")
+    log(f"  ============================================================")
+
+    try:
+        from modules.excel_manager import PromptWorkbook
+
+        # BƯỚC 1: LẬP KẾ HOẠCH - Đọc Excel để biết có bao nhiêu references cần validate
+        workbook = PromptWorkbook(str(excel_path))
+        all_chars = workbook.get_characters()
+
+        # Đếm references cần validate (cả NV và LOC, bỏ qua skip=True hoặc đã verified)
+        refs_to_validate = []
+        for char in all_chars:
+            # Kiểm tra cả NV và LOC
+            if not char.id.lower().startswith(('nv', 'loc')):
+                continue
+
+            # Bỏ qua references có skip=True
+            skip = getattr(char, 'skip', False)
+            if skip:
+                log(f"  [SKIP] {char.id} - marked as skip")
+                continue
+
+            # Bỏ qua references đã verified rồi
+            status = getattr(char, 'status', '')
+            if status in ['verified', 'verified_fixed']:
+                log(f"  [SKIP] {char.id} - already verified (status={status})")
+                continue
+
+            refs_to_validate.append(char.id)
+
+        if not refs_to_validate:
+            log(f"  [v] All references already validated, skip validator mode")
+        else:
+            nv_count = len([r for r in refs_to_validate if r.lower().startswith('nv')])
+            loc_count = len([r for r in refs_to_validate if r.lower().startswith('loc')])
+            log(f"  [PLAN] Cần validate {len(refs_to_validate)} references: {nv_count} NV + {loc_count} LOC")
+            log(f"  {refs_to_validate}")
+
+            # Lấy project URL từ Excel (config sheet)
+            project_url = None
+            try:
+                import openpyxl
+                wb_openpyxl = openpyxl.load_workbook(str(excel_path), read_only=True)
+                if 'config' in wb_openpyxl.sheetnames:
+                    config_sheet = wb_openpyxl['config']
+                    for row in config_sheet.iter_rows(min_row=2):  # Skip header
+                        if row[0].value == 'flow_project_url':
+                            project_url = row[1].value
+                            break
+                wb_openpyxl.close()
+
+                if project_url:
+                    log(f"  [v] Project URL from Excel: {project_url[:60]}...")
+                else:
+                    log(f"  [!] No project URL in Excel - will create new project")
+            except Exception as e:
+                log(f"  [WARN] Could not read project URL from Excel: {e}")
+
+            # Track validated NVs
+            validated_refs = set()
+
+            # Setup Chrome API cho validator (tạo 1 lần, dùng chung)
+            validator_api = None
+            validator = None
+
+            try:
+                from modules.reference_validator import ReferenceValidator
+                from modules.drission_flow_api import DrissionFlowAPI
+                import yaml
+
+                # Load config
+                config_file = Path("config/settings.yaml")
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+
+                # Setup Chrome 2 API
+                chrome_path = chrome2_path
+                validator_api = DrissionFlowAPI(
+                    chrome_portable=chrome_path,
+                    worker_id=2,
+                    total_workers=2,
+                    headless=False,
+                    webshare_enabled=False
+                )
+
+                # VÀO ĐÚNG PROJECT (dùng URL từ Excel)
+                if project_url:
+                    log(f"  [VALIDATOR] Starting Chrome with project URL...")
+                    if not validator_api.setup(project_url=project_url):
+                        log(f"  [ERROR] Failed to start Chrome!", "error")
+                        raise Exception("Chrome setup failed")
+                else:
+                    log(f"  [ERROR] No project URL - cannot validate!", "error")
+                    raise Exception("No project URL")
+
+                # Create validator
+                validator = ReferenceValidator(
+                    drission_api=validator_api,
+                    workbook=workbook,
+                    config=config,
+                    project_code=code
+                )
+
+                log(f"  [v] Validator ready!")
+
+            except Exception as e:
+                log(f"  [ERROR] Failed to setup validator: {e}", "error")
+                import traceback
+                traceback.print_exc()
+                # Skip validation
+                validated_refs = set(refs_to_validate)
+
+            # BƯỚC 2: CHỜ + VALIDATE TỪNG NV CÓ MEDIA_ID
+            log(f"  [VALIDATOR] Waiting for Chrome 1 to create references...")
+            log(f"  [VALIDATOR] Will validate each NV as soon as it has media_id...")
+
+            wait_interval = 10
+            waited = 0
+
+            while len(validated_refs) < len(refs_to_validate) and validator:
+                # Re-load Excel để check media_id mới
+                workbook = PromptWorkbook(str(excel_path))
+                all_chars = workbook.get_characters()
+
+                # Tìm NV nào có media_id mà chưa validate
+                for char in all_chars:
+                    if char.id not in refs_to_validate:
+                        continue
+                    if char.id in validated_refs:
+                        continue
+
+                    # Check status
+                    status = getattr(char, 'status', '')
+                    if status in ['verified', 'verified_fixed']:
+                        # Đã validate rồi
+                        validated_refs.add(char.id)
+                        log(f"  [v] {char.id} already validated (status={status})")
+                        continue
+
+                    # Check media_id
+                    if not char.media_id:
+                        continue  # Chưa có media_id, chờ tiếp
+
+                    # CÓ MEDIA_ID → VALIDATE NGAY!
+                    log(f"  ")
+                    log(f"  [VALIDATOR] Found {char.id} with media_id!")
+                    log(f"  [VALIDATOR] Validating {char.id}... ({len(validated_refs)+1}/{len(refs_to_validate)})")
+
+                    # Validate
+                    try:
+                        result = validator.validate_and_fix(char.id)
+                        log(f"  [VALIDATOR] {char.id} result: {result}")
+                    except Exception as e:
+                        log(f"  [ERROR] Validation failed for {char.id}: {e}", "error")
+                        import traceback
+                        traceback.print_exc()
+
+                    # Mark validated
+                    validated_refs.add(char.id)
+
+                # Check progress
+                if len(validated_refs) >= len(refs_to_validate):
+                    log(f"  ")
+                    log(f"  [v] VALIDATOR COMPLETED!")
+                    log(f"  [v] Validated {len(validated_refs)}/{len(refs_to_validate)} references")
+                    break
+
+                # Log progress
+                if waited % 30 == 0:
+                    log(f"  [WAIT] Validated: {len(validated_refs)}/{len(refs_to_validate)} - Waiting... ({waited}s)")
+
+                time.sleep(wait_interval)
+                waited += wait_interval
+
+            # Close validator API
+            if validator_api:
+                try:
+                    validator_api.close()
+                    log(f"  [v] Validator Chrome closed")
+                except:
+                    pass
+
+    except Exception as e:
+        log(f"  [ERROR] Validator error: {e}", "error")
+        import traceback
+        traceback.print_exc()
+        # Cleanup
+        if validator_api:
+            try:
+                validator_api.close()
+            except:
+                pass
+
+    # Step 3.6: Đợi Chrome 1 bắt đầu tạo SCENE images
     img_dir = local_dir / "img"
-    log(f"  [WAIT] WAITING for Chrome 1 to START creating scene images...")
-    log(f"     (Chrome 2 cần media_id từ references đã upload)")
+    log(f"  [WAIT] Waiting for Chrome 1 to START creating scene images...")
 
     wait_interval = 10
     waited = 0
@@ -277,7 +526,6 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             scene_files = []
             for f in img_dir.glob("*.png"):
                 name = f.stem
-                # Ảnh scene: tên là số (1.png, 2.png) hoặc scene_X
                 if name.isdigit() or name.startswith("scene_"):
                     scene_files.append(f)
             for f in img_dir.glob("*.jpg"):
@@ -288,14 +536,12 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             if scene_files:
                 log(f"  [v] Chrome 1 đã bắt đầu tạo scenes! Found {len(scene_files)} scene images")
                 log(f"     → Chrome 2 bắt đầu tạo scenes lẻ...")
-                time.sleep(3)  # Đợi thêm chút để chắc chắn
+                time.sleep(3)
                 break
 
         # Log mỗi 30 giây
         if waited % 30 == 0:
-            nv_count = len(list(img_dir.glob("nv_*"))) if img_dir.exists() else 0
-            loc_count = len(list(img_dir.glob("loc_*"))) if img_dir.exists() else 0
-            log(f"  [WAIT] Waiting... ({waited}s) - References: {nv_count} nv, {loc_count} loc")
+            log(f"  [WAIT] Waiting... ({waited}s)")
 
         time.sleep(wait_interval)
         waited += wait_interval
@@ -482,10 +728,124 @@ def run_scan_loop():
                 break
 
 
+def validate_references_if_needed(code: str, callback=None) -> bool:
+    """
+    VALIDATOR MODE - Chrome 2 validate references trước khi làm scenes.
+
+    Kiểm tra xem project có references chưa validate không.
+    Nếu có → Validate & fix bằng DeepSeek
+    Nếu không → Return False (sẽ chạy normal mode)
+
+    Returns:
+        True nếu đã validate xong (hoặc không cần)
+        False nếu có lỗi
+    """
+    def log(msg, level="INFO"):
+        if callback:
+            callback(msg, level)
+        else:
+            print(f"[Validator] {msg}")
+
+    try:
+        from modules.reference_validator import ReferenceValidator
+        from modules.excel_manager import PromptWorkbook
+        from modules.drission_flow_api import DrissionFlowAPI
+        import yaml
+
+        local_dir = LOCAL_PROJECTS / code
+        excel_path = local_dir / f"{code}_prompts.xlsx"
+
+        if not excel_path.exists():
+            return True  # No Excel, skip validation
+
+        # Load workbook
+        workbook = PromptWorkbook(str(excel_path))
+
+        # Get all references
+        all_chars = workbook.get_characters()
+        refs_to_validate = []
+
+        for char in all_chars:
+            # CHỈ VALIDATE NHI VẬT (nv) - BỎ QUA LOCATIONS (loc)
+            if not char.id.lower().startswith('nv'):
+                continue
+
+            # Check if has media_id and not verified yet
+            if char.media_id and char.status not in ['verified', 'verified_fixed']:
+                refs_to_validate.append(char.id)
+
+        if not refs_to_validate:
+            log(f"No references need validation, skip validator mode")
+            return True
+
+        log(f"\n{'='*60}")
+        log(f"VALIDATOR MODE - {len(refs_to_validate)} references to validate")
+        log(f"{'='*60}")
+        log(f"References: {refs_to_validate}")
+
+        # Setup DrissionFlowAPI
+        chrome2_path = get_chrome2_path()
+        if not chrome2_path:
+            log("ERROR: Chrome 2 path not found!", "ERROR")
+            return False
+
+        # Load config
+        config_path = TOOL_DIR / "config" / "settings.yaml"
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+
+        api = DrissionFlowAPI(
+            chrome_portable=chrome2_path,
+            worker_id=1,
+            total_workers=2,
+            headless=False,
+            webshare_enabled=False
+        )
+
+        # Setup Chrome
+        log("Starting Chrome for validation...")
+        if not api.setup(project_url="https://labs.google/fx/vi/tools/flow"):
+            log("ERROR: Failed to start Chrome!", "ERROR")
+            return False
+
+        log("Chrome started, creating validator...")
+
+        # Create validator
+        validator = ReferenceValidator(
+            drission_api=api,
+            workbook=workbook,
+            config=config
+        )
+
+        # Run validation
+        stats = validator.validate_all_references(refs_to_validate)
+
+        # Cleanup
+        api.close()
+
+        log(f"\n{'='*60}")
+        log(f"VALIDATION COMPLETED")
+        log(f"{'='*60}")
+        log(f"Tested: {stats['tested']}")
+        log(f"Verified: {stats['verified']}")
+        log(f"Violated: {stats['violated']}")
+        log(f"Fixed: {stats['fixed']}")
+        log(f"Failed: {stats['failed']}")
+
+        return True
+
+    except Exception as e:
+        log(f"ERROR in validator mode: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description='VE3 Worker PIC BASIC - Chrome 2')
     parser.add_argument('project', nargs='?', default=None, help='Project code')
+    parser.add_argument('--validate-only', action='store_true', help='Only run validator mode')
     args = parser.parse_args()
 
     # Khởi tạo Agent Protocol
@@ -494,7 +854,19 @@ def main():
     try:
         if args.project:
             # Single project mode
-            success = process_project_with_agent(args.project)
+
+            # VALIDATOR MODE: Validate references trước
+            if not args.validate_only:
+                print(f"\n[Chrome2] Checking if validation needed for {args.project}...")
+                validate_references_if_needed(args.project)
+                print(f"[Chrome2] Validation check completed, proceeding to normal mode...")
+
+            # Normal mode hoặc validate-only
+            if args.validate_only:
+                success = validate_references_if_needed(args.project)
+            else:
+                success = process_project_with_agent(args.project)
+
             sys.exit(0 if success else 1)
         else:
             # Loop mode

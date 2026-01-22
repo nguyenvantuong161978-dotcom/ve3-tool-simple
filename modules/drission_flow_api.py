@@ -376,7 +376,22 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                     if (response.status === 403 || (data.error && data.error.code === 403)) {
                         console.log('[RESPONSE] [x] 403 FORBIDDEN - IP blocked!');
                         var errorMsg = data.error ? data.error.message : 'Permission denied';
-                        window._response = {error: {code: 403, message: errorMsg}};
+
+                        // Capture FULL error details
+                        var errorDetails = null;
+                        if (data.error) {
+                            errorDetails = {
+                                message: data.error.message,
+                                details: data.error.details || [],
+                                violations: data.error.violations || [],
+                                reason: data.error.reason || null,
+                                metadata: data.error.metadata || null
+                            };
+                            // Log chi tiết để debug
+                            console.log('[ERROR_DETAILS]', JSON.stringify(errorDetails));
+                        }
+
+                        window._response = {error: {code: 403, message: errorMsg, fullDetails: errorDetails}};
                         window._responseError = 'Error 403: ' + errorMsg;
                         window._requestPending = false;
                         return response;
@@ -386,7 +401,22 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                     if (response.status === 400 || (data.error && data.error.code === 400)) {
                         console.log('[RESPONSE] [x] 400 POLICY VIOLATION - Prompt rejected!');
                         var errorMsg = data.error ? data.error.message : 'Policy violation';
-                        window._response = {error: {code: 400, message: errorMsg}};
+
+                        // Capture FULL error details (details, violations, reason, etc.)
+                        var errorDetails = null;
+                        if (data.error) {
+                            errorDetails = {
+                                message: data.error.message,
+                                details: data.error.details || [],
+                                violations: data.error.violations || [],
+                                reason: data.error.reason || null,
+                                metadata: data.error.metadata || null
+                            };
+                            // Log chi tiết để debug
+                            console.log('[ERROR_DETAILS]', JSON.stringify(errorDetails));
+                        }
+
+                        window._response = {error: {code: 400, message: errorMsg, fullDetails: errorDetails}};
                         window._responseError = 'Error 400: ' + errorMsg;
                         window._requestPending = false;
                         return response;
@@ -2050,8 +2080,12 @@ class DrissionFlowAPI:
 
             # 1. Ưu tiên chrome_portable từ config (KHÔNG check exists - để fail nếu sai)
             if self._chrome_portable:
-                # Expand environment variables như %USERNAME%
+                # Expand environment variables và convert to absolute path
                 chrome_exe = os.path.expandvars(self._chrome_portable)
+                # Convert relative path to absolute (from tool directory)
+                if not os.path.isabs(chrome_exe):
+                    tool_dir = Path(__file__).parent.parent  # ve3-tool-simple/
+                    chrome_exe = str(tool_dir / chrome_exe)
                 chrome_dir = Path(chrome_exe).parent
                 self.log(f"[CHROME] Dùng chrome_portable: {chrome_exe}")
                 # User Data: Nếu skip_portable_detection=True, dùng profile_dir thay vì built-in profile
@@ -2066,8 +2100,8 @@ class DrissionFlowAPI:
                             user_data = data_path
                             break
 
-            # 2. Tự động detect Chrome portable (bỏ qua nếu skip_portable_detection=True)
-            if not chrome_exe and platform.system() == 'Windows' and not self._skip_portable_detection:
+            # 2. Tự động detect Chrome portable (bỏ qua nếu skip_portable_detection=True HOẶC đã có chrome_portable từ constructor)
+            if not chrome_exe and not self._chrome_portable and platform.system() == 'Windows' and not self._skip_portable_detection:
                 chrome_locations = []
 
                 # 2a. Ưu tiên: Thư mục tool/GoogleChromePortable/GoogleChromePortable.exe
@@ -2092,8 +2126,7 @@ class DrissionFlowAPI:
                             if data_path.exists():
                                 user_data = data_path
                                 break
-                        # LƯU LẠI để reset_chrome_profile() có thể tìm đúng Data folder
-                        self._chrome_portable = chrome_exe
+                        # NOTE: KHÔNG ghi đè self._chrome_portable ở đây - giữ nguyên giá trị từ constructor
                         self.log(f"[AUTO] Phat hien Chrome: {chrome_exe}")
                         break
 
@@ -2628,6 +2661,13 @@ class DrissionFlowAPI:
                     self.log(f"[PAGE] Lỗi inject: {e}", "WARN")
                     break
 
+        # === ĐẢM BẢO WINDOW SIZE ĐỒNG NHẤT ===
+        # Sau khi setup xong, set lại window layout để Chrome có kích thước đúng
+        # (Tránh trường hợp Chrome bị thu nhỏ sau khi reset hoặc navigate)
+        if not self._headless and self._total_workers > 0:
+            self.log("[WIN] Đảm bảo window size đồng nhất...")
+            self._setup_window_layout()
+
         self._ready = True
         return True
 
@@ -2834,12 +2874,75 @@ class DrissionFlowAPI:
                 self.log("[WARN] Không tìm thấy textarea", "WARN")
                 return False
 
-            # 3. Click vào textarea để focus
-            try:
-                textarea.click()
-                time.sleep(0.5)
-            except:
-                pass
+            # 3. Click vào textarea để focus (2 lần + verify) - RETRY nếu fail
+            focus_ok = False
+            max_retry = 3
+
+            for attempt in range(max_retry):
+                try:
+                    if attempt > 0:
+                        self.log(f"    → Retry click {attempt + 1}/{max_retry}...")
+
+                    # Click lần 1
+                    textarea.click()
+                    time.sleep(0.3)
+
+                    # Click lần 2 để đảm bảo focus
+                    textarea.click()
+                    time.sleep(0.2)
+
+                    # VERIFY: Kiểm tra focus bằng cách điền text test
+                    try:
+                        verify_result = self.driver.run_js("""
+                            (function() {
+                                try {
+                                    var textarea = document.querySelector('textarea');
+                                    if (!textarea) return 'not_found';
+
+                                    // Lưu value cũ
+                                    var oldValue = textarea.value;
+
+                                    // Test: Điền text thử
+                                    textarea.value = '__FOCUS_TEST__';
+
+                                    // Check có điền được không
+                                    var success = (textarea.value === '__FOCUS_TEST__');
+
+                                    // Restore value cũ
+                                    textarea.value = oldValue;
+
+                                    return success ? 'focus_ok' : 'focus_failed';
+                                } catch(e) {
+                                    return 'js_error: ' + e.message;
+                                }
+                            })();
+                        """)
+
+                        if verify_result == 'focus_ok':
+                            self.log("    → Focus verified OK")
+                            focus_ok = True
+                            break  # Thành công, thoát loop
+                        elif verify_result is None:
+                            self.log("    → [WARN] Focus verify: None (clicked wrong place?)")
+                        else:
+                            self.log(f"    → [WARN] Focus verify: {verify_result}")
+
+                    except Exception as verify_err:
+                        self.log(f"    → [WARN] Verify error: {verify_err}")
+
+                    # Nếu đến đây mà chưa break → verify fail → retry
+                    if attempt < max_retry - 1:
+                        time.sleep(0.5)
+
+                except Exception as e:
+                    self.log(f"    → [WARN] Click error: {e}")
+                    if attempt < max_retry - 1:
+                        time.sleep(0.5)
+
+            # Nếu sau 3 lần vẫn không verify OK → cảnh báo nhưng vẫn thử paste
+            if not focus_ok:
+                self.log("    → [WARN] Focus NOT verified after retries, continue anyway...")
+
 
             # 4. Clear nội dung cũ bằng Ctrl+A
             from DrissionPage.common import Keys
@@ -2932,22 +3035,27 @@ class DrissionFlowAPI:
                         # Fallback: dùng JavaScript
                         self.driver.run_js(f"window.moveTo({x}, {y}); window.resizeTo({w}, {h});")
 
-            # Fixed Chrome window size (700x550) on right side, stacked vertically
-            # This matches the layout in vm_manager.show_chrome_windows()
-            chrome_width = 700
-            chrome_height = 550
+            # Chrome window size - match vm_manager.show_chrome_windows() layout
+            # Each Chrome takes ~1/2 screen height, stacked vertically on right side
+            gap = 20  # Gap between windows and screen edges
+            chrome_width = max(int(screen_w * 0.55), 1200)  # 55% screen width, min 1200
+            chrome_height = (screen_h - gap * 3) // 2  # Half screen height
+            chrome_height = max(chrome_height, 600)  # Min 600px
 
             # Position on right side of screen
-            x_start = screen_w - chrome_width - 10  # 10px from right edge
-            y_start = 50  # Start 50px from top
+            x_pos = screen_w - chrome_width - 10  # 10px from right edge
 
-            # Stack windows vertically based on worker_id
-            win_x = x_start
-            win_y = y_start + (worker * (chrome_height + 10))  # 10px gap between windows
+            # Stack vertically: Chrome 1 top, Chrome 2 bottom
+            if worker == 0:
+                # Chrome 1 - Top half
+                y_pos = gap
+            else:
+                # Chrome 2 - Bottom half
+                y_pos = gap + chrome_height + gap
 
-            # Make sure it doesn't go off screen
-            if win_y + chrome_height > screen_h:
-                win_y = y_start  # Reset to top if too low
+            # Set window position and size
+            win_x = x_pos
+            win_y = y_pos
 
             set_window_rect(win_x, win_y, chrome_width, chrome_height)
             self.log(f"[WIN] Window: Chrome {worker + 1} ({chrome_width}x{chrome_height} at {win_x},{win_y})")
@@ -2956,13 +3064,15 @@ class DrissionFlowAPI:
             self.log(f"[WARN] Window layout error: {e}", "WARN")
             # Don't fallback to maximize - keep Chrome at default size
 
-    def _click_textarea(self, wait_visible: bool = True):
+    def _click_textarea(self, wait_visible: bool = True, max_retry: int = 3):
         """
         Click vào textarea để focus - QUAN TRỌNG để nhập prompt.
         Đợi textarea visible trước khi click, nếu không thấy sẽ F5 refresh.
+        VERIFY focus bằng cách điền text test và đọc lại.
 
         Args:
             wait_visible: True = đợi textarea visible trước khi click
+            max_retry: Số lần retry nếu click nhầm chỗ (default: 3)
         """
         try:
             # QUAN TRỌNG: Đợi textarea visible trước khi click
@@ -2971,81 +3081,133 @@ class DrissionFlowAPI:
                     self.log("[x] Textarea không visible sau khi refresh", "ERROR")
                     return False
 
-            result = self.driver.run_js("""
-                (function() {
-                    var textarea = document.querySelector('textarea');
-                    if (!textarea) return 'not_found';
+            # RETRY LOOP: Click và verify focus
+            for attempt in range(max_retry):
+                self.log(f"[CLICK] Attempt {attempt + 1}/{max_retry}...")
 
-                    // Kiểm tra visible lần cuối trước khi click
-                    var rect = textarea.getBoundingClientRect();
-                    if (rect.width <= 0 || rect.height <= 0) return 'not_visible';
-
-                    // Scroll vào view
-                    textarea.scrollIntoView({block: 'center', behavior: 'instant'});
-
-                    // Lấy vị trí giữa textarea
-                    rect = textarea.getBoundingClientRect();
-                    var centerX = rect.left + rect.width / 2;
-                    var centerY = rect.top + rect.height / 2;
-
-                    // Tạo và dispatch mousedown event
-                    var mousedown = new MouseEvent('mousedown', {
-                        bubbles: true, cancelable: true, view: window,
-                        clientX: centerX, clientY: centerY
-                    });
-                    textarea.dispatchEvent(mousedown);
-
-                    // Tạo và dispatch mouseup event
-                    var mouseup = new MouseEvent('mouseup', {
-                        bubbles: true, cancelable: true, view: window,
-                        clientX: centerX, clientY: centerY
-                    });
-                    textarea.dispatchEvent(mouseup);
-
-                    // Tạo và dispatch click event
-                    var click = new MouseEvent('click', {
-                        bubbles: true, cancelable: true, view: window,
-                        clientX: centerX, clientY: centerY
-                    });
-                    textarea.dispatchEvent(click);
-
-                    // Focus
-                    textarea.focus();
-
-                    return 'clicked';
-                })();
-            """)
-
-            if result == 'clicked':
-                self.log("[v] Clicked textarea (JS) - lần 1")
-                # Click lần 2 sau 2s để đảm bảo focus
-                time.sleep(2)
-                result2 = self.driver.run_js("""
+                # === BƯỚC 1: CLICK VÀO TEXTAREA (2 LẦN ĐỂ ĐẢM BẢO FOCUS) ===
+                click_js = """
                     (function() {
                         var textarea = document.querySelector('textarea');
                         if (!textarea) return 'not_found';
-                        textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                        // Kiểm tra visible lần cuối trước khi click
                         var rect = textarea.getBoundingClientRect();
+                        if (rect.width <= 0 || rect.height <= 0) return 'not_visible';
+
+                        // Scroll vào view
+                        textarea.scrollIntoView({block: 'center', behavior: 'instant'});
+
+                        // Lấy vị trí giữa textarea
+                        rect = textarea.getBoundingClientRect();
                         var centerX = rect.left + rect.width / 2;
                         var centerY = rect.top + rect.height / 2;
+
+                        // Tạo và dispatch mousedown event
+                        var mousedown = new MouseEvent('mousedown', {
+                            bubbles: true, cancelable: true, view: window,
+                            clientX: centerX, clientY: centerY
+                        });
+                        textarea.dispatchEvent(mousedown);
+
+                        // Tạo và dispatch mouseup event
+                        var mouseup = new MouseEvent('mouseup', {
+                            bubbles: true, cancelable: true, view: window,
+                            clientX: centerX, clientY: centerY
+                        });
+                        textarea.dispatchEvent(mouseup);
+
+                        // Tạo và dispatch click event
                         var click = new MouseEvent('click', {
                             bubbles: true, cancelable: true, view: window,
                             clientX: centerX, clientY: centerY
                         });
                         textarea.dispatchEvent(click);
+
+                        // Focus
                         textarea.focus();
+
                         return 'clicked';
                     })();
-                """)
-                if result2 == 'clicked':
-                    self.log("[v] Clicked textarea (JS) - lần 2")
+                """
+
+                # Click lần 1
+                result = self.driver.run_js(click_js)
+
+                if result == 'not_found':
+                    self.log("[x] Textarea not found", "ERROR")
+                    return False
+                elif result == 'not_visible':
+                    self.log("[x] Textarea not visible", "ERROR")
+                    return False
+                elif result != 'clicked':
+                    self.log(f"[x] Click failed: {result}", "WARN")
+                    time.sleep(1)
+                    continue
+
+                self.log("    → Clicked 1st time")
                 time.sleep(0.3)
-                return True
-            elif result == 'not_found':
-                self.log("[x] Textarea not found", "ERROR")
-            elif result == 'not_visible':
-                self.log("[x] Textarea not visible", "ERROR")
+
+                # Click lần 2 để đảm bảo focus
+                result2 = self.driver.run_js(click_js)
+                if result2 == 'clicked':
+                    self.log("    → Clicked 2nd time")
+
+                time.sleep(0.5)
+
+                # === BƯỚC 2: VERIFY FOCUS bằng cách điền text test ===
+                self.log("[VERIFY] Testing focus by typing test text...")
+                verify_result = self.driver.run_js("""
+                    (function() {
+                        var textarea = document.querySelector('textarea');
+                        if (!textarea) return 'not_found';
+
+                        // Lưu value cũ
+                        var oldValue = textarea.value;
+
+                        // Clear và điền text test
+                        textarea.value = '__FOCUS_TEST__';
+
+                        // Trigger input event
+                        textarea.dispatchEvent(new Event('input', {bubbles: true}));
+
+                        // Đợi một chút
+                        var result = '';
+                        setTimeout(function() {
+                            // Đọc lại value
+                            var newValue = textarea.value;
+
+                            // Restore old value
+                            textarea.value = oldValue;
+                            textarea.dispatchEvent(new Event('input', {bubbles: true}));
+                        }, 50);
+
+                        // Check ngay lập tức
+                        if (textarea.value === '__FOCUS_TEST__') {
+                            // Restore luôn
+                            textarea.value = oldValue;
+                            return 'focus_ok';
+                        } else {
+                            return 'focus_failed';
+                        }
+                    })();
+                """)
+
+                time.sleep(0.2)
+
+                # === BƯỚC 3: KIỂM TRA KẾT QUẢ ===
+                if verify_result == 'focus_ok':
+                    self.log(f"[v] Textarea focused correctly! (attempt {attempt + 1})")
+                    return True
+                else:
+                    self.log(f"[x] Focus verification FAILED!", "WARN")
+                    self.log(f"    → Likely clicked wrong place, retry {attempt + 2}/{max_retry}...", "WARN")
+                    time.sleep(1)
+
+            # Hết retry
+            self.log("[x] Failed to focus textarea after all retries!", "ERROR")
             return False
+
         except Exception as e:
             self.log(f"[WARN] Click textarea error: {e}", "WARN")
             return False
@@ -3432,7 +3594,23 @@ class DrissionFlowAPI:
                     if response_data.get('error'):
                         error_info = response_data['error']
                         error_msg = f"{error_info.get('code', 'unknown')}: {error_info.get('message', str(error_info))}"
-                        self.log(f"[x] API Error: {error_msg}", "ERROR")
+
+                        # Log chi tiết nếu có fullDetails từ JS interceptor
+                        full_details = error_info.get('fullDetails')
+                        if full_details:
+                            self.log(f"[x] API Error: {error_msg}", "ERROR")
+                            self.log(f"[ERROR_DETAILS] Full error info:", "ERROR")
+                            if full_details.get('violations'):
+                                self.log(f"  - Violations: {full_details['violations']}", "ERROR")
+                            if full_details.get('details'):
+                                self.log(f"  - Details: {full_details['details']}", "ERROR")
+                            if full_details.get('reason'):
+                                self.log(f"  - Reason: {full_details['reason']}", "ERROR")
+                            if full_details.get('metadata'):
+                                self.log(f"  - Metadata: {full_details['metadata']}", "ERROR")
+                        else:
+                            self.log(f"[x] API Error: {error_msg}", "ERROR")
+
                         return [], error_msg
 
                     # Parse successful response
@@ -3467,7 +3645,8 @@ class DrissionFlowAPI:
         filename: str = None,
         max_retries: int = 3,
         image_inputs: Optional[List[Dict]] = None,
-        force_model: str = ""
+        force_model: str = "",
+        skip_400_retry: bool = False
     ) -> Tuple[bool, List[GeneratedImage], Optional[str]]:
         """
         Generate image - full flow với retry khi gặp 403.
@@ -3480,6 +3659,7 @@ class DrissionFlowAPI:
             image_inputs: List of reference images [{name, inputType}]
             force_model: Force model name (GEM_PIX_2, IMAGEN_4, etc.)
                          "" = không force, "auto" = auto-detect
+            skip_400_retry: If True, return immediately on 400 (for validator mode)
 
         Returns:
             Tuple[success, list of images, error]
@@ -3567,7 +3747,13 @@ class DrissionFlowAPI:
 
                 # === 400 ERROR: Policy violation (prompt bị cấm) ===
                 # Retry 1 lần, nếu vẫn 400 thì skip prompt này
+                # TRỪ KHI skip_400_retry=True (validator mode) → return ngay
                 if "400" in error:
+                    if skip_400_retry:
+                        # Validator mode: return ngay để validator xử lý
+                        self.log(f"[WARN] 400 Policy Violation - Return to validator for handling", "WARN")
+                        return False, [], error
+
                     policy_retry_count = getattr(self, '_policy_retry_count', 0)
                     if policy_retry_count < 1:
                         self._policy_retry_count = policy_retry_count + 1
@@ -3594,7 +3780,7 @@ class DrissionFlowAPI:
                     # Get shared tracker
                     try:
                         from modules.shared_403_tracker import get_403_tracker
-                        tracker = get_403_tracker(total_workers=self.total_workers)
+                        tracker = get_403_tracker(total_workers=self._total_workers)
                         tracker.mark_403(self.worker_id)
                     except Exception as e:
                         self.log(f"[403] Tracker error: {e}", "WARN")
@@ -3632,7 +3818,7 @@ class DrissionFlowAPI:
 
                             # CHỈ đổi IPv6 khi CẢ 2 workers đều ready
                             if tracker.should_rotate_ipv6(self.worker_id):
-                                self.log(f"  → [NET] CẢ {self.total_workers} Chrome đều ready → ĐỔI IPv6!", "WARN")
+                                self.log(f"  → [NET] CẢ {self._total_workers} Chrome đều ready → ĐỔI IPv6!", "WARN")
                                 self._cleared_data_for_403 = False
                                 self._consecutive_403 = 0
 
@@ -3847,7 +4033,7 @@ class DrissionFlowAPI:
             # Reset shared tracker for this worker
             try:
                 from modules.shared_403_tracker import get_403_tracker
-                tracker = get_403_tracker(total_workers=self.total_workers)
+                tracker = get_403_tracker(total_workers=self._total_workers)
                 tracker.reset_worker(self.worker_id)
             except:
                 pass

@@ -69,12 +69,13 @@ _agent: Optional['AgentWorker'] = None
 SCAN_INTERVAL = 60  # Quét mỗi 60 giây
 
 # Auto-detect network paths
+# Ưu tiên SMB share (Z:) trước vì ổn định hơn tsclient khi copy file lớn
 POSSIBLE_AUTO_PATHS = [
+    Path(r"Z:\AUTO"),                              # SMB Share (ưu tiên - ổn định nhất)
+    Path(r"Y:\AUTO"),                              # Mapped drive
     Path(r"\\tsclient\D\AUTO"),
     Path(r"\\vmware-host\Shared Folders\D\AUTO"),
     Path(r"\\VBOXSVR\AUTO"),
-    Path(r"Z:\AUTO"),
-    Path(r"Y:\AUTO"),
     Path(r"D:\AUTO"),
 ]
 
