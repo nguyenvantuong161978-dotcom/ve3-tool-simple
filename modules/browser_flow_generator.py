@@ -4135,23 +4135,68 @@ class BrowserFlowGenerator:
                 self.stats["failed"] += 1
                 consecutive_exceptions += 1
 
-                # Check nếu exception quá nhiều lần liên tiếp → KILL ALL CHROME
+                # Check nếu exception quá nhiều lần liên tiếp → KILL CHROME CỦA WORKER NÀY
                 if consecutive_exceptions >= MAX_CONSECUTIVE_EXCEPTIONS:
-                    self._log(f"[CRITICAL] {consecutive_exceptions} exceptions liên tiếp - KILL ALL CHROME!", "error")
+                    self._log(f"[CRITICAL] {consecutive_exceptions} exceptions liên tiếp - KILL Chrome worker {self.worker_id}!", "error")
                     try:
-                        import subprocess
-                        # Kill all Chrome processes
-                        subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'], capture_output=True, timeout=10)
-                        self._log("   [v] Killed all Chrome processes", "warn")
+                        # Dùng DrissionFlowAPI để kill Chrome của worker này (không kill all)
+                        drission_api.close()
+                        self._log(f"   [v] Killed Chrome worker {self.worker_id}", "warn")
                         time.sleep(5)
                         # Raise exception để worker restart
                         raise Exception(f"Too many consecutive exceptions ({consecutive_exceptions}) - Chrome killed, worker needs restart")
-                    except subprocess.TimeoutExpired:
-                        self._log("   [x] Taskkill timeout", "error")
                     except Exception as kill_e:
                         if "Too many consecutive" in str(kill_e):
                             raise  # Re-raise để worker restart
-                        self._log(f"   [x] Kill error: {kill_e}", "error")
+                        self._log(f"   [x] Kill Chrome error: {kill_e}", "error")
+                        # Nếu close() fail, thử kill theo portable path
+                        try:
+                            import subprocess
+                            # Lấy portable path của worker này
+                            chrome_portable = self.config.get('chrome_portable_2' if self.worker_id == 2 else 'chrome_portable', '')
+                            if chrome_portable:
+                                # Normalize path để match
+                                is_worker2 = 'Copy' in chrome_portable or self.worker_id == 2
+                                if is_worker2:
+                                    # Worker 2: Match Chrome có "Copy"
+                                    portable_marker = 'Copy'
+                                    exclude_marker = None
+                                    self._log(f"   → Backup: Kill Chrome worker 2 (chứa 'Copy')...")
+                                else:
+                                    # Worker 1: Match Chrome có "GoogleChromePortable" NHƯNG KHÔNG có "Copy"
+                                    portable_marker = 'GoogleChromePortable'
+                                    exclude_marker = 'Copy'
+                                    self._log(f"   → Backup: Kill Chrome worker 1 (GoogleChromePortable, không có Copy)...")
+
+                                # List all Chrome processes
+                                result = subprocess.run(
+                                    ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
+                                    capture_output=True, text=True, timeout=10
+                                )
+                                if result.returncode == 0:
+                                    lines = result.stdout.strip().split('\n')
+                                    killed_count = 0
+                                    for line in lines:
+                                        # Check marker
+                                        if portable_marker in line:
+                                            # Exclude nếu cần (Worker 1: không kill Chrome có "Copy")
+                                            if exclude_marker and exclude_marker in line:
+                                                continue
+
+                                            parts = line.strip().split()
+                                            if parts and parts[-1].isdigit():
+                                                pid = parts[-1]
+                                                subprocess.run(['taskkill', '/F', '/PID', pid], capture_output=True, timeout=5)
+                                                self._log(f"      → Killed PID {pid}")
+                                                killed_count += 1
+                                    self._log(f"   [v] Backup kill: {killed_count} Chrome processes", "warn")
+                                    if killed_count > 0:
+                                        time.sleep(5)
+                                        raise Exception(f"Too many consecutive exceptions ({consecutive_exceptions}) - Chrome killed, worker needs restart")
+                        except Exception as backup_e:
+                            if "Too many consecutive" in str(backup_e):
+                                raise
+                            self._log(f"   [x] Backup kill error: {backup_e}", "error")
 
                 # Nếu lỗi liên quan đến Chrome/API, thử restart Chrome 1 lần
                 error_msg = str(e).lower()
