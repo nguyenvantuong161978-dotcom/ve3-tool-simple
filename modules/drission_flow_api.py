@@ -2126,8 +2126,7 @@ class DrissionFlowAPI:
                             if data_path.exists():
                                 user_data = data_path
                                 break
-                        # LƯU LẠI để reset_chrome_profile() có thể tìm đúng Data folder
-                        self._chrome_portable = chrome_exe
+                        # NOTE: KHÔNG ghi đè self._chrome_portable ở đây - giữ nguyên giá trị từ constructor
                         self.log(f"[AUTO] Phat hien Chrome: {chrome_exe}")
                         break
 
