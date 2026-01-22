@@ -993,6 +993,46 @@ class SimpleGUI(tk.Tk):
             self.worker_labels[wid] = {'name': name_lbl, 'project': proj_lbl, 'status': status_lbl}
             self.worker_rows[wid] = frame
 
+        # === WORKER LOGS VIEWER ===
+        logs_frame = tk.LabelFrame(left, text=" WORKER LOGS ", bg='#16213e', fg='#00d9ff',
+                                   font=("Arial", 10, "bold"), padx=5, pady=5)
+        logs_frame.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        # Tab selector
+        tab_frame = tk.Frame(logs_frame, bg='#0f3460')
+        tab_frame.pack(fill="x", pady=(0, 5))
+
+        self.log_tab_var = tk.StringVar(value="excel")
+        self.log_tab_buttons = {}
+
+        for wid, label in [("excel", "EXCEL"), ("chrome_1", "CHROME 1"), ("chrome_2", "CHROME 2")]:
+            btn = tk.Radiobutton(tab_frame, text=label, variable=self.log_tab_var, value=wid,
+                                command=lambda w=wid: self._switch_log_tab(w),
+                                bg='#0f3460', fg='white', selectcolor='#1a1a2e',
+                                font=("Arial", 9, "bold"), indicatoron=False,
+                                padx=10, pady=3)
+            btn.pack(side="left", padx=2)
+            self.log_tab_buttons[wid] = btn
+
+        # Log text area
+        log_text_frame = tk.Frame(logs_frame, bg='#1a1a2e')
+        log_text_frame.pack(fill="both", expand=True)
+
+        log_scrollbar = tk.Scrollbar(log_text_frame)
+        log_scrollbar.pack(side="right", fill="y")
+
+        self.log_text = tk.Text(log_text_frame, bg='#0a0a0a', fg='#00ff88',
+                               font=("Consolas", 8), wrap="none",
+                               yscrollcommand=log_scrollbar.set,
+                               height=15)
+        self.log_text.pack(fill="both", expand=True)
+        log_scrollbar.config(command=self.log_text.yview)
+
+        # Horizontal scrollbar
+        log_scrollbar_x = tk.Scrollbar(logs_frame, orient="horizontal", command=self.log_text.xview)
+        log_scrollbar_x.pack(fill="x")
+        self.log_text.config(xscrollcommand=log_scrollbar_x.set)
+
         # === PROJECTS ===
         projects = tk.LabelFrame(left, text=" PROJECTS (click de xem) ", bg='#16213e', fg='white',
                                  font=("Arial", 10, "bold"), padx=5, pady=5)
@@ -1126,6 +1166,42 @@ class SimpleGUI(tk.Tk):
         self.selected_project = code
         self.detail_title_var.set(f"Project: {code}")
         self._load_project_detail(code)
+
+    def _switch_log_tab(self, worker_id: str):
+        """Switch log tab to show different worker."""
+        self._update_worker_logs(worker_id)
+
+    def _update_worker_logs(self, worker_id: str = None):
+        """Update log display for current worker tab."""
+        if worker_id is None:
+            worker_id = self.log_tab_var.get()
+
+        if not self.manager:
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', f"[{worker_id}] Manager not started\n")
+            return
+
+        # Read log file
+        log_file = TOOL_DIR / ".agent" / "logs" / f"{worker_id}.log"
+        if not log_file.exists():
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', f"[{worker_id}] No log file yet\n")
+            return
+
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                # Read last 500 lines
+                lines = f.readlines()
+                recent_lines = lines[-500:] if len(lines) > 500 else lines
+                log_content = ''.join(recent_lines)
+
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', log_content)
+            self.log_text.see(tk.END)  # Auto-scroll to bottom
+
+        except Exception as e:
+            self.log_text.delete('1.0', tk.END)
+            self.log_text.insert('1.0', f"[{worker_id}] Error reading log: {e}\n")
 
     def _show_excel_detail(self, code: str):
         """Show popup with detailed Excel status."""
@@ -1775,6 +1851,10 @@ class SimpleGUI(tk.Tk):
             self.manager.start_all(gui_mode=True)  # True = ẩn CMD windows
             threading.Thread(target=self.manager.orchestrate, daemon=True).start()
 
+            # Auto-hide CMD windows after 3 seconds
+            time.sleep(3)
+            self.after(0, lambda: self._auto_hide_windows())
+
         threading.Thread(target=run, daemon=True).start()
 
     def _stop(self):
@@ -1860,6 +1940,13 @@ class SimpleGUI(tk.Tk):
             self.manager.show_chrome_with_cmd()
             self.toggle_btn.config(text="AN CMD", bg='#00b894')
             self.windows_visible = True
+
+    def _auto_hide_windows(self):
+        """Auto-hide CMD windows when GUI starts."""
+        if self.manager and not self.windows_visible:
+            self.manager.hide_cmd_windows()
+            self.manager.hide_chrome_windows()
+            self.toggle_btn.config(text="HIEN CMD", bg='#6c5ce7')
 
     def _get_git_version(self) -> str:
         """Lay thong tin git commit cuoi cung."""
@@ -2227,6 +2314,7 @@ class SimpleGUI(tk.Tk):
         self._update_workers()
         self._update_projects()
         self._update_detail_panel()
+        self._update_worker_logs()  # Auto-update logs
         self.after(1000, self._update_loop)
 
     def _update_workers(self):
