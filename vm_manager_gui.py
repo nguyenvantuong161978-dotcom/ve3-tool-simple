@@ -1950,18 +1950,20 @@ class SimpleGUI(tk.Tk):
         threading.Thread(target=do_reset, daemon=True).start()
 
     def _toggle_windows(self):
-        """Toggle Chrome windows only (CMD stays hidden, logs in GUI)."""
+        """Toggle Chrome and CMD windows visibility."""
         if not self.manager:
             return
 
         if self.windows_visible:
-            # Hide Chrome only
+            # Hide both Chrome and CMD
             self.manager.hide_chrome_windows()
+            self.manager.hide_cmd_windows()
             self.toggle_btn.config(text="HIEN CHROME", bg='#6c5ce7')
             self.windows_visible = False
         else:
-            # Show Chrome and arrange nicely - use VMManager function
+            # Show both Chrome and CMD
             self.manager.show_chrome_windows()
+            self.manager.show_cmd_windows()
             self.toggle_btn.config(text="AN CHROME", bg='#00b894')
             self.windows_visible = True
 

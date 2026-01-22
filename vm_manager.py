@@ -1881,6 +1881,48 @@ class VMManager:
             self.log(f"Error hiding CMD windows: {e}", "CHROME", "ERROR")
             return False
 
+    def show_cmd_windows(self):
+        """Hiện các cửa sổ CMD ở giữa màn hình, xếp chồng nhau."""
+        if sys.platform != "win32":
+            return False
+
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+
+            cmd_windows = self.get_cmd_windows()
+            if not cmd_windows:
+                return False
+
+            # Get screen size
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+
+            # CMD window size - nhỏ hơn Chrome
+            cmd_width = 800
+            cmd_height = 600
+
+            # Position ở giữa màn hình, xếp chồng với offset
+            x_start = (screen_width - cmd_width) // 2
+            y_start = (screen_height - cmd_height) // 2
+
+            for i, hwnd in enumerate(cmd_windows):
+                # Restore if minimized
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+
+                # Xếp chồng với offset nhỏ để dễ phân biệt
+                x = x_start + (i * 30)
+                y = y_start + (i * 30)
+
+                # Move to position
+                user32.MoveWindow(hwnd, x, y, cmd_width, cmd_height, True)
+
+            self.log(f"Shown {len(cmd_windows)} CMD windows (center)", "CHROME", "SUCCESS")
+            return True
+        except Exception as e:
+            self.log(f"Error showing CMD windows: {e}", "CHROME", "ERROR")
+            return False
+
     def show_chrome_with_cmd(self):
         """
         Show TẤT CẢ windows (CMD, Chrome browsers).
