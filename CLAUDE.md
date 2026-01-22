@@ -99,28 +99,36 @@ git push official main  # Push lên repo chính thức
 
 > **QUAN TRỌNG**: Claude Code phải cập nhật section này sau mỗi phiên làm việc để phiên sau sử dụng hiệu quả.
 
-### Phiên hiện tại: 2026-01-20
+### Phiên hiện tại: 2026-01-22
 
-**Đang làm:**
-- Test full workflow cho project KA2-0002
-- Excel Worker: HOÀN THÀNH (274 scene prompts)
-- Chrome Workers: Đang chạy tạo ảnh
-
-**Vấn đề đang gặp:**
-- Chrome workers cần login Google trước khi chạy
-- Nhiều IPv6 trong list đã chết, cần cập nhật
+**CRITICAL ISSUE - Chrome 2 không điều khiển được:**
+- Vấn đề: Chrome 2 worker dùng SAI Chrome portable (dùng Chrome 1's portable)
+- Root cause: Auto-detect override chrome_portable path
+- Fix đã thử:
+  1. ✅ Thêm check `not self._chrome_portable` vào auto-detect condition
+  2. ✅ Convert relative path sang absolute path
+  3. ❌ Vẫn chưa hoạt động - cần investigate thêm
 
 **Đã hoàn thành phiên này:**
-- [x] Fix GUI hiển thị ProjectStatus
-- [x] Fix scene_number → scene_id bug
-- [x] Thêm Chrome data clearing
-- [x] Tạo CLAUDE.md cho memory
-- [x] Push code lên repo chính thức
+- [x] Fix CMD hiding - START.bat dùng pythonw
+- [x] Fix Chrome window detection (class name Chrome_WidgetWin)
+- [x] Fix Chrome window positioning (MoveWindow thay vì SetWindowPos)
+- [x] Add show_cmd_windows() - hiện CMD ở giữa màn hình
+- [x] Fix Chrome height - chia đều 2 Chrome không đè lên nhau
+- [x] Revert wrapper script (đã làm hỏng Chrome automation)
+- [x] Multiple attempts fix Chrome 2 portable path issue
+
+**Vấn đề cần fix URGENT:**
+- [ ] Chrome 2 portable path bị override - cần fix triệt để
+  - SmartEngine truyền đúng: `./GoogleChromePortable - Copy/`
+  - DrissionFlowAPI nhận sai: `./GoogleChromePortable/`
+  - Cần trace code flow để tìm chỗ mất path
 
 ### Backlog (việc cần làm)
+- [ ] Fix Chrome 2 portable path issue (URGENT)
+- [ ] Worker logs không hiển thị trong GUI (trade-off để Chrome automation hoạt động)
 - [ ] Kiểm tra và làm sạch IPv6 list
 - [ ] Test auto-recovery khi Chrome disconnect
-- [ ] Cải thiện error logging chi tiết hơn
 
 ### Lịch sử phiên trước
 _(Thêm tóm tắt phiên cũ vào đây)_
