@@ -1228,6 +1228,13 @@ For each location, provide:
 1. location_prompt: Full description for generating a reference image
 2. location_lock: Short description to use in scene prompts
 
+IMPORTANT RULES FOR LOCATION IMAGES:
+- Locations MUST be EMPTY SPACES with NO PEOPLE at all
+- ABSOLUTELY NO children under 18 years old
+- ABSOLUTELY NO human figures, faces, or body parts
+- Only show: architecture, environment, landscape, objects, furniture, nature
+- Focus on: lighting, atmosphere, mood, spatial composition
+
 Return JSON only:
 {{
     "locations": [
