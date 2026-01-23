@@ -252,6 +252,7 @@ class Scene:
         location_used: str = "",        # Location ID used
         reference_files: str = "",      # JSON list of reference files
         media_id: str = "",             # Media ID từ Google Flow API (dùng cho I2V)
+        video_note: str = "",           # Ghi chú video: "SKIP" = bỏ qua, "" = tạo video
         # DEPRECATED - giữ để backward compatible, sẽ map sang srt_start/srt_end
         start_time: str = "",
         end_time: str = ""
@@ -275,6 +276,7 @@ class Scene:
         self.location_used = location_used
         self.reference_files = reference_files
         self.media_id = media_id  # Media ID cho I2V
+        self.video_note = video_note  # Ghi chú video: "SKIP" hoặc ""
 
         # DEPRECATED aliases (để code cũ không bị lỗi)
         self.start_time = self.srt_start
@@ -300,6 +302,7 @@ class Scene:
             "location_used": self.location_used,
             "reference_files": self.reference_files,
             "media_id": self.media_id,  # Media ID cho I2V
+            "video_note": self.video_note,  # Ghi chú video
         }
     
     @classmethod
@@ -353,6 +356,7 @@ class Scene:
             location_used=str(data.get("location_used", "") or ""),
             reference_files=str(data.get("reference_files", "") or ""),
             media_id=str(data.get("media_id", "") or ""),  # Media ID cho I2V
+            video_note=str(data.get("video_note", "") or ""),  # Ghi chú video
         )
 
 

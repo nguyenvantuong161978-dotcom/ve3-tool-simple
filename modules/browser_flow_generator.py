@@ -4514,10 +4514,15 @@ class BrowserFlowGenerator:
 
                         video_path = getattr(scene, 'video_path', '') or ''
                         status_vid = getattr(scene, 'status_vid', '') or ''
+                        video_note = getattr(scene, 'video_note', '') or ''  # Ghi chú video
 
                         if not media_id:
                             scenes_without_media_id.append(scene_id)
                         elif not video_path and status_vid != 'done':
+                            # CHECK video_note: Nếu là "SKIP" thì bỏ qua scene này
+                            if video_note == "SKIP":
+                                continue  # BỎ QUA scene này (BASIC mode, segment > 1)
+
                             video_prompt = getattr(scene, 'video_prompt', '') or 'Subtle cinematic motion'
                             scenes_for_video.append({
                                 'scene_id': scene_id,
