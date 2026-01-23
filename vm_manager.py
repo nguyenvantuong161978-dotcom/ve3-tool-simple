@@ -1346,7 +1346,7 @@ class VMManager:
 
         # Stop worker
         self.stop_worker(worker_id)
-        self.kill_all_chrome()
+        self.kill_chrome_by_worker(worker_id)  # ✅ CHỈ kill worker này!
 
         # Get Chrome profile path
         w = self.workers.get(worker_id)
@@ -1598,6 +1598,62 @@ class VMManager:
     # ================================================================================
     # WORKER CONTROL
     # ================================================================================
+
+    def kill_chrome_by_worker(self, worker_id: str):
+        """
+        Kill CHỈ Chrome của 1 worker cụ thể (không kill worker khác).
+
+        Args:
+            worker_id: "chrome_1" hoặc "chrome_2"
+        """
+        if sys.platform != "win32":
+            # Linux: khó phân biệt, dùng kill_all_chrome
+            self.log(f"Linux: Cannot kill specific Chrome for {worker_id}, skipping", worker_id, "WARN")
+            return
+
+        self.log(f"Killing Chrome processes for {worker_id}...", worker_id, "WARN")
+
+        # Xác định Chrome folder path dựa vào worker_id
+        # Chrome path có dạng: "...\GoogleChromePortable\App\Chrome-bin\chrome.exe"
+        # Chrome 2 có: "...\GoogleChromePortable - Copy\App\Chrome-bin\chrome.exe"
+        if worker_id == "chrome_1":
+            # Chrome 1: Chứa "GoogleChromePortable\App" NHƯNG KHÔNG chứa "- Copy"
+            chrome_marker = "GoogleChromePortable\\App"
+            exclude_marker = "GoogleChromePortable - Copy"
+        else:  # chrome_2
+            # Chrome 2: Chứa "GoogleChromePortable - Copy\App"
+            chrome_marker = "GoogleChromePortable - Copy\\App"
+            exclude_marker = None
+
+        try:
+            # 1. List tất cả chrome.exe processes với command line
+            result = subprocess.run(
+                ["wmic", "process", "where", "name='chrome.exe'", "get", "processid,commandline"],
+                capture_output=True, text=True, timeout=5
+            )
+
+            killed_count = 0
+            for line in result.stdout.split('\n'):
+                # Check nếu command line chứa chrome_marker
+                if chrome_marker in line:
+                    # Nếu là Chrome 1, phải đảm bảo KHÔNG chứa "- Copy"
+                    if exclude_marker and exclude_marker in line:
+                        continue  # Skip Chrome 2
+
+                    # Extract PID (số cuối cùng trong dòng)
+                    parts = line.strip().split()
+                    if parts:
+                        pid = parts[-1]
+                        if pid.isdigit():
+                            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+                            killed_count += 1
+
+            self.log(f"Killed {killed_count} Chrome processes for {worker_id}", worker_id, "SUCCESS")
+
+        except Exception as e:
+            self.log(f"Error killing Chrome for {worker_id}: {e}", worker_id, "WARN")
+            self.log("Falling back to kill_all_chrome...", worker_id, "WARN")
+            self.kill_all_chrome()
 
     def kill_all_chrome(self):
         """Kill TẤT CẢ Chrome + CMD windows khi tắt tool."""
@@ -2148,7 +2204,7 @@ class VMManager:
 
         w = self.workers[worker_id]
         if w.worker_type == "chrome":
-            self.kill_all_chrome()
+            self.kill_chrome_by_worker(worker_id)  # ✅ CHỈ kill worker này!
 
         time.sleep(3)
         self.start_worker(worker_id, gui_mode=self.gui_mode)
