@@ -830,50 +830,311 @@ Return JSON only:
         segments = data["segments"]
         total_srt = len(srt_entries)
 
-        # VALIDATION: Check if segments cover all SRT entries
+        # =====================================================================
+        # VALIDATION 1: Check PROPORTIONAL image_count vs SRT entries
+        # ROOT CAUSE FIX: API có thể trả segment với 833 SRT entries nhưng chỉ 4 images
+        # Điều này gây mất 70% nội dung! Cần split segment quá lớn.
+        #
+        # STRATEGY (user suggestion):
+        # - Ratio > 30 (severe): Chia nhỏ 1/2 và GỌI LẠI API
+        # - Ratio 15-30 (moderate): Local split (không cần gọi API)
+        # =====================================================================
+        MAX_SRT_PER_IMAGE = 15  # Threshold for local split
+        SEVERE_RATIO = 30  # Threshold for API retry with smaller input
+
+        def _retry_segment_with_api(seg_start, seg_end, seg_name, depth=0):
+            """Recursively split and retry API when ratio is too high"""
+            if depth > 3:  # Max 3 levels of splitting
+                return None
+
+            srt_count = seg_end - seg_start + 1
+            if srt_count < 30:  # Too small to split further
+                return None
+
+            # Get SRT text for this range
+            range_entries = srt_entries[seg_start-1:seg_end]
+            range_text = " ".join([e.text for e in range_entries])
+
+            # Call API for this smaller range
+            retry_prompt = f"""Analyze this PORTION of a story and divide it into segments for video creation.
+
+SRT RANGE: {seg_start} to {seg_end} ({srt_count} entries)
+
+STORY PORTION:
+{range_text[:3000]}
+
+TASK: Divide this portion into 2-4 logical segments.
+- Total images should be approximately: {max(2, int(srt_count / 10))}
+- Each segment needs at least 1 image
+
+Return JSON only:
+{{
+    "segments": [
+        {{
+            "segment_id": 1,
+            "segment_name": "Sub-part 1",
+            "message": "What happens in this part",
+            "key_elements": ["visual elements"],
+            "image_count": 3,
+            "srt_range_start": {seg_start},
+            "srt_range_end": {seg_start + srt_count//2 - 1}
+        }}
+    ]
+}}
+"""
+            self._log(f"     [RETRY] Calling API for SRT {seg_start}-{seg_end} (depth={depth})...")
+            response = self._call_api(retry_prompt, temperature=0.3, max_tokens=2048)
+
+            if response:
+                retry_data = self._extract_json(response)
+                if retry_data and "segments" in retry_data:
+                    retry_segs = retry_data["segments"]
+                    # Validate the retry results
+                    valid_results = []
+                    for rs in retry_segs:
+                        rs_start = rs.get("srt_range_start", seg_start)
+                        rs_end = rs.get("srt_range_end", seg_end)
+                        rs_images = rs.get("image_count", 1)
+                        rs_count = rs_end - rs_start + 1
+                        rs_ratio = rs_count / max(1, rs_images)
+
+                        if rs_ratio > SEVERE_RATIO:
+                            # Still too high! Recursively split
+                            self._log(f"     [RETRY] Segment still has ratio {rs_ratio:.1f}, splitting further...")
+                            sub_result = _retry_segment_with_api(rs_start, rs_end, rs.get("segment_name", ""), depth + 1)
+                            if sub_result:
+                                valid_results.extend(sub_result)
+                            else:
+                                # Fallback: local split
+                                valid_results.append(rs)
+                        else:
+                            valid_results.append(rs)
+
+                    if valid_results:
+                        self._log(f"     [RETRY] Got {len(valid_results)} valid sub-segments from API")
+                        return valid_results
+
+            return None
+
+        if segments:
+            self._log(f"\n  [VALIDATION] Checking segment proportions...")
+            validated_segments = []
+            next_seg_id = 1
+
+            for seg in segments:
+                seg_start = seg.get("srt_range_start", 1)
+                seg_end = seg.get("srt_range_end", seg_start)
+                image_count = seg.get("image_count", 1)
+                srt_count = seg_end - seg_start + 1
+                ratio = srt_count / max(1, image_count)
+
+                if ratio > SEVERE_RATIO:
+                    # SEVERE! Try API retry with smaller input
+                    self._log(f"  [SEVERE] Segment '{seg.get('segment_name')}': {srt_count} SRT / {image_count} images = {ratio:.1f} ratio")
+                    self._log(f"     -> Attempting API retry with split input...")
+
+                    retry_result = _retry_segment_with_api(seg_start, seg_end, seg.get("segment_name", ""))
+
+                    if retry_result:
+                        # Use API result
+                        for rs in retry_result:
+                            rs["segment_id"] = next_seg_id
+                            validated_segments.append(rs)
+                            self._log(f"     -> Added from API: Segment {next_seg_id} ({rs.get('srt_range_start')}-{rs.get('srt_range_end')})")
+                            next_seg_id += 1
+                    else:
+                        # API retry failed, use local split
+                        self._log(f"     -> API retry failed, using local split...")
+                        entries_per_sub = 80
+
+                        remaining_entries = srt_count
+                        current_start = seg_start
+                        sub_index = 1
+
+                        while remaining_entries > 0:
+                            chunk_entries = min(remaining_entries, entries_per_sub)
+                            chunk_images = max(1, int(chunk_entries / 8))
+                            chunk_end = current_start + chunk_entries - 1
+
+                            new_seg = {
+                                "segment_id": next_seg_id,
+                                "segment_name": f"{seg.get('segment_name', 'Part')} ({sub_index})",
+                                "message": seg.get("message", ""),
+                                "key_elements": seg.get("key_elements", []),
+                                "image_count": chunk_images,
+                                "srt_range_start": current_start,
+                                "srt_range_end": chunk_end,
+                                "importance": seg.get("importance", "medium")
+                            }
+                            validated_segments.append(new_seg)
+                            self._log(f"     -> Local split: Segment {next_seg_id}: SRT {current_start}-{chunk_end} ({chunk_images} images)")
+
+                            current_start = chunk_end + 1
+                            remaining_entries -= chunk_entries
+                            next_seg_id += 1
+                            sub_index += 1
+
+                elif ratio > MAX_SRT_PER_IMAGE:
+                    # MODERATE! Use local split (no API call needed)
+                    self._log(f"  [WARN] Segment '{seg.get('segment_name')}': {srt_count} SRT / {image_count} images = {ratio:.1f} ratio (moderate)")
+                    self._log(f"     -> Using local split...")
+
+                    entries_per_sub = 80
+
+                    remaining_entries = srt_count
+                    current_start = seg_start
+                    sub_index = 1
+
+                    while remaining_entries > 0:
+                        chunk_entries = min(remaining_entries, entries_per_sub)
+                        chunk_images = max(1, int(chunk_entries / 8))
+                        chunk_end = current_start + chunk_entries - 1
+
+                        new_seg = {
+                            "segment_id": next_seg_id,
+                            "segment_name": f"{seg.get('segment_name', 'Part')} ({sub_index})",
+                            "message": seg.get("message", ""),
+                            "key_elements": seg.get("key_elements", []),
+                            "image_count": chunk_images,
+                            "srt_range_start": current_start,
+                            "srt_range_end": chunk_end,
+                            "importance": seg.get("importance", "medium")
+                        }
+                        validated_segments.append(new_seg)
+                        self._log(f"     -> Segment {next_seg_id}: SRT {current_start}-{chunk_end} ({chunk_images} images)")
+
+                        current_start = chunk_end + 1
+                        remaining_entries -= chunk_entries
+                        next_seg_id += 1
+                        sub_index += 1
+                else:
+                    # Segment OK, but update segment_id
+                    seg["segment_id"] = next_seg_id
+                    validated_segments.append(seg)
+                    self._log(f"  [OK] Segment {next_seg_id} '{seg.get('segment_name')}': {srt_count} SRT / {image_count} images = {ratio:.1f} ratio")
+                    next_seg_id += 1
+
+            # Update segments with validated list
+            if len(validated_segments) != len(segments):
+                self._log(f"\n  [FIX] Split {len(segments)} segments -> {len(validated_segments)} segments")
+            segments = validated_segments
+            data["segments"] = segments
+
+        # =====================================================================
+        # VALIDATION 2: Check if segments cover ALL SRT entries
+        # If missing, CALL API for missing range (instead of empty auto-add)
+        # =====================================================================
         if segments:
             last_seg = segments[-1]
             last_srt_end = last_seg.get("srt_range_end", 0)
 
             if last_srt_end < total_srt:
-                # FIX: Extend coverage to include all SRT entries
                 missing_entries = total_srt - last_srt_end
+                missing_start = last_srt_end + 1
                 self._log(f"  [WARN] Segments only cover SRT 1-{last_srt_end}, missing {missing_entries} entries")
-                self._log(f"  -> Auto-fixing: extending coverage to SRT {total_srt}")
+                self._log(f"  -> Calling API for missing range SRT {missing_start}-{total_srt}...")
 
-                # Calculate how many additional images needed (~5s per image)
+                # Get SRT text for missing range
+                missing_srt_entries = srt_entries[last_srt_end:total_srt]
+                missing_text = " ".join([e.text for e in missing_srt_entries])
+                missing_text_sampled = self._sample_text(missing_text, total_chars=4000)
+
+                # Calculate expected images for missing range
                 missing_duration = missing_entries * (total_duration / total_srt)
-                additional_images = max(1, int(missing_duration / 5))
+                expected_images = max(2, int(missing_duration / 5))
 
-                # Either extend last segment or add new segment
-                if missing_entries <= 50:  # Small gap - extend last segment
-                    segments[-1]["srt_range_end"] = total_srt
-                    segments[-1]["image_count"] = segments[-1].get("image_count", 1) + additional_images
-                    self._log(f"     -> Extended last segment to SRT {total_srt} (+{additional_images} images)")
-                else:
-                    # Larger gap - add new segment(s)
-                    remaining = missing_entries
-                    current_start = last_srt_end + 1
+                # Call API for missing range
+                missing_prompt = f"""Analyze this CONTINUATION portion of a story and divide it into segments for video creation.
+
+THIS IS A CONTINUATION - the story started earlier. Analyze what happens in THIS PORTION.
+
+SRT RANGE: {missing_start} to {total_srt} ({missing_entries} entries)
+ESTIMATED DURATION: {missing_duration:.1f} seconds
+
+STORY CONTINUATION:
+{missing_text_sampled}
+
+TASK: Divide this continuation into 2-6 logical segments.
+Each segment should have:
+- message: DETAILED description of what happens (2-3 sentences minimum)
+- key_elements: Visual elements for image creation
+- visual_summary: What images should show
+- image_count: Number of images needed (~{expected_images} total for this range)
+
+Return JSON only:
+{{
+    "segments": [
+        {{
+            "segment_id": 1,
+            "segment_name": "Continuation Scene Name",
+            "message": "DETAILED: What happens, who is involved, emotions, actions",
+            "key_elements": ["character doing action", "specific visual", "emotion"],
+            "visual_summary": "What images should show for this segment",
+            "mood": "emotional tone",
+            "characters_involved": [],
+            "image_count": 5,
+            "srt_range_start": {missing_start},
+            "srt_range_end": {missing_start + missing_entries // 3}
+        }}
+    ]
+}}
+"""
+                api_response = self._call_api(missing_prompt, temperature=0.3, max_tokens=3000)
+
+                api_segments = []
+                if api_response:
+                    api_data = self._extract_json(api_response)
+                    if api_data and "segments" in api_data:
+                        api_segments = api_data["segments"]
+                        self._log(f"     -> API returned {len(api_segments)} segments for missing range")
+
+                        # Adjust segment IDs, validate ranges, and RECALCULATE image_count
+                        seg_id = len(segments) + 1
+                        for seg in api_segments:
+                            seg["segment_id"] = seg_id
+                            # Ensure srt_range is within missing range
+                            seg_start = seg.get("srt_range_start", missing_start)
+                            seg_end = seg.get("srt_range_end", min(seg_start + 100, total_srt))
+                            seg["srt_range_start"] = max(missing_start, seg_start)
+                            seg["srt_range_end"] = min(total_srt, seg_end)
+
+                            # CRITICAL: Recalculate image_count based on SRT entries
+                            # API may return unreasonable values (e.g., 185 for 308 entries)
+                            seg_entries = seg["srt_range_end"] - seg["srt_range_start"] + 1
+                            seg["image_count"] = max(2, int(seg_entries / 10))  # ~10 SRT per image
+
+                            segments.append(seg)
+                            self._log(f"     -> Added API segment {seg_id}: '{seg.get('segment_name')}' (SRT {seg['srt_range_start']}-{seg['srt_range_end']}, {seg['image_count']} imgs)")
+                            seg_id += 1
+
+                # If API failed or incomplete, fallback to auto-add
+                current_coverage = max(s.get("srt_range_end", 0) for s in segments) if segments else 0
+                if current_coverage < total_srt:
+                    remaining = total_srt - current_coverage
+                    self._log(f"     -> Still missing {remaining} entries, using fallback auto-add...")
+
+                    current_start = current_coverage + 1
                     seg_id = len(segments) + 1
 
                     while remaining > 0:
-                        chunk = min(remaining, 100)  # Max 100 entries per segment
-                        chunk_images = max(1, int(chunk * (total_duration / total_srt) / 5))
+                        chunk = min(remaining, 100)
+                        chunk_images = max(1, int(chunk / 10))
                         new_seg = {
                             "segment_id": seg_id,
                             "segment_name": f"Continuation Part {seg_id - len(data['segments'])}",
-                            "message": "Continuing the narrative",
-                            "key_elements": [],
+                            "message": f"Continuing the narrative from SRT {current_start}",
+                            "key_elements": ["continuation", "story progression"],
+                            "visual_summary": f"Visual continuation of the story from timestamp {current_start}",
+                            "mood": "neutral",
                             "image_count": chunk_images,
-                            "estimated_duration": chunk * (total_duration / total_srt),
                             "srt_range_start": current_start,
-                            "srt_range_end": current_start + chunk - 1,
+                            "srt_range_end": min(current_start + chunk - 1, total_srt),
                             "importance": "medium"
                         }
                         segments.append(new_seg)
-                        self._log(f"     -> Added segment {seg_id}: SRT {current_start}-{current_start + chunk - 1} ({chunk_images} images)")
+                        self._log(f"     -> Fallback segment {seg_id}: SRT {current_start}-{new_seg['srt_range_end']} ({chunk_images} images)")
 
-                        current_start += chunk
+                        current_start = new_seg['srt_range_end'] + 1
                         remaining -= chunk
                         seg_id += 1
 
@@ -1890,6 +2151,65 @@ Create exactly {image_count} scenes!"""
             self._log("  ERROR: No scenes created!", "ERROR")
             return StepResult("create_director_plan_basic", StepStatus.FAILED, "No scenes created")
 
+        # =====================================================================
+        # POST-PROCESSING: Fill any SRT gaps to ensure 100% coverage
+        # This catches cases where API didn't return proper srt_indices
+        # =====================================================================
+        all_covered_indices = set()
+        for scene in all_scenes:
+            indices = scene.get("srt_indices", [])
+            if isinstance(indices, list):
+                all_covered_indices.update(indices)
+
+        all_srt_indices = set(range(1, len(srt_entries) + 1))
+        uncovered = sorted(all_srt_indices - all_covered_indices)
+
+        if uncovered:
+            self._log(f"\n  [GAP-FILL] Found {len(uncovered)} uncovered SRT entries, creating fill scenes...")
+
+            # Group consecutive indices into chunks
+            chunks = []
+            if uncovered:
+                current_chunk = [uncovered[0]]
+                for idx in uncovered[1:]:
+                    if idx == current_chunk[-1] + 1:
+                        current_chunk.append(idx)
+                    else:
+                        chunks.append(current_chunk)
+                        current_chunk = [idx]
+                chunks.append(current_chunk)
+
+            # Create fill scenes for each chunk (max 10 SRT per scene)
+            for chunk in chunks:
+                # Split large chunks into smaller scenes
+                chunk_start = 0
+                while chunk_start < len(chunk):
+                    chunk_end = min(chunk_start + 10, len(chunk))
+                    scene_indices = chunk[chunk_start:chunk_end]
+
+                    scene_ents = [e for idx, e in enumerate(srt_entries, 1) if idx in scene_indices]
+                    if scene_ents:
+                        fill_scene = {
+                            "scene_id": scene_id_counter,
+                            "segment_id": 0,  # Gap-fill scenes don't belong to specific segment
+                            "srt_indices": scene_indices,
+                            "srt_start": scene_ents[0].start_time,
+                            "srt_end": scene_ents[-1].end_time,
+                            "duration": 5.0,  # Default 5s
+                            "srt_text": " ".join([e.text for e in scene_ents]),
+                            "visual_moment": f"[Gap-fill] Scene covering SRT {scene_indices[0]}-{scene_indices[-1]}",
+                            "characters_used": "",
+                            "location_used": "",
+                            "camera": "Medium shot",
+                            "lighting": "Natural lighting"
+                        }
+                        all_scenes.append(fill_scene)
+                        scene_id_counter += 1
+
+                    chunk_start = chunk_end
+
+            self._log(f"  [GAP-FILL] Added {scene_id_counter - len(all_scenes) + len(chunks)} fill scenes, total: {len(all_scenes)}")
+
         # Save to Excel
         try:
             workbook.save_director_plan(all_scenes)
@@ -2396,19 +2716,55 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                         api_scenes.append(fallback_scene)
                         self._log(f"     -> Created fallback for scene {orig_id}")
 
-            # Check duplicates - chỉ skip nếu >80% trùng lặp
-            seen_prompts = set()
+            # Check duplicates - nếu >80% trùng lặp, tạo unique fallback thay vì skip
+            seen_prompts = {}
             duplicate_count = 0
             for s in api_scenes:
                 prompt_key = s.get("img_prompt", "")[:100]
                 if prompt_key in seen_prompts:
                     duplicate_count += 1
                 else:
-                    seen_prompts.add(prompt_key)
+                    seen_prompts[prompt_key] = True
 
             if len(api_scenes) > 0 and duplicate_count > len(api_scenes) * 0.8:
-                self._log(f"  Batch {batch_num}: >80% duplicates ({duplicate_count}/{len(api_scenes)}), skipped!", "ERROR")
-                continue
+                self._log(f"  Batch {batch_num}: >80% duplicates ({duplicate_count}/{len(api_scenes)}), creating UNIQUE fallbacks!", "WARN")
+
+                # Tạo unique fallback cho từng scene thay vì skip cả batch
+                seen_for_dedup = set()
+                for i, scene_data in enumerate(api_scenes):
+                    prompt_key = scene_data.get("img_prompt", "")[:100]
+                    scene_id = scene_data.get("scene_id", i)
+
+                    if prompt_key in seen_for_dedup:
+                        # Prompt bị trùng - tạo unique fallback từ scene info
+                        orig = next((s for s in batch if int(s.get("scene_id", 0)) == int(scene_id)), None)
+                        if orig:
+                            srt_text = (orig.get("srt_text") or "")[:150]
+                            visual = (orig.get("visual_moment") or "")[:100]
+                            chars_used = orig.get("characters_used") or ""
+                            loc_used = orig.get("location_used") or ""
+
+                            # Tạo unique prompt với scene_id và context
+                            unique_prompt = f"Scene {scene_id}: {visual or srt_text}. "
+                            unique_prompt += "Cinematic 4K, dramatic lighting, photorealistic, film quality."
+
+                            # Thêm character/location refs
+                            if chars_used:
+                                for cid in chars_used.split(","):
+                                    cid = cid.strip()
+                                    if cid:
+                                        img = char_image_lookup.get(cid, f"{cid}.png")
+                                        unique_prompt += f" ({img})"
+                            if loc_used:
+                                img = loc_image_lookup.get(loc_used, f"{loc_used}.png")
+                                unique_prompt += f" (reference: {img})"
+
+                            scene_data["img_prompt"] = unique_prompt
+                            self._log(f"     -> Created unique fallback for scene {scene_id}")
+                    else:
+                        seen_for_dedup.add(prompt_key)
+
+                # KHÔNG continue - tiếp tục save scenes
 
             # Save scenes
             try:

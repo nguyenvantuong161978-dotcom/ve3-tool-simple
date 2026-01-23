@@ -88,6 +88,25 @@ git push official main  # Push lên repo chính thức
 
 ## Recent Fixes
 
+### 2026-01-23 - Excel API 100% SRT Coverage (v1.0.4)
+- **CRITICAL**: Fixed Excel worker losing scenes and SRT coverage
+- **4 Major Fixes in `modules/progressive_prompts.py`**:
+  1. **VALIDATION 1 (lines 833-1021)**: Split disproportionate segments
+     - Ratio > 15: Local split into smaller segments
+     - Ratio > 30: Recursive API retry with smaller input
+  2. **VALIDATION 2 (lines 1023-1130)**: API call for missing segments
+     - Detects gaps in SRT coverage after Step 2
+     - Calls API for missing ranges with proper context
+     - Recalculates image_count: `seg_entries / 10`
+  3. **GAP-FILL (lines 2146-2198)**: Post-processing in Step 5
+     - Finds all uncovered SRT indices
+     - Creates fill scenes (max 10 SRT per scene)
+     - Guarantees 100% SRT coverage
+  4. **Duplicate Fallback (line ~2730)**: No more skipped batches
+     - Creates unique fallback prompts instead of skipping
+     - Prevents losing scenes due to >80% duplicates
+- **Test Result (KA2-0238)**: 1183 SRT entries, 100% coverage, 520 scenes
+
 ### 2026-01-22 - Chrome 2 Control Fix
 - **CRITICAL**: Fixed Chrome 2 using wrong portable path
   - Added `not self._chrome_portable` check to prevent auto-detect override
@@ -111,108 +130,53 @@ git push official main  # Push lên repo chính thức
 
 > **QUAN TRỌNG**: Claude Code phải cập nhật section này sau mỗi phiên làm việc để phiên sau sử dụng hiệu quả.
 
-### Phiên hiện tại: 2026-01-23 - Excel Worker Bug Hunt (COMPLETED ✅)
+### Phiên hiện tại: 2026-01-23 - Excel API 100% SRT Coverage (COMPLETED ✅)
 
-**MISSION**: Chạy THẬT test AR8-0003 để tìm TẤT CẢ bugs trong BASIC/FULL video mode logic
+**MISSION**: Fix Excel worker để đảm bảo 100% SRT coverage - không được thiếu scene
 
-**STATUS**: ✅ ALL 7 BUGS FIXED & VERIFIED
+**STATUS**: ✅ ALL FIXES APPLIED & TESTED
 
-**7 CRITICAL BUGS FOUND & FIXED**:
+**4 CRITICAL FIXES IN `modules/progressive_prompts.py`**:
 
-1. **Bug #1: director_plan missing segment_id column**
-   - Step 7 không biết scene thuộc segment nào → ALL scenes có video_note=""
-   - Fix: Added segment_id to DIRECTOR_PLAN_COLUMNS, updated save/get/update methods
+1. **VALIDATION 1 (lines 833-1021)**: Split disproportionate segments
+   - Problem: 1 segment có 833 SRT entries nhưng chỉ 4 images → mất 28 phút video
+   - Fix: Ratio > 15 → split locally, Ratio > 30 → recursive API retry
 
-2. **Bug #2: Step 6 crash - None[:slice] TypeError**
-   - ALL 18 batches failed với "'NoneType' object is not subscriptable"
-   - Root: `scene.get('srt_text', '')[:200]` returns None nếu value là None!
-   - Fix: Pattern `(scene.get('key') or default)[:x]` - applied 4 chỗ trong Step 6
+2. **VALIDATION 2 (lines 1023-1130)**: API call for missing segments
+   - Problem: Step 2 không cover hết SRT range
+   - Fix: Detect gaps, call API for missing ranges, recalculate image_count
 
-3. **Bug #3: Step 7 crash - None.split() AttributeError**
-   - 2/27 batches failed với "'NoneType' object has no attribute 'split'"
-   - Fix: Pattern `(scene.get('key') or "").split()` - applied 10+ chỗ trong Step 7
+3. **GAP-FILL (lines 2146-2198)**: Post-processing in Step 5
+   - Problem: API scenes không có proper srt_indices
+   - Fix: Find uncovered SRT, create fill scenes (max 10 SRT per scene)
 
-4. **Bug #4: Scene class missing segment_id attribute**
-   - Added segment_id param to __init__, to_dict(), from_dict()
+4. **Duplicate Fallback (line ~2730)**: No more skipped batches
+   - Problem: >80% duplicates → skip batch → lose 10 scenes
+   - Fix: Create unique fallback prompts instead of skipping
 
-5. **Bug #5: segment_id position causing DATA CORRUPTION** ⚠️ CRITICAL!
-   - Thêm segment_id vào position 2 → shift ALL columns → data swap!
-   - location_used chứa reference_files, characters_used chứa location_used
-   - Fix: Moved segment_id to END of SCENES_COLUMNS (backward compatible)
+**TEST RESULT (KA2-0238)**:
+- SRT entries: 1183
+- Step 2 coverage: 100%
+- Step 5 coverage: 100% (with GAP-FILL)
+- Total scenes: 520
 
-6. **Enhancement: max_parallel_api 6 → 10** (25-30% speedup expected)
+**KEY INSIGHT**: Khi API trả về không đủ data:
+- Chia nhỏ input
+- Gọi lại API song song
+- Validate và fill gaps sau mỗi step
 
-7. **Bug #7: segment_id not passed to Scene constructor** (commit bb53d6a)
-   - Code reads segment_id from director_plan & uses it to calculate video_note
-   - BUT forgot to pass segment_id to Scene() constructor
-   - Result: ALL scenes had segment_id=1 instead of proper distribution
-   - Fix: Added `segment_id=segment_id` parameter in Step 7 (1 line)
-
-**CRITICAL PYTHON GOTCHA IDENTIFIED:**
-```python
-# When dict value is None (not missing):
-data = {"key": None}
-
-# ❌ WRONG - .get() with default DOESN'T WORK for None:
-data.get("key", "default")  # Returns None, NOT "default"!
-
-# ✅ CORRECT - use `or`:
-data.get("key") or "default"  # Returns "default" when value is None
-```
-
-**API VALIDATION ISSUES DISCOVERED:**
-- Step 2: Segments API failed → fallback (low quality)
-- Step 5: Expected 60 scenes, got 52 → auto-fill 8 scenes
-- Step 5: 31 SRT entries uncovered (93.2% coverage)
-
-**FILES MODIFIED:**
-- modules/excel_manager.py (~100 lines)
-- modules/progressive_prompts.py (~30 lines)
-- config/settings.yaml (max_parallel_api)
-- Created 15+ test/debug scripts
-
-**VERIFIED:**
-- ✅ test_segment_id_fix.py: PASSED
-- ✅ Excel audit: Raw data CORRECT (không phải lỗi API)
-- ✅ Bug từ code đọc Excel, không phải API
-
-**FINAL VERIFICATION TEST (9.7 min):**
-- ✅ ALL 7 steps completed successfully
-- ✅ 98 scenes created, 100% SRT coverage
-- ✅ segment_id distribution CORRECT: Seg1=16, Seg2=10, Seg3=12, ..., Seg10=6
-- ✅ video_note assignment PERFECT: Seg1=16 CREATE, Seg2-10=82 SKIP
-- ✅ Performance improved 33% (14.6 min → 9.7 min)
-- ✅ Cleaned up 20 test/debug files
-
-**COMMITS:**
-- 56f840a: Fix 6 critical bugs (director_plan, None handling, column shift)
-- 4ae0026: Update CLAUDE.md documentation
-- a47d440: Test run verification
-- bb53d6a: Fix segment_id constructor parameter + verification
-
-**DOCUMENTATION:**
-- BAO_CAO_KIEM_TRA_CUOI_CUNG.md - Full report (Vietnamese)
-- BAO_CAO_KET_QUA_FIX.md - Final verification results
-- TOM_TAT_NHANH.md - Quick summary
-- SESSION_SUMMARY_2026_01_23.md - Session summary
-- BUGS_FOUND_2026_01_23.md - Detailed bug analysis
-- FINAL_FIX_SUMMARY.md - Complete fix summary
-
-**STATUS: ✅ PRODUCTION READY** - Excel worker stable, accurate, fast
+**STATUS: ✅ PRODUCTION READY** - Excel worker đảm bảo 100% SRT coverage
 
 ### Backlog (việc cần làm)
 
 **High Priority:**
-- [ ] **API Validation Framework**: Add validation after each Excel worker step
-  - Check data completeness (no missing scenes, full coverage)
-  - Retry mechanism for incomplete API responses
-  - Quality metrics logging
+- [x] **API Validation Framework**: ✅ DONE (v1.0.4)
+  - VALIDATION 1: Check ratio, split if disproportionate
+  - VALIDATION 2: Check coverage, call API for missing
+  - GAP-FILL: Post-processing to fill remaining gaps
 - [ ] **Pipeline Optimization**: Step 6+7 chạy song song (30-40% speedup)
   - Step 7 bắt đầu khi Step 6 hoàn thành batch đầu
   - Excel làm "message queue" giữa 2 steps
-- [ ] **Regenerate AR8-0003**: Test với schema mới (segment_id ở column 19)
-  - Verify BASIC mode: Seg 1 video_note="", Seg 2+ video_note="SKIP"
-  - Verify data integrity: no column shift, correct references
 
 **Medium Priority:**
 - [ ] Worker logs không hiển thị trong GUI (trade-off để Chrome automation hoạt động)
