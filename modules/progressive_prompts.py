@@ -2170,6 +2170,25 @@ Return JSON only:
         except:
             pass
 
+        # === BASIC MODE: Xác định Segment 1 range ===
+        excel_mode = self.config.get("excel_mode", "full").lower()
+        seg1_start = 0
+        seg1_end = 999999  # Mặc định cho phép tất cả (FULL mode)
+
+        if excel_mode == "basic":
+            self._log(f"  [BASIC MODE] Chỉ tạo video_prompt cho Segment 1")
+            try:
+                story_segments = workbook.get_story_segments()
+                if story_segments:
+                    # Tìm segment đầu tiên (srt_range_start nhỏ nhất)
+                    first_segment = min(story_segments, key=lambda s: s.get('srt_range_start', 999999))
+                    seg1_start = first_segment.get('srt_range_start', 1)
+                    seg1_end = first_segment.get('srt_range_end', seg1_start + 10)
+                    seg_name = first_segment.get('segment_name', 'Segment 1')
+                    self._log(f"  [BASIC MODE] {seg_name}: SRT {seg1_start}-{seg1_end}")
+            except Exception as e:
+                self._log(f"  [BASIC MODE] Warning: Could not get segments: {e}")
+
         context_lock = story_analysis.get("context_lock", "")
 
         # Build character/location lookup - bao gồm cả image_file cho reference
@@ -2410,6 +2429,20 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                     if loc_id:
                         ref_files.append(loc_image_lookup.get(loc_id, f"{loc_id}.png"))
 
+                    # === BASIC MODE: Chỉ set video_prompt cho Segment 1 ===
+                    video_prompt_value = scene_data.get("video_prompt", "")
+                    if excel_mode == "basic":
+                        # Lấy srt_start để xác định scene thuộc segment nào
+                        scene_srt_start = original.get("srt_start", 0)
+                        try:
+                            scene_srt_start = int(scene_srt_start)
+                        except (ValueError, TypeError):
+                            scene_srt_start = 0
+
+                        # Nếu scene KHÔNG thuộc Segment 1 → không tạo video
+                        if not (seg1_start <= scene_srt_start <= seg1_end):
+                            video_prompt_value = ""  # Not Segment 1, skip video
+
                     scene = Scene(
                         scene_id=scene_id,
                         srt_start=original.get("srt_start", ""),
@@ -2417,7 +2450,7 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                         duration=original.get("duration", 0),
                         srt_text=original.get("srt_text", ""),
                         img_prompt=img_prompt,
-                        video_prompt=scene_data.get("video_prompt", ""),
+                        video_prompt=video_prompt_value,
                         characters_used=original.get("characters_used", ""),
                         location_used=original.get("location_used", ""),
                         reference_files=json.dumps(ref_files) if ref_files else "",
