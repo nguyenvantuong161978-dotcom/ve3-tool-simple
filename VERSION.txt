@@ -1,3 +1,3 @@
-1.0.1
-2026-01-23 15:27
-Chrome Worker Kill Fix - Kill correct worker only, not all Chrome
+1.0.2
+2026-01-23 15:38
+Fix: Video creation before images done + Chrome kill fix
