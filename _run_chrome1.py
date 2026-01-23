@@ -48,6 +48,20 @@ except ImportError:
     AGENT_ENABLED = False
     AgentWorker = None
 
+
+def get_video_mode() -> str:
+    """Đọc video_mode từ settings.yaml. Returns 'basic' hoặc 'full'."""
+    try:
+        import yaml
+        settings_path = TOOL_DIR / "config" / "settings.yaml"
+        if settings_path.exists():
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            return config.get('video_mode', 'full').lower()
+    except:
+        pass
+    return 'full'  # Default là full
+
 # Central Logger - để log hiển thị trong GUI
 try:
     from modules.central_logger import get_logger
@@ -384,8 +398,13 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             # Không return False, để có thể retry sau
 
     # Step 6: Tạo video (sau khi có đủ ảnh)
+    # Video sẽ chỉ tạo cho scenes CÓ video_prompt trong Excel
+    # BASIC mode: Chỉ Segment 1 có video_prompt
+    # FULL mode: Tất cả scenes có video_prompt
     if is_local_pic_complete(local_dir, code):
-        log(f"\n[STEP 6] Creating videos...")
+        video_mode = get_video_mode()
+        log(f"\n[STEP 6] Creating videos (mode: {video_mode})...")
+        log(f"  (Chỉ tạo video cho scenes có video_prompt trong Excel)")
         if create_videos_for_project(local_dir, code, callback):
             log(f"  [OK] Videos created!")
         else:

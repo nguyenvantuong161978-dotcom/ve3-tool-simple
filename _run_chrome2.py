@@ -49,6 +49,20 @@ except ImportError:
     AGENT_ENABLED = False
     AgentWorker = None
 
+
+def get_video_mode() -> str:
+    """Đọc video_mode từ settings.yaml. Returns 'basic' hoặc 'full'."""
+    try:
+        import yaml
+        settings_path = TOOL_DIR / "config" / "settings.yaml"
+        if settings_path.exists():
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            return config.get('video_mode', 'full').lower()
+    except:
+        pass
+    return 'full'  # Default là full
+
 # Central Logger - để log hiển thị trong GUI
 try:
     from modules.central_logger import get_logger
