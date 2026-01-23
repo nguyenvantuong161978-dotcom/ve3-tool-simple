@@ -103,7 +103,36 @@ class Scene:
         )
 ```
 
-### 2. Director Plan - Lưu segment_id (progressive_prompts.py:1849)
+### 2. Step 5: Apply 8s Rule dựa trên Mode (progressive_prompts.py:1686-1706)
+
+**BASIC mode: Chỉ Segment 1 áp dụng 8s rule**
+**FULL mode: Tất cả segments áp dụng 8s rule**
+
+```python
+# ÁP DỤNG 8s RULE dựa trên mode
+max_scene_duration = self.config.get("max_scene_duration", 8)
+min_scene_duration = self.config.get("min_scene_duration", 5)
+excel_mode = self.config.get("excel_mode", "full").lower()
+
+# BASIC mode: Chỉ Segment 1 áp dụng 8s rule
+# FULL mode: Tất cả segments áp dụng 8s rule
+should_apply_8s_rule = (excel_mode == "full") or (excel_mode == "basic" and seg_id == 1)
+
+if should_apply_8s_rule:
+    original_image_count = image_count
+    # Tính số scenes tối thiểu để mỗi scene <= max_scene_duration
+    min_scenes_needed = max(1, int(seg_duration / max_scene_duration))
+    if seg_duration / min_scenes_needed > max_scene_duration:
+        min_scenes_needed += 1  # Thêm 1 scene nếu vẫn vượt
+
+    # Sử dụng số lớn hơn giữa planned và min_scenes_needed
+    if min_scenes_needed > image_count:
+        image_count = min_scenes_needed
+        mode_label = "BASIC Seg 1" if excel_mode == "basic" else "FULL"
+        self._log(f"     -> [{mode_label}] Segment {seg_id}: {original_image_count} planned → {image_count} scenes (max {max_scene_duration}s/scene)")
+```
+
+### 3. Director Plan - Lưu segment_id (progressive_prompts.py:1849)
 
 **Lưu segment_id để biết scene thuộc segment nào:**
 
@@ -118,7 +147,7 @@ for seg_idx in range(len(story_segments)):
         scene_id_counter += 1
 ```
 
-### 3. Set video_note khi tạo Scene (progressive_prompts.py:2420-2429)
+### 4. Set video_note khi tạo Scene (progressive_prompts.py:2434-2439)
 
 **Set "SKIP" cho Segment 2+ trong BASIC mode:**
 
@@ -137,7 +166,7 @@ scene = Scene(
 )
 ```
 
-### 4. Check video_note khi tạo video (browser_flow_generator.py:4518-4525)
+### 5. Check video_note khi tạo video (browser_flow_generator.py:4517-4524)
 
 **Bỏ qua scenes có video_note="SKIP":**
 
@@ -190,7 +219,7 @@ Scenes 11-15: video_note = "SKIP" → BỎ QUA ❌
 - Tạo ẢNH cho TẤT CẢ các segments
 - Chỉ tạo VIDEO cho Segment 1 (phần opening)
 - Segment 2+ chỉ có ảnh, không có video
-- **Duration constraint:** Mỗi scene: 5-8 giây (tuân thủ max_scene_duration)
+- **Duration constraint:** CHỈ Segment 1 tuân thủ 8s/scene (Segment 2+ dùng số scenes theo plan từ Step 2)
 
 ### FULL Mode (excel_mode: full, video_mode: full)
 
@@ -218,6 +247,7 @@ Scenes 11-15: video_note = "" → TẠO VIDEO ✅
 **Tóm tắt FULL mode:**
 - Tạo ẢNH cho TẤT CẢ các segments
 - Tạo VIDEO cho TẤT CẢ các segments
+- **Duration constraint:** TẤT CẢ segments tuân thủ 8s/scene (max_scene_duration)
 
 ---
 
