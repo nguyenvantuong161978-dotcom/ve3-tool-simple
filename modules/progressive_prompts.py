@@ -750,11 +750,8 @@ For each segment, provide DETAILED information (this will guide image creation):
 4. mood: The emotional tone (tense, warm, sad, hopeful, dramatic, etc.)
 5. characters_involved: Which characters appear in this segment
 
-GUIDELINES:
-- Total images across all segments should roughly equal: {int(total_duration / 5)} (assuming ~5s per image)
-- Each segment should have at least 1 image, typically 2-5 images
-- Important emotional moments may need more images
-- Action sequences need more images than dialogue
+YOUR TASK: Divide the story into logical narrative segments ONLY.
+DO NOT calculate image_count - focus on identifying distinct story parts.
 
 Return JSON only:
 {{
@@ -764,22 +761,21 @@ Return JSON only:
             "segment_name": "Opening/Introduction",
             "message": "DETAILED narrative: what happens, who is involved, what's the conflict/emotion",
             "key_elements": ["character doing action", "specific location", "emotional state", "important object"],
-            "visual_summary": "2-3 sentences describing what the images should show. E.g., 'Show the protagonist alone in his room, looking worried. Then show him making a decision, getting up with determination.'",
+            "visual_summary": "2-3 sentences describing what the images should show",
             "mood": "melancholic/hopeful/tense/etc",
             "characters_involved": ["main character", "supporting character"],
-            "image_count": 3,
             "estimated_duration": 15.0,
             "srt_range_start": 1,
-            "srt_range_end": 5,
+            "srt_range_end": 25,
             "importance": "high/medium/low"
         }}
     ],
-    "total_images": 20,
     "summary": "Brief overview of the story structure"
 }}
 """
 
-        # Call API
+        # PHASE 1: Call API for segment division only (no image_count)
+        self._log(f"  [PHASE 1] Calling API for segment division...")
         response = self._call_api(prompt, temperature=0.3, max_tokens=4096)
         if not response:
             self._log("  ERROR: API call failed!", "ERROR")
@@ -829,6 +825,118 @@ Return JSON only:
 
         segments = data["segments"]
         total_srt = len(srt_entries)
+
+        # =====================================================================
+        # PHASE 2: Calculate image_count for EACH segment individually IN PARALLEL
+        # ROOT CAUSE FIX: Single API call with all segments hits max_tokens limit
+        # → API must compress → reduces image_count to fit response
+        # SOLUTION: Call API separately for each segment to get accurate count
+        # OPTIMIZATION: Call all APIs in parallel for speed
+        # =====================================================================
+        self._log(f"\n  [PHASE 2] Calculating image_count for {len(segments)} segments (parallel)...")
+
+        def _calculate_image_count_for_segment(seg_with_idx):
+            """Helper function to calculate image count for one segment"""
+            idx, seg = seg_with_idx
+            seg_start = seg.get("srt_range_start", 1)
+            seg_end = seg.get("srt_range_end", total_srt)
+            srt_count = seg_end - seg_start + 1
+
+            # Get SRT entries for this segment
+            seg_entries = srt_entries[seg_start-1:seg_end]
+            seg_text = " ".join([e.text for e in seg_entries])
+            seg_duration = srt_count * (total_duration / total_srt) if total_duration > 0 else srt_count * 3
+
+            # Calculate expected range (3-6 seconds per image)
+            min_images = max(1, int(seg_duration / 6))
+            max_images = max(1, int(seg_duration / 3))
+            target_images = int((min_images + max_images) / 2)
+
+            calc_prompt = f"""Calculate the number of IMAGES needed for this story segment.
+
+SEGMENT: "{seg.get('segment_name', f'Segment {idx}')}"
+NARRATIVE: {seg.get('message', 'Not specified')}
+MOOD: {seg.get('mood', 'Not specified')}
+
+SRT RANGE: {seg_start} to {seg_end} ({srt_count} entries, ~{seg_duration:.1f}s)
+CONTENT SAMPLE: {seg_text[:500]}...
+
+TASK: Calculate how many images this segment needs for video creation.
+
+CRITICAL REQUIREMENTS:
+- Minimum: {min_images} images (6s per image max)
+- Maximum: {max_images} images (3s per image min)
+- Target: {target_images} images (balance)
+
+CONSIDER:
+- Emotional scenes: More images for impact
+- Action/fast pacing: More images
+- Dialogue-heavy: Fewer images but >= minimum
+- One image typically covers 3-6 SRT entries
+
+Return JSON only:
+{{{{
+    "image_count": {target_images},
+    "reasoning": "Brief explanation (optional)"
+}}}}"""
+
+            calc_response = self._call_api(calc_prompt, temperature=0.2, max_tokens=500)
+
+            if calc_response:
+                calc_data = self._extract_json(calc_response)
+                if calc_data and "image_count" in calc_data:
+                    calculated_count = calc_data["image_count"]
+                    # Clamp to range
+                    final_count = max(min_images, min(calculated_count, max_images))
+                    return (idx, final_count, srt_count, "API")
+                else:
+                    # Fallback: Use target
+                    return (idx, target_images, srt_count, "fallback-parse")
+            else:
+                # API failed, use target
+                return (idx, target_images, srt_count, "fallback-api")
+
+        # Execute in parallel with ThreadPoolExecutor
+        max_workers = min(10, len(segments))  # Limit to 10 concurrent calls
+        results = []
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            futures = {
+                executor.submit(_calculate_image_count_for_segment, (idx, seg)): idx
+                for idx, seg in enumerate(segments, start=1)
+            }
+
+            # Collect results as they complete
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    results.append(result)
+                    idx, count, srt_count, source = result
+                    self._log(f"     Segment {idx}/{len(segments)}: {count} images ({srt_count} SRT) [{source}]")
+                except Exception as e:
+                    idx = futures[future]
+                    self._log(f"     Segment {idx}/{len(segments)}: ERROR - {e}", "ERROR")
+                    # Fallback for failed segment
+                    seg = segments[idx-1]
+                    seg_start = seg.get("srt_range_start", 1)
+                    seg_end = seg.get("srt_range_end", total_srt)
+                    srt_count = seg_end - seg_start + 1
+                    fallback_count = max(1, srt_count // 4)
+                    results.append((idx, fallback_count, srt_count, "error"))
+
+        # Sort results by segment index and apply to segments
+        results.sort(key=lambda x: x[0])
+        for idx, count, srt_count, source in results:
+            segments[idx-1]["image_count"] = count
+
+        total_images_calculated = sum(s.get("image_count", 0) for s in segments)
+        self._log(f"  [PHASE 2] Completed! Total images: {total_images_calculated}")
+        self._log(f"     Average ratio: {total_srt / total_images_calculated:.1f} SRT/image")
+
+        # Update data
+        data["segments"] = segments
+        data["total_images"] = total_images_calculated
 
         # =====================================================================
         # VALIDATION 1: Check PROPORTIONAL image_count vs SRT entries
@@ -1137,6 +1245,49 @@ Return JSON only:
                         current_start = new_seg['srt_range_end'] + 1
                         remaining -= chunk
                         seg_id += 1
+
+                data["segments"] = segments
+
+        # =====================================================================
+        # VALIDATION 3: GLOBAL image count check - CRITICAL FIX
+        # ROOT CAUSE: API may plan too few images globally even if each segment
+        # passes local validation (e.g., 66 images for 459 SRT = 7.0 ratio)
+        # =====================================================================
+        if segments:
+            total_images = sum(s.get("image_count", 0) for s in segments)
+            global_ratio = len(srt_entries) / max(1, total_images)
+
+            # Calculate minimum required images (4 SRT per image max)
+            min_required_images = int(len(srt_entries) / 4)
+
+            if total_images < min_required_images:
+                shortage = min_required_images - total_images
+                shortage_pct = (shortage / min_required_images) * 100
+
+                self._log(f"\n  [GLOBAL CHECK] INSUFFICIENT total images!")
+                self._log(f"     Total SRT: {len(srt_entries)}")
+                self._log(f"     Planned images: {total_images}")
+                self._log(f"     Global ratio: {global_ratio:.1f} SRT/image")
+                self._log(f"     Required minimum: {min_required_images} (4 SRT/image max)")
+                self._log(f"     Shortage: {shortage} images ({shortage_pct:.0f}%)")
+                self._log(f"  -> AUTO-FIX: Proportionally increasing image_count across all segments...")
+
+                # Calculate multiplier to reach minimum
+                multiplier = min_required_images / total_images
+
+                # Apply multiplier to each segment
+                for seg in segments:
+                    old_count = seg.get("image_count", 1)
+                    new_count = max(1, int(old_count * multiplier))
+                    seg["image_count"] = new_count
+
+                # Recalculate total
+                new_total = sum(s.get("image_count", 0) for s in segments)
+                new_ratio = len(srt_entries) / max(1, new_total)
+
+                self._log(f"     New total images: {new_total}")
+                self._log(f"     New global ratio: {new_ratio:.1f} SRT/image")
+                self._log(f"  [FIX] Applied {multiplier:.2f}x multiplier to all segments")
 
                 data["segments"] = segments
 
