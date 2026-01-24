@@ -2462,8 +2462,13 @@ class DrissionFlowAPI:
 
         for nav_attempt in range(max_nav_retries):
             try:
+                # Set timeout 15s cho navigation (tránh đợi quá lâu)
+                # Page sẽ tiếp tục load trong background, nhưng code không bị block
+                self.driver.set.timeouts(page_load=15)
+
                 self.driver.get(target_url)
-                # IPv6 cần thời gian load lâu hơn
+
+                # Đợi thêm 3-6s để page load tiếp
                 wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
                 time.sleep(wait_time)
 
