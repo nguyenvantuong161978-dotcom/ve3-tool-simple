@@ -1,3 +1,3 @@
-1.0.28
-2026-01-24 13:20
-FIX: ALWAYS wait 15s after /test navigate (was skipped if page not ready)
+1.0.29
+2026-01-24 15:40
+Add logout check AFTER warm-up, BEFORE navigate to /flow - auto-login if needed

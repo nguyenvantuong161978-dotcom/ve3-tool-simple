@@ -2505,6 +2505,26 @@ class DrissionFlowAPI:
                     time.sleep(15)
                     self.log(f"[v] Warm up done!")
 
+                    # CHECK LOGOUT sau warm up
+                    self.log(f"[MỒI] Check logout...")
+                    if self._is_logged_out():
+                        self.log("[WARN] Phát hiện bị LOGOUT sau warm up!", "WARN")
+                        if self._auto_login_google():
+                            self.log("[v] Đã login lại thành công!")
+                            # Login xong, vào lại /test để warm up lại
+                            self.log("[MỒI] Vào lại project/test sau login...")
+                            self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
+                            time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
+                            if self._wait_for_page_ready(timeout=30):
+                                self.log(f"[v] Page ready!")
+                            time.sleep(15)  # Đợi 15s nữa
+                            self.log(f"[v] Warm up lại done!")
+                        else:
+                            self.log("[x] Auto-login thất bại", "ERROR")
+                            return False
+                    else:
+                        self.log(f"[v] Đang đăng nhập!")
+
                     # Bước 2: SAU ĐÓ vào trang chủ Flow để click "Dự án mới"
                     self.log(f"Vào trang chủ Flow...")
                     target_url = self.FLOW_URL_FALLBACK
