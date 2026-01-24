@@ -1869,6 +1869,7 @@ Create scenes (~8s each). Return JSON:
             existing_plan = workbook.get_director_plan()
             if existing_plan and len(existing_plan) > 0:
                 self._log(f"  -> Already has {len(existing_plan)} scenes, skip!")
+                workbook.update_step_status("step_5", "COMPLETED", len(existing_plan), len(existing_plan), "Already done")
                 return StepResult("create_director_plan_basic", StepStatus.COMPLETED, "Already done")
         except:
             pass
