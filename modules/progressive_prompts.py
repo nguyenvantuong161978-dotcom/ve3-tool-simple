@@ -143,42 +143,94 @@ class ProgressivePromptsGenerator:
 
     def _call_api(self, prompt: str, temperature: float = 0.7, max_tokens: int = 8192) -> Optional[str]:
         """
-        Gọi DeepSeek API.
+        Gọi DeepSeek API với retry logic để tránh mid-process failures.
 
         Returns:
-            Response text hoặc None nếu fail
+            Response text hoặc None nếu fail sau tất cả retries
         """
         import requests
+        import time
 
         if not self.deepseek_keys:
             self._log("  ERROR: No API keys available!", "ERROR")
             return None
 
-        key = self.deepseek_keys[self.deepseek_index % len(self.deepseek_keys)]
-        self.deepseek_index += 1
+        max_retries = 5
+        base_delay = 2  # seconds
 
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json"
-        }
+        for attempt in range(max_retries):
+            key = self.deepseek_keys[self.deepseek_index % len(self.deepseek_keys)]
+            self.deepseek_index += 1
 
-        data = {
-            "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": temperature,
-            "max_tokens": max_tokens
-        }
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
+            }
 
-        try:
-            resp = requests.post(self.DEEPSEEK_URL, headers=headers, json=data, timeout=120)
-            if resp.status_code == 200:
-                return resp.json()["choices"][0]["message"]["content"]
-            else:
-                self._log(f"  API error: {resp.status_code} - {resp.text[:200]}", "ERROR")
-                return None
-        except Exception as e:
-            self._log(f"  API exception: {e}", "ERROR")
-            return None
+            data = {
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+
+            try:
+                resp = requests.post(self.DEEPSEEK_URL, headers=headers, json=data, timeout=120)
+
+                if resp.status_code == 200:
+                    # Success!
+                    if attempt > 0:
+                        self._log(f"  API success after {attempt + 1} attempts", "INFO")
+                    return resp.json()["choices"][0]["message"]["content"]
+
+                elif resp.status_code == 429:
+                    # Rate limit - retry with exponential backoff
+                    delay = base_delay * (2 ** attempt)
+                    self._log(f"  Rate limit hit (429), retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
+                    if attempt < max_retries - 1:
+                        time.sleep(delay)
+                        continue
+                    else:
+                        self._log(f"  API error after {max_retries} retries: {resp.status_code}", "ERROR")
+                        return None
+
+                elif resp.status_code >= 500:
+                    # Server error - retry with exponential backoff
+                    delay = base_delay * (2 ** attempt)
+                    self._log(f"  Server error ({resp.status_code}), retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
+                    if attempt < max_retries - 1:
+                        time.sleep(delay)
+                        continue
+                    else:
+                        self._log(f"  API error after {max_retries} retries: {resp.status_code}", "ERROR")
+                        return None
+
+                else:
+                    # Client error (4xx except 429) - don't retry
+                    self._log(f"  API error: {resp.status_code} - {resp.text[:200]}", "ERROR")
+                    return None
+
+            except requests.exceptions.Timeout:
+                delay = base_delay * (2 ** attempt)
+                self._log(f"  Timeout, retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    continue
+                else:
+                    self._log(f"  Timeout after {max_retries} retries", "ERROR")
+                    return None
+
+            except Exception as e:
+                delay = base_delay * (2 ** attempt)
+                self._log(f"  API exception: {e}, retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    continue
+                else:
+                    self._log(f"  API exception after {max_retries} retries: {e}", "ERROR")
+                    return None
+
+        return None
 
     def _extract_json(self, text: str) -> Optional[dict]:
         """Extract JSON từ response text - với repair cho truncated JSON."""
