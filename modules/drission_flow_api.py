@@ -3530,9 +3530,62 @@ class DrissionFlowAPI:
         # Đợi 2 giây để reCAPTCHA chuẩn bị token
         time.sleep(2)
 
-        # Nhấn Enter để gửi
-        textarea.input('\n')
-        self.log("→ Pressed Enter to send")
+        # VERIFY: Textarea có prompt chưa? (tránh Enter quá nhanh)
+        verify_result = self.driver.run_js(f"""
+            (function() {{
+                var textarea = document.querySelector('textarea');
+                if (!textarea) return 'not_found';
+
+                var promptLength = {len(prompt)};
+                var actualLength = textarea.value.length;
+
+                // Check value có prompt không (cho phép sai lệch 10%)
+                if (actualLength < promptLength * 0.9) {{
+                    return 'prompt_missing:' + actualLength;
+                }}
+
+                return 'ready';
+            }})();
+        """)
+
+        if verify_result != 'ready':
+            self.log(f"[WARN] Textarea chưa sẵn sàng: {verify_result}", "WARN")
+            time.sleep(1)  # Đợi thêm 1s
+
+        # Đợi thêm 0.5s để chắc chắn
+        time.sleep(0.5)
+
+        # Nhấn Enter bằng JavaScript (đáng tin hơn .input())
+        enter_result = self.driver.run_js("""
+            (function() {
+                var textarea = document.querySelector('textarea');
+                if (!textarea) return 'not_found';
+
+                // Focus lần cuối
+                textarea.focus();
+
+                // Gửi Enter event
+                var event = new KeyboardEvent('keydown', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true,
+                    cancelable: true
+                });
+                textarea.dispatchEvent(event);
+
+                // Trigger form submit (nếu có)
+                var form = textarea.closest('form');
+                if (form) {
+                    form.dispatchEvent(new Event('submit', {bubbles: true}));
+                }
+
+                return 'sent';
+            })();
+        """)
+
+        self.log(f"→ Pressed Enter to send ({enter_result})")
         self.log("→ Chrome đang gửi request...")
 
         # 4. Đợi response từ browser (không gọi API riêng!)
