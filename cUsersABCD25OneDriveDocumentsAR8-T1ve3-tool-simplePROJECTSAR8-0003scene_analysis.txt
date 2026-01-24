@@ -1,0 +1,11 @@
+SCENE ANALYSIS (82 total):
+============================================================
+Total scenes: 82
+
+Usable (has visual/chars/locs): 0 (0%)
+GAP-FILL placeholders: 0
+Missing characters: 6
+Missing locations: 5
+Missing visual_moment: 82
+
+CONCLUSION: Only 0/82 scenes can generate images/videos!
