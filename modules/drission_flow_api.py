@@ -2911,8 +2911,65 @@ class DrissionFlowAPI:
                 # Đợi JavaScript hoàn thành (300 + 200 = 500ms + buffer)
                 time.sleep(0.8)
 
-                self.log(f"→ Pasted with JavaScript [v]")
-                return True
+                # VERIFY: Textarea có prompt chưa?
+                verify_result = self.driver.run_js(f"""
+                    (function() {{
+                        var textarea = document.querySelector('textarea');
+                        if (!textarea) return 'not_found';
+
+                        var promptLength = {len(prompt)};
+                        var actualLength = textarea.value.length;
+
+                        // Check value có prompt không (cho phép sai lệch 10%)
+                        if (actualLength < promptLength * 0.9) {{
+                            return 'paste_failed:' + actualLength;
+                        }}
+
+                        return 'ok';
+                    }})();
+                """)
+
+                if verify_result == 'ok':
+                    self.log(f"→ Pasted with JavaScript [v]")
+                    return True
+                else:
+                    self.log(f"[WARN] JS paste failed: {verify_result}, trying fallback...", "WARN")
+                    # FALLBACK: Set textarea.value trực tiếp
+                    try:
+                        fallback_result = self.driver.run_js(f"""
+                            (function() {{
+                                var prompt = {repr(prompt)};
+                                var textarea = document.querySelector('textarea');
+                                if (!textarea) return 'not_found';
+
+                                textarea.focus();
+                                textarea.value = prompt;
+                                textarea.dispatchEvent(new Event('input', {{bubbles: true}}));
+
+                                return 'ok';
+                            }})();
+                        """)
+                        time.sleep(0.5)
+
+                        # Verify lại
+                        verify2 = self.driver.run_js(f"""
+                            (function() {{
+                                var textarea = document.querySelector('textarea');
+                                if (!textarea) return 'not_found';
+                                return textarea.value.length >= {len(prompt)} * 0.9 ? 'ok' : 'fail';
+                            }})();
+                        """)
+
+                        if verify2 == 'ok':
+                            self.log(f"→ FALLBACK: Set textarea.value [v]")
+                            return True
+                        else:
+                            self.log(f"[WARN] FALLBACK also failed: {verify2}", "WARN")
+                            return False
+
+                    except Exception as fallback_err:
+                        self.log(f"[WARN] Fallback error: {fallback_err}", "WARN")
+                        return False
 
             except Exception as e:
                 self.log(f"[WARN] JS paste error: {e}", "WARN")
@@ -3518,6 +3575,7 @@ class DrissionFlowAPI:
             return [], "Không tìm thấy textarea"
 
         # Paste prompt bằng Ctrl+V (như thủ công)
+        # Hàm này có built-in fallback nếu JS paste fail
         self._paste_prompt_ctrlv(textarea, prompt)
 
         # Đợi 2 giây để reCAPTCHA chuẩn bị token
