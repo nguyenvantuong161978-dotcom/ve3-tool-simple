@@ -2496,7 +2496,9 @@ class DrissionFlowAPI:
                     # Đợi page ready
                     self.log(f"[MỒI] Đợi page load xong...")
                     if self._wait_for_page_ready(timeout=30):
-                        self.log(f"[v] Warm up done - page ready!")
+                        self.log(f"[v] Page ready - đợi thêm 15s cho JS/AJAX...")
+                        time.sleep(15)  # Đợi JavaScript/AJAX load xong thật sự
+                        self.log(f"[v] Warm up done!")
                     else:
                         self.log(f"[WARN] Warm up page chưa ready, tiếp tục...", "WARN")
 
