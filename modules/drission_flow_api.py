@@ -2885,7 +2885,7 @@ class DrissionFlowAPI:
 
     def _paste_prompt_ctrlv(self, textarea, prompt: str) -> bool:
         """
-        Nhập prompt bằng Ctrl+V (pyperclip).
+        Nhập prompt bằng DrissionPage .input() - đơn giản và đáng tin cậy.
 
         Args:
             textarea: Element textarea đã tìm thấy
@@ -2895,172 +2895,75 @@ class DrissionFlowAPI:
             True nếu thành công
         """
         try:
-            import pyperclip
-
-            # 1. Copy prompt vào clipboard
-            pyperclip.copy(prompt)
-            self.log(f"→ Copied {len(prompt)} chars to clipboard")
-
-            # 2. Tìm textarea bằng DrissionPage
+            # 1. Tìm textarea bằng DrissionPage
             textarea = self.driver.ele('tag:textarea', timeout=10)
             if not textarea:
                 self.log("[WARN] Không tìm thấy textarea", "WARN")
                 return False
 
-            # 3. JavaScript: Click 2 lần + Select all + Paste prompt
+            # 2. Click vào textarea
             try:
-                result = self.driver.run_js(f"""
-                    (function() {{
-                        try {{
-                            var prompt = {repr(prompt)};
-                            var textarea = document.querySelector('textarea');
-                            if (!textarea) return 'not_found';
-
-                            // Scroll vào view
-                            textarea.scrollIntoView({{block: 'center', behavior: 'instant'}});
-
-                            // Click lần 1
-                            textarea.click();
-                            textarea.focus();
-
-                            // Đợi 300ms bằng setTimeout
-                            setTimeout(function() {{
-                                // Click lần 2
-                                textarea.click();
-                                textarea.focus();
-
-                                // Đợi 200ms rồi paste
-                                setTimeout(function() {{
-                                    // Select all (Ctrl+A)
-                                    textarea.select();
-
-                                    // Insert text (paste)
-                                    document.execCommand('insertText', false, prompt);
-
-                                }}, 200);
-                            }}, 300);
-
-                            return 'pasting';
-
-                        }} catch(e) {{
-                            return 'error: ' + e.message;
-                        }}
-                    }})();
-                """)
-
-                # Đợi JavaScript hoàn thành (300 + 200 = 500ms + buffer)
-                # Khi có references, page lag hơn → cần đợi lâu hơn
-                time.sleep(1.2)
-
-                # VERIFY: Textarea có prompt chưa?
-                try:
-                    verify_result = self.driver.run_js(f"""
-                        (function() {{
-                            try {{
-                                var textarea = document.querySelector('textarea');
-                                if (!textarea) return 'not_found';
-
-                                var promptLength = {len(prompt)};
-                                var actualLength = textarea.value.length;
-
-                                // Check value có prompt không (cho phép sai lệch 10%)
-                                if (actualLength < promptLength * 0.9) {{
-                                    return 'paste_failed:' + actualLength;
-                                }}
-
-                                return 'ok';
-                            }} catch(e) {{
-                                return 'verify_error:' + e.message;
-                            }}
-                        }})();
-                    """)
-                except Exception as e:
-                    self.log(f"[WARN] Verify exception: {e}", "WARN")
-                    verify_result = None
-
-                # Log verify result để debug
-                self.log(f"→ Verify result: {verify_result}")
-
-                if verify_result == 'ok':
-                    self.log(f"→ Pasted with JavaScript [v]")
-                    return True
-                else:
-                    # Nếu verify None → có thể paste OK nhưng verify lỗi
-                    # Thử verify lần nữa với timeout dài hơn
-                    if verify_result is None:
-                        self.log(f"[WARN] Verify returned None, retry verify...", "WARN")
-                        time.sleep(1.0)
-                        try:
-                            verify_retry = self.driver.run_js(f"""
-                                (function() {{
-                                    var textarea = document.querySelector('textarea');
-                                    if (!textarea) return 'not_found';
-                                    return textarea.value.length >= {len(prompt)} * 0.9 ? 'ok' : 'fail:' + textarea.value.length;
-                                }})();
-                            """)
-                            if verify_retry == 'ok':
-                                self.log(f"→ Verify retry: OK [v]")
-                                return True
-                            else:
-                                self.log(f"[WARN] Verify retry failed: {verify_retry}", "WARN")
-                        except Exception as e:
-                            self.log(f"[WARN] Verify retry exception: {e}", "WARN")
-
-                    self.log(f"[WARN] JS paste failed: {verify_result}, trying fallback...", "WARN")
-                    # FALLBACK: Set textarea.value trực tiếp
-                    try:
-                        fallback_result = self.driver.run_js(f"""
-                            (function() {{
-                                try {{
-                                    var prompt = {repr(prompt)};
-                                    var textarea = document.querySelector('textarea');
-                                    if (!textarea) return 'not_found';
-
-                                    textarea.focus();
-                                    textarea.value = prompt;
-                                    textarea.dispatchEvent(new Event('input', {{bubbles: true}}));
-
-                                    return 'ok';
-                                }} catch(e) {{
-                                    return 'error:' + e.message;
-                                }}
-                            }})();
-                        """)
-                        time.sleep(1.0)
-
-                        # Verify lại
-                        try:
-                            verify2 = self.driver.run_js(f"""
-                                (function() {{
-                                    try {{
-                                        var textarea = document.querySelector('textarea');
-                                        if (!textarea) return 'not_found';
-                                        return textarea.value.length >= {len(prompt)} * 0.9 ? 'ok' : 'fail:' + textarea.value.length;
-                                    }} catch(e) {{
-                                        return 'error:' + e.message;
-                                    }}
-                                }})();
-                            """)
-                        except Exception as e:
-                            self.log(f"[WARN] Fallback verify exception: {e}", "WARN")
-                            verify2 = None
-
-                        self.log(f"→ FALLBACK verify: {verify2}")
-
-                        if verify2 == 'ok':
-                            self.log(f"→ FALLBACK: Set textarea.value [v]")
-                            return True
-                        else:
-                            self.log(f"[WARN] FALLBACK also failed: {verify2}", "WARN")
-                            return False
-
-                    except Exception as fallback_err:
-                        self.log(f"[WARN] Fallback error: {fallback_err}", "WARN")
-                        return False
-
+                textarea.click()
+                time.sleep(0.3)
+                self.log(f"→ Clicked textarea, entering {len(prompt)} chars...")
             except Exception as e:
-                self.log(f"[WARN] JS paste error: {e}", "WARN")
+                self.log(f"[WARN] Click textarea failed: {e}", "WARN")
+
+            # 3. Clear textarea trước (select all + delete)
+            try:
+                # Select all bằng Ctrl+A
+                textarea.input('^a')  # Ctrl+A
+                time.sleep(0.1)
+                # Delete
+                textarea.input('\x08')  # Backspace
+                time.sleep(0.1)
+            except Exception as e:
+                self.log(f"[WARN] Clear textarea failed: {e}", "WARN")
+
+            # 4. Nhập prompt bằng .input()
+            try:
+                textarea.input(prompt)
+                time.sleep(0.5)  # Đợi prompt được nhập xong
+                self.log(f"→ Prompt entered via .input()")
+            except Exception as e:
+                self.log(f"[WARN] Input prompt failed: {e}", "WARN")
                 return False
+
+            # 5. VERIFY: Textarea có prompt chưa?
+            try:
+                textarea_elem = self.driver.ele('tag:textarea', timeout=5)
+                if not textarea_elem:
+                    verify_result = 'not_found'
+                else:
+                    # Đọc value từ element property
+                    textarea_value = textarea_elem.property('value')
+                    if textarea_value is None:
+                        textarea_value = ''
+
+                    actual_len = len(textarea_value)
+                    expected_len = len(prompt)
+
+                    if actual_len >= expected_len * 0.9:
+                        verify_result = 'ok'
+                    else:
+                        verify_result = f'failed:{actual_len}'
+            except Exception as e:
+                self.log(f"[WARN] Verify exception: {e}", "WARN")
+                verify_result = None
+
+            # Log verify result để debug
+            self.log(f"→ Verify result: {verify_result}")
+
+            if verify_result == 'ok':
+                self.log(f"→ Prompt entered successfully [v]")
+                return True
+            else:
+                self.log(f"[WARN] Prompt entry failed: {verify_result}", "WARN")
+                return False
+
+        except Exception as e:
+            self.log(f"[WARN] Paste prompt failed: {e}", "WARN")
+            return False
 
         except Exception as e:
             self.log(f"[WARN] Paste prompt failed: {e}", "WARN")
@@ -3661,8 +3564,8 @@ class DrissionFlowAPI:
         if not textarea:
             return [], "Không tìm thấy textarea"
 
-        # Paste prompt bằng Ctrl+V (như thủ công)
-        # Hàm này có built-in fallback nếu JS paste fail
+        # Nhập prompt bằng DrissionPage .input()
+        # Hàm này đã verify prompt sau khi nhập
         paste_ok = self._paste_prompt_ctrlv(textarea, prompt)
         if not paste_ok:
             self.log("[ERROR] Paste prompt failed completely, aborting request", "ERROR")
@@ -3671,62 +3574,14 @@ class DrissionFlowAPI:
         # Đợi 2 giây để reCAPTCHA chuẩn bị token
         time.sleep(2)
 
-        # VERIFY: Textarea có prompt chưa? (tránh Enter quá nhanh)
-        verify_result = self.driver.run_js(f"""
-            (function() {{
-                var textarea = document.querySelector('textarea');
-                if (!textarea) return 'not_found';
+        # Nhấn Enter bằng DrissionPage .input() (đơn giản nhất)
+        try:
+            textarea.input('\n')
+            self.log("→ Pressed Enter to send")
+        except Exception as e:
+            self.log(f"[ERROR] Failed to send Enter: {e}", "ERROR")
+            return [], f"Failed to send Enter: {e}"
 
-                var promptLength = {len(prompt)};
-                var actualLength = textarea.value.length;
-
-                // Check value có prompt không (cho phép sai lệch 10%)
-                if (actualLength < promptLength * 0.9) {{
-                    return 'prompt_missing:' + actualLength;
-                }}
-
-                return 'ready';
-            }})();
-        """)
-
-        if verify_result != 'ready':
-            self.log(f"[ERROR] Textarea chưa sẵn sàng: {verify_result}, aborting request", "ERROR")
-            return [], f"Textarea not ready: {verify_result}"
-
-        # Đợi thêm 0.5s để chắc chắn
-        time.sleep(0.5)
-
-        # Nhấn Enter bằng JavaScript (đáng tin hơn .input())
-        enter_result = self.driver.run_js("""
-            (function() {
-                var textarea = document.querySelector('textarea');
-                if (!textarea) return 'not_found';
-
-                // Focus lần cuối
-                textarea.focus();
-
-                // Gửi Enter event
-                var event = new KeyboardEvent('keydown', {
-                    key: 'Enter',
-                    code: 'Enter',
-                    keyCode: 13,
-                    which: 13,
-                    bubbles: true,
-                    cancelable: true
-                });
-                textarea.dispatchEvent(event);
-
-                // Trigger form submit (nếu có)
-                var form = textarea.closest('form');
-                if (form) {
-                    form.dispatchEvent(new Event('submit', {bubbles: true}));
-                }
-
-                return 'sent';
-            })();
-        """)
-
-        self.log(f"→ Pressed Enter to send ({enter_result})")
         self.log("→ Chrome đang gửi request...")
 
         # 4. Đợi response từ browser (không gọi API riêng!)
