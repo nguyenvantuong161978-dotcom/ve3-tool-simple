@@ -979,7 +979,7 @@ class DrissionFlowAPI:
     """
 
     BASE_URL = "https://aisandbox-pa.googleapis.com"
-    FLOW_URL = "https://labs.google/fx/vi/tools/flow"
+    FLOW_URL = "https://labs.google/fx/vi/tools/flow/project/test"
 
     def __init__(
         self,
