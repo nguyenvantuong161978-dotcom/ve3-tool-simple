@@ -2715,15 +2715,15 @@ class DrissionFlowAPI:
                 pass
         return None
 
-    def _wait_for_textarea_visible(self, timeout: int = None, max_refresh: int = 3) -> bool:
+    def _wait_for_textarea_visible(self, timeout: int = None, max_refresh: int = 1) -> bool:
         """
         Đợi textarea xuất hiện VÀ có thể tương tác.
         Textarea là dấu hiệu page đã load xong.
         PHẢI verify textarea thật sự visible, không chỉ có trong DOM.
         """
-        # Timeout tối đa 10s là đủ
+        # Timeout 20s (với references, page load lâu hơn)
         if timeout is None:
-            timeout = 10
+            timeout = 20
 
         for refresh_count in range(max_refresh + 1):
             # === CHECK LOGOUT TRƯỚC MỖI VÒNG ===
@@ -2771,11 +2771,11 @@ class DrissionFlowAPI:
 
             # Timeout - thử F5 refresh nếu còn lượt
             if refresh_count < max_refresh:
-                self.log(f"[TEXTAREA] [WARN] Không thấy textarea sẵn sàng, F5 refresh...")
+                self.log(f"[TEXTAREA] [WARN] Không thấy textarea sau {timeout}s, F5 refresh...")
                 try:
                     self.driver.refresh()
-                    # IPv6 cần đợi lâu hơn sau F5
-                    wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
+                    # Đợi 8s sau F5 (với references, page load lâu)
+                    wait_time = 10 if getattr(self, '_ipv6_activated', False) else 8
                     time.sleep(wait_time)
                 except Exception as e:
                     self.log(f"[TEXTAREA] Refresh error: {e}")
