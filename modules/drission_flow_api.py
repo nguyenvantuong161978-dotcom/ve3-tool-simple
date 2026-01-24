@@ -3601,7 +3601,11 @@ class DrissionFlowAPI:
 
         # 4. Đợi response từ browser (không gọi API riêng!)
         start_time = time.time()
+        request_detected = False
+
         while time.time() - start_time < timeout:
+            elapsed = time.time() - start_time
+
             result = self.driver.run_js("""
                 return {
                     pending: window._requestPending,
@@ -3609,6 +3613,30 @@ class DrissionFlowAPI:
                     error: window._responseError
                 };
             """)
+
+            # EARLY DETECTION: Sau 10s, check xem có request chưa
+            if not request_detected and elapsed > 10:
+                if not result.get('pending') and not result.get('response') and not result.get('error'):
+                    self.log("[WARN] Không thấy request sau 10s - Enter có thể bị trượt!", "WARN")
+                    self.log("[RETRY] Thử gửi Enter lại...")
+
+                    # RETRY: Focus lại và gửi Enter lần nữa
+                    try:
+                        textarea = self.driver.ele('tag:textarea', timeout=3)
+                        if textarea:
+                            textarea.click()
+                            time.sleep(0.3)
+                            textarea.input('\n')
+                            self.log("→ Retry Enter sent")
+                        else:
+                            self.log("[WARN] Không tìm thấy textarea để retry", "WARN")
+                    except Exception as e:
+                        self.log(f"[WARN] Retry Enter failed: {e}", "WARN")
+
+                    # Đánh dấu đã detect để không retry nhiều lần
+                    request_detected = True
+                else:
+                    request_detected = True
 
             if result.get('error'):
                 error_msg = result['error']
