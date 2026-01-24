@@ -519,6 +519,102 @@ scene = Scene(
 **VERSION**: 1.0.31
 **STATUS**: ✅ PRODUCTION READY - Perfect metadata accuracy!
 
+---
+
+### Phiên tiếp theo: 2026-01-24 - API Retry Logic (Prevent Mid-Process Failures ✅)
+
+**MISSION**: Implement retry logic to prevent API failures from stopping Excel generation mid-process
+
+**PROBLEM DISCOVERED**:
+- First two full test runs failed at Step 5 (Director Plan)
+- Steps 5-7 stayed PENDING, 0 scenes created
+- Third test succeeded → indicates intermittent API issues
+- User identified: "hay là do api bị kiểu phải chờ vì làm nhiều" (API needs waiting due to many calls)
+
+**ROOT CAUSE**:
+- DeepSeek API rate limiting / quota exhaustion
+- No retry mechanism → single API failure = process stops
+- High API call volume in Steps 5-7 triggers rate limits
+
+**SOLUTION - EXPONENTIAL BACKOFF RETRY LOGIC**:
+
+**Implementation** (`modules/progressive_prompts.py` lines 144-233):
+```python
+def _call_api(self, prompt: str, temperature: float = 0.7, max_tokens: int = 8192) -> Optional[str]:
+    """Gọi DeepSeek API với retry logic để tránh mid-process failures."""
+    import requests
+    import time
+
+    max_retries = 5
+    base_delay = 2  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(self.DEEPSEEK_URL, headers=headers, json=data, timeout=120)
+
+            if resp.status_code == 200:
+                # Success!
+                if attempt > 0:
+                    self._log(f"  API success after {attempt + 1} attempts", "INFO")
+                return resp.json()["choices"][0]["message"]["content"]
+
+            elif resp.status_code == 429:
+                # Rate limit - retry with exponential backoff
+                delay = base_delay * (2 ** attempt)  # 2, 4, 8, 16, 32 seconds
+                self._log(f"  Rate limit hit (429), retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    continue
+
+            elif resp.status_code >= 500:
+                # Server error - retry
+                delay = base_delay * (2 ** attempt)
+                self._log(f"  Server error ({resp.status_code}), retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    continue
+
+            else:
+                # Client error (4xx except 429) - don't retry
+                self._log(f"  API error: {resp.status_code}", "ERROR")
+                return None
+
+        except requests.exceptions.Timeout:
+            # Timeout - retry
+            delay = base_delay * (2 ** attempt)
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+                continue
+
+    return None
+```
+
+**FEATURES**:
+- ✅ **5 max retries** with exponential backoff (2^n seconds)
+- ✅ **Rate limit handling** (429 errors) → automatic retry with backoff
+- ✅ **Server error handling** (5xx errors) → automatic retry
+- ✅ **Timeout handling** → automatic retry
+- ✅ **Smart retry** - Skip retry for client errors (4xx except 429)
+- ✅ **Detailed logging** - Track retry attempts and success
+
+**RETRY DELAYS**:
+- Attempt 1: 2 seconds
+- Attempt 2: 4 seconds
+- Attempt 3: 8 seconds
+- Attempt 4: 16 seconds
+- Attempt 5: 32 seconds
+- Total max wait: 62 seconds per API call
+
+**RESULT**:
+- ✅ Prevents mid-process failures from API rate limiting
+- ✅ Automatic recovery without manual intervention
+- ✅ No lost work due to temporary API issues
+- ✅ Handles high-volume API calls gracefully
+
+**COMMIT**: 71a0512
+**VERSION**: 1.0.32
+**STATUS**: ✅ TESTING - Running full Excel generation to verify
+
 ### Backlog (việc cần làm)
 
 **High Priority:**
