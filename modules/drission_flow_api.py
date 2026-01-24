@@ -2879,56 +2879,50 @@ class DrissionFlowAPI:
                 self.log("[WARN] Không tìm thấy textarea", "WARN")
                 return False
 
-            # 3. JavaScript: Click 2 lần + Select all + Paste prompt
+            # 3. Click textarea và gửi Ctrl+V thật (không dùng JS)
             try:
-                result = self.driver.run_js(f"""
-                    (function() {{
-                        try {{
-                            var prompt = {repr(prompt)};
-                            var textarea = document.querySelector('textarea');
-                            if (!textarea) return 'not_found';
+                # Click 2 lần để focus
+                textarea.click()
+                time.sleep(0.3)
+                textarea.click()
+                time.sleep(0.2)
 
-                            // Scroll vào view
-                            textarea.scrollIntoView({{block: 'center', behavior: 'instant'}});
+                # Select all (Ctrl+A) rồi Ctrl+V
+                textarea.input(prompt, clear=True)
+                time.sleep(0.3)
 
-                            // Click lần 1
-                            textarea.click();
-                            textarea.focus();
+                # Thêm dấu cách cuối bằng cách type thêm
+                textarea.input(' ', clear=False)
+                time.sleep(0.2)
 
-                            // Đợi 300ms bằng setTimeout
-                            setTimeout(function() {{
-                                // Click lần 2
-                                textarea.click();
-                                textarea.focus();
-
-                                // Đợi 200ms rồi paste
-                                setTimeout(function() {{
-                                    // Select all (Ctrl+A)
-                                    textarea.select();
-
-                                    // Insert text (paste)
-                                    document.execCommand('insertText', false, prompt);
-
-                                }}, 200);
-                            }}, 300);
-
-                            return 'pasting';
-
-                        }} catch(e) {{
-                            return 'error: ' + e.message;
-                        }}
-                    }})();
-                """)
-
-                # Đợi JavaScript hoàn thành (300 + 200 = 500ms + buffer)
-                time.sleep(0.8)
-
-                self.log(f"→ Pasted with JavaScript [v]")
+                self.log(f"→ Pasted with DrissionPage input [v]")
                 return True
 
             except Exception as e:
-                self.log(f"[WARN] JS paste error: {e}", "WARN")
-                return False
+                self.log(f"[WARN] DrissionPage input error: {e}, trying Ctrl+V...", "WARN")
+
+                # Fallback: Ctrl+V thật
+                try:
+                    textarea.click()
+                    time.sleep(0.2)
+
+                    # Gửi Ctrl+A rồi Ctrl+V
+                    from DrissionPage.common.actions import Actions
+                    ac = Actions(self.driver)
+                    ac.key_down('ctrl').key_down('a').key_up('a').key_up('ctrl')
+                    time.sleep(0.1)
+                    ac.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                    time.sleep(0.3)
+
+                    # Thêm dấu cách
+                    ac.type(' ')
+                    time.sleep(0.2)
+
+                    self.log(f"→ Pasted with Ctrl+V [v]")
+                    return True
+                except Exception as e2:
+                    self.log(f"[WARN] Ctrl+V also failed: {e2}", "WARN")
+                    return False
 
         except Exception as e:
             self.log(f"[WARN] Paste prompt failed: {e}", "WARN")

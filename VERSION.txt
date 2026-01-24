@@ -1,3 +1,3 @@
-1.0.7
-2026-01-23 23:00
-Fix: Thêm dấu cách cuối prompt để Enter hoạt động trong Google Flow
+1.0.8
+2026-01-23 23:15
+Fix: Dùng DrissionPage input thay vì JS để paste prompt (Google Flow cần user action thật)
