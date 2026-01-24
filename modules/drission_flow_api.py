@@ -1705,8 +1705,8 @@ class DrissionFlowAPI:
                 self.log("[WARN] Chrome chưa mở, không thể clear data", "WARN")
                 return False
 
-            # Mở trang Clear browsing data
-            self.driver.get("chrome://settings/clearBrowserData")
+            # Mở trang Clear browsing data (JavaScript - non-blocking)
+            self.driver.run_js("window.location.href = 'chrome://settings/clearBrowserData';", timeout=2)
             time.sleep(2)
 
             # JS để click "All time" và "Delete from this device"
@@ -2485,13 +2485,13 @@ class DrissionFlowAPI:
 
         for nav_attempt in range(max_nav_retries):
             try:
-                # Set timeout 15s cho navigation (tránh đợi quá lâu)
-                # Page sẽ tiếp tục load trong background, nhưng code không bị block
-                self.driver.set.timeouts(page_load=15)
+                # DÙNG JAVASCRIPT NAVIGATE - KHÔNG BLOCK!
+                # driver.get() vẫn đợi page load bất chấp timeout
+                # JavaScript window.location.href = instant, không đợi
+                self.log(f"[NAV] Navigate via JavaScript (non-blocking)...")
+                self.driver.run_js(f"window.location.href = '{target_url}';", timeout=2)
 
-                self.driver.get(target_url)
-
-                # Đợi thêm 3-6s để page bắt đầu load
+                # Đợi 3-6s để page bắt đầu load
                 wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
                 time.sleep(wait_time)
 
@@ -2584,9 +2584,9 @@ class DrissionFlowAPI:
                             saved_project_url = getattr(self, '_current_project_url', None)
                             skip_mode = getattr(self, '_skip_mode_selection', False)
                             if self.setup(project_url=saved_project_url, skip_mode_selection=skip_mode):
-                                # Retry navigation
+                                # Retry navigation (JavaScript - non-blocking)
                                 try:
-                                    self.driver.get(target_url)
+                                    self.driver.run_js(f"window.location.href = '{target_url}';", timeout=2)
                                     time.sleep(3)
                                     current_url = self._get_current_url()
                                     if current_url and current_url != "about:blank":
@@ -2615,10 +2615,10 @@ class DrissionFlowAPI:
                 # Nếu có project_url nhưng bị redirect về trang chủ → retry vào project cũ
                 if project_url and "/project/" in project_url:
                     self.log(f"[WARN] Bị redirect, retry vào project cũ...")
-                    # Retry vào project URL (max 3 lần)
+                    # Retry vào project URL (max 3 lần) - JavaScript non-blocking
                     for retry in range(3):
                         time.sleep(2)
-                        self.driver.get(project_url)
+                        self.driver.run_js(f"window.location.href = '{project_url}';", timeout=2)
                         time.sleep(3)
                         retry_url = self._get_current_url()
                         if "/project/" in retry_url:
@@ -2652,7 +2652,8 @@ class DrissionFlowAPI:
             self.log("[PROJECT] [WARN] Phát hiện bị LOGOUT!")
             if self._auto_login_google():
                 self.log("[PROJECT] [v] Đã login lại, quay lại project...")
-                self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
+                project_url = f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}"
+                self.driver.run_js(f"window.location.href = '{project_url}';", timeout=2)
                 time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
             else:
                 self.log("[PROJECT] [x] Login lại thất bại", "ERROR")
@@ -2663,7 +2664,8 @@ class DrissionFlowAPI:
             # Thử navigate lại project 1 lần nữa
             self.log("[PROJECT] [WARN] Không thấy textarea, thử load lại project...")
             try:
-                self.driver.get(f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}")
+                project_url = f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}"
+                self.driver.run_js(f"window.location.href = '{project_url}';", timeout=2)
                 time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
                 if not self._wait_for_textarea_visible():
                     self.log("[x] Không thể tìm textarea sau nhiều lần thử", "ERROR")
