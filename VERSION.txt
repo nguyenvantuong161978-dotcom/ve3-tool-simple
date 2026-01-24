@@ -1,3 +1,3 @@
-1.0.21
-2026-01-24 12:35
-Change default Flow URL to project/test - skip "Dự án mới" button, faster startup
+1.0.22
+2026-01-24 12:40
+Add fallback: Try project/test first (2x), then fallback to Flow homepage (4x) if button not found

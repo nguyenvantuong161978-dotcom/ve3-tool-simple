@@ -980,6 +980,7 @@ class DrissionFlowAPI:
 
     BASE_URL = "https://aisandbox-pa.googleapis.com"
     FLOW_URL = "https://labs.google/fx/vi/tools/flow/project/test"
+    FLOW_URL_FALLBACK = "https://labs.google/fx/vi/tools/flow"  # Fallback nếu project/test fail
 
     def __init__(
         self,
@@ -1250,7 +1251,8 @@ class DrissionFlowAPI:
 
         # 1. Đợi trang load và tìm button "Dự án mới"
         # Nếu không tìm thấy → F5 refresh và thử lại (mỗi 10s)
-        MAX_REFRESH = 6  # Tối đa 6 lần refresh (60s)
+        # Nếu vẫn không được sau 2 lần → fallback về trang chủ Flow
+        MAX_REFRESH = 2  # Thử 2 lần với project/test
         clicked_success = False
         for refresh_count in range(MAX_REFRESH):
             # Thử tìm button trong 10s
@@ -1328,7 +1330,74 @@ class DrissionFlowAPI:
                     return True
             except:
                 pass
-            self.log(f"[x] Không tìm thấy button 'Dự án mới' sau {MAX_REFRESH} lần refresh", "ERROR")
+
+            # Nếu đang ở project/test và không tìm thấy button → fallback về trang chủ Flow
+            current_url = self._get_current_url()
+            if "/project/test" in current_url or self.FLOW_URL in current_url:
+                self.log(f"[WARN] Không tìm thấy button với project/test, fallback về trang chủ Flow...")
+                try:
+                    # Navigate về trang chủ Flow
+                    self.driver.run_js(f"window.location.href = '{self.FLOW_URL_FALLBACK}';", timeout=2)
+                    time.sleep(3)
+                    self.log("   Đợi page load...")
+                    if not self._wait_for_page_ready(timeout=30):
+                        self.log("[WARN] Page chưa sẵn sàng", "WARN")
+
+                    # Thử lại với trang chủ Flow (thêm 4 lần nữa)
+                    for retry_count in range(4):
+                        for i in range(10):
+                            try:
+                                check_url = self._get_current_url()
+                                if "/project/" in check_url:
+                                    self.log("[v] Đã vào project (fallback)")
+                                    return True
+                            except:
+                                pass
+
+                            try:
+                                result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
+                                if result == 'CLICKED':
+                                    self.log("[v] Clicked 'Dự án mới' (fallback)")
+                                    clicked_success = True
+                                    time.sleep(2)
+                                    try:
+                                        check_url = self._get_current_url()
+                                        if "/project/" in check_url:
+                                            self.log("[v] Đã vào project!")
+                                            return True
+                                    except:
+                                        pass
+                                    break
+                            except Exception as e:
+                                if "ContextLost" in str(type(e).__name__):
+                                    self.log(f"   Page đang refresh...")
+                                    time.sleep(2)
+                                    continue
+                                raise
+                            time.sleep(1)
+
+                        if clicked_success:
+                            break
+
+                        # F5 nếu chưa thấy button
+                        if retry_count < 3:
+                            self.log(f"[WARN] Retry {retry_count + 1}/4 - F5 refresh...")
+                            try:
+                                self.driver.refresh()
+                                time.sleep(3)
+                            except:
+                                pass
+
+                    # Check URL cuối cùng
+                    final_url = self._get_current_url()
+                    if "/project/" in final_url:
+                        self.log("[v] Đã vào project sau fallback!")
+                        return True
+
+                except Exception as fallback_err:
+                    self.log(f"[x] Fallback error: {fallback_err}", "ERROR")
+
+            self.log(f"[x] Không tìm thấy button 'Dự án mới' sau tất cả các lần thử", "ERROR")
             return False
 
         # 2. Chọn "Tạo hình ảnh" từ dropdown
