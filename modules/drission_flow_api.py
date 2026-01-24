@@ -2901,26 +2901,26 @@ class DrissionFlowAPI:
                 self.log("[WARN] Không tìm thấy textarea", "WARN")
                 return False
 
-            # 2. Click vào textarea
+            # 2. Click vào textarea và clear bằng JavaScript
             try:
                 textarea.click()
                 time.sleep(0.3)
-                self.log(f"→ Clicked textarea, entering {len(prompt)} chars...")
-            except Exception as e:
-                self.log(f"[WARN] Click textarea failed: {e}", "WARN")
 
-            # 3. Clear textarea trước (select all + delete)
-            try:
-                # Select all bằng Ctrl+A
-                textarea.input('^a')  # Ctrl+A
-                time.sleep(0.1)
-                # Delete
-                textarea.input('\x08')  # Backspace
-                time.sleep(0.1)
-            except Exception as e:
-                self.log(f"[WARN] Clear textarea failed: {e}", "WARN")
+                # Clear textarea bằng JavaScript (đáng tin hơn)
+                self.driver.run_js("""
+                    var textarea = document.querySelector('textarea');
+                    if (textarea) {
+                        textarea.value = '';
+                        textarea.focus();
+                    }
+                """)
+                time.sleep(0.2)
 
-            # 4. Nhập prompt bằng .input()
+                self.log(f"→ Clicked & cleared textarea, entering {len(prompt)} chars...")
+            except Exception as e:
+                self.log(f"[WARN] Click/clear textarea failed: {e}", "WARN")
+
+            # 3. Nhập prompt bằng .input()
             try:
                 textarea.input(prompt)
                 time.sleep(0.5)  # Đợi prompt được nhập xong
