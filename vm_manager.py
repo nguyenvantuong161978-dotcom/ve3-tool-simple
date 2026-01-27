@@ -1630,8 +1630,8 @@ class VMManager:
         # Create thumbnail before copying
         self.create_thumbnail(project_code)
 
-        # Đích: AUTO/{project_code}/
-        dest_dir = self.auto_path / project_code
+        # Đích: AUTO/visual/{project_code}/
+        dest_dir = self.auto_path / "visual" / project_code
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         # Copy tất cả files và folders

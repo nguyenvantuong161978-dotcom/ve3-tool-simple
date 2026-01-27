@@ -1,3 +1,3 @@
-1.0.34
-2026-01-24 21:00
-Auto-copy to master on completion + thumbnail generation from main character
+1.0.35
+2026-01-24 21:05
+Fix: Copy to AUTO/visual/{project_code}/ instead of AUTO/{project_code}/
