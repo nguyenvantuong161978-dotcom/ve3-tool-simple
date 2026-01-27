@@ -31,6 +31,7 @@ echo.
 echo Dang cap nhat files...
 
 REM Copy files
+copy /Y "update_temp\ve3-tool-simple-main\VERSION.txt" "VERSION.txt"
 copy /Y "update_temp\ve3-tool-simple-main\vm_manager.py" "vm_manager.py"
 copy /Y "update_temp\ve3-tool-simple-main\vm_manager_gui.py" "vm_manager_gui.py"
 copy /Y "update_temp\ve3-tool-simple-main\run_excel_api.py" "run_excel_api.py"
@@ -55,8 +56,10 @@ echo CAP NHAT XONG!
 echo ========================================
 echo.
 echo Phien ban moi:
+type VERSION.txt 2>nul
+echo.
+echo Git commit:
 git rev-parse --short HEAD 2>nul
-git log -1 --format=%%cd --date=format:%%Y-%%m-%%d_%%H:%%M 2>nul
 echo.
 echo Lan sau co the dung nut UPDATE trong GUI.
 echo.
