@@ -1110,6 +1110,7 @@ class SmartEngine:
             id_col = None
             prompt_col = None
             status_col = None  # Thêm cột status để check skip
+            is_child_col = None  # Thêm cột is_child để skip trẻ con
 
             for i, h in enumerate(headers):
                 if h is None:
@@ -1126,6 +1127,8 @@ class SmartEngine:
                     prompt_col = i
                 if status_col is None and h_lower == 'status':
                     status_col = i
+                if is_child_col is None and h_lower == 'is_child':
+                    is_child_col = i
 
             if id_col is None or prompt_col is None:
                 continue
@@ -1137,6 +1140,7 @@ class SmartEngine:
                 pid = row[id_col]
                 prompt = row[prompt_col]
                 status = row[status_col] if status_col is not None and status_col < len(row) else None
+                is_child = row[is_child_col] if is_child_col is not None and is_child_col < len(row) else None
 
                 if not pid or not prompt:
                     continue
@@ -1145,8 +1149,19 @@ class SmartEngine:
                 prompt_str = str(prompt).strip()
                 status_str = str(status).lower().strip() if status else ""
 
-                # Skip children (status="skip" hoặc DO_NOT_GENERATE)
-                if status_str == "skip" or prompt_str == "DO_NOT_GENERATE":
+                # Parse is_child value (có thể là True/False hoặc "true"/"false" hoặc 1/0)
+                is_child_val = False
+                if is_child is not None:
+                    if isinstance(is_child, bool):
+                        is_child_val = is_child
+                    elif isinstance(is_child, (int, float)):
+                        is_child_val = bool(is_child)
+                    elif isinstance(is_child, str):
+                        is_child_val = is_child.lower().strip() in ('true', '1', 'yes')
+
+                # Skip children (status="skip" hoặc DO_NOT_GENERATE hoặc is_child=True)
+                if status_str == "skip" or prompt_str == "DO_NOT_GENERATE" or is_child_val:
+                    self.log(f"  [SKIP] {pid_str}: Child character, skipping reference image")
                     continue
 
                 # CHI lay character/location prompts (nv*, loc*)
