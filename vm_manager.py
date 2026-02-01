@@ -1193,11 +1193,36 @@ class VMManager:
             "current_task": agent_status.current_task,
             "current_scene": agent_status.current_scene,
             "total_scenes": agent_status.total_scenes,
+            "current_step": agent_status.current_step,
+            "step_name": agent_status.step_name,
             "completed_count": agent_status.completed_count,
             "failed_count": agent_status.failed_count,
             "last_error": agent_status.last_error,
             "last_error_type": agent_status.last_error_type,
             "uptime_seconds": agent_status.uptime_seconds,
+        }
+
+    def get_worker_status(self, worker_id: str) -> Optional[Dict]:
+        """
+        Lấy trạng thái worker cho GUI hiển thị.
+        Trả về dict với các thông tin cần thiết.
+        """
+        details = self.get_worker_details(worker_id)
+        if not details:
+            return None
+
+        # Thêm thông tin cho GUI
+        return {
+            "state": details.get("state", "idle"),
+            "current_project": details.get("current_project", ""),
+            "current_task": details.get("current_task", ""),
+            "current_step": details.get("current_step", 0),
+            "step_name": details.get("step_name", ""),
+            "current_scene": details.get("current_scene", ""),
+            "total_scenes": details.get("total_scenes", 0),
+            "completed_count": details.get("completed_count", 0),
+            "failed_count": details.get("failed_count", 0),
+            "progress": details.get("progress", 0),
         }
 
     def get_worker_logs(self, worker_id: str, lines: int = 20) -> List[str]:

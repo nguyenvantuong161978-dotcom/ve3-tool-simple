@@ -2410,14 +2410,29 @@ class SimpleGUI(tk.Tk):
                             self.worker_vars[f"{wid}_status"].set(f"S{step}/7")
                             actions.append(f"EXCEL {proj}: Step {step}/7 - {step_name}")
                         else:
-                            self.worker_vars[f"{wid}_status"].set("")
-                            # Chrome worker
-                            if 'image' in task.lower():
-                                actions.append(f"{wid.upper()}: {proj} tao anh")
-                            elif 'video' in task.lower():
-                                actions.append(f"{wid.upper()}: {proj} tao video")
+                            # Chrome worker - hiển thị scene đang làm
+                            current_scene = status.get('current_scene', 0)
+                            total_scenes = status.get('total_scenes', 0)
+                            completed = status.get('completed_count', 0)
+
+                            if current_scene and current_scene > 0:
+                                # Hiển thị scene/total: "S72 (50/651)"
+                                if total_scenes > 0:
+                                    self.worker_vars[f"{wid}_status"].set(f"S{current_scene} ({completed}/{total_scenes})")
+                                else:
+                                    self.worker_vars[f"{wid}_status"].set(f"S{current_scene}")
+                                actions.append(f"{wid.upper()} {proj}: S{current_scene}")
+                            elif completed > 0:
+                                self.worker_vars[f"{wid}_status"].set(f"{completed} done")
+                                actions.append(f"{wid.upper()} {proj}: {completed} anh")
                             else:
-                                actions.append(f"{wid.upper()}: {proj}")
+                                self.worker_vars[f"{wid}_status"].set("")
+                                if 'image' in task.lower():
+                                    actions.append(f"{wid.upper()}: {proj} tao anh")
+                                elif 'video' in task.lower():
+                                    actions.append(f"{wid.upper()}: {proj} tao video")
+                                else:
+                                    actions.append(f"{wid.upper()}: {proj}")
                     else:
                         # Idle - chi hien ten, bo project va status
                         self.worker_vars[f"{wid}_project"].set("")

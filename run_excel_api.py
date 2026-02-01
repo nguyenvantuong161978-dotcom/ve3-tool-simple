@@ -235,7 +235,8 @@ def has_api_keys(cfg: dict) -> bool:
 def create_excel_with_api(
     project_dir: Path,
     name: str,
-    log_callback: Callable = None
+    log_callback: Callable = None,
+    agent = None
 ) -> bool:
     """
     Tạo Excel từ SRT bằng Progressive API.
@@ -244,6 +245,7 @@ def create_excel_with_api(
         project_dir: Thư mục project
         name: Tên project (e.g., KA2-0001)
         log_callback: Callback để log
+        agent: Agent Protocol instance để update status
 
     Returns:
         True nếu thành công
@@ -268,6 +270,34 @@ def create_excel_with_api(
         log_callback("No API keys configured! Check config/settings.yaml", "ERROR")
         return False
 
+    # Step names for display
+    step_names = {
+        1: "Story Analysis",
+        2: "Story Segments",
+        3: "Characters",
+        4: "Locations",
+        5: "Director Plan",
+        6: "Scene Planning",
+        7: "Scene Prompts"
+    }
+
+    # Wrapper để parse step từ log và update agent
+    def log_with_step_tracking(msg, level="INFO"):
+        log_callback(msg, level)
+
+        # Parse step number từ message: [STEP X/7]
+        if agent and "[STEP" in msg:
+            import re
+            match = re.search(r'\[STEP\s*(\d+)/7\]', msg)
+            if match:
+                step_num = int(match.group(1))
+                step_name = step_names.get(step_num, f"Step {step_num}")
+                agent.update_status(
+                    current_step=step_num,
+                    step_name=step_name,
+                    progress=int(step_num * 100 / 7)
+                )
+
     # === Progressive API ===
     try:
         from modules.progressive_prompts import ProgressivePromptsGenerator
@@ -278,7 +308,7 @@ def create_excel_with_api(
         api_success = gen.run_all_steps(
             project_dir,
             name,
-            log_callback=lambda msg, level="INFO": log_callback(msg, level)
+            log_callback=log_with_step_tracking
         )
 
         if api_success and excel_path.exists():
@@ -636,14 +666,14 @@ class ExcelAPIWorker:
         try:
             if status == "create_new":
                 # Tạo Excel mới từ đầu
-                success = create_excel_with_api(project_dir, name, log)
+                success = create_excel_with_api(project_dir, name, log, agent=_agent)
             elif status == "resume":
                 # Resume từ bước chưa hoàn thành
                 log(f"Resuming from step: {progress.get('current_step', 'unknown')}")
                 log(f"Incomplete steps: {', '.join(progress.get('incomplete_steps', []))}")
                 if progress.get('flow_project_url'):
                     log(f"Reusing Flow project: {progress['flow_project_url']}")
-                success = create_excel_with_api(project_dir, name, log)
+                success = create_excel_with_api(project_dir, name, log, agent=_agent)
             elif status == "fix_fallback":
                 # Fix Excel có [FALLBACK] prompts
                 success = fix_excel_with_api(project_dir, name, log)

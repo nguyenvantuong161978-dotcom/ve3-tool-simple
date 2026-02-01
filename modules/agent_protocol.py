@@ -105,6 +105,8 @@ class WorkerStatus:
     current_task: str = ""
     current_scene: int = 0
     total_scenes: int = 0
+    current_step: int = 0  # For Excel Worker: step 1-7
+    step_name: str = ""    # For Excel Worker: step name
     completed_count: int = 0
     failed_count: int = 0
     last_error: str = ""
@@ -265,6 +267,8 @@ class AgentWorker:
         current_task: str = None,
         current_scene: int = None,
         total_scenes: int = None,
+        current_step: int = None,
+        step_name: str = None,
     ):
         """Cập nhật trạng thái."""
         if state:
@@ -279,6 +283,10 @@ class AgentWorker:
             self._status.current_scene = current_scene
         if total_scenes is not None:
             self._status.total_scenes = total_scenes
+        if current_step is not None:
+            self._status.current_step = current_step
+        if step_name is not None:
+            self._status.step_name = step_name
 
         self._save_status()
 
