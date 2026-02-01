@@ -2584,38 +2584,64 @@ class SmartEngine:
         self.log("[STEP 4] Load scene prompts...")
 
         # === CHECK: Đảm bảo Excel đã hoàn thành (có scenes) ===
-        try:
-            from modules.excel_manager import PromptWorkbook
-            wb_check = PromptWorkbook(excel_path)
-            wb_check.load_or_create()
-            stats = wb_check.get_stats()
-            total_scenes = stats.get('total_scenes', 0)
-            scenes_with_prompts = stats.get('scenes_with_prompts', 0)
-            total_chars = stats.get('total_characters', 0)
+        # RETRY LOGIC: Excel có thể bị Chrome 1 lock
+        import time as _time
+        max_check_retries = 5
+        check_retry_delay = 3
 
-            self.log(f"  [CHECK] Characters: {total_chars}, Scenes: {scenes_with_prompts}/{total_scenes}")
+        total_scenes = 0
+        scenes_with_prompts = 0
+        total_chars = 0
 
-            if total_scenes == 0 or scenes_with_prompts == 0:
-                # QUAN TRỌNG: Nếu là Chrome Worker 2, KHÔNG XÓA Excel!
-                # Chrome 1 có thể đang ghi file → Chrome 2 không đọc được
-                # Chỉ return error để retry sau
-                if hasattr(self, 'worker_id') and self.worker_id == 2:
-                    self.log("[WARN] Excel không có scenes - có thể Chrome 1 đang ghi file", "WARN")
-                    self.log("       Chrome 2 sẽ đợi và retry sau...", "WARN")
-                    return {"error": "excel_locked_by_chrome1"}
+        for check_attempt in range(max_check_retries):
+            try:
+                from modules.excel_manager import PromptWorkbook
+                wb_check = PromptWorkbook(excel_path)
+                wb_check.load_or_create()
+                stats = wb_check.get_stats()
+                total_scenes = stats.get('total_scenes', 0)
+                scenes_with_prompts = stats.get('scenes_with_prompts', 0)
+                total_chars = stats.get('total_characters', 0)
 
-                # Chrome 1 hoặc worker khác: có thể tạo lại
-                self.log("[WARN] Excel chưa có scenes! Đang tạo lại...", "WARN")
-                if srt_path.exists():
-                    # Xóa Excel cũ và tạo mới
-                    excel_path.unlink()
-                    if not self.make_prompts(proj_dir, name, excel_path):
-                        return {"error": "prompts_failed_no_scenes"}
+                # Nếu đọc được data (scenes > 0), break retry loop
+                if total_scenes > 0:
+                    break
+
+                # Nếu Chrome 2 và không đọc được, retry
+                if hasattr(self, 'worker_id') and self.worker_id == 2 and check_attempt < max_check_retries - 1:
+                    self.log(f"  [RETRY {check_attempt+1}/{max_check_retries}] Scenes=0, Excel có thể bị lock, waiting {check_retry_delay}s...", "WARN")
+                    _time.sleep(check_retry_delay)
+                    continue
+                break
+            except Exception as e:
+                if check_attempt < max_check_retries - 1:
+                    self.log(f"  [RETRY {check_attempt+1}/{max_check_retries}] Check Excel error: {e}, waiting {check_retry_delay}s...", "WARN")
+                    _time.sleep(check_retry_delay)
                 else:
-                    self.log("[FAIL] Không có SRT để tạo scenes!", "ERROR")
-                    return {"error": "no_srt_no_scenes"}
-        except Exception as e:
-            self.log(f"  Check Excel error: {e}", "WARN")
+                    self.log(f"  Check Excel error after {max_check_retries} retries: {e}", "WARN")
+
+        self.log(f"  [CHECK] Characters: {total_chars}, Scenes: {scenes_with_prompts}/{total_scenes}")
+
+        # Kiểm tra sau retry loop
+        if total_scenes == 0 or scenes_with_prompts == 0:
+            # QUAN TRỌNG: Nếu là Chrome Worker 2, KHÔNG XÓA Excel!
+            # Chrome 1 có thể đang ghi file → Chrome 2 không đọc được
+            # Chỉ return error để retry sau
+            if hasattr(self, 'worker_id') and self.worker_id == 2:
+                self.log("[WARN] Excel không có scenes sau retry - có thể Chrome 1 đang ghi file", "WARN")
+                self.log("       Chrome 2 sẽ đợi và retry sau...", "WARN")
+                return {"error": "excel_locked_by_chrome1"}
+
+            # Chrome 1 hoặc worker khác: có thể tạo lại
+            self.log("[WARN] Excel chưa có scenes! Đang tạo lại...", "WARN")
+            if srt_path.exists():
+                # Xóa Excel cũ và tạo mới
+                excel_path.unlink()
+                if not self.make_prompts(proj_dir, name, excel_path):
+                    return {"error": "prompts_failed_no_scenes"}
+            else:
+                self.log("[FAIL] Không có SRT để tạo scenes!", "ERROR")
+                return {"error": "no_srt_no_scenes"}
 
         all_prompts = self._load_prompts(excel_path, proj_dir)
 
@@ -4067,9 +4093,29 @@ class SmartEngine:
     def _load_prompts(self, excel_path: Path, proj_dir: Path) -> List[Dict]:
         """Load prompts tu Excel - doc TAT CA sheets."""
         import openpyxl
+        import time
 
         prompts = []
-        wb = openpyxl.load_workbook(excel_path)
+
+        # === RETRY LOGIC: Excel có thể bị Chrome 1 lock ===
+        max_retries = 5
+        retry_delay = 3  # seconds
+
+        wb = None
+        for attempt in range(max_retries):
+            try:
+                wb = openpyxl.load_workbook(excel_path, read_only=True)  # read_only để tránh lock
+                break  # Success!
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    self.log(f"  [RETRY {attempt+1}/{max_retries}] Excel locked, waiting {retry_delay}s...", "WARN")
+                    time.sleep(retry_delay)
+                else:
+                    self.log(f"  [FAIL] Cannot read Excel after {max_retries} retries: {e}", "ERROR")
+                    return []  # Return empty list
+
+        if wb is None:
+            return []
 
         self.log(f"Excel co {len(wb.sheetnames)} sheets: {wb.sheetnames}")
 

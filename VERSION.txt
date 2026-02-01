@@ -1,3 +1,3 @@
-1.0.52
-2026-02-02 00:35
-Fix: Chrome 2 KHÔNG XÓA Excel khi không đọc được (file lock từ Chrome 1)
+1.0.53
+2026-02-02 00:50
+Fix: Chrome 2 retry đọc Excel với delay khi bị Chrome 1 lock
