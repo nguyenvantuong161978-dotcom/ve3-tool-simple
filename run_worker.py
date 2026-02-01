@@ -118,7 +118,11 @@ def matches_channel(code: str) -> bool:
 
 
 def is_project_complete_on_master(code: str) -> bool:
-    """Check if project already exists in VISUAL folder on master."""
+    """Check if project already exists in VISUAL folder on master AND is FULLY complete.
+
+    FIX v1.0.45: Kiểm tra expected vs actual images thay vì chỉ check ANY image.
+    Bug cũ: Project có 1 ảnh trên master cũng bị skip, dù còn thiếu nhiều ảnh.
+    """
     # SAFETY: Kiểm tra master có thực sự accessible không
     # Nếu không accessible, return False để không xóa local project
     try:
@@ -134,16 +138,46 @@ def is_project_complete_on_master(code: str) -> bool:
     if not visual_dir.exists():
         return False
 
-    # Check if has ANY images (*.png, *.mp4, *.jpg)
+    # Check expected vs actual images (giống is_local_pic_complete)
     img_dir = visual_dir / "img"
-    if img_dir.exists():
-        try:
-            img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.mp4")) + list(img_dir.glob("*.jpg"))
-            return len(img_files) > 0
-        except (OSError, PermissionError):
+    if not img_dir.exists():
+        return False
+
+    try:
+        img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg"))
+        if len(img_files) == 0:
             return False
 
-    return False
+        # Đọc Excel để lấy expected count
+        excel_path = visual_dir / f"{code}_prompts.xlsx"
+        if excel_path.exists():
+            try:
+                from modules.excel_manager import PromptWorkbook
+                wb = PromptWorkbook(str(excel_path))
+                wb.load_or_create()
+                scenes = wb.get_scenes()
+                expected = len([s for s in scenes if s.img_prompt])
+
+                # Nếu expected = 0, Excel invalid → không complete
+                if expected == 0:
+                    return False
+
+                # Chỉ complete nếu actual >= expected
+                is_complete = len(img_files) >= expected
+                if not is_complete:
+                    print(f"    [{code}] Master VISUAL: {len(img_files)}/{expected} images - NOT complete")
+                return is_complete
+            except Exception as e:
+                # Lỗi đọc Excel → không complete
+                return False
+        else:
+            # Không có Excel trên master → không verify được → không complete
+            # Trừ khi có RẤT NHIỀU ảnh (>100) → assume complete
+            if len(img_files) >= 100:
+                return True
+            return False
+    except (OSError, PermissionError):
+        return False
 
 
 def is_excel_step7_completed(project_dir: Path, name: str) -> bool:
