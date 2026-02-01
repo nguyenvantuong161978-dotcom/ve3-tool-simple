@@ -81,6 +81,65 @@ class StepResult:
     data: Any = None
 
 
+def parse_srt_timestamp(ts: str) -> float:
+    """
+    Parse SRT timestamp to seconds.
+    Format: "HH:MM:SS,mmm" or "HH:MM:SS" or number (already seconds)
+
+    v1.0.48: Helper để tính planned_duration
+    """
+    if ts is None:
+        return 0.0
+
+    # Already a number
+    if isinstance(ts, (int, float)):
+        return float(ts)
+
+    ts_str = str(ts).strip()
+    if not ts_str:
+        return 0.0
+
+    try:
+        # Handle timedelta string format "0:01:23"
+        if ts_str.count(':') == 2 and ',' not in ts_str and '.' not in ts_str:
+            parts = ts_str.split(':')
+            h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+            return h * 3600 + m * 60 + s
+
+        # Handle SRT format "00:01:23,456"
+        if ',' in ts_str:
+            time_part, ms_part = ts_str.split(',')
+            h, m, s = map(int, time_part.split(':'))
+            ms = int(ms_part)
+            return h * 3600 + m * 60 + s + ms / 1000
+
+        # Handle "00:01:23.456"
+        if '.' in ts_str and ts_str.count(':') == 2:
+            parts = ts_str.split(':')
+            h, m = int(parts[0]), int(parts[1])
+            s = float(parts[2])
+            return h * 3600 + m * 60 + s
+
+        # Try parsing as float directly
+        return float(ts_str)
+    except:
+        return 0.0
+
+
+def calc_planned_duration(srt_start, srt_end) -> float:
+    """
+    Tính planned_duration (giây) từ srt_start và srt_end.
+
+    v1.0.48: Simple calculation for video editing
+    """
+    start_sec = parse_srt_timestamp(srt_start)
+    end_sec = parse_srt_timestamp(srt_end)
+
+    if end_sec > start_sec:
+        return round(end_sec - start_sec, 2)
+    return 0.0
+
+
 class ProgressivePromptsGenerator:
     """
     Generator tạo prompts theo từng step.
@@ -3028,11 +3087,17 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                     chars_used_str = ",".join(char_ids) if char_ids else ""
                     loc_used_str = loc_id if loc_id else ""
 
+                    # v1.0.48: Calculate planned_duration from srt_start/srt_end
+                    srt_start = original.get("srt_start", "")
+                    srt_end = original.get("srt_end", "")
+                    planned_duration = calc_planned_duration(srt_start, srt_end)
+
                     scene = Scene(
                         scene_id=scene_id,
-                        srt_start=original.get("srt_start", ""),
-                        srt_end=original.get("srt_end", ""),
+                        srt_start=srt_start,
+                        srt_end=srt_end,
                         duration=original.get("duration", 0),
+                        planned_duration=planned_duration,  # v1.0.48: Calculated from SRT
                         srt_text=original.get("srt_text", ""),
                         img_prompt=img_prompt,
                         video_prompt=scene_data.get("video_prompt", ""),
