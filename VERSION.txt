@@ -1,3 +1,3 @@
 1.0.38
-2026-01-27 10:15
-Fix: GUI now shows correct version date from VERSION.txt instead of git commit date
+2026-02-01 15:41
+Fix: GUI now shows correct version date from VERSION.txt
