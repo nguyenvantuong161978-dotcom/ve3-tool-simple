@@ -255,8 +255,14 @@ def is_local_pic_complete(project_dir: Path, name: str) -> bool:
         excel_path = project_dir / f"{name}_prompts.xlsx"
         if excel_path.exists():
             wb = PromptWorkbook(str(excel_path))
+            wb.load_or_create()
             scenes = wb.get_scenes()
             expected = len([s for s in scenes if s.img_prompt])
+
+            # FIX: Nếu expected = 0, không coi là complete
+            if expected == 0:
+                print(f"    [{name}] Images: {len(img_files)}/? - Excel invalid, treating as incomplete")
+                return False
 
             if len(img_files) >= expected:
                 print(f"    [{name}] Images: {len(img_files)}/{expected} - COMPLETE")
@@ -266,8 +272,10 @@ def is_local_pic_complete(project_dir: Path, name: str) -> bool:
                 return False
     except Exception as e:
         print(f"    [{name}] Warning: {e}")
+        # Nếu có lỗi đọc Excel, không coi là complete
+        return False
 
-    return len(img_files) > 0
+    return False  # Không có Excel = không complete
 
 
 def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
