@@ -434,13 +434,16 @@ def scan_incomplete_local_projects() -> list:
         if is_local_pic_complete(item, code):
             continue
 
-        srt_path = item / f"{code}.srt"
+        # Chrome Worker CHỈ xử lý projects có Excel với prompts (Step 7 done)
+        # Projects chỉ có SRT → đợi Excel Worker hoàn thành trước
         if has_excel_with_prompts(item, code):
-            print(f"    - {code}: incomplete (has Excel, no images)")
+            print(f"    - {code}: incomplete (has Excel with prompts, no images)")
             incomplete.append(code)
-        elif srt_path.exists():
-            print(f"    - {code}: has SRT, no Excel")
-            incomplete.append(code)
+        else:
+            # Log để debug nhưng KHÔNG thêm vào list
+            srt_path = item / f"{code}.srt"
+            if srt_path.exists():
+                print(f"    - {code}: has SRT, waiting for Excel Worker (Step 7)")
 
     return sorted(incomplete)
 
