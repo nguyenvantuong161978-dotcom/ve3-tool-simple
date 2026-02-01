@@ -29,6 +29,7 @@ import time
 import shutil
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 # Add current directory to path
 TOOL_DIR = Path(__file__).parent
@@ -43,11 +44,12 @@ WORKER_ID = "chrome_2"
 
 # Agent Protocol - giao tiếp với VM Manager
 try:
-    from modules.agent_protocol import AgentWorker, ErrorType
+    from modules.agent_protocol import AgentWorker, AgentManager, ErrorType
     AGENT_ENABLED = True
 except ImportError:
     AGENT_ENABLED = False
     AgentWorker = None
+    AgentManager = None
 
 # Central Logger - để log hiển thị trong GUI
 try:
@@ -596,6 +598,25 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         return False
 
 
+def get_chrome1_current_project() -> Optional[str]:
+    """Đọc project mà Chrome 1 đang làm từ Agent Status.
+
+    Chrome 2 PHẢI làm cùng project với Chrome 1, không được tự chọn.
+    """
+    if not AgentManager:
+        return None
+
+    try:
+        manager = AgentManager()
+        status = manager.get_worker_status("chrome_1")
+        if status and status.current_project:
+            return status.current_project
+    except Exception as e:
+        print(f"  [DEBUG] Cannot get Chrome 1 status: {e}")
+
+    return None
+
+
 def scan_incomplete_local_projects() -> list:
     """Scan local PROJECTS for incomplete projects."""
     incomplete = []
@@ -697,56 +718,60 @@ def run_scan_loop():
     time.sleep(10)
 
     cycle = 0
-    current_project = None  # Track project đang làm
 
     while True:
         cycle += 1
-        print(f"\n[Chrome2 CYCLE {cycle}] Scanning...")
+        print(f"\n[Chrome2 CYCLE {cycle}] Checking Chrome 1 status...")
 
-        incomplete_local = scan_incomplete_local_projects()
-        pending_master = scan_master_projects()
-        pending = list(dict.fromkeys(incomplete_local + pending_master))
+        # ===== QUAN TRỌNG: Chrome 2 LUÔN follow Chrome 1 =====
+        chrome1_project = get_chrome1_current_project()
 
-        if not pending:
-            print(f"  No pending projects")
-            current_project = None  # Reset khi không còn project
-            print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
-            try:
-                time.sleep(SCAN_INTERVAL)
-            except KeyboardInterrupt:
-                print("\n\nStopped by user.")
-                break
+        if chrome1_project:
+            # Chrome 1 đang làm project → Chrome 2 làm cùng project đó
+            target = chrome1_project
+            print(f"  [Chrome2] Following Chrome 1: {target}")
         else:
-            print(f"  Found: {len(pending)} pending projects")
-
-            # CHỈ XỬ LÝ 1 PROJECT - ưu tiên project đang làm dở
-            if current_project and current_project in pending:
-                target = current_project
-                print(f"  [Chrome2] Continuing: {target}")
-            else:
-                target = pending[0]
-                current_project = target
-                print(f"  [Chrome2] Starting: {target}")
-
-            try:
-                success = process_project_pic_basic_chrome2(target)
-                if not success:
-                    print(f"  [Chrome2] Project {target} incomplete, will retry...")
-                else:
-                    print(f"  [Chrome2] Project {target} completed!")
-                    current_project = None  # Move to next project
-            except KeyboardInterrupt:
-                print("\n\nStopped by user.")
-                return
-            except Exception as e:
-                print(f"  [Chrome2] Error processing {target}: {e}")
-
+            # Chrome 1 chưa làm gì → Chrome 2 đợi
+            print(f"  [Chrome2] Chrome 1 is idle, waiting...")
             print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
             try:
                 time.sleep(SCAN_INTERVAL)
             except KeyboardInterrupt:
                 print("\n\nStopped by user.")
                 break
+            continue  # Skip processing, wait for Chrome 1
+
+        # Kiểm tra project có Excel với prompts không
+        local_dir = LOCAL_PROJECTS / target
+        if not has_excel_with_prompts(local_dir, target):
+            print(f"  [Chrome2] {target} not ready (no Excel/prompts), waiting...")
+            print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+            try:
+                time.sleep(SCAN_INTERVAL)
+            except KeyboardInterrupt:
+                print("\n\nStopped by user.")
+                break
+            continue
+
+        # Process project (following Chrome 1)
+        try:
+            success = process_project_pic_basic_chrome2(target)
+            if not success:
+                print(f"  [Chrome2] Project {target} incomplete, will retry...")
+            else:
+                print(f"  [Chrome2] Project {target} completed!")
+        except KeyboardInterrupt:
+            print("\n\nStopped by user.")
+            return
+        except Exception as e:
+            print(f"  [Chrome2] Error processing {target}: {e}")
+
+        print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+        try:
+            time.sleep(SCAN_INTERVAL)
+        except KeyboardInterrupt:
+            print("\n\nStopped by user.")
+            break
 
 
 def validate_references_if_needed(code: str, callback=None) -> bool:
@@ -1011,33 +1036,31 @@ def run_scan_loop_with_agent():
     print(f"{'='*60}\n")
 
     cycle = 0
-    current_project = None  # Track project đang làm
 
     try:
         while True:
             cycle += 1
-            print(f"\n[CYCLE {cycle}] Scanning...")
+            print(f"\n[CYCLE {cycle}] Checking Chrome 1 status...")
 
-            # Tìm projects cần xử lý (từ local và master)
-            projects = scan_incomplete_local_projects()
-            if not projects:
-                projects = scan_master_projects()
+            # ===== QUAN TRỌNG: Chrome 2 LUÔN follow Chrome 1 =====
+            chrome1_project = get_chrome1_current_project()
 
-            if projects:
-                # CHỈ XỬ LÝ 1 PROJECT - ưu tiên project đang làm dở
-                if current_project and current_project in projects:
-                    target = current_project
-                    print(f"  [Chrome2] Continuing: {target}")
-                else:
-                    target = projects[0]
-                    current_project = target
-                    print(f"  [Chrome2] Starting: {target}")
+            if chrome1_project:
+                target = chrome1_project
+                print(f"  [Chrome2] Following Chrome 1: {target}")
+
+                # Kiểm tra project có Excel với prompts không
+                local_dir = LOCAL_PROJECTS / target
+                if not has_excel_with_prompts(local_dir, target):
+                    print(f"  [Chrome2] {target} not ready (no Excel/prompts), waiting...")
+                    print(f"\nWaiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+                    time.sleep(SCAN_INTERVAL)
+                    continue
 
                 try:
                     success = process_project_with_agent(target)
                     if success:
                         print(f"  [Chrome2] Project {target} completed!")
-                        current_project = None  # Move to next project
                     else:
                         print(f"  [Chrome2] Project {target} incomplete, will retry...")
                 except KeyboardInterrupt:
@@ -1045,7 +1068,7 @@ def run_scan_loop_with_agent():
                 except Exception as e:
                     agent_log(f"Error processing {target}: {e}", "ERROR")
             else:
-                current_project = None  # Reset khi không còn project
+                print(f"  [Chrome2] Chrome 1 is idle, waiting...")
 
             print(f"\nWaiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
             time.sleep(SCAN_INTERVAL)

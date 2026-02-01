@@ -518,6 +518,9 @@ def run_scan_loop():
         if not pending:
             print(f"  No pending projects")
             current_project = None  # Reset khi không còn project
+            # Reset agent status để Chrome 2 biết
+            if _agent:
+                _agent.update_status(state="idle", current_project="")
             print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
             try:
                 time.sleep(SCAN_INTERVAL)
@@ -536,6 +539,13 @@ def run_scan_loop():
                 current_project = target
                 print(f"  Starting: {target}")
 
+            # === UPDATE AGENT STATUS để Chrome 2 biết project đang làm ===
+            if _agent:
+                _agent.update_status(
+                    state="working",
+                    current_project=target
+                )
+
             try:
                 success = process_project_pic_basic(target)
                 if not success:
@@ -545,9 +555,19 @@ def run_scan_loop():
                     current_project = None  # Move to next project
             except KeyboardInterrupt:
                 print("\n\nStopped by user.")
+                # Reset agent status
+                if _agent:
+                    _agent.update_status(state="idle", current_project="")
                 return
             except Exception as e:
                 print(f"  Error processing {target}: {safe_str(e)}")
+
+            # === RESET AGENT STATUS khi xong project ===
+            if _agent and success:
+                _agent.update_status(
+                    state="idle",
+                    current_project=""
+                )
 
             print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
             try:
