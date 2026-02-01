@@ -420,24 +420,43 @@ class PromptWorkbook:
     def load_or_create(self) -> "PromptWorkbook":
         """
         Load file Excel nếu tồn tại, hoặc tạo mới nếu chưa có.
-        Tự động xóa và tạo mới nếu file bị corrupted.
+        CHỈ xóa file nếu thực sự corrupted (BadZipFile), KHÔNG xóa khi file bị lock.
+
+        v1.0.49: Fix bug xóa Excel khi file bị lock bởi Chrome Worker
 
         Returns:
             self để hỗ trợ method chaining
         """
+        from zipfile import BadZipFile
+
         if self.path.exists():
             try:
                 self.logger.info(f"Loading existing Excel file: {self.path}")
                 self.workbook = load_workbook(self.path)
-            except Exception as e:
-                # File bị corrupted (BadZipFile, etc.) → xóa và tạo mới
-                self.logger.warning(f"Excel file corrupted: {e}")
+            except BadZipFile as e:
+                # CHỈ xóa file khi thực sự corrupted (BadZipFile)
+                self.logger.warning(f"Excel file corrupted (BadZipFile): {e}")
                 self.logger.info(f"Deleting corrupted file and creating new...")
                 try:
-                    self.path.unlink()  # Xóa file bị hỏng
+                    self.path.unlink()
                 except:
                     pass
                 self._create_new_workbook()
+            except PermissionError as e:
+                # File đang bị lock - KHÔNG XÓA, raise lỗi
+                self.logger.error(f"Excel file locked (PermissionError): {e}")
+                raise  # Để caller biết và xử lý
+            except Exception as e:
+                # Lỗi khác - thử đợi và retry, KHÔNG XÓA file
+                self.logger.warning(f"Error loading Excel: {e}")
+                import time
+                time.sleep(2)  # Đợi 2s
+                try:
+                    self.workbook = load_workbook(self.path)
+                    self.logger.info("Retry successful!")
+                except Exception as e2:
+                    self.logger.error(f"Retry failed: {e2}")
+                    raise  # KHÔNG XÓA, raise để caller xử lý
         else:
             self.logger.info(f"Creating new Excel file: {self.path}")
             self._create_new_workbook()

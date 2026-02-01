@@ -585,6 +585,8 @@ class ExcelAPIWorker:
 
                     if progress['is_complete']:
                         # Hoàn thành 100% - Skip
+                        # v1.0.49: Log để debug
+                        # log(f"  [{name}] Excel complete (100%) - Skip")
                         pass
                     elif progress['can_resume']:
                         # Đang làm dở - Resume
@@ -593,8 +595,15 @@ class ExcelAPIWorker:
                         # Có [FALLBACK] - Fix
                         results.append((item, name, "fix_fallback", progress))
                     elif not has_excel_with_prompts(item, name):
-                        # Excel rỗng hoặc lỗi - Tạo lại
-                        results.append((item, name, "create_new", None))
+                        # v1.0.49: Check thêm điều kiện - chỉ tạo mới nếu THỰC SỰ rỗng
+                        # Tránh xóa Excel do lỗi đọc tạm thời
+                        if progress['total_progress'] == 0:
+                            log(f"  [{name}] Excel empty (0%) - Will create new")
+                            results.append((item, name, "create_new", None))
+                        else:
+                            # Có progress nhưng không có prompts - có thể đang tạo
+                            log(f"  [{name}] Excel {progress['total_progress']:.0f}% but no prompts - Skip (in progress?)")
+                            pass
 
         # Scan master projects (if accessible) - IMPORT to local before processing
         if self.master_projects and safe_path_exists(self.master_projects):
