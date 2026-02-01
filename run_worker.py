@@ -146,8 +146,44 @@ def is_project_complete_on_master(code: str) -> bool:
     return False
 
 
+def is_excel_step7_completed(project_dir: Path, name: str) -> bool:
+    """
+    Check if Excel has Step 7 (scene_prompts) COMPLETED.
+    Chrome Worker should only process projects with Step 7 done.
+    """
+    excel_path = project_dir / f"{name}_prompts.xlsx"
+    if not excel_path.exists():
+        return False
+
+    try:
+        from modules.excel_manager import PromptWorkbook
+        wb = PromptWorkbook(str(excel_path))
+        wb.load_or_create()
+
+        # Check step 7 status
+        step7_status = wb.get_step_status("step_7")
+        if step7_status and step7_status.get("status") == "COMPLETED":
+            return True
+
+        # Fallback: check if scene_prompts step is completed
+        all_steps = wb.get_all_step_status()
+        for step in all_steps:
+            if "prompt" in step.get("step_name", "").lower():
+                if step.get("status") == "COMPLETED":
+                    return True
+
+        return False
+    except Exception as e:
+        # Fallback: if can't read status, check if has scenes with prompts
+        return False
+
+
 def has_excel_with_prompts(project_dir: Path, name: str) -> bool:
-    """Check if project has Excel with prompts (ready for worker)."""
+    """Check if project has Excel with prompts (ready for worker).
+
+    IMPORTANT: Also checks that Step 7 is COMPLETED to avoid conflict
+    with Excel Worker still writing to the file.
+    """
     # Check flat structure
     excel_path = project_dir / f"{name}_prompts.xlsx"
     if not excel_path.exists():
@@ -156,6 +192,14 @@ def has_excel_with_prompts(project_dir: Path, name: str) -> bool:
     try:
         from modules.excel_manager import PromptWorkbook
         wb = PromptWorkbook(str(excel_path))
+        wb.load_or_create()
+
+        # Check Step 7 COMPLETED first
+        step7_status = wb.get_step_status("step_7")
+        if not step7_status or step7_status.get("status") != "COMPLETED":
+            # Excel Worker chưa hoàn thành - KHÔNG xử lý
+            return False
+
         stats = wb.get_stats()
         total_scenes = stats.get('total_scenes', 0)
         scenes_with_prompts = stats.get('scenes_with_prompts', 0)
