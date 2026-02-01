@@ -2584,10 +2584,10 @@ class SmartEngine:
         self.log("[STEP 4] Load scene prompts...")
 
         # === CHECK: Đảm bảo Excel đã hoàn thành (có scenes) ===
-        # RETRY LOGIC: Excel có thể bị Chrome 1 lock
+        # RETRY LOGIC: Excel có thể bị Chrome 1 lock hoặc đang ghi giữa chừng
         import time as _time
-        max_check_retries = 5
-        check_retry_delay = 3
+        max_check_retries = 10  # Tăng từ 5 lên 10
+        check_retry_delay = 5   # Tăng từ 3s lên 5s (total max 50s)
 
         total_scenes = 0
         scenes_with_prompts = 0
@@ -4097,9 +4097,9 @@ class SmartEngine:
 
         prompts = []
 
-        # === RETRY LOGIC: Excel có thể bị Chrome 1 lock ===
-        max_retries = 5
-        retry_delay = 3  # seconds
+        # === RETRY LOGIC: Excel có thể bị Chrome 1 lock hoặc đang ghi giữa chừng ===
+        max_retries = 10   # Tăng từ 5 lên 10
+        retry_delay = 5    # Tăng từ 3s lên 5s (total max 50s)
 
         wb = None
         for attempt in range(max_retries):
