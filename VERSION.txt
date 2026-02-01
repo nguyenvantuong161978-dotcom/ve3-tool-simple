@@ -1,3 +1,3 @@
-1.0.38
-2026-02-01 15:41
-Fix: GUI now shows correct version date from VERSION.txt
+1.0.39
+2026-02-01 15:50
+Fix: Auto-delete corrupted Excel files and create new (BadZipFile error)
