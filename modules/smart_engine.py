@@ -2596,6 +2596,15 @@ class SmartEngine:
             self.log(f"  [CHECK] Characters: {total_chars}, Scenes: {scenes_with_prompts}/{total_scenes}")
 
             if total_scenes == 0 or scenes_with_prompts == 0:
+                # QUAN TRỌNG: Nếu là Chrome Worker 2, KHÔNG XÓA Excel!
+                # Chrome 1 có thể đang ghi file → Chrome 2 không đọc được
+                # Chỉ return error để retry sau
+                if hasattr(self, 'worker_id') and self.worker_id == 2:
+                    self.log("[WARN] Excel không có scenes - có thể Chrome 1 đang ghi file", "WARN")
+                    self.log("       Chrome 2 sẽ đợi và retry sau...", "WARN")
+                    return {"error": "excel_locked_by_chrome1"}
+
+                # Chrome 1 hoặc worker khác: có thể tạo lại
                 self.log("[WARN] Excel chưa có scenes! Đang tạo lại...", "WARN")
                 if srt_path.exists():
                     # Xóa Excel cũ và tạo mới
@@ -2611,7 +2620,14 @@ class SmartEngine:
         all_prompts = self._load_prompts(excel_path, proj_dir)
 
         if not all_prompts:
-            # Excel có 0 prompts = file bị lỗi, xóa để tạo lại và tiếp tục
+            # QUAN TRỌNG: Nếu là Chrome Worker 2, KHÔNG XÓA Excel!
+            # Chrome 1 có thể đang ghi file → Chrome 2 không đọc được
+            if hasattr(self, 'worker_id') and self.worker_id == 2:
+                self.log(f"[WARN] Excel có 0 prompts - có thể Chrome 1 đang ghi file", "WARN")
+                self.log("       Chrome 2 sẽ đợi và retry sau...", "WARN")
+                return {"error": "excel_locked_by_chrome1"}
+
+            # Chrome 1 hoặc worker khác: có thể tạo lại
             self.log(f"[WARN] Excel có 0 prompts - xóa file lỗi và tạo lại...", "WARN")
             try:
                 excel_path.unlink()
