@@ -434,9 +434,26 @@ class PromptWorkbook:
                 self.logger.info(f"Loading existing Excel file: {self.path}")
                 self.workbook = load_workbook(self.path)
             except BadZipFile as e:
-                # CHỈ xóa file khi thực sự corrupted (BadZipFile)
-                self.logger.warning(f"Excel file corrupted (BadZipFile): {e}")
-                self.logger.info(f"Deleting corrupted file and creating new...")
+                # v1.0.58: BadZipFile có thể do file đang được write bởi Chrome Worker
+                # KHÔNG XÓA NGAY - retry trước!
+                self.logger.warning(f"Excel file BadZipFile (có thể đang được write): {e}")
+                import time
+
+                # Retry 3 lần với delay tăng dần
+                for attempt in range(1, 4):
+                    self.logger.info(f"Retry loading ({attempt}/3) sau {attempt * 2}s...")
+                    time.sleep(attempt * 2)  # 2s, 4s, 6s
+                    try:
+                        self.workbook = load_workbook(self.path)
+                        self.logger.info(f"Retry {attempt} thành công!")
+                        return self  # Thành công, thoát
+                    except BadZipFile:
+                        self.logger.warning(f"Retry {attempt} vẫn BadZipFile")
+                    except Exception as retry_e:
+                        self.logger.warning(f"Retry {attempt} lỗi khác: {retry_e}")
+
+                # Sau 3 lần retry vẫn fail → file thực sự corrupt
+                self.logger.error(f"Excel file thực sự corrupted sau 3 retries - tạo mới")
                 try:
                     self.path.unlink()
                 except:

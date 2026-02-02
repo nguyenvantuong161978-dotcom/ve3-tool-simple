@@ -505,6 +505,8 @@ def get_excel_progress(project_dir: Path, name: str) -> dict:
         return wb.get_resume_info()
     except Exception as e:
         log(f"Error getting Excel progress for {name}: {e}", "WARN")
+        # v1.0.58: Thêm read_error flag để tránh tạo mới khi file bị lock
+        # Khi Chrome Workers đang ghi vào Excel, file có thể bị lock tạm thời
         return {
             'total_progress': 0.0,
             'current_step': None,
@@ -512,7 +514,8 @@ def get_excel_progress(project_dir: Path, name: str) -> dict:
             'incomplete_details': [],
             'flow_project_url': '',
             'can_resume': False,
-            'is_complete': False
+            'is_complete': False,
+            'read_error': True  # Flag để biết có lỗi đọc, KHÔNG tạo mới!
         }
 
 
@@ -595,9 +598,13 @@ class ExcelAPIWorker:
                         # Có [FALLBACK] - Fix
                         results.append((item, name, "fix_fallback", progress))
                     elif not has_excel_with_prompts(item, name):
-                        # v1.0.49: Check thêm điều kiện - chỉ tạo mới nếu THỰC SỰ rỗng
-                        # Tránh xóa Excel do lỗi đọc tạm thời
-                        if progress['total_progress'] == 0:
+                        # v1.0.58: CRITICAL FIX - Check read_error trước khi tạo mới!
+                        # Khi Chrome Workers đang ghi vào Excel, file bị lock → read_error
+                        # KHÔNG được tạo mới vì sẽ xóa mất progress đã làm!
+                        if progress.get('read_error', False):
+                            log(f"  [{name}] Excel read error (file locked?) - SKIP to protect data")
+                            pass
+                        elif progress['total_progress'] == 0:
                             log(f"  [{name}] Excel empty (0%) - Will create new")
                             results.append((item, name, "create_new", None))
                         else:
