@@ -1265,6 +1265,18 @@ class SimpleGUI(tk.Tk):
             total_scenes = status.get('total_scenes', 0)
             completed = status.get('completed_count', 0)
             failed = status.get('failed_count', 0)
+            current_task = status.get('current_task', '')
+
+            # v1.0.64: Show current task (scene being processed)
+            if current_task:
+                # Parse scene number from task name (format: image_AR8-0003_163347)
+                task_parts = current_task.split('_')
+                if len(task_parts) >= 3:
+                    scene_num = task_parts[-1]  # Last part is scene number
+                    lines.append(f"  Processing: Scene {scene_num}")
+                else:
+                    lines.append(f"  Processing: {current_task}")
+                lines.append("")
 
             if current_scene > 0:
                 lines.append(f"  Scene:   {current_scene}/{total_scenes}")
@@ -1288,13 +1300,30 @@ class SimpleGUI(tk.Tk):
             lines.append("")
             lines.append(f"  ERROR:   {last_error[:60]}")
 
-        # Uptime
+        # Uptime and Remaining Time (v1.0.64)
         uptime = status.get('uptime_seconds', 0)
+        PROJECT_TIMEOUT = 5 * 3600  # 5 hours in seconds
+
         if uptime > 0:
-            mins = uptime // 60
-            secs = uptime % 60
+            # Uptime display
+            uptime_hours = int(uptime // 3600)
+            uptime_mins = int((uptime % 3600) // 60)
             lines.append("")
-            lines.append(f"  Uptime:  {mins}m {secs}s")
+            lines.append(f"  Elapsed: {uptime_hours}h {uptime_mins}m")
+
+            # Remaining time calculation
+            remaining = max(0, PROJECT_TIMEOUT - uptime)
+            remaining_hours = int(remaining // 3600)
+            remaining_mins = int((remaining % 3600) // 60)
+
+            if remaining > 0:
+                lines.append(f"  Remaining: {remaining_hours}h {remaining_mins}m")
+            else:
+                lines.append(f"  Remaining: TIMEOUT!")
+
+            # Time progress bar
+            time_progress = self._make_progress_bar(int(uptime), PROJECT_TIMEOUT)
+            lines.append(f"  Time:    {time_progress}")
 
         lines.append("")
         lines.append(f"{'='*50}")

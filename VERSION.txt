@@ -1,12 +1,15 @@
-1.0.63
-2026-02-02 22:50
-Fix: Thêm timeout 5 tiếng cho project trong _run_chrome1.py
+1.0.64
+2026-02-02 23:00
+GUI: Hiển thị tiến độ hiện đại hơn
 
-1. _run_chrome1.py: run_scan_loop()
-   - Trước: Không có timeout → project chạy mãi (11+ giờ)
-   - Sau: Timeout 5 tiếng → copy to VISUAL → move to next project
-   - Hiển thị thời gian chạy mỗi cycle
+1. vm_manager_gui.py: _update_worker_logs()
+   - Hiển thị scene đang xử lý (Processing: Scene XXX)
+   - Hiển thị thời gian đã chạy (Elapsed: Xh Ym)
+   - Hiển thị thời gian còn lại (Remaining: Xh Ym)
+   - Thanh tiến độ thời gian (Time: [====----] 40%)
+   - Real-time update
 
-2. v1.0.62: Parse is_child đúng cách
-3. v1.0.61: Không copy Excel từ master nếu local đã có
-4. v1.0.60: Xóa master source sau copy/update
+2. v1.0.63: Timeout 5 tiếng cho _run_chrome1.py
+3. v1.0.62: Parse is_child đúng cách
+4. v1.0.61: Không copy Excel từ master nếu local đã có
+5. v1.0.60: Xóa master source sau copy/update
