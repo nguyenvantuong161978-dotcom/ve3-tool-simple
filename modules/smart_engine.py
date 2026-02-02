@@ -177,6 +177,11 @@ class SmartEngine:
         self.callback = None
         self._lock = threading.Lock()
 
+        # === EXCEL PROTECTION FLAG ===
+        # Khi total_workers > 1, TUYỆT ĐỐI KHÔNG XÓA EXCEL!
+        # Chrome 1 hoặc Chrome 2 có thể đang ghi file
+        self._parallel_mode = total_workers > 1
+
         # Parallel processing state
         self._character_gen_thread = None
         self._character_gen_result = None
@@ -213,6 +218,31 @@ class SmartEngine:
         self.load_config()
         self.load_cached_tokens()  # Load tokens da luu
         self.load_media_name_cache()  # Load media_name cache
+
+    def _safe_delete_excel(self, excel_path: Path) -> bool:
+        """
+        Xóa Excel AN TOÀN - KHÔNG XÓA khi đang chạy song song!
+
+        Returns:
+            True nếu đã xóa thành công
+            False nếu KHÔNG được phép xóa (parallel mode)
+        """
+        # === CRITICAL: KHÔNG BAO GIỜ XÓA EXCEL KHI CHẠY SONG SONG ===
+        if self._parallel_mode:
+            self.log(f"[PROTECT] KHÔNG XÓA Excel - đang chạy song song (total_workers={self.total_workers})", "WARN")
+            self.log(f"          File: {excel_path.name}", "WARN")
+            self.log(f"          Worker sẽ retry sau...", "WARN")
+            return False
+
+        # Chỉ xóa khi chạy đơn lẻ (total_workers=1)
+        try:
+            if excel_path.exists():
+                excel_path.unlink()
+                self.log(f"  [OK] Đã xóa Excel: {excel_path.name}")
+                return True
+        except Exception as e:
+            self.log(f"  [WARN] Không thể xóa Excel: {e}", "WARN")
+        return False
 
     def log(self, msg: str, level: str = "INFO"):
         """Log message. Skip DEBUG level unless verbose_log is enabled."""
@@ -2635,8 +2665,9 @@ class SmartEngine:
             # Chrome 1 hoặc worker khác: có thể tạo lại
             self.log("[WARN] Excel chưa có scenes! Đang tạo lại...", "WARN")
             if srt_path.exists():
-                # Xóa Excel cũ và tạo mới
-                excel_path.unlink()
+                # Xóa Excel cũ và tạo mới (dùng safe delete để double-check)
+                if not self._safe_delete_excel(excel_path):
+                    return {"error": "excel_protected_parallel_mode"}
                 if not self.make_prompts(proj_dir, name, excel_path):
                     return {"error": "prompts_failed_no_scenes"}
             else:
@@ -2656,8 +2687,9 @@ class SmartEngine:
             # Chrome 1 hoặc worker khác: có thể tạo lại
             self.log(f"[WARN] Excel có 0 prompts - xóa file lỗi và tạo lại...", "WARN")
             try:
-                excel_path.unlink()
-                self.log(f"   Đã xóa: {excel_path.name}")
+                # SAFE DELETE: Double-check parallel mode trước khi xóa
+                if not self._safe_delete_excel(excel_path):
+                    return {"error": "excel_protected_parallel_mode"}
 
                 # Tạo lại prompts từ SRT
                 if srt_path.exists():

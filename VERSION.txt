@@ -1,3 +1,3 @@
-1.0.56
-2026-02-02 02:00
-Fix: Retry logic cũng dùng total_workers > 1 thay vì worker_id == 2
+1.0.57
+2026-02-02 09:30
+Fix: Thêm _safe_delete_excel() - BẢO VỆ TUYỆT ĐỐI Excel khi chạy song song
