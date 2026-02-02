@@ -146,6 +146,36 @@ def matches_channel(project_name: str, channel: Optional[str] = None) -> bool:
     return project_name.startswith(channel)
 
 
+def is_project_in_visual(name: str, auto_path: Optional[Path]) -> bool:
+    """
+    v1.0.69: Check if project already exists in VISUAL folder on master.
+    Nếu đã có trong VISUAL → skip, không import lại.
+    """
+    if not auto_path:
+        return False
+
+    # v1.0.69: Thống nhất dùng "visual" chữ thường
+    visual_dir = auto_path / "visual" / name
+
+    try:
+        if not visual_dir.exists():
+            return False
+
+        # Check if has images (project hoàn thành)
+        img_dir = visual_dir / "img"
+        if not img_dir.exists():
+            return False
+
+        img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg"))
+        if len(img_files) > 0:
+            log(f"  [{name}] Already in VISUAL ({len(img_files)} images) - Skip")
+            return True
+
+        return False
+    except (OSError, PermissionError):
+        return False
+
+
 def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Optional[Path]:
     """
     Copy project từ master về local để xử lý.
@@ -634,6 +664,10 @@ class ExcelAPIWorker:
 
                     srt_path = item / f"{name}.srt"
                     if not safe_path_exists(srt_path):
+                        continue
+
+                    # v1.0.69: Skip if already in VISUAL (đã hoàn thành)
+                    if is_project_in_visual(name, self.auto_path):
                         continue
 
                     # IMPORT: Copy from master to local BEFORE adding to results

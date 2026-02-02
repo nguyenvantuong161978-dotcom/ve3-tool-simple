@@ -1,17 +1,14 @@
-1.0.69
-2026-02-03 00:15
-Fix: VISUAL path case mismatch - thống nhất "visual" chữ thường
+1.0.70
+2026-02-03 00:20
+Fix: Excel Worker cũng check VISUAL trước khi import
 
-1. run_worker.py: MASTER_VISUAL path
-   - Trước: AUTO_PATH / "VISUAL" (chữ HOA)
-   - Sau: AUTO_PATH / "visual" (chữ thường)
-   - Thống nhất với vm_manager.py dùng "visual"
+1. run_excel_api.py: Thêm is_project_in_visual()
+   - Check project có trong AUTO/visual/ chưa
+   - Nếu có → skip, không import từ master
+   - Tránh làm lại mã đã hoàn thành
 
-2. Bug đã fix:
-   - vm_manager.py copy vào: AUTO/visual/{code}/
-   - run_worker.py check trong: AUTO/VISUAL/{code}/ (SAI!)
-   - Kết quả: is_project_complete_on_master() không tìm thấy
-   - Mã cứ bị copy lại và làm lại
+2. v1.0.69: Fix VISUAL path case (run_worker.py)
+   - VISUAL → visual (chữ thường)
 
 3. v1.0.68: Xóa local folder sau copy to master
 4. v1.0.67: Không xóa master source, dựa VISUAL check done
