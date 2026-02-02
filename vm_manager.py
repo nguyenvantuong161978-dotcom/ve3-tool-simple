@@ -506,7 +506,9 @@ class QualityChecker:
                 # FULL: done when all videos are complete
                 videos_complete = (status.videos_done == status.total_scenes)
 
-            if status.images_done == status.total_scenes:
+            # v1.0.76: Only mark as "done" if total_scenes > 0
+            # Prevents auto-copy when Excel has no scenes yet
+            if status.total_scenes > 0 and status.images_done == status.total_scenes:
                 if videos_complete:
                     status.current_step = "done"
                 else:

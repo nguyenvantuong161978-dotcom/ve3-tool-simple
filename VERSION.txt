@@ -1,13 +1,13 @@
-1.0.75
-2026-02-03 12:00
-Fix: SMALL mode skip GLOBAL CHECK
+1.0.76
+2026-02-03 12:15
+Fix: Không copy khi total_scenes = 0
 
-1. SMALL mode fix:
-   - Skip GLOBAL CHECK validation (4 SRT/image rule)
-   - Giữ nguyên số images do API tính (~100-150)
-   - Trước đó bị GLOBAL CHECK tăng gấp đôi → 246 scenes
+1. Bug fix - Auto-copy khi ấn BẮT ĐẦU:
+   - Nguyên nhân: total_scenes = 0 → images_done == total_scenes (0==0) → "done"
+   - Fix: Chỉ đánh dấu "done" khi total_scenes > 0
+   - Tránh copy project chưa có Excel/scenes
 
-2. v1.0.74: Chỉ copy sang VISUAL khi có ảnh
-3. v1.0.73: Default Small mode + Fix premature auto-copy
-4. v1.0.72: Thêm SMALL mode (100-150 scenes)
-5. v1.0.71: Tăng scene duration 5-8s (giảm 35% scenes)
+2. v1.0.75: SMALL mode skip GLOBAL CHECK
+3. v1.0.74: Chỉ copy sang VISUAL khi có ảnh
+4. v1.0.73: Default Small mode + Fix premature auto-copy
+5. v1.0.72: Thêm SMALL mode (100-150 scenes)
