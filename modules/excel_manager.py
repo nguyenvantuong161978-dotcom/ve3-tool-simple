@@ -159,6 +159,15 @@ class Character:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Character":
         """Tạo Character từ dictionary."""
+        # FIX v1.0.62: Parse is_child đúng cách (bool("False") = True là BUG!)
+        is_child_value = data.get("is_child", False)
+        if isinstance(is_child_value, bool):
+            is_child = is_child_value
+        elif isinstance(is_child_value, str):
+            is_child = is_child_value.lower() in ("true", "1", "yes")
+        else:
+            is_child = bool(is_child_value)
+
         return cls(
             id=str(data.get("id", "")),
             role=str(data.get("role", "supporting")),
@@ -168,7 +177,7 @@ class Character:
             character_lock=str(data.get("character_lock", "")),
             image_file=str(data.get("image_file", "")),
             status=str(data.get("status", "pending")),
-            is_child=bool(data.get("is_child", False)),
+            is_child=is_child,
             media_id=str(data.get("media_id", "")),
         )
 

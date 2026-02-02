@@ -1,10 +1,11 @@
-1.0.61
-2026-02-02 16:10
-Fix: KHÔNG copy Excel từ master nếu local đã có (nguyên nhân Excel bị xóa)
+1.0.62
+2026-02-02 16:25
+Fix: Parse is_child đúng cách - tránh tạo ảnh tham chiếu cho trẻ con
 
-1. run_worker.py: copy_from_master()
-   - Trước: Copy Excel từ master nếu master "mới hơn" → ĐÈ LÊN EXCEL LOCAL
-   - Sau: Chỉ copy Excel nếu LOCAL CHƯA CÓ Excel
-   - Fix lỗi Excel bị corrupt/xóa khi Chrome đang dùng
+1. modules/excel_manager.py: Character.from_dict()
+   - Trước: bool("False") = True (BUG!) → tạo ảnh cho tất cả
+   - Sau: Parse string "false"/"False"/"FALSE" = False đúng
+   - Chỉ tạo ảnh tham chiếu cho người lớn
 
-2. v1.0.60: Xóa master source sau copy/update để tránh trùng lặp
+2. v1.0.61: Không copy Excel từ master nếu local đã có
+3. v1.0.60: Xóa master source sau copy/update
