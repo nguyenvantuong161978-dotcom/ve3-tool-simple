@@ -510,6 +510,9 @@ def copy_from_master(code: str) -> Path:
             if srt_src.exists() and not srt_dst.exists():
                 shutil.copy2(srt_src, srt_dst)
                 print(f"  [COPY] Copied SRT from master")
+
+            # FIX v1.0.60: Xóa master source sau khi update để tránh máy khác pick trùng
+            delete_master_source(code)
         return dst
 
     # Local doesn't exist, need to copy from master

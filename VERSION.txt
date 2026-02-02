@@ -1,11 +1,8 @@
-1.0.59
-2026-02-02 12:30
-Fix: Chrome restart exhausted - DỪNG WORKER thay vì chạy vô nghĩa
+1.0.60
+2026-02-02 16:05
+Fix: Xóa master source sau khi copy/update để tránh trùng lặp
 
-1. chrome_manager.py: Thêm ChromeRestartExhaustedException
-   - Khi restart 5 lần fail → raise exception thay vì return False
-   - Worker sẽ DỪNG hoàn toàn thay vì tiếp tục với API chưa setup
-
-2. browser_flow_generator.py: Catch exception và dừng worker
-   - Không silent fail ChromeRestartExhaustedException
-   - Log rõ ràng: "Worker DỪNG - cần khởi động lại từ GUI!"
+1. run_worker.py: copy_from_master()
+   - Trước: Nếu local đã có → KHÔNG xóa master → máy khác pick trùng
+   - Sau: Xóa master source sau khi update Excel/SRT từ master
+   - Tránh nhiều máy pick cùng 1 project
