@@ -1,8 +1,10 @@
-1.0.60
-2026-02-02 16:05
-Fix: Xóa master source sau khi copy/update để tránh trùng lặp
+1.0.61
+2026-02-02 16:10
+Fix: KHÔNG copy Excel từ master nếu local đã có (nguyên nhân Excel bị xóa)
 
 1. run_worker.py: copy_from_master()
-   - Trước: Nếu local đã có → KHÔNG xóa master → máy khác pick trùng
-   - Sau: Xóa master source sau khi update Excel/SRT từ master
-   - Tránh nhiều máy pick cùng 1 project
+   - Trước: Copy Excel từ master nếu master "mới hơn" → ĐÈ LÊN EXCEL LOCAL
+   - Sau: Chỉ copy Excel nếu LOCAL CHƯA CÓ Excel
+   - Fix lỗi Excel bị corrupt/xóa khi Chrome đang dùng
+
+2. v1.0.60: Xóa master source sau copy/update để tránh trùng lặp

@@ -494,15 +494,16 @@ def copy_from_master(code: str) -> Path:
     # If local already exists, use it (even if master was deleted)
     if dst.exists():
         print(f"  [LOCAL] Using existing local: {code}")
-        # Try to update Excel and SRT from master if available
+        # Try to update SRT from master if available
         if src.exists():
-            # Copy Excel if newer
-            excel_src = src / f"{code}_prompts.xlsx"
+            # FIX v1.0.61: KHÔNG copy Excel từ master nếu local đã có
+            # Vì Chrome có thể đang dùng Excel local → copy sẽ corrupt
             excel_dst = dst / f"{code}_prompts.xlsx"
-            if excel_src.exists():
-                if not excel_dst.exists() or excel_src.stat().st_mtime > excel_dst.stat().st_mtime:
+            if not excel_dst.exists():
+                excel_src = src / f"{code}_prompts.xlsx"
+                if excel_src.exists():
                     shutil.copy2(excel_src, excel_dst)
-                    print(f"  [COPY] Updated Excel from master")
+                    print(f"  [COPY] Copied Excel from master (local was missing)")
 
             # Copy SRT if local doesn't have it
             srt_src = src / f"{code}.srt"
