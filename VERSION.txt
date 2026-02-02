@@ -1,17 +1,20 @@
-1.0.71
-2026-02-03 01:50
-Optimize: Giảm số scenes - mỗi scene 5-8 giây (thay vì 3-6s)
+1.0.72
+2026-02-03 02:10
+Feature: Thêm SMALL mode - giảm xuống 100-150 scenes
 
-1. modules/progressive_prompts.py:
-   - Trước: 3-6 giây/scene → video 1h = ~700-900 scenes
-   - Sau: 5-8 giây/scene → video 1h = ~450-550 scenes
-   - Giảm ~35-40% số lượng scenes
+1. SMALL mode (excel_mode=small):
+   - Segment 1: Giữ 5-8s/scene (chi tiết, để tạo video)
+   - Segments 2+: KEY MOMENTS only (20-30s/scene)
+   - Video 1h: ~100-150 scenes (thay vì ~550)
 
-2. Lợi ích:
-   - Ít scenes hơn → tạo ảnh nhanh hơn
-   - Tiết kiệm API calls (Google Flow)
-   - Chất lượng scene cao hơn (focus vào key moments)
+2. Thay đổi:
+   - progressive_prompts.py: Step 2 PHASE 2 hỗ trợ small mode
+   - vm_manager_gui.py: Thêm radio button "Small" (màu vàng)
 
-3. v1.0.70: Excel Worker check VISUAL trước import
-4. v1.0.69: Fix VISUAL path case
-5. v1.0.68: Xóa local folder sau copy to master
+3. Lợi ích:
+   - Tiết kiệm Flow quota (500-700 ảnh/ngày)
+   - Chạy nhanh hơn nhiều
+   - Segment 1 vẫn đủ chi tiết để tạo video
+
+4. v1.0.71: Tăng scene duration 5-8s (giảm 35% scenes)
+5. v1.0.70: Excel Worker check VISUAL trước import

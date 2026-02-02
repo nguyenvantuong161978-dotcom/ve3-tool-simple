@@ -937,13 +937,15 @@ class SimpleGUI(tk.Tk):
         )
         self.reset_btn.pack(side="left", padx=5, pady=12)
 
-        # Mode
+        # Mode - v1.0.72: Thêm Small mode (100-150 scenes)
         mode_frame = tk.Frame(top, bg='#0f3460')
         mode_frame.pack(side="left", padx=30)
         tk.Label(mode_frame, text="Mode:", bg='#0f3460', fg='white', font=("Arial", 10)).pack(side="left")
         self.mode_var = tk.StringVar(value="basic")
         tk.Radiobutton(mode_frame, text="Basic", variable=self.mode_var, value="basic",
                        bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
+        tk.Radiobutton(mode_frame, text="Small", variable=self.mode_var, value="small",
+                       bg='#0f3460', fg='#ffcc00', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
         tk.Radiobutton(mode_frame, text="Full", variable=self.mode_var, value="full",
                        bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
 

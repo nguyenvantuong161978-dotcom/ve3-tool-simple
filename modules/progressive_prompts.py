@@ -943,8 +943,12 @@ Return JSON only:
         # → API must compress → reduces image_count to fit response
         # SOLUTION: Call API separately for each segment to get accurate count
         # OPTIMIZATION: Call all APIs in parallel for speed
+        # v1.0.72: Support "small" mode - Segment 1 detailed, Segments 2+ key moments only
         # =====================================================================
+        excel_mode = self.config.get("excel_mode", "full").lower()
         self._log(f"\n  [PHASE 2] Calculating image_count for {len(segments)} segments (parallel)...")
+        if excel_mode == "small":
+            self._log(f"  [SMALL MODE] Segment 1: 5-8s/scene | Segments 2+: KEY MOMENTS only")
 
         def _calculate_image_count_for_segment(seg_with_idx):
             """Helper function to calculate image count for one segment"""
@@ -958,12 +962,46 @@ Return JSON only:
             seg_text = " ".join([e.text for e in seg_entries])
             seg_duration = srt_count * (total_duration / total_srt) if total_duration > 0 else srt_count * 3
 
-            # Calculate expected range (5-8 seconds per image) - v1.0.71: tăng từ 3-6s lên 5-8s
-            min_images = max(1, int(seg_duration / 8))  # 8s max per image
-            max_images = max(1, int(seg_duration / 5))  # 5s min per image
-            target_images = int((min_images + max_images) / 2)
+            # v1.0.72: SMALL MODE - Different logic for Segment 1 vs Segments 2+
+            is_small_mode = excel_mode == "small"
+            is_segment_1 = (idx == 1)
 
-            calc_prompt = f"""Calculate the number of IMAGES needed for this story segment.
+            if is_small_mode and not is_segment_1:
+                # SMALL MODE - Segments 2+: KEY MOMENTS only (20-30s per image)
+                min_images = max(1, int(seg_duration / 30))  # 30s max per image
+                max_images = max(2, int(seg_duration / 20))  # 20s min per image
+                target_images = max(2, int((min_images + max_images) / 2))
+
+                calc_prompt = f"""Identify KEY VISUAL MOMENTS for this story segment.
+
+SEGMENT: "{seg.get('segment_name', f'Segment {idx}')}"
+NARRATIVE: {seg.get('message', 'Not specified')}
+MOOD: {seg.get('mood', 'Not specified')}
+
+DURATION: ~{seg_duration:.1f} seconds
+CONTENT SAMPLE: {seg_text[:300]}...
+
+TASK: This is a SUMMARY segment. Identify only the MOST IMPORTANT visual moments.
+Do NOT cover every detail - only key turning points, emotional peaks, and memorable images.
+
+REQUIREMENTS:
+- Minimum: {min_images} images
+- Maximum: {max_images} images
+- Target: {target_images} images (1 image per 20-30 seconds)
+
+Return JSON only:
+{{{{
+    "image_count": {target_images},
+    "key_moments": ["moment 1", "moment 2", ...]
+}}}}"""
+                mode_label = "SMALL-KEY"
+            else:
+                # NORMAL/FULL/SMALL-Segment1: Standard 5-8s per image
+                min_images = max(1, int(seg_duration / 8))  # 8s max per image
+                max_images = max(1, int(seg_duration / 5))  # 5s min per image
+                target_images = int((min_images + max_images) / 2)
+
+                calc_prompt = f"""Calculate the number of IMAGES needed for this story segment.
 
 SEGMENT: "{seg.get('segment_name', f'Segment {idx}')}"
 NARRATIVE: {seg.get('message', 'Not specified')}
@@ -975,21 +1013,22 @@ CONTENT SAMPLE: {seg_text[:500]}...
 TASK: Calculate how many images this segment needs for video creation.
 
 CRITICAL REQUIREMENTS:
-- Minimum: {min_images} images (6s per image max)
-- Maximum: {max_images} images (3s per image min)
+- Minimum: {min_images} images (8s per image max)
+- Maximum: {max_images} images (5s per image min)
 - Target: {target_images} images (balance)
 
 CONSIDER:
 - Emotional scenes: More images for impact
 - Action/fast pacing: More images
 - Dialogue-heavy: Fewer images but >= minimum
-- One image typically covers 5-8 SRT entries (v1.0.71: slower pacing)
+- One image typically covers 5-8 SRT entries
 
 Return JSON only:
 {{{{
     "image_count": {target_images},
     "reasoning": "Brief explanation (optional)"
 }}}}"""
+                mode_label = "SMALL-SEG1" if (is_small_mode and is_segment_1) else "NORMAL"
 
             calc_response = self._call_api(calc_prompt, temperature=0.2, max_tokens=500)
 
@@ -999,13 +1038,13 @@ Return JSON only:
                     calculated_count = calc_data["image_count"]
                     # Clamp to range
                     final_count = max(min_images, min(calculated_count, max_images))
-                    return (idx, final_count, srt_count, "API")
+                    return (idx, final_count, srt_count, f"API-{mode_label}")
                 else:
                     # Fallback: Use target
-                    return (idx, target_images, srt_count, "fallback-parse")
+                    return (idx, target_images, srt_count, f"fallback-{mode_label}")
             else:
                 # API failed, use target
-                return (idx, target_images, srt_count, "fallback-api")
+                return (idx, target_images, srt_count, f"fallback-{mode_label}")
 
         # Execute in parallel with ThreadPoolExecutor
         max_workers = min(10, len(segments))  # Limit to 10 concurrent calls
