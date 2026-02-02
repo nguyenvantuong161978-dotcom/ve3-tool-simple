@@ -1,22 +1,22 @@
-1.0.66
-2026-02-02 23:30
-GUI: Nút "XONG MA" + Thống nhất TIMEOUT 6 tiếng
+1.0.67
+2026-02-02 23:35
+Fix: KHÔNG XÓA master source - dựa vào VISUAL để check done
 
-1. vm_manager_gui.py:
-   - Thêm nút "XONG MA" (màu cam, góc phải)
-   - Click để chủ động hoàn thành mã đang chạy
-   - Confirm trước khi thực hiện
-   - Copy về máy chủ → Chuyển mã tiếp theo
+1. run_worker.py: copy_from_master()
+   - BỎ delete_master_source() sau khi copy
+   - KHÔNG xóa project trên máy chủ nữa
+   - Dựa vào VISUAL folder để biết mã đã xong
 
-2. _run_chrome1.py:
-   - PROJECT_TIMEOUT = 6 * 3600 (thống nhất)
-   - Khi timeout: Coi như hoàn thành
+2. Logic mới:
+   - Copy từ master → VM (KHÔNG XÓA master)
+   - VM làm mã
+   - Khi xong → Copy về VISUAL trên master
+   - is_project_complete_on_master() kiểm tra VISUAL
+   - Nếu có trong VISUAL → skip, không làm lại
 
-3. Logic thống nhất:
-   - Hoàn thành tự động
-   - Timeout >=6 tiếng
-   - Click "XONG MA"
-   → Tất cả đều: Copy về máy chủ → Next project
+3. Giải quyết bug:
+   - Trước: Mã cứ làm đi làm lại vì bị xóa rồi lại có
+   - Sau: Check VISUAL trước khi pick → không làm lại
 
-4. v1.0.65: project_elapsed_seconds tracking
-5. v1.0.64: GUI hiển thị thời gian còn lại
+4. v1.0.66: Nút "XONG MA" + TIMEOUT 6 tiếng
+5. v1.0.65: project_elapsed_seconds tracking

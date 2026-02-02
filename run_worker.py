@@ -484,7 +484,11 @@ def delete_local_project(code: str):
 
 
 def copy_from_master(code: str) -> Path:
-    """Copy project from master to local (or return local if already exists)."""
+    """Copy project from master to local (or return local if already exists).
+
+    v1.0.67: KHÔNG XÓA master source sau khi copy.
+    Logic mới: Dựa vào VISUAL folder để biết mã đã xong (is_project_complete_on_master).
+    """
     src = MASTER_PROJECTS / code
     dst = LOCAL_PROJECTS / code
 
@@ -512,8 +516,8 @@ def copy_from_master(code: str) -> Path:
                 shutil.copy2(srt_src, srt_dst)
                 print(f"  [COPY] Copied SRT from master")
 
-            # FIX v1.0.60: Xóa master source sau khi update để tránh máy khác pick trùng
-            delete_master_source(code)
+            # v1.0.67: KHÔNG XÓA master source - dựa vào VISUAL để check done
+            # delete_master_source(code)  # REMOVED
         return dst
 
     # Local doesn't exist, need to copy from master
@@ -524,8 +528,9 @@ def copy_from_master(code: str) -> Path:
     print(f"  [COPY] Copying from master: {code}")
     shutil.copytree(src, dst)
     print(f"  [OK] Copied to: {dst}")
-    # Cleanup: delete from master after successful copy
-    delete_master_source(code)
+
+    # v1.0.67: KHÔNG XÓA master source - dựa vào VISUAL để check done
+    # delete_master_source(code)  # REMOVED
 
     return dst
 
