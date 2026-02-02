@@ -2607,8 +2607,8 @@ class SmartEngine:
                 if total_scenes > 0:
                     break
 
-                # Nếu Chrome 2 và không đọc được, retry
-                if hasattr(self, 'worker_id') and self.worker_id == 2 and check_attempt < max_check_retries - 1:
+                # Nếu đang chạy song song và không đọc được, retry
+                if hasattr(self, 'total_workers') and self.total_workers > 1 and check_attempt < max_check_retries - 1:
                     self.log(f"  [RETRY {check_attempt+1}/{max_check_retries}] Scenes=0, Excel có thể bị lock, waiting {check_retry_delay}s...", "WARN")
                     _time.sleep(check_retry_delay)
                     continue
