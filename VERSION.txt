@@ -1,3 +1,3 @@
-1.0.54
-2026-02-02 01:30
-Fix: Chrome 2 tăng retry 10 lần x 5s khi đọc Excel bị lock
+1.0.55
+2026-02-02 01:45
+Fix: Cả Chrome 1 và Chrome 2 đều KHÔNG XÓA Excel khi chạy song song

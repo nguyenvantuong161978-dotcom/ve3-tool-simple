@@ -2624,13 +2624,13 @@ class SmartEngine:
 
         # Kiểm tra sau retry loop
         if total_scenes == 0 or scenes_with_prompts == 0:
-            # QUAN TRỌNG: Nếu là Chrome Worker 2, KHÔNG XÓA Excel!
-            # Chrome 1 có thể đang ghi file → Chrome 2 không đọc được
+            # QUAN TRỌNG: Nếu đang chạy song song (total_workers > 1), KHÔNG XÓA Excel!
+            # Chrome 1 (worker_id=0) hoặc Chrome 2 (worker_id=1) có thể đang ghi file
             # Chỉ return error để retry sau
-            if hasattr(self, 'worker_id') and self.worker_id == 2:
-                self.log("[WARN] Excel không có scenes sau retry - có thể Chrome 1 đang ghi file", "WARN")
-                self.log("       Chrome 2 sẽ đợi và retry sau...", "WARN")
-                return {"error": "excel_locked_by_chrome1"}
+            if hasattr(self, 'total_workers') and self.total_workers > 1:
+                self.log("[WARN] Excel không có scenes sau retry - đang chạy song song, không xóa", "WARN")
+                self.log("       Worker sẽ đợi và retry sau...", "WARN")
+                return {"error": "excel_locked_parallel_mode"}
 
             # Chrome 1 hoặc worker khác: có thể tạo lại
             self.log("[WARN] Excel chưa có scenes! Đang tạo lại...", "WARN")
@@ -2646,12 +2646,12 @@ class SmartEngine:
         all_prompts = self._load_prompts(excel_path, proj_dir)
 
         if not all_prompts:
-            # QUAN TRỌNG: Nếu là Chrome Worker 2, KHÔNG XÓA Excel!
-            # Chrome 1 có thể đang ghi file → Chrome 2 không đọc được
-            if hasattr(self, 'worker_id') and self.worker_id == 2:
-                self.log(f"[WARN] Excel có 0 prompts - có thể Chrome 1 đang ghi file", "WARN")
-                self.log("       Chrome 2 sẽ đợi và retry sau...", "WARN")
-                return {"error": "excel_locked_by_chrome1"}
+            # QUAN TRỌNG: Nếu đang chạy song song (total_workers > 1), KHÔNG XÓA Excel!
+            # Chrome 1 hoặc Chrome 2 có thể đang ghi file
+            if hasattr(self, 'total_workers') and self.total_workers > 1:
+                self.log(f"[WARN] Excel có 0 prompts - đang chạy song song, không xóa", "WARN")
+                self.log("       Worker sẽ đợi và retry sau...", "WARN")
+                return {"error": "excel_locked_parallel_mode"}
 
             # Chrome 1 hoặc worker khác: có thể tạo lại
             self.log(f"[WARN] Excel có 0 prompts - xóa file lỗi và tạo lại...", "WARN")
