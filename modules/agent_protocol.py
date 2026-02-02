@@ -113,6 +113,7 @@ class WorkerStatus:
     last_error_type: str = ""
     last_update: str = ""
     uptime_seconds: int = 0
+    project_elapsed_seconds: int = 0  # v1.0.65: Time spent on current project
     # v1.0.47: Track specific scenes
     scenes_completed: List[int] = None  # List of completed scene IDs
     scenes_failed: List[int] = None     # List of failed scene IDs
@@ -136,6 +137,8 @@ class WorkerStatus:
             d['scenes_failed'] = []
         if 'last_action' not in d:
             d['last_action'] = ''
+        if 'project_elapsed_seconds' not in d:
+            d['project_elapsed_seconds'] = 0
         return cls(**d)
 
 
@@ -240,6 +243,7 @@ class AgentWorker:
     def __init__(self, worker_id: str):
         self.worker_id = worker_id
         self.start_time = datetime.now()
+        self.project_start_time = None  # v1.0.65: Track project start time
         self._status = WorkerStatus(worker_id=worker_id)
         self._log_file = None
         self._status_thread = None
@@ -296,7 +300,13 @@ class AgentWorker:
             self._status.state = state
         if progress is not None:
             self._status.progress = progress
-        if current_project:
+        if current_project is not None:
+            # v1.0.65: Track project start time
+            if current_project != self._status.current_project:
+                if current_project:  # New project started
+                    self.project_start_time = datetime.now()
+                else:  # Project cleared
+                    self.project_start_time = None
             self._status.current_project = current_project
         if current_task:
             self._status.current_task = current_task
@@ -328,6 +338,12 @@ class AgentWorker:
         """Lưu status vào file."""
         self._status.last_update = datetime.now().isoformat()
         self._status.uptime_seconds = int((datetime.now() - self.start_time).total_seconds())
+
+        # v1.0.65: Calculate project elapsed time
+        if self.project_start_time:
+            self._status.project_elapsed_seconds = int((datetime.now() - self.project_start_time).total_seconds())
+        else:
+            self._status.project_elapsed_seconds = 0
 
         status_path = STATUS_DIR / f"{self.worker_id}.json"
         try:

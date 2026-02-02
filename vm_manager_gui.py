@@ -1300,19 +1300,19 @@ class SimpleGUI(tk.Tk):
             lines.append("")
             lines.append(f"  ERROR:   {last_error[:60]}")
 
-        # Uptime and Remaining Time (v1.0.64)
-        uptime = status.get('uptime_seconds', 0)
+        # v1.0.65: Project Elapsed Time and Remaining Time
+        project_elapsed = status.get('project_elapsed_seconds', 0)
         PROJECT_TIMEOUT = 5 * 3600  # 5 hours in seconds
 
-        if uptime > 0:
-            # Uptime display
-            uptime_hours = int(uptime // 3600)
-            uptime_mins = int((uptime % 3600) // 60)
+        if project_elapsed > 0:
+            # Elapsed time for current project
+            elapsed_hours = int(project_elapsed // 3600)
+            elapsed_mins = int((project_elapsed % 3600) // 60)
             lines.append("")
-            lines.append(f"  Elapsed: {uptime_hours}h {uptime_mins}m")
+            lines.append(f"  Project Time: {elapsed_hours}h {elapsed_mins}m")
 
             # Remaining time calculation
-            remaining = max(0, PROJECT_TIMEOUT - uptime)
+            remaining = max(0, PROJECT_TIMEOUT - project_elapsed)
             remaining_hours = int(remaining // 3600)
             remaining_mins = int((remaining % 3600) // 60)
 
@@ -1322,8 +1322,8 @@ class SimpleGUI(tk.Tk):
                 lines.append(f"  Remaining: TIMEOUT!")
 
             # Time progress bar
-            time_progress = self._make_progress_bar(int(uptime), PROJECT_TIMEOUT)
-            lines.append(f"  Time:    {time_progress}")
+            time_progress = self._make_progress_bar(int(project_elapsed), PROJECT_TIMEOUT)
+            lines.append(f"  Timeout:  {time_progress}")
 
         lines.append("")
         lines.append(f"{'='*50}")

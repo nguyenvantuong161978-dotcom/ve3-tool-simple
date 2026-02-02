@@ -1,18 +1,22 @@
 1.0.65
-2026-02-02 23:15
-GUI: Hiển thị tiến độ chính xác hơn
+2026-02-02 23:20
+GUI: Tiến độ chính xác + Thời gian project
 
-1. _run_chrome1.py, _run_chrome2.py: progress_callback()
-   - Parse log format [34/445] ID: 123 thay vì "Scene X"
-   - current_scene = index (34) - số ảnh đang làm
-   - total_scenes = total (445) - tổng ảnh được phân
-   - step_name = "scene_123" - ID scene đang xử lý
+1. agent_protocol.py: WorkerStatus, AgentWorker
+   - Thêm project_elapsed_seconds (thời gian MÃ đang chạy)
+   - project_start_time reset khi đổi project
+   - Khác với uptime_seconds (thời gian worker chạy)
 
-2. vm_manager_gui.py: _update_worker_logs()
-   - Hiển thị Progress: 34/445 [====----] 8%
-   - Hiển thị Processing: scene_123
-   - Hiển thị Elapsed / Remaining / Timeout bar
+2. _run_chrome1.py, _run_chrome2.py: progress_callback()
+   - Parse log format [34/445] ID: 123
+   - current_scene = 34, total_scenes = 445
+   - step_name = "scene_123"
 
-3. v1.0.64: GUI hiển thị thời gian còn lại
-4. v1.0.63: Timeout 5 tiếng cho _run_chrome1.py
-5. v1.0.62: Parse is_child đúng cách
+3. vm_manager_gui.py: _update_worker_logs()
+   - Progress: 34/445 [====----] 8%
+   - Processing: scene_123
+   - Project Time: 2h 30m / Remaining: 2h 30m
+   - Timeout bar hiển thị % đã dùng
+
+4. v1.0.64: GUI hiển thị thời gian còn lại (uptime)
+5. v1.0.63: Timeout 5 tiếng cho _run_chrome1.py
