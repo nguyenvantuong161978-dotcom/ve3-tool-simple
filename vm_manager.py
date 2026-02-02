@@ -2409,14 +2409,24 @@ class VMManager:
         for wid in self.workers:
             self.stop_worker(wid)
 
-        # 2. Copy kết quả về máy chủ (nếu có AUTO path)
+        # 2. Copy kết quả về máy chủ (nếu có AUTO path VÀ có ảnh)
+        # v1.0.74: Chỉ copy nếu có ảnh - tránh copy project rỗng
         if self.auto_path:
-            try:
-                self.log(f"Copying {project_code} to master...", "SYSTEM")
-                self.copy_project_to_master(project_code)
-                self.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
-            except Exception as e:
-                self.log(f"Failed to copy {project_code}: {e}", "SYSTEM", "ERROR")
+            project_dir = self.project_root / project_code
+            img_dir = project_dir / "img"
+            img_count = 0
+            if img_dir.exists():
+                img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
+
+            if img_count > 0:
+                try:
+                    self.log(f"Có {img_count} ảnh - Copying {project_code} to master...", "SYSTEM")
+                    self.copy_project_to_master(project_code)
+                    self.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
+                except Exception as e:
+                    self.log(f"Failed to copy {project_code}: {e}", "SYSTEM", "ERROR")
+            else:
+                self.log(f"KHÔNG có ảnh - Bỏ qua copy {project_code}", "SYSTEM", "WARN")
 
         # 3. Mark project as completed (timeout)
         if project_code in self.project_tasks:

@@ -550,16 +550,26 @@ def run_scan_loop():
                 if elapsed >= PROJECT_TIMEOUT:
                     print(f"\n{'='*60}")
                     print(f"  [TIMEOUT] Project {target} đã chạy {elapsed_hours:.1f} giờ (>=6h)")
-                    print(f"  Coi như HOÀN THÀNH - Copy về máy chủ...")
-                    print(f"{'='*60}")
-                    # Copy kết quả về VISUAL (giống như hoàn thành)
+
+                    # v1.0.74: CHỈ copy nếu có ảnh - tránh copy project rỗng
                     local_dir = LOCAL_PROJECTS / target
-                    if local_dir.exists():
+                    img_dir = local_dir / "img"
+                    img_count = 0
+                    if img_dir.exists():
+                        img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
+
+                    if img_count > 0:
+                        print(f"  Có {img_count} ảnh - Copy về máy chủ...")
+                        print(f"{'='*60}")
                         try:
                             copy_to_visual(target, local_dir)
-                            print(f"  [v] Copied {target} to VISUAL (timeout = done)")
+                            print(f"  [v] Copied {target} to VISUAL (timeout + {img_count} images)")
                         except Exception as e:
                             print(f"  [x] Failed to copy to VISUAL: {e}")
+                    else:
+                        print(f"  KHÔNG có ảnh - Bỏ qua, chuyển project tiếp theo")
+                        print(f"{'='*60}")
+
                     current_project = None
                     project_start_time = None
                     continue  # Scan lại để pick project tiếp theo

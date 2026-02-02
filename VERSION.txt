@@ -1,17 +1,13 @@
-1.0.73
-2026-02-03 11:30
-Fix: Default Small mode + Prevent premature auto-copy
+1.0.74
+2026-02-03 11:45
+Fix: Chỉ copy sang VISUAL khi có ảnh
 
-1. GUI Changes:
-   - Default mode changed from "basic" to "small"
-   - Small mode: ~100-150 scenes (vs ~550 in basic)
+1. Timeout copy fixes:
+   - _run_chrome1.py: Timeout 6h chỉ copy nếu img_count > 0
+   - vm_manager.py: handle_project_timeout() chỉ copy nếu có ảnh
+   - Tránh copy project rỗng sang máy chủ
 
-2. Bug Fix - Premature auto-copy:
-   - Fixed: Project được copy về VISUAL khi chưa xong
-   - Root cause: Segment 1 detection sai (compare scene_id với SRT range)
-   - Fix: Dùng image_count để xác định Segment 1 scenes
-   - Safeguard: Nếu segment1_scenes empty, không đánh dấu "done"
-
+2. v1.0.73: Default Small mode + Fix premature auto-copy
 3. v1.0.72: Thêm SMALL mode (100-150 scenes)
 4. v1.0.71: Tăng scene duration 5-8s (giảm 35% scenes)
 5. v1.0.70: Excel Worker check VISUAL trước import
