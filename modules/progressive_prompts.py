@@ -1402,8 +1402,16 @@ Return JSON only:
         # VALIDATION 3: GLOBAL image count check - CRITICAL FIX
         # ROOT CAUSE: API may plan too few images globally even if each segment
         # passes local validation (e.g., 66 images for 459 SRT = 7.0 ratio)
+        # v1.0.75: SKIP this check for SMALL mode - we want fewer images intentionally
         # =====================================================================
-        if segments:
+        excel_mode_check = self.config.get("excel_mode", "full").lower()
+        skip_global_check = (excel_mode_check == "small")
+
+        if skip_global_check and segments:
+            total_images = sum(s.get("image_count", 0) for s in segments)
+            self._log(f"\n  [SMALL MODE] Skipping GLOBAL CHECK - keeping {total_images} images")
+
+        if segments and not skip_global_check:
             total_images = sum(s.get("image_count", 0) for s in segments)
             global_ratio = len(srt_entries) / max(1, total_images)
 
