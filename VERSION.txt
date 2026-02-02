@@ -1,22 +1,19 @@
-1.0.65
-2026-02-02 23:20
-GUI: Tiến độ chính xác + Thời gian project
+1.0.66
+2026-02-02 23:25
+Thống nhất TIMEOUT = 6 tiếng (coi như hoàn thành)
 
-1. agent_protocol.py: WorkerStatus, AgentWorker
-   - Thêm project_elapsed_seconds (thời gian MÃ đang chạy)
-   - project_start_time reset khi đổi project
-   - Khác với uptime_seconds (thời gian worker chạy)
+1. _run_chrome1.py:
+   - PROJECT_TIMEOUT = 6 * 3600 (thay vì 5 tiếng)
+   - Khi timeout: "Coi như HOÀN THÀNH - Copy về máy chủ"
+   - Xử lý giống như project done
 
-2. _run_chrome1.py, _run_chrome2.py: progress_callback()
-   - Parse log format [34/445] ID: 123
-   - current_scene = 34, total_scenes = 445
-   - step_name = "scene_123"
+2. vm_manager_gui.py:
+   - PROJECT_TIMEOUT = 6 * 3600
+   - Hiển thị Remaining time theo 6 tiếng
 
-3. vm_manager_gui.py: _update_worker_logs()
-   - Progress: 34/445 [====----] 8%
-   - Processing: scene_123
-   - Project Time: 2h 30m / Remaining: 2h 30m
-   - Timeout bar hiển thị % đã dùng
+3. Logic thống nhất:
+   - Hoàn thành HOẶC >=6 tiếng → Copy về máy chủ → Next project
+   - vm_manager.py + _run_chrome1.py đều dùng 6 tiếng
 
-4. v1.0.64: GUI hiển thị thời gian còn lại (uptime)
-5. v1.0.63: Timeout 5 tiếng cho _run_chrome1.py
+4. v1.0.65: project_elapsed_seconds tracking
+5. v1.0.64: GUI hiển thị thời gian còn lại

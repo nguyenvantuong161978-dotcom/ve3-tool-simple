@@ -1300,9 +1300,9 @@ class SimpleGUI(tk.Tk):
             lines.append("")
             lines.append(f"  ERROR:   {last_error[:60]}")
 
-        # v1.0.65: Project Elapsed Time and Remaining Time
+        # v1.0.66: Project Elapsed Time and Remaining Time (6 tiếng max)
         project_elapsed = status.get('project_elapsed_seconds', 0)
-        PROJECT_TIMEOUT = 5 * 3600  # 5 hours in seconds
+        PROJECT_TIMEOUT = 6 * 3600  # 6 hours = max time per project
 
         if project_elapsed > 0:
             # Elapsed time for current project

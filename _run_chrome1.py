@@ -508,7 +508,7 @@ def run_scan_loop():
     # Track current project để không nhảy sang project khác
     current_project = None
     project_start_time = None
-    PROJECT_TIMEOUT = 5 * 3600  # 5 tiếng = 18000 giây
+    PROJECT_TIMEOUT = 6 * 3600  # v1.0.66: 6 tiếng (thống nhất với vm_manager.py)
 
     while True:
         cycle += 1
@@ -543,28 +543,28 @@ def run_scan_loop():
                 project_start_time = time.time()  # FIX v1.0.63: Track thời gian bắt đầu
                 print(f"  Starting: {target}")
 
-            # === FIX v1.0.63: CHECK TIMEOUT 5 TIẾNG ===
+            # === v1.0.66: CHECK TIMEOUT 6 TIẾNG (coi như hoàn thành) ===
             if project_start_time:
                 elapsed = time.time() - project_start_time
                 elapsed_hours = elapsed / 3600
                 if elapsed >= PROJECT_TIMEOUT:
                     print(f"\n{'='*60}")
-                    print(f"  [TIMEOUT] Project {target} đã chạy {elapsed_hours:.1f} giờ (>5h)")
-                    print(f"  Moving to next project...")
+                    print(f"  [TIMEOUT] Project {target} đã chạy {elapsed_hours:.1f} giờ (>=6h)")
+                    print(f"  Coi như HOÀN THÀNH - Copy về máy chủ...")
                     print(f"{'='*60}")
-                    # Copy kết quả về VISUAL trước khi chuyển
+                    # Copy kết quả về VISUAL (giống như hoàn thành)
                     local_dir = LOCAL_PROJECTS / target
                     if local_dir.exists():
                         try:
                             copy_to_visual(target, local_dir)
-                            print(f"  [v] Copied {target} to VISUAL (timeout)")
+                            print(f"  [v] Copied {target} to VISUAL (timeout = done)")
                         except Exception as e:
                             print(f"  [x] Failed to copy to VISUAL: {e}")
                     current_project = None
                     project_start_time = None
                     continue  # Scan lại để pick project tiếp theo
                 else:
-                    print(f"  [TIME] Project running: {elapsed_hours:.1f}h / 5h")
+                    print(f"  [TIME] Project running: {elapsed_hours:.1f}h / 6h")
 
             # === UPDATE AGENT STATUS để Chrome 2 biết project đang làm ===
             if _agent:
