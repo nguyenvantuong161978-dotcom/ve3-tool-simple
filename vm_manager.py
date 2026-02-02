@@ -1642,7 +1642,10 @@ class VMManager:
             self.log(f"Failed to create thumbnail: {e}", "SYSTEM", "ERROR")
 
     def copy_project_to_master(self, project_code: str):
-        """Copy project folder to master (AUTO path)."""
+        """Copy project folder to master (AUTO path) and delete local after success.
+
+        v1.0.68: Thêm logic xóa local folder sau khi copy thành công.
+        """
         if not self.auto_path:
             self.log("No AUTO path detected, skip copy", "SYSTEM", "WARN")
             return
@@ -1661,6 +1664,7 @@ class VMManager:
 
         # Copy tất cả files và folders
         import shutil
+        copy_success = True
         for item in src_dir.iterdir():
             dest_item = dest_dir / item.name
             try:
@@ -1672,8 +1676,17 @@ class VMManager:
                     shutil.copy2(str(item), str(dest_item))
             except Exception as e:
                 self.log(f"Failed to copy {item.name}: {e}", "SYSTEM", "ERROR")
+                copy_success = False
 
         self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
+
+        # v1.0.68: Xóa local folder sau khi copy thành công
+        if copy_success:
+            try:
+                shutil.rmtree(str(src_dir))
+                self.log(f"Deleted local folder: {src_dir}", "SYSTEM", "INFO")
+            except Exception as e:
+                self.log(f"Failed to delete local folder: {e}", "SYSTEM", "WARN")
 
     def create_tasks_for_project(self, project_code: str):
         status = self.quality_checker.get_project_status(project_code)
