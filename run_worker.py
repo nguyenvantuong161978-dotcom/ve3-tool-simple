@@ -67,11 +67,13 @@ AUTO_PATH = detect_auto_path()
 
 if AUTO_PATH:
     MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
-    MASTER_VISUAL = AUTO_PATH / "VISUAL"
+    # v1.0.69: Fix path - thống nhất dùng "visual" (chữ thường) với vm_manager.py
+    MASTER_VISUAL = AUTO_PATH / "visual"
 else:
     # Fallback to default (will fail if not accessible)
     MASTER_PROJECTS = Path(r"\\tsclient\D\AUTO\ve3-tool-simple\PROJECTS")
-    MASTER_VISUAL = Path(r"\\tsclient\D\AUTO\VISUAL")
+    # v1.0.69: Fix path - thống nhất dùng "visual" (chữ thường)
+    MASTER_VISUAL = Path(r"\\tsclient\D\AUTO\visual")
 
 # Local PROJECTS folder (worker)
 LOCAL_PROJECTS = TOOL_DIR / "PROJECTS"
@@ -953,7 +955,8 @@ def run_scan_loop():
         AUTO_PATH = detect_auto_path()
         if AUTO_PATH:
             MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
-            MASTER_VISUAL = AUTO_PATH / "VISUAL"
+            # v1.0.69: Fix path - thống nhất dùng "visual" (chữ thường)
+            MASTER_VISUAL = AUTO_PATH / "visual"
 
     if AUTO_PATH:
         print(f"  [v] AUTO path:     {AUTO_PATH}")

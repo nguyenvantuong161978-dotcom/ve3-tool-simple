@@ -1,18 +1,18 @@
-1.0.68
-2026-02-03 00:05
-Fix: Xóa local folder sau khi copy to master thành công
+1.0.69
+2026-02-03 00:15
+Fix: VISUAL path case mismatch - thống nhất "visual" chữ thường
 
-1. vm_manager.py: copy_project_to_master()
-   - Thêm logic xóa local folder sau khi copy thành công
-   - Track copy_success để chỉ xóa khi all files copied OK
-   - Áp dụng cho: hoàn thành tự động, timeout 6h, nút "XONG MA"
+1. run_worker.py: MASTER_VISUAL path
+   - Trước: AUTO_PATH / "VISUAL" (chữ HOA)
+   - Sau: AUTO_PATH / "visual" (chữ thường)
+   - Thống nhất với vm_manager.py dùng "visual"
 
-2. Workflow hoàn chỉnh:
-   - Copy từ master → VM (KHÔNG XÓA master)
-   - VM làm mã
-   - Khi xong → Copy về VISUAL + XÓA LOCAL
-   - Check VISUAL để không làm lại mã đã xong
+2. Bug đã fix:
+   - vm_manager.py copy vào: AUTO/visual/{code}/
+   - run_worker.py check trong: AUTO/VISUAL/{code}/ (SAI!)
+   - Kết quả: is_project_complete_on_master() không tìm thấy
+   - Mã cứ bị copy lại và làm lại
 
-3. v1.0.67: Không xóa master source, dựa VISUAL check done
-4. v1.0.66: Nút "XONG MA" + TIMEOUT 6 tiếng
-5. v1.0.65: project_elapsed_seconds tracking
+3. v1.0.68: Xóa local folder sau copy to master
+4. v1.0.67: Không xóa master source, dựa VISUAL check done
+5. v1.0.66: Nút "XONG MA" + TIMEOUT 6 tiếng
