@@ -1,8 +1,11 @@
-1.0.58
-2026-02-02 09:52
-Fix: BẢO VỆ Excel khỏi bị xóa khi đang được Chrome Worker sử dụng
+1.0.59
+2026-02-02 12:30
+Fix: Chrome restart exhausted - DỪNG WORKER thay vì chạy vô nghĩa
 
-1. run_excel_api.py: Thêm read_error flag - SKIP thay vì tạo mới khi có lỗi đọc
-2. excel_manager.py: Retry 3 lần khi gặp BadZipFile trước khi xóa file
-   - BadZipFile có thể do file đang được write, không phải corrupted
-   - Retry với delay 2s, 4s, 6s trước khi quyết định xóa
+1. chrome_manager.py: Thêm ChromeRestartExhaustedException
+   - Khi restart 5 lần fail → raise exception thay vì return False
+   - Worker sẽ DỪNG hoàn toàn thay vì tiếp tục với API chưa setup
+
+2. browser_flow_generator.py: Catch exception và dừng worker
+   - Không silent fail ChromeRestartExhaustedException
+   - Log rõ ràng: "Worker DỪNG - cần khởi động lại từ GUI!"

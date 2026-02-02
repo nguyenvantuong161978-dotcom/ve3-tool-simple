@@ -3925,7 +3925,7 @@ class BrowserFlowGenerator:
 
                     # Đánh dấu lỗi với ChromeManager để giám sát
                     try:
-                        from modules.chrome_manager import get_chrome_manager
+                        from modules.chrome_manager import get_chrome_manager, ChromeRestartExhaustedException
                         chrome_mgr = get_chrome_manager()
                         chrome_mgr.mark_error(self.worker_id, str(error))
 
@@ -3940,6 +3940,11 @@ class BrowserFlowGenerator:
                                     drission_api = worker.drission_api
                             else:
                                 self._log(f"[Manager] [x] Restart Chrome {self.worker_id} thất bại", "warn")
+                    except ChromeRestartExhaustedException as exhaust_e:
+                        # Chrome đã restart quá nhiều lần - DỪNG WORKER HOÀN TOÀN
+                        self._log(f"[FATAL] {exhaust_e}", "error")
+                        self._log(f"[FATAL] Worker {self.worker_id} DỪNG - cần khởi động lại từ GUI!", "error")
+                        raise  # Re-raise để dừng worker
                     except Exception as mgr_e:
                         pass  # Silent fail - fallback to original logic
 

@@ -43,6 +43,11 @@ from enum import Enum
 from pathlib import Path
 
 
+class ChromeRestartExhaustedException(Exception):
+    """Raised when Chrome has been restarted too many times and should stop."""
+    pass
+
+
 class ChromeStatus(Enum):
     """Trạng thái của Chrome worker."""
     IDLE = "idle"           # Chưa khởi động
@@ -50,6 +55,7 @@ class ChromeStatus(Enum):
     ERROR = "error"         # Bị lỗi, cần restart
     RESTARTING = "restarting"  # Đang restart
     STOPPED = "stopped"     # Đã dừng
+    EXHAUSTED = "exhausted"  # Đã restart quá nhiều lần, cần dừng hoàn toàn
 
 
 @dataclass
@@ -203,8 +209,12 @@ class ChromeManager:
 
         # Check giới hạn restart
         if worker.restart_count >= self.MAX_RESTARTS_PER_WORKER:
-            self.log(f"Chrome {worker_id} đã restart {worker.restart_count} lần, bỏ qua", "WARN")
-            return False
+            worker.status = ChromeStatus.EXHAUSTED
+            self.log(f"Chrome {worker_id} đã restart {worker.restart_count} lần - DỪNG HOÀN TOÀN!", "ERROR")
+            raise ChromeRestartExhaustedException(
+                f"Chrome {worker_id} đã restart {self.MAX_RESTARTS_PER_WORKER} lần. "
+                f"Worker cần dừng hoàn toàn và khởi động lại."
+            )
 
         worker.status = ChromeStatus.RESTARTING
         worker.restart_count += 1
