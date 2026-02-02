@@ -1049,6 +1049,16 @@ class SimpleGUI(tk.Tk):
             btn.pack(side="left", padx=2)
             self.log_tab_buttons[wid] = btn
 
+        # v1.0.66: Force Complete button (right side)
+        self.force_complete_btn = tk.Button(
+            tab_frame, text="XONG MA",
+            command=self._force_complete_project,
+            bg='#ff6600', fg='white',
+            font=("Arial", 8, "bold"),
+            padx=8, pady=2
+        )
+        self.force_complete_btn.pack(side="right", padx=5)
+
         # Log text area
         log_text_frame = tk.Frame(logs_frame, bg='#1a1a2e')
         log_text_frame.pack(fill="both", expand=True)
@@ -1205,6 +1215,60 @@ class SimpleGUI(tk.Tk):
     def _switch_log_tab(self, worker_id: str):
         """Switch log tab to show different worker."""
         self._update_worker_logs(worker_id)
+
+    def _force_complete_project(self):
+        """v1.0.66: Force complete current project and move to next."""
+        if not self.manager:
+            return
+
+        # Get current project from Chrome workers
+        current_project = None
+        for wid in ["chrome_1", "chrome_2"]:
+            status = self.manager.get_worker_status(wid)
+            if status and status.get('current_project'):
+                current_project = status.get('current_project')
+                break
+
+        if not current_project:
+            from tkinter import messagebox
+            messagebox.showinfo("Thong bao", "Khong co ma dang chay!")
+            return
+
+        # Confirm
+        from tkinter import messagebox
+        if not messagebox.askyesno(
+            "Xac nhan",
+            f"Ban muon HOAN THANH ma {current_project}?\n\n"
+            f"- Copy ket qua ve may chu\n"
+            f"- Chuyen sang ma tiep theo"
+        ):
+            return
+
+        # Force complete
+        self.manager.log("=" * 60, "SYSTEM")
+        self.manager.log(f"FORCE COMPLETE: {current_project}", "SYSTEM", "WARN")
+        self.manager.log("=" * 60, "SYSTEM")
+
+        try:
+            # Copy to master
+            self.manager.log(f"Copying {current_project} to master...", "SYSTEM")
+            self.manager.copy_project_to_master(current_project)
+            self.manager.log(f"Copied {current_project} successfully", "SYSTEM", "SUCCESS")
+
+            # Mark as completed
+            if not hasattr(self.manager, '_completed_projects'):
+                self.manager._completed_projects = set()
+            self.manager._completed_projects.add(current_project)
+
+            # Reset project tracking
+            self.manager.project_start_time = None
+            self.manager.current_project_code = None
+
+            messagebox.showinfo("Thanh cong", f"Da hoan thanh ma {current_project}!\nChuyen sang ma tiep theo...")
+
+        except Exception as e:
+            self.manager.log(f"Force complete failed: {e}", "SYSTEM", "ERROR")
+            messagebox.showerror("Loi", f"Khong the hoan thanh ma:\n{e}")
 
     def _update_worker_logs(self, worker_id: str = None):
         """v1.0.47: Show structured worker status instead of raw logs."""

@@ -1,19 +1,22 @@
 1.0.66
-2026-02-02 23:25
-Thống nhất TIMEOUT = 6 tiếng (coi như hoàn thành)
+2026-02-02 23:30
+GUI: Nút "XONG MA" + Thống nhất TIMEOUT 6 tiếng
 
-1. _run_chrome1.py:
-   - PROJECT_TIMEOUT = 6 * 3600 (thay vì 5 tiếng)
-   - Khi timeout: "Coi như HOÀN THÀNH - Copy về máy chủ"
-   - Xử lý giống như project done
+1. vm_manager_gui.py:
+   - Thêm nút "XONG MA" (màu cam, góc phải)
+   - Click để chủ động hoàn thành mã đang chạy
+   - Confirm trước khi thực hiện
+   - Copy về máy chủ → Chuyển mã tiếp theo
 
-2. vm_manager_gui.py:
-   - PROJECT_TIMEOUT = 6 * 3600
-   - Hiển thị Remaining time theo 6 tiếng
+2. _run_chrome1.py:
+   - PROJECT_TIMEOUT = 6 * 3600 (thống nhất)
+   - Khi timeout: Coi như hoàn thành
 
 3. Logic thống nhất:
-   - Hoàn thành HOẶC >=6 tiếng → Copy về máy chủ → Next project
-   - vm_manager.py + _run_chrome1.py đều dùng 6 tiếng
+   - Hoàn thành tự động
+   - Timeout >=6 tiếng
+   - Click "XONG MA"
+   → Tất cả đều: Copy về máy chủ → Next project
 
 4. v1.0.65: project_elapsed_seconds tracking
 5. v1.0.64: GUI hiển thị thời gian còn lại
