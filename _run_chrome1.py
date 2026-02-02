@@ -500,12 +500,15 @@ def run_scan_loop():
     print(f"  Channel filter:  {WORKER_CHANNEL or 'ALL'}")
     print(f"  Mode:            BASIC (no IP rotation)")
     print(f"  Duration:        Segment-based (no 8s limit)")
+    print(f"  Timeout:         5 hours per project")
     print(f"{'='*60}")
 
     cycle = 0
 
     # Track current project để không nhảy sang project khác
     current_project = None
+    project_start_time = None
+    PROJECT_TIMEOUT = 5 * 3600  # 5 tiếng = 18000 giây
 
     while True:
         cycle += 1
@@ -537,7 +540,31 @@ def run_scan_loop():
             else:
                 target = pending[0]
                 current_project = target
+                project_start_time = time.time()  # FIX v1.0.63: Track thời gian bắt đầu
                 print(f"  Starting: {target}")
+
+            # === FIX v1.0.63: CHECK TIMEOUT 5 TIẾNG ===
+            if project_start_time:
+                elapsed = time.time() - project_start_time
+                elapsed_hours = elapsed / 3600
+                if elapsed >= PROJECT_TIMEOUT:
+                    print(f"\n{'='*60}")
+                    print(f"  [TIMEOUT] Project {target} đã chạy {elapsed_hours:.1f} giờ (>5h)")
+                    print(f"  Moving to next project...")
+                    print(f"{'='*60}")
+                    # Copy kết quả về VISUAL trước khi chuyển
+                    local_dir = LOCAL_PROJECTS / target
+                    if local_dir.exists():
+                        try:
+                            copy_to_visual(target, local_dir)
+                            print(f"  [v] Copied {target} to VISUAL (timeout)")
+                        except Exception as e:
+                            print(f"  [x] Failed to copy to VISUAL: {e}")
+                    current_project = None
+                    project_start_time = None
+                    continue  # Scan lại để pick project tiếp theo
+                else:
+                    print(f"  [TIME] Project running: {elapsed_hours:.1f}h / 5h")
 
             # === UPDATE AGENT STATUS để Chrome 2 biết project đang làm ===
             if _agent:
@@ -553,6 +580,7 @@ def run_scan_loop():
                 else:
                     print(f"  Project {target} completed!")
                     current_project = None  # Move to next project
+                    project_start_time = None
             except KeyboardInterrupt:
                 print("\n\nStopped by user.")
                 # Reset agent status
