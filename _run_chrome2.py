@@ -959,16 +959,22 @@ def process_project_with_agent(code: str) -> bool:
         """Callback that also updates agent with scene progress."""
         print(msg)
 
-        # Try to extract scene number from message
-        if _agent and "Scene" in msg:
+        # v1.0.65: Parse progress from log format [34/445] ID: 123
+        if _agent:
             import re
-            match = re.search(r'Scene\s*(\d+)', msg, re.IGNORECASE)
+            # Format: [current/total] ID: scene_id
+            match = re.search(r'\[(\d+)/(\d+)\]\s*ID:\s*(\S+)', msg)
             if match:
-                scene_num = int(match.group(1))
-                current_scene[0] = scene_num
-                progress = int((scene_num / total_scenes * 100) if total_scenes > 0 else 0)
+                current_idx = int(match.group(1))  # 34
+                total_idx = int(match.group(2))    # 445
+                scene_id = match.group(3)          # 123
+
+                current_scene[0] = current_idx
+                progress = int((current_idx / total_idx * 100) if total_idx > 0 else 0)
                 _agent.update_status(
-                    current_scene=scene_num,
+                    current_scene=current_idx,
+                    total_scenes=total_idx,
+                    step_name=f"scene_{scene_id}",  # Show actual scene ID
                     progress=progress
                 )
 

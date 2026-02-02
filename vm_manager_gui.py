@@ -1265,28 +1265,28 @@ class SimpleGUI(tk.Tk):
             total_scenes = status.get('total_scenes', 0)
             completed = status.get('completed_count', 0)
             failed = status.get('failed_count', 0)
-            current_task = status.get('current_task', '')
+            step_name = status.get('step_name', '')  # v1.0.65: actual scene ID
 
-            # v1.0.64: Show current task (scene being processed)
-            if current_task:
-                # Parse scene number from task name (format: image_AR8-0003_163347)
-                task_parts = current_task.split('_')
-                if len(task_parts) >= 3:
-                    scene_num = task_parts[-1]  # Last part is scene number
-                    lines.append(f"  Processing: Scene {scene_num}")
-                else:
-                    lines.append(f"  Processing: {current_task}")
+            # v1.0.65: Show progress and actual scene ID
+            if current_scene > 0 and total_scenes > 0:
+                # Show progress: 34/445
+                lines.append(f"  Progress: {current_scene}/{total_scenes}")
+                progress_bar = self._make_progress_bar(current_scene, total_scenes)
+                lines.append(f"           {progress_bar}")
                 lines.append("")
 
-            if current_scene > 0:
-                lines.append(f"  Scene:   {current_scene}/{total_scenes}")
-            if completed > 0 or total_scenes > 0:
-                lines.append(f"  Done:    {completed}")
-                if total_scenes > 0:
-                    progress_bar = self._make_progress_bar(completed, total_scenes)
-                    lines.append(f"  Progress: {progress_bar}")
+            # Show actual scene ID being processed
+            if step_name:
+                lines.append(f"  Processing: {step_name}")
+            elif current_scene > 0:
+                lines.append(f"  Processing: scene {current_scene}")
+            lines.append("")
+
+            # Lifetime stats
+            if completed > 0:
+                lines.append(f"  Total Done: {completed}")
             if failed > 0:
-                lines.append(f"  Failed:  {failed}")
+                lines.append(f"  Total Failed: {failed}")
 
         # Last action
         last_action = status.get('last_action', '')

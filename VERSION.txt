@@ -1,15 +1,18 @@
-1.0.64
-2026-02-02 23:00
-GUI: Hiển thị tiến độ hiện đại hơn
+1.0.65
+2026-02-02 23:15
+GUI: Hiển thị tiến độ chính xác hơn
 
-1. vm_manager_gui.py: _update_worker_logs()
-   - Hiển thị scene đang xử lý (Processing: Scene XXX)
-   - Hiển thị thời gian đã chạy (Elapsed: Xh Ym)
-   - Hiển thị thời gian còn lại (Remaining: Xh Ym)
-   - Thanh tiến độ thời gian (Time: [====----] 40%)
-   - Real-time update
+1. _run_chrome1.py, _run_chrome2.py: progress_callback()
+   - Parse log format [34/445] ID: 123 thay vì "Scene X"
+   - current_scene = index (34) - số ảnh đang làm
+   - total_scenes = total (445) - tổng ảnh được phân
+   - step_name = "scene_123" - ID scene đang xử lý
 
-2. v1.0.63: Timeout 5 tiếng cho _run_chrome1.py
-3. v1.0.62: Parse is_child đúng cách
-4. v1.0.61: Không copy Excel từ master nếu local đã có
-5. v1.0.60: Xóa master source sau copy/update
+2. vm_manager_gui.py: _update_worker_logs()
+   - Hiển thị Progress: 34/445 [====----] 8%
+   - Hiển thị Processing: scene_123
+   - Hiển thị Elapsed / Remaining / Timeout bar
+
+3. v1.0.64: GUI hiển thị thời gian còn lại
+4. v1.0.63: Timeout 5 tiếng cho _run_chrome1.py
+5. v1.0.62: Parse is_child đúng cách
