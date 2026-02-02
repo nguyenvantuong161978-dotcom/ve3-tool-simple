@@ -1,15 +1,17 @@
-1.0.70
-2026-02-03 00:20
-Fix: Excel Worker cũng check VISUAL trước khi import
+1.0.71
+2026-02-03 01:50
+Optimize: Giảm số scenes - mỗi scene 5-8 giây (thay vì 3-6s)
 
-1. run_excel_api.py: Thêm is_project_in_visual()
-   - Check project có trong AUTO/visual/ chưa
-   - Nếu có → skip, không import từ master
-   - Tránh làm lại mã đã hoàn thành
+1. modules/progressive_prompts.py:
+   - Trước: 3-6 giây/scene → video 1h = ~700-900 scenes
+   - Sau: 5-8 giây/scene → video 1h = ~450-550 scenes
+   - Giảm ~35-40% số lượng scenes
 
-2. v1.0.69: Fix VISUAL path case (run_worker.py)
-   - VISUAL → visual (chữ thường)
+2. Lợi ích:
+   - Ít scenes hơn → tạo ảnh nhanh hơn
+   - Tiết kiệm API calls (Google Flow)
+   - Chất lượng scene cao hơn (focus vào key moments)
 
-3. v1.0.68: Xóa local folder sau copy to master
-4. v1.0.67: Không xóa master source, dựa VISUAL check done
-5. v1.0.66: Nút "XONG MA" + TIMEOUT 6 tiếng
+3. v1.0.70: Excel Worker check VISUAL trước import
+4. v1.0.69: Fix VISUAL path case
+5. v1.0.68: Xóa local folder sau copy to master

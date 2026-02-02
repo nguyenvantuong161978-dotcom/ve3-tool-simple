@@ -958,9 +958,9 @@ Return JSON only:
             seg_text = " ".join([e.text for e in seg_entries])
             seg_duration = srt_count * (total_duration / total_srt) if total_duration > 0 else srt_count * 3
 
-            # Calculate expected range (3-6 seconds per image)
-            min_images = max(1, int(seg_duration / 6))
-            max_images = max(1, int(seg_duration / 3))
+            # Calculate expected range (5-8 seconds per image) - v1.0.71: tăng từ 3-6s lên 5-8s
+            min_images = max(1, int(seg_duration / 8))  # 8s max per image
+            max_images = max(1, int(seg_duration / 5))  # 5s min per image
             target_images = int((min_images + max_images) / 2)
 
             calc_prompt = f"""Calculate the number of IMAGES needed for this story segment.
@@ -983,7 +983,7 @@ CONSIDER:
 - Emotional scenes: More images for impact
 - Action/fast pacing: More images
 - Dialogue-heavy: Fewer images but >= minimum
-- One image typically covers 3-6 SRT entries
+- One image typically covers 5-8 SRT entries (v1.0.71: slower pacing)
 
 Return JSON only:
 {{{{
