@@ -1,20 +1,17 @@
-1.0.72
-2026-02-03 02:10
-Feature: Thêm SMALL mode - giảm xuống 100-150 scenes
+1.0.73
+2026-02-03 11:30
+Fix: Default Small mode + Prevent premature auto-copy
 
-1. SMALL mode (excel_mode=small):
-   - Segment 1: Giữ 5-8s/scene (chi tiết, để tạo video)
-   - Segments 2+: KEY MOMENTS only (20-30s/scene)
-   - Video 1h: ~100-150 scenes (thay vì ~550)
+1. GUI Changes:
+   - Default mode changed from "basic" to "small"
+   - Small mode: ~100-150 scenes (vs ~550 in basic)
 
-2. Thay đổi:
-   - progressive_prompts.py: Step 2 PHASE 2 hỗ trợ small mode
-   - vm_manager_gui.py: Thêm radio button "Small" (màu vàng)
+2. Bug Fix - Premature auto-copy:
+   - Fixed: Project được copy về VISUAL khi chưa xong
+   - Root cause: Segment 1 detection sai (compare scene_id với SRT range)
+   - Fix: Dùng image_count để xác định Segment 1 scenes
+   - Safeguard: Nếu segment1_scenes empty, không đánh dấu "done"
 
-3. Lợi ích:
-   - Tiết kiệm Flow quota (500-700 ảnh/ngày)
-   - Chạy nhanh hơn nhiều
-   - Segment 1 vẫn đủ chi tiết để tạo video
-
+3. v1.0.72: Thêm SMALL mode (100-150 scenes)
 4. v1.0.71: Tăng scene duration 5-8s (giảm 35% scenes)
 5. v1.0.70: Excel Worker check VISUAL trước import

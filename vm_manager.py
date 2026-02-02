@@ -464,14 +464,14 @@ class QualityChecker:
                     seg1 = segments[0]  # First segment
                     status.segment1_end_srt = seg1.get('srt_range_end', 0)
 
-                    # Find scenes that belong to Segment 1
-                    srt_start = seg1.get('srt_range_start', 1)
-                    srt_end = seg1.get('srt_range_end', 0)
+                    # v1.0.73 FIX: Use image_count to find Segment 1 scenes
+                    # Segment 1 scenes are scene_ids 1 through image_count
+                    seg1_image_count = seg1.get('image_count', 0)
 
-                    for scene in scenes:
-                        # Scene belongs to Segment 1 if its scene_id is within SRT range
-                        if srt_start <= scene.scene_id <= srt_end:
-                            status.segment1_scenes.append(scene.scene_id)
+                    if seg1_image_count > 0:
+                        for scene in scenes:
+                            if scene.scene_id <= seg1_image_count:
+                                status.segment1_scenes.append(scene.scene_id)
             except:
                 pass
 
@@ -493,7 +493,15 @@ class QualityChecker:
                 # BASIC: done when all Segment 1 videos are complete
                 seg1_videos_done = len([s for s in status.segment1_scenes if s not in status.videos_missing])
                 seg1_videos_needed = len(status.segment1_scenes)
-                videos_complete = (seg1_videos_done >= seg1_videos_needed) if seg1_videos_needed > 0 else True
+                # v1.0.73 FIX: If segment1_scenes empty but has scenes, don't mark as complete
+                # This prevents premature "done" status when segment detection fails
+                if seg1_videos_needed > 0:
+                    videos_complete = (seg1_videos_done >= seg1_videos_needed)
+                elif status.total_scenes > 0:
+                    # Segment 1 detection failed but has scenes - stay in video step
+                    videos_complete = False
+                else:
+                    videos_complete = True
             else:
                 # FULL: done when all videos are complete
                 videos_complete = (status.videos_done == status.total_scenes)
