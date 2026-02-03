@@ -3166,13 +3166,30 @@ Return JSON only with EXACTLY {len(batch)} scenes:
         self._log(f"\n  -> Total: Created {total_created} scene prompts")
 
         elapsed = int(time.time() - step_start)
-        if total_created > 0:
-            # Update step status with duration
-            workbook.update_step_status("step_7", "COMPLETED", total_created, total_created,
-                f"{elapsed}s - {total_created} prompts")
-            return StepResult("create_scene_prompts", StepStatus.COMPLETED, f"Created {total_created} scenes")
+
+        # v1.0.80: Fix status update - tính đúng số lượng scenes
+        # existing_scenes = scenes đã có từ trước
+        # total_created = scenes mới tạo lần này
+        # director_plan = tổng số scenes cần có
+        total_in_plan = len(director_plan)
+        final_scene_count = len(existing_ids) + total_created  # existing + new
+
+        self._log(f"  [STATUS] {final_scene_count}/{total_in_plan} scenes ({len(existing_ids)} existed + {total_created} new)")
+
+        if final_scene_count >= total_in_plan:
+            # All scenes done
+            workbook.update_step_status("step_7", "COMPLETED", final_scene_count, total_in_plan,
+                f"{elapsed}s - {final_scene_count}/{total_in_plan} scenes")
+            return StepResult("create_scene_prompts", StepStatus.COMPLETED, f"Total {final_scene_count} scenes")
+        elif final_scene_count > 0:
+            # Some scenes done but incomplete - still mark COMPLETED to avoid re-run
+            # (next run will create remaining scenes)
+            workbook.update_step_status("step_7", "COMPLETED", final_scene_count, total_in_plan,
+                f"{elapsed}s - {final_scene_count}/{total_in_plan} (partial)")
+            return StepResult("create_scene_prompts", StepStatus.COMPLETED, f"Partial: {final_scene_count}/{total_in_plan}")
         else:
-            workbook.update_step_status("step_7", "ERROR", 0, 0, f"{elapsed}s - No scenes created")
+            # No scenes at all
+            workbook.update_step_status("step_7", "ERROR", 0, total_in_plan, f"{elapsed}s - No scenes created")
             return StepResult("create_scene_prompts", StepStatus.FAILED, "No scenes created")
 
     # =========================================================================
