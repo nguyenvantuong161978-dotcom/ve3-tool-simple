@@ -2804,6 +2804,8 @@ Return JSON only:
         if not pending_scenes:
             self._log(f"  -> Đã có {len(existing_scenes)} scenes, skip!")
             workbook.update_step_status("step_7", "COMPLETED", len(existing_scenes), len(existing_scenes), "Already done")
+            workbook.save()  # v1.0.81: SAVE ngay sau update!
+            self._log(f"  [SAVED] step_7 = COMPLETED ({len(existing_scenes)} scenes)")
             return StepResult("create_scene_prompts", StepStatus.COMPLETED, "Already done")
 
         self._log(f"  -> Cần tạo prompts cho {len(pending_scenes)} scenes...")
@@ -3165,31 +3167,22 @@ Return JSON only with EXACTLY {len(batch)} scenes:
 
         self._log(f"\n  -> Total: Created {total_created} scene prompts")
 
+        # v1.0.81: ĐƠN GIẢN - Sau Step 7 xong → update status → SAVE
         elapsed = int(time.time() - step_start)
-
-        # v1.0.80: Fix status update - tính đúng số lượng scenes
-        # existing_scenes = scenes đã có từ trước
-        # total_created = scenes mới tạo lần này
-        # director_plan = tổng số scenes cần có
         total_in_plan = len(director_plan)
-        final_scene_count = len(existing_ids) + total_created  # existing + new
+        final_scene_count = len(existing_ids) + total_created
 
-        self._log(f"  [STATUS] {final_scene_count}/{total_in_plan} scenes ({len(existing_ids)} existed + {total_created} new)")
-
-        if final_scene_count >= total_in_plan:
-            # All scenes done
+        if final_scene_count > 0:
+            # Có scenes → COMPLETED
             workbook.update_step_status("step_7", "COMPLETED", final_scene_count, total_in_plan,
-                f"{elapsed}s - {final_scene_count}/{total_in_plan} scenes")
-            return StepResult("create_scene_prompts", StepStatus.COMPLETED, f"Total {final_scene_count} scenes")
-        elif final_scene_count > 0:
-            # Some scenes done but incomplete - still mark COMPLETED to avoid re-run
-            # (next run will create remaining scenes)
-            workbook.update_step_status("step_7", "COMPLETED", final_scene_count, total_in_plan,
-                f"{elapsed}s - {final_scene_count}/{total_in_plan} (partial)")
-            return StepResult("create_scene_prompts", StepStatus.COMPLETED, f"Partial: {final_scene_count}/{total_in_plan}")
+                f"{elapsed}s - {final_scene_count} scenes")
+            workbook.save()  # QUAN TRỌNG: SAVE ngay sau khi update status!
+            self._log(f"  [SAVED] step_7 = COMPLETED ({final_scene_count}/{total_in_plan} scenes)")
+            return StepResult("create_scene_prompts", StepStatus.COMPLETED, f"{final_scene_count} scenes")
         else:
-            # No scenes at all
-            workbook.update_step_status("step_7", "ERROR", 0, total_in_plan, f"{elapsed}s - No scenes created")
+            # Không có scenes → ERROR
+            workbook.update_step_status("step_7", "ERROR", 0, total_in_plan, f"{elapsed}s - No scenes")
+            workbook.save()
             return StepResult("create_scene_prompts", StepStatus.FAILED, "No scenes created")
 
     # =========================================================================
