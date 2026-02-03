@@ -1,13 +1,13 @@
-1.0.78
-2026-02-03 21:30
-Fix: step_7 khong duoc danh dau COMPLETED
+1.0.79
+2026-02-03 22:15
+Fix: Khong chay lai Excel khi da co scenes
 
-1. Fix bug processing_status:
-   - step_7 khong duoc update sau khi Step 7 hoan thanh
-   - Them FINAL CHECK de dam bao step_7 = COMPLETED
-   - Fix "resume (85.7% done)" khi da hoan thanh
+1. v1.0.79: EARLY CHECK trong run_all_steps():
+   - Neu Excel da co scenes -> chi fix processing_status
+   - KHONG chay lai 7 steps (tiet kiem thoi gian)
+   - Fix cho may cap nhat len 78 nhung Excel cu chua COMPLETED
 
-2. v1.0.77: UI - Nut XONG theo tung project
-3. v1.0.76: Fix auto-copy khi total_scenes = 0
-4. v1.0.75: SMALL mode skip GLOBAL CHECK
-5. v1.0.74: Chi copy sang VISUAL khi co anh
+2. v1.0.78: FINAL CHECK - step_7 = COMPLETED
+3. v1.0.77: UI - Nut XONG theo tung project
+4. v1.0.76: Fix auto-copy khi total_scenes = 0
+5. v1.0.75: SMALL mode skip GLOBAL CHECK

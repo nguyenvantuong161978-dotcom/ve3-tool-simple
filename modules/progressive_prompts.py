@@ -3229,6 +3229,49 @@ Return JSON only with EXACTLY {len(batch)} scenes:
         # Load/create workbook
         workbook = PromptWorkbook(excel_path).load_or_create()
 
+        # v1.0.79: EARLY CHECK - Nếu Excel đã có scenes thì chỉ fix status, không chạy lại
+        # Fix bug: Máy cập nhật lên v1.0.78 nhưng Excel cũ có step_7 chưa COMPLETED
+        #          → Tool chạy lại toàn bộ 7 steps thay vì chỉ fix status
+        try:
+            existing_scenes = workbook.get_scenes()
+            if existing_scenes and len(existing_scenes) > 0:
+                self._log(f"\n  [EARLY CHECK] Excel already has {len(existing_scenes)} scenes!")
+
+                # Check if processing_status is incomplete
+                step7_status = workbook.get_step_status("step_7")
+                if step7_status.get("status") != "COMPLETED":
+                    self._log(f"  [EARLY CHECK] Fixing processing_status (was: {step7_status.get('status', 'unknown')})")
+
+                    # Fix all step statuses
+                    segments = workbook.get_segments() or []
+                    characters = workbook.get_characters() or []
+                    director_plan = workbook.get_director_plan() or []
+                    scene_planning = workbook.get_scene_planning() or []
+
+                    # Update each step status
+                    workbook.update_step_status("step_1", "COMPLETED", 1, 1, "EARLY CHECK - auto-fixed")
+                    workbook.update_step_status("step_2", "COMPLETED", len(segments), len(segments), "EARLY CHECK - auto-fixed")
+                    workbook.update_step_status("step_3", "COMPLETED", len(characters), len(characters), "EARLY CHECK - auto-fixed")
+                    workbook.update_step_status("step_4", "COMPLETED", len(characters), len(characters), "EARLY CHECK - auto-fixed")
+                    workbook.update_step_status("step_5", "COMPLETED", len(director_plan), len(director_plan), "EARLY CHECK - auto-fixed")
+                    workbook.update_step_status("step_6", "COMPLETED", len(scene_planning), len(scene_planning), "EARLY CHECK - auto-fixed")
+                    workbook.update_step_status("step_7", "COMPLETED", len(existing_scenes), len(existing_scenes), "EARLY CHECK - auto-fixed")
+
+                    self._log(f"  [EARLY CHECK] Fixed! All steps marked COMPLETED")
+                    self._log("\n" + "="*70)
+                    self._log("  SKIPPED - Excel already complete!")
+                    self._log("="*70)
+                    return True
+                else:
+                    self._log(f"  [EARLY CHECK] processing_status OK, skipping re-generation")
+                    self._log("\n" + "="*70)
+                    self._log("  SKIPPED - Excel already complete!")
+                    self._log("="*70)
+                    return True
+        except Exception as e:
+            self._log(f"  [EARLY CHECK] Warning: {e}", "WARN")
+            # Continue with normal flow if check fails
+
         # Run steps
         all_success = True
 
