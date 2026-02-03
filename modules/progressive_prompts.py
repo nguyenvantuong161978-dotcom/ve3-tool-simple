@@ -3274,6 +3274,19 @@ Return JSON only with EXACTLY {len(batch)} scenes:
             self._log("Step 5 FAILED!", "ERROR")
             return False
 
+        # v1.0.78: FINAL CHECK - Đảm bảo step_7 được đánh dấu COMPLETED
+        # Fix bug: step_7 không được update sau khi Step 7 hoàn thành
+        try:
+            scenes = workbook.get_scenes()
+            if scenes and len(scenes) > 0:
+                step7_status = workbook.get_step_status("step_7")
+                if step7_status.get("status") != "COMPLETED":
+                    self._log(f"  [FINAL CHECK] Updating step_7 status: {len(scenes)} scenes exist")
+                    workbook.update_step_status("step_7", "COMPLETED", len(scenes), len(scenes),
+                        "Final check - scenes exist")
+        except Exception as e:
+            self._log(f"  [FINAL CHECK] Warning: {e}", "WARN")
+
         self._log("\n" + "="*70)
         self._log("  ALL STEPS COMPLETED!")
         self._log("="*70)

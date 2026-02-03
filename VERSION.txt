@@ -1,13 +1,13 @@
-1.0.76
-2026-02-03 12:15
-Fix: Không copy khi total_scenes = 0
+1.0.78
+2026-02-03 21:30
+Fix: step_7 khong duoc danh dau COMPLETED
 
-1. Bug fix - Auto-copy khi ấn BẮT ĐẦU:
-   - Nguyên nhân: total_scenes = 0 → images_done == total_scenes (0==0) → "done"
-   - Fix: Chỉ đánh dấu "done" khi total_scenes > 0
-   - Tránh copy project chưa có Excel/scenes
+1. Fix bug processing_status:
+   - step_7 khong duoc update sau khi Step 7 hoan thanh
+   - Them FINAL CHECK de dam bao step_7 = COMPLETED
+   - Fix "resume (85.7% done)" khi da hoan thanh
 
-2. v1.0.75: SMALL mode skip GLOBAL CHECK
-3. v1.0.74: Chỉ copy sang VISUAL khi có ảnh
-4. v1.0.73: Default Small mode + Fix premature auto-copy
-5. v1.0.72: Thêm SMALL mode (100-150 scenes)
+2. v1.0.77: UI - Nut XONG theo tung project
+3. v1.0.76: Fix auto-copy khi total_scenes = 0
+4. v1.0.75: SMALL mode skip GLOBAL CHECK
+5. v1.0.74: Chi copy sang VISUAL khi co anh

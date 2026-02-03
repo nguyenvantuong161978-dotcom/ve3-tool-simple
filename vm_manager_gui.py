@@ -1051,15 +1051,7 @@ class SimpleGUI(tk.Tk):
             btn.pack(side="left", padx=2)
             self.log_tab_buttons[wid] = btn
 
-        # v1.0.66: Force Complete button (right side)
-        self.force_complete_btn = tk.Button(
-            tab_frame, text="XONG MA",
-            command=self._force_complete_project,
-            bg='#ff6600', fg='white',
-            font=("Arial", 8, "bold"),
-            padx=8, pady=2
-        )
-        self.force_complete_btn.pack(side="right", padx=5)
+        # v1.0.77: Removed XONG MA button - now per-project in project list
 
         # Log text area
         log_text_frame = tk.Frame(logs_frame, bg='#1a1a2e')
@@ -1085,10 +1077,10 @@ class SimpleGUI(tk.Tk):
                                  font=("Arial", 10, "bold"), padx=5, pady=5)
         projects.pack(fill="both", expand=True, padx=5, pady=(0, 5))
 
-        # Header
+        # Header - v1.0.77: Thêm cột XONG cho mỗi project
         header = tk.Frame(projects, bg='#0f3460')
         header.pack(fill="x")
-        for txt, w in [("Code", 10), ("Excel", 6), ("NV", 5), ("Anh", 7), ("Video", 7), ("Status", 8)]:
+        for txt, w in [("Code", 10), ("Excel", 6), ("NV", 5), ("Anh", 7), ("Video", 7), ("Status", 6), ("", 5)]:
             tk.Label(header, text=txt, width=w, bg='#0f3460', fg='white',
                      font=("Arial", 9, "bold")).pack(side="left", padx=2, pady=5)
 
@@ -1267,6 +1259,52 @@ class SimpleGUI(tk.Tk):
             self.manager.current_project_code = None
 
             messagebox.showinfo("Thanh cong", f"Da hoan thanh ma {current_project}!\nChuyen sang ma tiep theo...")
+
+        except Exception as e:
+            self.manager.log(f"Force complete failed: {e}", "SYSTEM", "ERROR")
+            messagebox.showerror("Loi", f"Khong the hoan thanh ma:\n{e}")
+
+    def _force_complete_by_code(self, project_code: str):
+        """v1.0.77: Force complete specific project by code."""
+        if not self.manager:
+            return
+
+        if not project_code:
+            return
+
+        # Confirm
+        from tkinter import messagebox
+        if not messagebox.askyesno(
+            "Xac nhan",
+            f"Ban muon HOAN THANH ma {project_code}?\n\n"
+            f"- Copy ket qua ve may chu\n"
+            f"- Danh dau hoan thanh"
+        ):
+            return
+
+        # Force complete
+        self.manager.log("=" * 60, "SYSTEM")
+        self.manager.log(f"FORCE COMPLETE: {project_code}", "SYSTEM", "WARN")
+        self.manager.log("=" * 60, "SYSTEM")
+
+        try:
+            # Copy to master
+            self.manager.log(f"Copying {project_code} to master...", "SYSTEM")
+            self.manager.copy_project_to_master(project_code)
+            self.manager.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
+
+            # Mark as completed
+            if not hasattr(self.manager, '_completed_projects'):
+                self.manager._completed_projects = set()
+            self.manager._completed_projects.add(project_code)
+
+            # Update button to show completed
+            if project_code in self.project_rows:
+                btn = self.project_rows[project_code]['labels'].get('xong_btn')
+                if btn:
+                    btn.config(text="DA XONG", bg='#00aa00', state='disabled')
+
+            messagebox.showinfo("Thanh cong", f"Da hoan thanh ma {project_code}!")
 
         except Exception as e:
             self.manager.log(f"Force complete failed: {e}", "SYSTEM", "ERROR")
@@ -2823,8 +2861,17 @@ class SimpleGUI(tk.Tk):
         labels['videos'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
         labels['videos'].pack(side="left", padx=2)
 
-        labels['status'] = tk.Label(row, text="--", width=8, bg=bg, fg='#aaa', font=("Consolas", 10))
+        labels['status'] = tk.Label(row, text="--", width=6, bg=bg, fg='#aaa', font=("Consolas", 10))
         labels['status'].pack(side="left", padx=2)
+
+        # v1.0.77: Nút XONG cho mỗi project
+        xong_btn = tk.Button(row, text="XONG", width=4,
+                            command=lambda c=code: self._force_complete_by_code(c),
+                            bg='#ff6600', fg='white',
+                            font=("Arial", 8, "bold"),
+                            padx=2, pady=0)
+        xong_btn.pack(side="left", padx=2)
+        labels['xong_btn'] = xong_btn
 
         self.project_rows[code] = {'row': row, 'labels': labels, 'bg': bg}
 
