@@ -1,19 +1,29 @@
-1.0.81
-2026-02-04 04:25 (VN)
-Fix: Step 7 KHONG SAVE sau khi update status
+1.0.86
+2026-02-04 11:40 (VN)
+Fix: Auto-reset TẤT CẢ workers khi project xong
 
-BUG GOC:
-- Step 7 update step_7 = COMPLETED
-- Nhung KHONG GOI workbook.save()!
-- Status chi o trong memory, KHONG LUU vao Excel
-- Lan sau chay → Excel van thay step_7 chua COMPLETED → chay lai!
+BUG:
+- Chrome 2 vẫn ở mã cũ, không chuyển sang mã mới
+- Nguyên nhân: Workers không được restart khi project hoàn thành
 
-FIX DON GIAN:
-- Sau update_step_status() → GOI workbook.save() NGAY
-- Them log: "[SAVED] step_7 = COMPLETED"
+FIX (đúng thứ tự):
+1. DỪNG - Stop all workers + kill Chrome
+2. COPY - Copy project sang máy chủ (master)
+3. RESET - Restart all workers để chạy mã mới
 
-1. v1.0.81: Them workbook.save() sau khi update step_7
-2. v1.0.80: Fix so luong scenes (existing + new)
-3. v1.0.79: EARLY CHECK - khong chay lai khi da co scenes
-4. v1.0.78: FINAL CHECK - step_7 = COMPLETED
-5. v1.0.77: UI - Nut XONG theo tung project
+FLOW MỚI:
+Project xong (current_step = "done")
+  ↓
+Step 1: Stop all workers (Excel + Chrome 1 + Chrome 2)
+  ↓
+Step 2: Copy to master
+  ↓
+Step 3: Restart all workers
+  ↓
+Workers start fresh → pick up project mới
+
+1. v1.0.86: Auto-reset ALL workers khi project xong
+2. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
+3. v1.0.84: Mode SMALL = chi anh, khong video
+4. v1.0.83: Priority - project gan xong lam truoc
+5. v1.0.82: EARLY CHECK dua vao step_7 status

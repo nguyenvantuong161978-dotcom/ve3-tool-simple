@@ -524,6 +524,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 pass
 
     # Step 3.6: Đợi Chrome 1 bắt đầu tạo SCENE images
+    # v1.0.86: Đợi không giới hạn - VMManager sẽ restart workers khi project xong
     img_dir = local_dir / "img"
     log(f"  [WAIT] Waiting for Chrome 1 to START creating scene images...")
 

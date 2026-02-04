@@ -476,33 +476,31 @@ class QualityChecker:
                 pass
 
             # Determine videos_needed based on mode
-            if status.video_mode == "basic" or "basic" in status.video_mode.lower():
+            # v1.0.84: SMALL mode = CHỈ ẢNH, KHÔNG VIDEO
+            if status.video_mode == "small" or "small" in status.video_mode.lower():
+                # SMALL mode: KHÔNG tạo video, chỉ tạo ảnh
+                status.videos_needed = []  # Không cần video nào
+                videos_complete = True  # Coi như video đã xong
+            elif status.video_mode == "basic" or "basic" in status.video_mode.lower():
                 # BASIC mode: only videos for Segment 1 scenes that have images
                 for scene_id in status.segment1_scenes:
                     if scene_id not in status.images_missing:  # Has image
                         if scene_id in status.videos_missing:  # Needs video
                             status.videos_needed.append(scene_id)
+                # BASIC: done when all Segment 1 videos are complete
+                seg1_videos_done = len([s for s in status.segment1_scenes if s not in status.videos_missing])
+                seg1_videos_needed = len(status.segment1_scenes)
+                if seg1_videos_needed > 0:
+                    videos_complete = (seg1_videos_done >= seg1_videos_needed)
+                elif status.total_scenes > 0:
+                    videos_complete = False
+                else:
+                    videos_complete = True
             else:
                 # FULL mode: all scenes that have images need videos
                 for scene_id in status.videos_missing:
                     if scene_id not in status.images_missing:  # Has image
                         status.videos_needed.append(scene_id)
-
-            # Determine completion based on mode
-            if status.video_mode == "basic" or "basic" in status.video_mode.lower():
-                # BASIC: done when all Segment 1 videos are complete
-                seg1_videos_done = len([s for s in status.segment1_scenes if s not in status.videos_missing])
-                seg1_videos_needed = len(status.segment1_scenes)
-                # v1.0.73 FIX: If segment1_scenes empty but has scenes, don't mark as complete
-                # This prevents premature "done" status when segment detection fails
-                if seg1_videos_needed > 0:
-                    videos_complete = (seg1_videos_done >= seg1_videos_needed)
-                elif status.total_scenes > 0:
-                    # Segment 1 detection failed but has scenes - stay in video step
-                    videos_complete = False
-                else:
-                    videos_complete = True
-            else:
                 # FULL: done when all videos are complete
                 videos_complete = (status.videos_done == status.total_scenes)
 
@@ -1560,6 +1558,7 @@ class VMManager:
     # ================================================================================
 
     def scan_projects(self) -> List[str]:
+        """Scan và sort projects theo priority: GẦN XONG làm trước."""
         projects = []
         local = TOOL_DIR / "PROJECTS"
         if not local.exists():
@@ -1571,7 +1570,20 @@ class VMManager:
                     continue
                 if (item / f"{code}.srt").exists():
                     projects.append(code)
-        return sorted(projects)
+
+        # v1.0.82: Sort by completion - project gần xong làm trước
+        # Priority: images_done / total_scenes (cao hơn = ưu tiên hơn)
+        def get_completion(code: str) -> float:
+            try:
+                status = self.quality_checker.get_project_status(code)
+                if status.total_scenes == 0:
+                    return -1  # Chưa có scenes → priority thấp nhất
+                return status.images_done / status.total_scenes
+            except:
+                return -1
+
+        # Sort descending: completion cao → làm trước
+        return sorted(projects, key=get_completion, reverse=True)
 
     def create_thumbnail(self, project_code: str):
         """Create thumbnail from main character (not child) for master."""
@@ -1715,8 +1727,16 @@ class VMManager:
                 self.log(f"PROJECT COMPLETED: {project_code}", "SYSTEM", "SUCCESS")
                 self.log("=" * 60, "SYSTEM")
 
+                # v1.0.86: STEP 1 - DỪNG tất cả workers trước
+                self.log("Step 1: Stopping all workers...", "SYSTEM")
+                for wid in list(self.workers.keys()):
+                    self.stop_worker(wid)
+                self.kill_all_chrome()
+                time.sleep(2)
+
+                # v1.0.86: STEP 2 - COPY sang máy chủ
                 try:
-                    self.log(f"Copying {project_code} to master...", "SYSTEM")
+                    self.log(f"Step 2: Copying {project_code} to master...", "SYSTEM")
                     self.copy_project_to_master(project_code)
                     self.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
                 except Exception as e:
@@ -1730,6 +1750,15 @@ class VMManager:
                 # Reset project timer for next project
                 self.project_start_time = None
                 self.current_project_code = None
+
+                # v1.0.86: STEP 3 - RESET (restart all workers) để chạy mã mới
+                self.log("Step 3: Restarting all workers for next project...", "SYSTEM")
+                for wid in list(self.workers.keys()):
+                    time.sleep(2)
+                    self.start_worker(wid, gui_mode=self.gui_mode)
+                    w = self.workers[wid]
+                    w.last_restart_time = datetime.now()
+                    w.restart_count += 1
 
                 self.log("Ready for next project", "SYSTEM", "SUCCESS")
             return
