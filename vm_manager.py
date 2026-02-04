@@ -1702,13 +1702,42 @@ class VMManager:
 
         self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
 
-        # v1.0.68: Xóa local folder sau khi copy thành công
+        # v1.0.90: Xóa local folder với RETRY logic (thay vì chỉ try 1 lần)
         if copy_success:
-            try:
-                shutil.rmtree(str(src_dir))
-                self.log(f"Deleted local folder: {src_dir}", "SYSTEM", "INFO")
-            except Exception as e:
-                self.log(f"Failed to delete local folder: {e}", "SYSTEM", "WARN")
+            delete_success = False
+            for retry in range(5):  # Thử tối đa 5 lần
+                try:
+                    # Force garbage collection trước khi xóa
+                    import gc
+                    gc.collect()
+
+                    shutil.rmtree(str(src_dir))
+                    self.log(f"Deleted local folder: {src_dir}", "SYSTEM", "INFO")
+                    delete_success = True
+                    break
+                except Exception as e:
+                    if retry < 4:
+                        delay = (retry + 1) * 2  # 2, 4, 6, 8 seconds
+                        self.log(f"Delete retry {retry+1}/5, waiting {delay}s... ({e})", "SYSTEM", "WARN")
+                        time.sleep(delay)
+                    else:
+                        self.log(f"Failed to delete after 5 attempts: {e}", "SYSTEM", "ERROR")
+
+            if not delete_success:
+                # v1.0.90: Nếu xóa folder fail, thử xóa từng file riêng lẻ
+                self.log("Trying to delete files individually...", "SYSTEM", "WARN")
+                try:
+                    for item in src_dir.rglob("*"):
+                        if item.is_file():
+                            try:
+                                item.unlink()
+                            except:
+                                pass
+                    # Sau đó thử xóa folder rỗng
+                    shutil.rmtree(str(src_dir), ignore_errors=True)
+                    self.log("Partially cleaned up local folder", "SYSTEM", "WARN")
+                except:
+                    pass
 
     def create_tasks_for_project(self, project_code: str):
         status = self.quality_checker.get_project_status(project_code)
@@ -1732,7 +1761,14 @@ class VMManager:
                 for wid in list(self.workers.keys()):
                     self.stop_worker(wid)
                 self.kill_all_chrome()
-                time.sleep(2)
+
+                # v1.0.90: Tăng wait time từ 2s lên 5s để Windows giải phóng file locks
+                self.log("Waiting 5s for file locks to release...", "SYSTEM")
+                time.sleep(5)
+
+                # v1.0.90: Force garbage collection để giải phóng Python file handles
+                import gc
+                gc.collect()
 
                 # v1.0.86: STEP 2 - COPY sang máy chủ
                 try:

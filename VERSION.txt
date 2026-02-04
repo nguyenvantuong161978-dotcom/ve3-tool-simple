@@ -1,19 +1,22 @@
-1.0.88
-2026-02-04 22:25 (VN)
-Fix: EARLY CHECK fix all steps to COMPLETED
+1.0.90
+2026-02-04 21:10 (VN)
+Fix: Copy/Delete reliability - file lock handling
 
 BUG:
-- Project Excel da hoan thanh van bi pick up lien tuc moi 60 giay
-- Nguyen nhan: step_5/step_6 chua duoc danh dau COMPLETED du step_7 = COMPLETED
-- Ket qua: total_progress < 100% -> can_resume = True -> bi pick up lai
+- Khi project xong, copy sang master nhung xoa local folder bi fail
+- Nguyen nhan: Wait time qua ngan (2s) + khong retry khi delete fail
+- Ket qua: Files van con tren local, Chrome/CMD chua tat het
 
 FIX:
-- Khi EARLY CHECK skip, danh dau TAT CA steps la COMPLETED
-- Sau 1 cycle, project se khong bi pick up lai
+1. Tang wait time tu 2s len 5s sau khi kill Chrome/workers
+2. Them garbage collection de giai phong Python file handles
+3. Delete voi RETRY logic (5 lan, exponential backoff 2-8s)
+4. Neu folder delete fail, thu xoa tung file rieng le
 
-1. v1.0.88: EARLY CHECK fix all steps to COMPLETED
-2. v1.0.87: GUI Project list real-time update
-3. v1.0.86: Auto-reset ALL workers khi project xong
-4. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
-5. v1.0.84: Mode SMALL = chi anh, khong video
-6. v1.0.83: Priority - project gan xong lam truoc
+1. v1.0.90: Copy/Delete reliability - file lock handling
+2. v1.0.89: Step 5 segment retry + status fix
+3. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+4. v1.0.87: GUI Project list real-time update
+5. v1.0.86: Auto-reset ALL workers khi project xong
+6. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
+7. v1.0.84: Mode SMALL = chi anh, khong video

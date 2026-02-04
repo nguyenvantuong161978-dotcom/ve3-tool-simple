@@ -2437,6 +2437,70 @@ Create exactly {image_count} scenes!"""
                     self._log(f"     -> Segment {seg_idx+1} failed: {e}", "ERROR")
                     segment_results[seg_idx] = []
 
+        # =====================================================================
+        # v1.0.89: RETRY LOGIC - Đảm bảo 100% segments có data
+        # Nếu segment nào trả về empty, retry với exponential backoff
+        # =====================================================================
+        failed_segments = [i for i in range(len(story_segments)) if not segment_results.get(i)]
+
+        if failed_segments:
+            self._log(f"\n  [RETRY] Found {len(failed_segments)} failed segments, retrying sequentially...")
+
+            SEGMENT_RETRY_MAX = 5
+            for seg_idx in failed_segments:
+                seg = story_segments[seg_idx]
+                seg_name = seg.get("segment_name", f"Segment {seg_idx+1}")
+
+                for retry_attempt in range(SEGMENT_RETRY_MAX):
+                    delay = 3 * (2 ** retry_attempt)  # 3, 6, 12, 24, 48 seconds
+                    self._log(f"     Retry {retry_attempt+1}/{SEGMENT_RETRY_MAX} for segment {seg_idx+1} ({seg_name}) after {delay}s...")
+                    time.sleep(delay)
+
+                    try:
+                        result_idx, scenes, _ = process_segment_basic((seg_idx, seg))
+                        if scenes:
+                            segment_results[seg_idx] = scenes
+                            self._log(f"     -> SUCCESS! Got {len(scenes)} scenes on retry {retry_attempt+1}")
+                            break
+                    except Exception as e:
+                        self._log(f"     -> Retry {retry_attempt+1} failed: {e}", "WARNING")
+
+                # v1.0.89: Nếu vẫn fail sau tất cả retries, tạo GUARANTEED fallback scenes
+                if not segment_results.get(seg_idx):
+                    self._log(f"     -> All retries exhausted for segment {seg_idx+1}, creating GUARANTEED fallback scenes", "WARNING")
+
+                    # Lấy thông tin segment để tạo fallback
+                    image_count = seg.get("image_count", 1)
+                    srt_start = seg.get("srt_range_start", 1)
+                    srt_end = seg.get("srt_range_end", len(srt_entries))
+                    seg_entries = [e for i, e in enumerate(srt_entries, 1) if srt_start <= i <= srt_end]
+
+                    entries_per_scene = max(1, len(seg_entries) / image_count) if image_count > 0 else len(seg_entries)
+                    fallback_scenes = []
+
+                    for i in range(image_count):
+                        start_idx = int(i * entries_per_scene)
+                        end_idx = min(int((i + 1) * entries_per_scene), len(seg_entries))
+                        scene_ents = seg_entries[start_idx:end_idx] if seg_entries else []
+
+                        fallback_scene = {
+                            "scene_id": 0,  # Will be assigned after merge
+                            "srt_indices": list(range(srt_start + start_idx, srt_start + min(end_idx, len(seg_entries)))),
+                            "srt_start": scene_ents[0].start_time if scene_ents else "",
+                            "srt_end": scene_ents[-1].end_time if scene_ents else "",
+                            "duration": 5.0,  # Default 5s
+                            "srt_text": " ".join([e.text for e in scene_ents]) if scene_ents else "",
+                            "visual_moment": f"[Fallback] Scene {i+1}/{image_count} from: {seg_name}",
+                            "characters_used": "",
+                            "location_used": "",
+                            "camera": "Medium shot",
+                            "lighting": "Natural lighting"
+                        }
+                        fallback_scenes.append(fallback_scene)
+
+                    segment_results[seg_idx] = fallback_scenes
+                    self._log(f"     -> Created {len(fallback_scenes)} guaranteed fallback scenes for segment {seg_idx+1}")
+
         # Merge results in order and assign scene_ids
         scene_id_counter = 1
         for seg_idx in range(len(story_segments)):
@@ -2538,9 +2602,17 @@ Create exactly {image_count} scenes!"""
                 if uncovered_list:
                     self._log(f"     Missing SRT: {[u['srt_index'] for u in uncovered_list[:10]]}...")
 
+            # v1.0.89: Update step_5 status in Excel (was missing!)
+            total_duration = sum(s.get('duration', 0) for s in all_scenes)
+            workbook.update_step_status("step_5", "COMPLETED",
+                coverage['total_srt'], coverage['covered_by_scene'],
+                f"{len(all_scenes)} scenes, {total_duration:.0f}s")
+            workbook.save()
+
             return StepResult("create_director_plan_basic", StepStatus.COMPLETED, "Success", {"scenes": all_scenes})
         except Exception as e:
             self._log(f"  ERROR: Could not save to Excel: {e}", "ERROR")
+            workbook.update_step_status("step_5", "ERROR", 0, 0, str(e)[:80])
             return StepResult("create_director_plan_basic", StepStatus.FAILED, str(e))
 
     # =========================================================================
