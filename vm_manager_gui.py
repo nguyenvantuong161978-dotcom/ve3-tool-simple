@@ -2756,6 +2756,16 @@ class SimpleGUI(tk.Tk):
 
         try:
             projects = self.manager.scan_projects()[:12]
+            current_projects = set(projects)
+
+            # v1.0.86: Remove rows for projects no longer in scan results (real-time update)
+            old_projects = set(self.project_rows.keys())
+            removed = old_projects - current_projects
+            for code in removed:
+                if code in self.project_rows:
+                    row_data = self.project_rows[code]
+                    row_data['row'].destroy()  # Remove Tkinter widget
+                    del self.project_rows[code]
 
             for i, code in enumerate(projects):
                 if code not in self.project_rows:

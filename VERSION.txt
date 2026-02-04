@@ -1,29 +1,17 @@
-1.0.86
-2026-02-04 11:40 (VN)
-Fix: Auto-reset TẤT CẢ workers khi project xong
+1.0.87
+2026-02-04 22:05 (VN)
+Fix: GUI Project list real-time update
 
 BUG:
-- Chrome 2 vẫn ở mã cũ, không chuyển sang mã mới
-- Nguyên nhân: Workers không được restart khi project hoàn thành
+- Project list trong GUI khong cap nhat khi project bi xoa/copy
 
-FIX (đúng thứ tự):
-1. DỪNG - Stop all workers + kill Chrome
-2. COPY - Copy project sang máy chủ (master)
-3. RESET - Restart all workers để chạy mã mới
+FIX:
+- Xoa row cua project khong con ton tai trong PROJECTS folder
+- Update moi 1 giay (da co san)
 
-FLOW MỚI:
-Project xong (current_step = "done")
-  ↓
-Step 1: Stop all workers (Excel + Chrome 1 + Chrome 2)
-  ↓
-Step 2: Copy to master
-  ↓
-Step 3: Restart all workers
-  ↓
-Workers start fresh → pick up project mới
-
-1. v1.0.86: Auto-reset ALL workers khi project xong
-2. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
-3. v1.0.84: Mode SMALL = chi anh, khong video
-4. v1.0.83: Priority - project gan xong lam truoc
-5. v1.0.82: EARLY CHECK dua vao step_7 status
+1. v1.0.87: GUI Project list real-time update
+2. v1.0.86: Auto-reset ALL workers khi project xong
+3. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
+4. v1.0.84: Mode SMALL = chi anh, khong video
+5. v1.0.83: Priority - project gan xong lam truoc
+6. v1.0.82: EARLY CHECK dua vao step_7 status
