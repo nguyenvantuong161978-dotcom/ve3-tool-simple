@@ -1,17 +1,19 @@
-1.0.87
-2026-02-04 22:05 (VN)
-Fix: GUI Project list real-time update
+1.0.88
+2026-02-04 22:25 (VN)
+Fix: EARLY CHECK fix all steps to COMPLETED
 
 BUG:
-- Project list trong GUI khong cap nhat khi project bi xoa/copy
+- Project Excel da hoan thanh van bi pick up lien tuc moi 60 giay
+- Nguyen nhan: step_5/step_6 chua duoc danh dau COMPLETED du step_7 = COMPLETED
+- Ket qua: total_progress < 100% -> can_resume = True -> bi pick up lai
 
 FIX:
-- Xoa row cua project khong con ton tai trong PROJECTS folder
-- Update moi 1 giay (da co san)
+- Khi EARLY CHECK skip, danh dau TAT CA steps la COMPLETED
+- Sau 1 cycle, project se khong bi pick up lai
 
-1. v1.0.87: GUI Project list real-time update
-2. v1.0.86: Auto-reset ALL workers khi project xong
-3. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
-4. v1.0.84: Mode SMALL = chi anh, khong video
-5. v1.0.83: Priority - project gan xong lam truoc
-6. v1.0.82: EARLY CHECK dua vao step_7 status
+1. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+2. v1.0.87: GUI Project list real-time update
+3. v1.0.86: Auto-reset ALL workers khi project xong
+4. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
+5. v1.0.84: Mode SMALL = chi anh, khong video
+6. v1.0.83: Priority - project gan xong lam truoc
