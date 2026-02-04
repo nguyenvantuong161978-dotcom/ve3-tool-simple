@@ -160,16 +160,18 @@ class IPv6Rotator:
 
     def _load_ipv6_list(self):
         """
-        Load danh sách IPv6 từ file config/ipv6_list.txt
+        Load danh sách IPv6 từ file config/ipv6.txt (hoặc ipv6_list.txt)
 
         Format hỗ trợ:
         1. Chỉ IP: 2001:ee0:b004:3f01::2  (gateway tự tính = prefix::1)
         2. IP,GATEWAY: 2001:ee0:b004:3f01::2,2001:ee0:b004:3f01::1
         """
         try:
-            # Tìm file ipv6_list.txt
+            # Tìm file ipv6.txt hoặc ipv6_list.txt (backward compatible)
             base_dir = Path(__file__).parent.parent
-            ipv6_file = base_dir / "config" / "ipv6_list.txt"
+            ipv6_file = base_dir / "config" / "ipv6.txt"
+            if not ipv6_file.exists():
+                ipv6_file = base_dir / "config" / "ipv6_list.txt"
 
             if ipv6_file.exists():
                 with open(ipv6_file, 'r', encoding='utf-8') as f:
