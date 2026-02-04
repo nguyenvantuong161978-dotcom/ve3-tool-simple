@@ -10,12 +10,11 @@ FIX:
 
 1. v1.0.95: Fix skip child reference images on resume
 2. v1.0.94: Delete local folder - stronger retry logic
-2. v1.0.93: Auto-detect IPv6 on START
-3. v1.0.92: Fix IPv6 file name compatibility
-4. v1.0.91: GUI - IPv6 config moved to Setup VM
-5. v1.0.90: Copy/Delete reliability - file lock handling
-6. v1.0.89: Step 5 segment retry + status fix
-7. v1.0.88: EARLY CHECK fix all steps to COMPLETED
-8. v1.0.87: GUI Project list real-time update
-9. v1.0.86: Auto-reset ALL workers khi project xong
-10. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
+3. v1.0.93: Auto-detect IPv6 on START
+4. v1.0.92: Fix IPv6 file name compatibility
+5. v1.0.91: GUI - IPv6 config moved to Setup VM
+6. v1.0.90: Copy/Delete reliability - file lock handling
+7. v1.0.89: Step 5 segment retry + status fix
+8. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+9. v1.0.87: GUI Project list real-time update
+10. v1.0.86: Auto-reset ALL workers khi project xong
