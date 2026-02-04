@@ -1,21 +1,18 @@
-1.0.98
-2026-02-05 04:00 (VN)
-Fix: Chrome 2 infinite retry + Allow 95% completion
+1.0.99
+2026-02-05 04:30 (VN)
+Change: Completion threshold 95% -> 80%
 
-FIX:
-- Chrome 2: Chi kiem tra ODD scenes (1,3,5...) khi check completion
-- Chrome 2: Skip retry neu project folder da bi xoa (completed)
-- VM Manager: Clear agent status files khi reset
-- VM Manager: Project "done" khi >= 95% anh xong (cho phep 1 so anh fail)
-- Chrome 2 se khong follow project cu sau reset
+CHANGE:
+- VM Manager: Project "done" khi >= 80% anh xong (truoc la 95%)
+- Cho phep nhieu anh fail hon de khong bi ket
 
-1. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
-2. v1.0.97: Add INSTALL.bat for new machine setup
-3. v1.0.96: Add gspread + google-auth to requirements.txt
-4. v1.0.95: Fix skip child reference images on resume
-5. v1.0.94: Delete local folder - stronger retry logic
-6. v1.0.93: Auto-detect IPv6 on START
-7. v1.0.92: Fix IPv6 file name compatibility
-8. v1.0.91: GUI - IPv6 config moved to Setup VM
-9. v1.0.90: Copy/Delete reliability - file lock handling
-10. v1.0.89: Step 5 segment retry + status fix
+1. v1.0.99: Change completion threshold 95% -> 80%
+2. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
+3. v1.0.97: Add INSTALL.bat for new machine setup
+4. v1.0.96: Add gspread + google-auth to requirements.txt
+5. v1.0.95: Fix skip child reference images on resume
+6. v1.0.94: Delete local folder - stronger retry logic
+7. v1.0.93: Auto-detect IPv6 on START
+8. v1.0.92: Fix IPv6 file name compatibility
+9. v1.0.91: GUI - IPv6 config moved to Setup VM
+10. v1.0.90: Copy/Delete reliability - file lock handling

@@ -506,10 +506,10 @@ class QualityChecker:
 
             # v1.0.76: Only mark as "done" if total_scenes > 0
             # Prevents auto-copy when Excel has no scenes yet
-            # v1.0.98: Also mark as "done" if >= 95% images complete (allow some failures)
+            # v1.0.99: Also mark as "done" if >= 80% images complete (allow some failures)
             if status.total_scenes > 0:
                 completion_pct = (status.images_done / status.total_scenes) * 100
-                is_complete_enough = (status.images_done == status.total_scenes) or (completion_pct >= 95)
+                is_complete_enough = (status.images_done == status.total_scenes) or (completion_pct >= 80)
 
                 if is_complete_enough:
                     if videos_complete:
