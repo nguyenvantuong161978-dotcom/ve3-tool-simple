@@ -2173,14 +2173,19 @@ class SimpleGUI(tk.Tk):
         self.manager.settings.excel_mode = self.mode_var.get()
         self.manager.settings.video_mode = self.mode_var.get()
 
+        # Auto-detect IPv6 before starting
+        # Check if IPv6 is available and working
+        ipv6_ok = self._auto_detect_ipv6()
+
         self.running = True
-        self.status_var.set(f"Dang chay ({self.mode_var.get().upper()})")
+        ipv6_status = "IPv6" if ipv6_ok else "Direct"
+        self.status_var.set(f"Dang chay ({self.mode_var.get().upper()}) - {ipv6_status}")
         self.start_btn.config(bg='#666', state="disabled")
 
         # Log start
         if LOGGER_AVAILABLE:
             from modules.central_logger import log
-            log("main", f"=== STARTED === Mode: {self.mode_var.get()}", "INFO")
+            log("main", f"=== STARTED === Mode: {self.mode_var.get()}, IPv6: {ipv6_status}", "INFO")
 
         def run():
             self.manager.start_all(gui_mode=True)  # True = ẩn CMD windows
@@ -2340,6 +2345,108 @@ class SimpleGUI(tk.Tk):
         except:
             pass
         return True  # Mac dinh enabled
+
+    def _auto_detect_ipv6(self) -> bool:
+        """
+        Auto-detect IPv6 connectivity.
+        Test ping to Google DNS IPv6 for each IP in config/ipv6.txt.
+        Returns True if at least one IPv6 works, False if none work.
+        Also updates settings.yaml automatically.
+        """
+        import subprocess
+        import yaml
+
+        config_path = TOOL_DIR / "config" / "settings.yaml"
+
+        # Find IPv6 file (ipv6.txt or ipv6_list.txt)
+        ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
+        if not ipv6_file.exists():
+            ipv6_file = TOOL_DIR / "config" / "ipv6_list.txt"
+
+        if not ipv6_file.exists():
+            print("[IPv6] No IPv6 file found, using direct connection")
+            self._set_ipv6_enabled(False)
+            return False
+
+        # Read IPv6 list
+        try:
+            with open(ipv6_file, "r", encoding="utf-8") as f:
+                ipv6_list = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except Exception as e:
+            print(f"[IPv6] Error reading IPv6 file: {e}")
+            self._set_ipv6_enabled(False)
+            return False
+
+        if not ipv6_list:
+            print("[IPv6] IPv6 file is empty, using direct connection")
+            self._set_ipv6_enabled(False)
+            return False
+
+        # Test first 3 IPs (enough to detect if IPv6 works)
+        test_count = min(3, len(ipv6_list))
+        working_count = 0
+
+        print(f"[IPv6] Testing {test_count} IPv6 addresses...")
+        self.status_var.set("Dang kiem tra IPv6...")
+        self.update()
+
+        for i, ip in enumerate(ipv6_list[:test_count]):
+            try:
+                # Ping Google DNS IPv6 using the local IPv6 address
+                # On Windows: ping -n 1 -w 2000 2001:4860:4860::8888
+                result = subprocess.run(
+                    ['ping', '-n', '1', '-w', '2000', '2001:4860:4860::8888'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                )
+                if result.returncode == 0:
+                    working_count += 1
+                    print(f"[IPv6] Test {i+1}/{test_count}: OK")
+                else:
+                    print(f"[IPv6] Test {i+1}/{test_count}: FAIL")
+            except Exception as e:
+                print(f"[IPv6] Test {i+1}/{test_count}: ERROR - {e}")
+
+        # Decide IPv6 mode
+        if working_count > 0:
+            print(f"[IPv6] {working_count}/{test_count} tests passed - Using IPv6 Rotation")
+            self._set_ipv6_enabled(True)
+            return True
+        else:
+            print("[IPv6] All tests failed - Using Direct Connection")
+            self._set_ipv6_enabled(False)
+            return False
+
+    def _set_ipv6_enabled(self, enabled: bool):
+        """Update IPv6 enabled setting in settings.yaml and manager."""
+        import yaml
+
+        config_path = TOOL_DIR / "config" / "settings.yaml"
+        try:
+            config = {}
+            if config_path.exists():
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f) or {}
+
+            if 'ipv6_rotation' not in config:
+                config['ipv6_rotation'] = {}
+            config['ipv6_rotation']['enabled'] = enabled
+
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+            # Update manager settings if exists
+            if hasattr(self, 'manager') and self.manager:
+                if hasattr(self.manager, 'settings') and hasattr(self.manager.settings, 'ipv6_rotation'):
+                    self.manager.settings.ipv6_rotation['enabled'] = enabled
+
+            status = "BAT" if enabled else "TAT"
+            print(f"[IPv6] Settings updated: IPv6 = {status}")
+
+        except Exception as e:
+            print(f"[IPv6] Error saving settings: {e}")
 
     def _run_update(self):
         """Cap nhat code tu GitHub - ho tro ca khi khong co Git."""

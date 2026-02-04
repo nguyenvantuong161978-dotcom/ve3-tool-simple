@@ -412,6 +412,23 @@ git push official main  # Push lên repo chính thức
 
 ## Recent Fixes
 
+### 2026-02-04 - Project Priority (v1.0.83)
+- **TÍNH NĂNG**: Project gần xong → làm trước
+- **Logic**: `completion = images_done / total_scenes`
+- **Sort**: Descending - completion cao hơn = priority cao hơn
+- **Code**: `vm_manager.py` - `scan_projects()`
+- **Mục đích**: Tối ưu hóa thời gian hoàn thành project
+
+### 2026-02-04 - EARLY CHECK Logic Fix (v1.0.82)
+- **BUG**: v1.0.79 EARLY CHECK kiểm tra "if scenes exist" → SAI!
+  - Scenes có thể tồn tại nhưng chưa đủ (API bị ngắt giữa chừng)
+  - Dẫn đến skip khi Excel chưa hoàn thành
+- **FIX**: Kiểm tra `step_7 status == "COMPLETED"` thay vì check scenes
+  - Nếu step_7 = COMPLETED → skip (Excel đã hoàn thành)
+  - Nếu step_7 != COMPLETED → chạy tiếp từ bước đang dở
+- **Code**: `modules/progressive_prompts.py` lines 3245-3259
+- **Kết hợp với v1.0.81**: `workbook.save()` sau mỗi `update_step_status()`
+
 ### 2026-01-23 - Excel API 100% SRT Coverage (v1.0.4)
 - **CRITICAL**: Fixed Excel worker losing scenes and SRT coverage
 - **4 Major Fixes in `modules/progressive_prompts.py`**:
@@ -454,7 +471,41 @@ git push official main  # Push lên repo chính thức
 
 > **QUAN TRỌNG**: Claude Code phải cập nhật section này sau mỗi phiên làm việc để phiên sau sử dụng hiệu quả.
 
-### Phiên hiện tại: 2026-01-24 - Step 7 Metadata Fix (100% Accuracy ✅)
+### Phiên hiện tại: 2026-02-04 - EARLY CHECK Logic Fix (v1.0.82 ✅)
+
+**MISSION**: Fix EARLY CHECK logic - Dựa vào TRẠNG THÁI 7 BƯỚC, không phải scenes
+
+**PROBLEM DISCOVERED**:
+- v1.0.79 EARLY CHECK: `if scenes exist → skip`
+- SAI! Vì scenes có thể tồn tại nhưng chưa đủ (API bị ngắt giữa chừng)
+- User: "nên dựa vào trạng thái của 7 bước để quyết định có làm hay không"
+
+**ROOT CAUSE**:
+- Code kiểm tra `if existing_scenes and len(existing_scenes) > 0` → skip
+- Nhưng scenes có thể incomplete, step_7 chưa COMPLETED
+- Dẫn đến skip khi Excel chưa thực sự hoàn thành
+
+**FIX ĐƠN GIẢN** (`modules/progressive_prompts.py` lines 3245-3259):
+```python
+# v1.0.82: EARLY CHECK dựa vào TRẠNG THÁI 7 BƯỚC, không phải scenes
+step7_status = workbook.get_step_status("step_7")
+if step7_status.get("status") == "COMPLETED":
+    # Skip - Excel đã hoàn thành
+    return True
+# Nếu không COMPLETED → tiếp tục chạy các bước
+```
+
+**RESULT**:
+- ✅ Skip khi step_7 = COMPLETED (chính xác)
+- ✅ Chạy tiếp khi step_7 != COMPLETED (resume từ bước dở)
+- ✅ Không bị skip khi scenes incomplete
+
+**VERSION**: 1.0.82
+**STATUS**: ✅ PRODUCTION READY
+
+---
+
+### Phiên trước: 2026-01-24 - Step 7 Metadata Fix (100% Accuracy ✅)
 
 **MISSION**: Fix metadata/prompt mismatch - Đảm bảo metadata chính xác 100%
 
