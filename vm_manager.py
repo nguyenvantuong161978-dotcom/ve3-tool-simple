@@ -506,11 +506,18 @@ class QualityChecker:
 
             # v1.0.76: Only mark as "done" if total_scenes > 0
             # Prevents auto-copy when Excel has no scenes yet
-            if status.total_scenes > 0 and status.images_done == status.total_scenes:
-                if videos_complete:
-                    status.current_step = "done"
-                else:
-                    status.current_step = "video"
+            # v1.0.98: Also mark as "done" if >= 95% images complete (allow some failures)
+            if status.total_scenes > 0:
+                completion_pct = (status.images_done / status.total_scenes) * 100
+                is_complete_enough = (status.images_done == status.total_scenes) or (completion_pct >= 95)
+
+                if is_complete_enough:
+                    if videos_complete:
+                        status.current_step = "done"
+                        if status.images_done < status.total_scenes:
+                            status.errors.append(f"Completed with {status.images_done}/{status.total_scenes} images ({completion_pct:.1f}%)")
+                    else:
+                        status.current_step = "video"
 
         except Exception as e:
             status.errors.append(str(e))
