@@ -1,15 +1,15 @@
-1.0.94
-2026-02-04 23:45 (VN)
-Fix: Delete local folder after copy - stronger retry + Windows force delete
+1.0.95
+2026-02-05 00:30 (VN)
+Fix: Skip child character reference images on resume
 
 FIX:
-- Tach rieng logic xoa ra function _delete_project_folder
-- Tang wait time truoc khi xoa (10s thay vi 5s)
-- Them Step rieng biet: Stop -> Copy -> Delete -> Restart -> Verify
-- Them Windows force delete (rd /s /q) neu Python shutil fail
-- Verify deletion sau khi restart, retry neu van con
+- flow_image_generator.py thieu check is_child khi resume project
+- Them doc cot is_child tu Excel
+- Them check is_child vao skip logic (giong smart_engine.py va browser_flow_generator.py)
+- Child characters now properly skipped on both first run AND resume
 
-1. v1.0.94: Delete local folder - stronger retry logic
+1. v1.0.95: Fix skip child reference images on resume
+2. v1.0.94: Delete local folder - stronger retry logic
 2. v1.0.93: Auto-detect IPv6 on START
 3. v1.0.92: Fix IPv6 file name compatibility
 4. v1.0.91: GUI - IPv6 config moved to Setup VM

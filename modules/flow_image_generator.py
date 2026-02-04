@@ -180,6 +180,7 @@ class FlowImageGenerator:
                 "english_prompt": headers.index("english_prompt") if "english_prompt" in headers else -1,
                 "image_file": headers.index("image_file") if "image_file" in headers else -1,
                 "status": headers.index("status") if "status" in headers else -1,
+                "is_child": headers.index("is_child") if "is_child" in headers else -1,  # v1.0.95
             }
             
             if col_idx["english_prompt"] == -1:
@@ -191,12 +192,23 @@ class FlowImageGenerator:
                 prompt = row[col_idx["english_prompt"]].value
                 image_file = row[col_idx["image_file"]].value if col_idx["image_file"] >= 0 else f"{char_id}.png"
                 status = row[col_idx["status"]].value if col_idx["status"] >= 0 else "pending"
-                
+
+                # v1.0.95: Read is_child column
+                is_child_raw = row[col_idx["is_child"]].value if col_idx["is_child"] >= 0 else None
+                is_child = False
+                if is_child_raw is not None:
+                    if isinstance(is_child_raw, bool):
+                        is_child = is_child_raw
+                    elif isinstance(is_child_raw, str):
+                        is_child = is_child_raw.lower().strip() in ('true', '1', 'yes')
+                    elif isinstance(is_child_raw, (int, float)):
+                        is_child = bool(is_child_raw)
+
                 if not prompt:
                     continue
 
-                # Skip children (status="skip" or english_prompt="DO_NOT_GENERATE")
-                if status == "skip" or prompt == "DO_NOT_GENERATE":
+                # Skip children (status="skip" or english_prompt="DO_NOT_GENERATE" or is_child=True)
+                if status == "skip" or prompt == "DO_NOT_GENERATE" or is_child:
                     self._log(f"  [SKIP]  {char_id}: Child character, skipping (will use inline description)")
                     continue
 
