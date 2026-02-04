@@ -1663,10 +1663,13 @@ class VMManager:
         except Exception as e:
             self.log(f"Failed to create thumbnail: {e}", "SYSTEM", "ERROR")
 
-    def copy_project_to_master(self, project_code: str):
-        """Copy project folder to master (AUTO path) and delete local after success.
+    def copy_project_to_master(self, project_code: str, delete_after: bool = True):
+        """Copy project folder to master (AUTO path).
 
-        v1.0.68: Thêm logic xóa local folder sau khi copy thành công.
+        v1.0.94: Tách riêng logic xóa ra function _delete_project_folder.
+        Args:
+            project_code: Mã project
+            delete_after: Nếu True, xóa local folder sau khi copy (default: True cho backward compat)
         """
         if not self.auto_path:
             self.log("No AUTO path detected, skip copy", "SYSTEM", "WARN")
@@ -1702,42 +1705,83 @@ class VMManager:
 
         self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
 
-        # v1.0.90: Xóa local folder với RETRY logic (thay vì chỉ try 1 lần)
-        if copy_success:
-            delete_success = False
-            for retry in range(5):  # Thử tối đa 5 lần
-                try:
-                    # Force garbage collection trước khi xóa
-                    import gc
-                    gc.collect()
+        # v1.0.94: Chỉ xóa nếu delete_after=True (backward compatible)
+        if copy_success and delete_after:
+            self._delete_project_folder(project_code)
 
-                    shutil.rmtree(str(src_dir))
-                    self.log(f"Deleted local folder: {src_dir}", "SYSTEM", "INFO")
-                    delete_success = True
-                    break
-                except Exception as e:
-                    if retry < 4:
-                        delay = (retry + 1) * 2  # 2, 4, 6, 8 seconds
-                        self.log(f"Delete retry {retry+1}/5, waiting {delay}s... ({e})", "SYSTEM", "WARN")
-                        time.sleep(delay)
-                    else:
-                        self.log(f"Failed to delete after 5 attempts: {e}", "SYSTEM", "ERROR")
+    def _delete_project_folder(self, project_code: str):
+        """v1.0.94: Xóa local project folder với retry logic mạnh hơn.
 
-            if not delete_success:
-                # v1.0.90: Nếu xóa folder fail, thử xóa từng file riêng lẻ
-                self.log("Trying to delete files individually...", "SYSTEM", "WARN")
-                try:
-                    for item in src_dir.rglob("*"):
-                        if item.is_file():
-                            try:
-                                item.unlink()
-                            except:
-                                pass
-                    # Sau đó thử xóa folder rỗng
-                    shutil.rmtree(str(src_dir), ignore_errors=True)
-                    self.log("Partially cleaned up local folder", "SYSTEM", "WARN")
-                except:
-                    pass
+        Flow:
+        1. Thử xóa cả folder (5 lần, delay 3s mỗi lần)
+        2. Nếu fail, thử xóa từng file riêng lẻ
+        3. Cuối cùng thử xóa folder rỗng
+        """
+        import shutil
+        import gc
+        import subprocess
+
+        src_dir = TOOL_DIR / "PROJECTS" / project_code
+        if not src_dir.exists():
+            return  # Đã xóa rồi
+
+        self.log(f"Deleting local folder: {project_code}...", "SYSTEM")
+
+        # Method 1: Thử xóa cả folder
+        for retry in range(5):
+            try:
+                gc.collect()
+                shutil.rmtree(str(src_dir))
+                self.log(f"Deleted local folder: {src_dir}", "SYSTEM", "SUCCESS")
+                return  # Success!
+            except Exception as e:
+                if retry < 4:
+                    delay = 3  # 3s mỗi lần
+                    self.log(f"Delete retry {retry+1}/5, waiting {delay}s... ({type(e).__name__})", "SYSTEM", "WARN")
+                    time.sleep(delay)
+                else:
+                    self.log(f"rmtree failed after 5 attempts: {e}", "SYSTEM", "WARN")
+
+        # Method 2: Xóa từng file riêng lẻ
+        self.log("Trying to delete files individually...", "SYSTEM", "WARN")
+        deleted_files = 0
+        locked_files = []
+        try:
+            for item in list(src_dir.rglob("*")):
+                if item.is_file():
+                    try:
+                        item.unlink()
+                        deleted_files += 1
+                    except Exception as e:
+                        locked_files.append(item.name)
+
+            self.log(f"Deleted {deleted_files} files, {len(locked_files)} locked", "SYSTEM", "INFO")
+
+            if locked_files:
+                self.log(f"Locked files: {locked_files[:5]}{'...' if len(locked_files) > 5 else ''}", "SYSTEM", "WARN")
+        except Exception as e:
+            self.log(f"Individual delete error: {e}", "SYSTEM", "WARN")
+
+        # Method 3: Dùng Windows cmd để force delete (rd /s /q)
+        if src_dir.exists():
+            try:
+                self.log("Trying Windows force delete (rd /s /q)...", "SYSTEM", "WARN")
+                result = subprocess.run(
+                    ['cmd', '/c', 'rd', '/s', '/q', str(src_dir)],
+                    capture_output=True, timeout=30
+                )
+                if not src_dir.exists():
+                    self.log("Windows force delete succeeded", "SYSTEM", "SUCCESS")
+                    return
+            except Exception as e:
+                self.log(f"Windows force delete failed: {e}", "SYSTEM", "WARN")
+
+        # Final check
+        if src_dir.exists():
+            remaining = list(src_dir.rglob("*"))
+            self.log(f"Could not fully delete folder, {len(remaining)} items remain", "SYSTEM", "ERROR")
+        else:
+            self.log("Local folder deleted successfully", "SYSTEM", "SUCCESS")
 
     def create_tasks_for_project(self, project_code: str):
         status = self.quality_checker.get_project_status(project_code)
@@ -1756,27 +1800,37 @@ class VMManager:
                 self.log(f"PROJECT COMPLETED: {project_code}", "SYSTEM", "SUCCESS")
                 self.log("=" * 60, "SYSTEM")
 
-                # v1.0.86: STEP 1 - DỪNG tất cả workers trước
-                self.log("Step 1: Stopping all workers...", "SYSTEM")
+                # v1.0.94: STEP 1 - DỪNG tất cả workers + Kill Chrome
+                self.log("Step 1: Stopping all workers and Chrome...", "SYSTEM")
                 for wid in list(self.workers.keys()):
                     self.stop_worker(wid)
                 self.kill_all_chrome()
 
-                # v1.0.90: Tăng wait time từ 2s lên 5s để Windows giải phóng file locks
-                self.log("Waiting 5s for file locks to release...", "SYSTEM")
-                time.sleep(5)
+                # v1.0.94: Tăng wait time lên 10s để Windows giải phóng file locks hoàn toàn
+                self.log("Waiting 10s for file locks to release...", "SYSTEM")
+                time.sleep(10)
 
-                # v1.0.90: Force garbage collection để giải phóng Python file handles
+                # v1.0.94: Force garbage collection để giải phóng Python file handles
                 import gc
                 gc.collect()
 
-                # v1.0.86: STEP 2 - COPY sang máy chủ
+                # v1.0.94: STEP 2 - COPY sang máy chủ (không xóa local trong step này)
+                copy_ok = False
                 try:
                     self.log(f"Step 2: Copying {project_code} to master...", "SYSTEM")
-                    self.copy_project_to_master(project_code)
+                    self.copy_project_to_master(project_code, delete_after=False)
                     self.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
+                    copy_ok = True
                 except Exception as e:
                     self.log(f"Failed to copy {project_code}: {e}", "SYSTEM", "ERROR")
+
+                # v1.0.94: STEP 3 - XÓA local folder riêng biệt (sau khi copy xong)
+                if copy_ok:
+                    self.log("Step 3: Deleting local folder...", "SYSTEM")
+                    # Đợi thêm 5s nữa để đảm bảo copy hoàn tất
+                    time.sleep(5)
+                    gc.collect()
+                    self._delete_project_folder(project_code)
 
                 # Mark as completed to avoid re-copying
                 if not hasattr(self, '_completed_projects'):
@@ -1787,14 +1841,21 @@ class VMManager:
                 self.project_start_time = None
                 self.current_project_code = None
 
-                # v1.0.86: STEP 3 - RESET (restart all workers) để chạy mã mới
-                self.log("Step 3: Restarting all workers for next project...", "SYSTEM")
+                # v1.0.94: STEP 4 - RESET (restart all workers) để chạy mã mới
+                self.log("Step 4: Restarting all workers for next project...", "SYSTEM")
                 for wid in list(self.workers.keys()):
                     time.sleep(2)
                     self.start_worker(wid, gui_mode=self.gui_mode)
                     w = self.workers[wid]
                     w.last_restart_time = datetime.now()
                     w.restart_count += 1
+
+                # v1.0.94: STEP 5 - Verify deletion sau khi restart
+                src_dir = TOOL_DIR / "PROJECTS" / project_code
+                if src_dir.exists():
+                    self.log(f"Warning: Local folder still exists, retry cleanup...", "SYSTEM", "WARN")
+                    time.sleep(3)
+                    self._delete_project_folder(project_code)
 
                 self.log("Ready for next project", "SYSTEM", "SUCCESS")
             return

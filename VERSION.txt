@@ -1,20 +1,21 @@
-1.0.93
-2026-02-04 23:30 (VN)
-Auto-detect IPv6 on START - auto fallback to Direct if not working
+1.0.94
+2026-02-04 23:45 (VN)
+Fix: Delete local folder after copy - stronger retry + Windows force delete
 
-NEW:
-- Khi click START, tu dong kiem tra IPv6 connectivity
-- Neu IPv6 hoat dong -> dung IPv6 Rotation
-- Neu IPv6 khong hoat dong hoac die het -> dung Direct connection
-- Default o Setup VM la "Dung IPv6"
+FIX:
+- Tach rieng logic xoa ra function _delete_project_folder
+- Tang wait time truoc khi xoa (10s thay vi 5s)
+- Them Step rieng biet: Stop -> Copy -> Delete -> Restart -> Verify
+- Them Windows force delete (rd /s /q) neu Python shutil fail
+- Verify deletion sau khi restart, retry neu van con
 
-1. v1.0.93: Auto-detect IPv6 on START
-2. v1.0.92: Fix IPv6 file name compatibility
-3. v1.0.91: GUI - IPv6 config moved to Setup VM
-4. v1.0.90: Copy/Delete reliability - file lock handling
-5. v1.0.89: Step 5 segment retry + status fix
-6. v1.0.88: EARLY CHECK fix all steps to COMPLETED
-7. v1.0.87: GUI Project list real-time update
-8. v1.0.86: Auto-reset ALL workers khi project xong
-9. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
-10. v1.0.84: Mode SMALL = chi anh, khong video
+1. v1.0.94: Delete local folder - stronger retry logic
+2. v1.0.93: Auto-detect IPv6 on START
+3. v1.0.92: Fix IPv6 file name compatibility
+4. v1.0.91: GUI - IPv6 config moved to Setup VM
+5. v1.0.90: Copy/Delete reliability - file lock handling
+6. v1.0.89: Step 5 segment retry + status fix
+7. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+8. v1.0.87: GUI Project list real-time update
+9. v1.0.86: Auto-reset ALL workers khi project xong
+10. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
