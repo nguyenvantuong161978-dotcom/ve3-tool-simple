@@ -280,6 +280,73 @@ def is_local_pic_complete(project_dir: Path, name: str) -> bool:
     return False  # Không có Excel = không complete
 
 
+def is_chrome2_odd_scenes_complete(project_dir: Path, name: str) -> bool:
+    """
+    Check if Chrome 2's ODD scenes are complete.
+
+    Chrome 2 chỉ xử lý scenes LẺ (1, 3, 5, ...).
+    Nếu tất cả scenes lẻ đã có ảnh → Chrome 2 xong việc.
+    Scenes chẵn là việc của Chrome 1.
+    """
+    img_dir = project_dir / "img"
+    if not img_dir.exists():
+        return False
+
+    try:
+        from modules.excel_manager import PromptWorkbook
+        excel_path = project_dir / f"{name}_prompts.xlsx"
+        if not excel_path.exists():
+            return False
+
+        wb = PromptWorkbook(str(excel_path))
+        wb.load_or_create()
+        scenes = wb.get_scenes()
+
+        # Lấy tất cả scene IDs có prompt
+        all_scene_ids = []
+        for s in scenes:
+            if s.img_prompt:
+                try:
+                    scene_num = int(s.scene_id)
+                    all_scene_ids.append(scene_num)
+                except (ValueError, TypeError):
+                    pass
+
+        if not all_scene_ids:
+            return False
+
+        # Chrome 2 (worker_id=1, total_workers=2) xử lý scenes theo modulo
+        # scene_num % 2 == worker_id % 2 = 1 % 2 = 1
+        # → Chrome 2 xử lý scenes có số lẻ (1, 3, 5, 7, 9, ...)
+        odd_scenes = [s for s in all_scene_ids if s % 2 == 1]
+
+        if not odd_scenes:
+            print(f"    [{name}] Chrome2: No odd scenes to process")
+            return True  # Không có scenes lẻ nào → xong việc
+
+        # Kiểm tra xem tất cả scenes lẻ đã có ảnh chưa
+        missing_odd = []
+        for scene_num in odd_scenes:
+            # Tìm file ảnh cho scene này
+            img_file = img_dir / f"scene_{scene_num:03d}.png"
+            img_file_alt = img_dir / f"{scene_num}.png"
+
+            if not img_file.exists() and not img_file_alt.exists():
+                missing_odd.append(scene_num)
+
+        if missing_odd:
+            print(f"    [{name}] Chrome2: {len(odd_scenes) - len(missing_odd)}/{len(odd_scenes)} odd scenes done")
+            print(f"    [{name}] Chrome2: Missing odd scenes: {missing_odd[:10]}{'...' if len(missing_odd) > 10 else ''}")
+            return False
+        else:
+            print(f"    [{name}] Chrome2: ALL {len(odd_scenes)} odd scenes COMPLETE!")
+            return True
+
+    except Exception as e:
+        print(f"    [{name}] Chrome2 check error: {e}")
+        return False
+
+
 def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
     """Process a single project - CHROME 2."""
 
@@ -591,12 +658,23 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         return False
 
     # Step 5: Check completion
+    # v1.0.98: Chrome 2 CHỈ kiểm tra scenes LẺ của nó
+    # Nếu tất cả scenes lẻ xong → Chrome 2 xong việc
+    # Scenes chẵn thiếu là việc của Chrome 1
+
+    # Trường hợp 1: Tất cả images đều xong (cả chẵn lẫn lẻ)
     if is_local_pic_complete(local_dir, code):
-        log(f"  Images complete!")
+        log(f"  ALL images complete!")
         return True
-    else:
-        log(f"  Images incomplete", "WARN")
-        return False
+
+    # Trường hợp 2: Chrome 2 đã xong hết scenes LẺ của nó
+    if is_chrome2_odd_scenes_complete(local_dir, code):
+        log(f"  Chrome2 ODD scenes complete! (Waiting for Chrome1 to finish even scenes)")
+        return True  # Chrome 2 xong việc, không retry
+
+    # Trường hợp 3: Còn scenes lẻ chưa xong → cần retry
+    log(f"  Chrome2 has pending odd scenes", "WARN")
+    return False
 
 
 def get_chrome1_current_project() -> Optional[str]:
@@ -744,6 +822,20 @@ def run_scan_loop():
 
         # Kiểm tra project có Excel với prompts không
         local_dir = LOCAL_PROJECTS / target
+
+        # v1.0.98: Nếu local folder KHÔNG tồn tại → project đã completed & deleted
+        # → Đợi Chrome 1 chuyển sang project mới
+        if not local_dir.exists():
+            print(f"  [Chrome2] {target} folder not found (project completed?)")
+            print(f"  [Chrome2] Waiting for Chrome 1 to start new project...")
+            print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+            try:
+                time.sleep(SCAN_INTERVAL)
+            except KeyboardInterrupt:
+                print("\n\nStopped by user.")
+                break
+            continue
+
         if not has_excel_with_prompts(local_dir, target):
             print(f"  [Chrome2] {target} not ready (no Excel/prompts), waiting...")
             print(f"\n  Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")

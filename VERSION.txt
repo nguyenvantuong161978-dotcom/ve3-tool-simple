@@ -1,19 +1,20 @@
-1.0.97
-2026-02-05 02:55 (VN)
-Add: INSTALL.bat for new machine setup
+1.0.98
+2026-02-05 03:45 (VN)
+Fix: Chrome 2 infinite retry + Clear agent status on reset
 
-ADD:
-- INSTALL.bat - Click de cai tat ca thu vien Python
-- Chay: pip install -r requirements.txt
-- May moi chi can click INSTALL.bat la xong
+FIX:
+- Chrome 2: Chi kiem tra ODD scenes (1,3,5...) khi check completion
+- Chrome 2: Skip retry neu project folder da bi xoa (completed)
+- VM Manager: Clear agent status files khi reset
+- Chrome 2 se khong follow project cu sau reset
 
-1. v1.0.97: Add INSTALL.bat for new machine setup
-2. v1.0.96: Add gspread + google-auth to requirements.txt
-3. v1.0.95: Fix skip child reference images on resume
-4. v1.0.94: Delete local folder - stronger retry logic
-5. v1.0.93: Auto-detect IPv6 on START
-6. v1.0.92: Fix IPv6 file name compatibility
-7. v1.0.91: GUI - IPv6 config moved to Setup VM
-8. v1.0.90: Copy/Delete reliability - file lock handling
-9. v1.0.89: Step 5 segment retry + status fix
-10. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+1. v1.0.98: Fix Chrome 2 infinite retry + Clear agent status on reset
+2. v1.0.97: Add INSTALL.bat for new machine setup
+3. v1.0.96: Add gspread + google-auth to requirements.txt
+4. v1.0.95: Fix skip child reference images on resume
+5. v1.0.94: Delete local folder - stronger retry logic
+6. v1.0.93: Auto-detect IPv6 on START
+7. v1.0.92: Fix IPv6 file name compatibility
+8. v1.0.91: GUI - IPv6 config moved to Setup VM
+9. v1.0.90: Copy/Delete reliability - file lock handling
+10. v1.0.89: Step 5 segment retry + status fix

@@ -1806,6 +1806,10 @@ class VMManager:
                     self.stop_worker(wid)
                 self.kill_all_chrome()
 
+                # v1.0.98: XÓA agent status files để Chrome 2 không follow project cũ
+                self.log("Step 1.5: Clearing agent status files...", "SYSTEM")
+                self._clear_agent_status()
+
                 # v1.0.94: Tăng wait time lên 10s để Windows giải phóng file locks hoàn toàn
                 self.log("Waiting 10s for file locks to release...", "SYSTEM")
                 time.sleep(10)
@@ -1936,6 +1940,25 @@ class VMManager:
             self.log(f"Error killing Chrome for {worker_id}: {e}", worker_id, "WARN")
             self.log("Falling back to kill_all_chrome...", worker_id, "WARN")
             self.kill_all_chrome()
+
+    def _clear_agent_status(self):
+        """
+        v1.0.98: Xóa agent status files khi reset.
+
+        Chrome 2 đọc status của Chrome 1 để follow project.
+        Nếu không xóa, Chrome 2 sẽ follow project cũ sau khi restart.
+        """
+        try:
+            status_dir = TOOL_DIR / ".agent" / "status"
+            if status_dir.exists():
+                for f in status_dir.glob("*.json"):
+                    try:
+                        f.unlink()
+                        self.log(f"  Cleared {f.name}", "SYSTEM")
+                    except Exception as e:
+                        self.log(f"  Cannot delete {f.name}: {e}", "SYSTEM", "WARN")
+        except Exception as e:
+            self.log(f"Error clearing agent status: {e}", "SYSTEM", "WARN")
 
     def kill_all_chrome(self):
         """Kill TẤT CẢ Chrome + CMD windows khi tắt tool."""
@@ -2536,6 +2559,10 @@ class VMManager:
         self.log("Stopping all workers...", "SYSTEM")
         for wid in self.workers:
             self.stop_worker(wid)
+
+        # v1.0.98: Clear agent status files
+        self.log("Clearing agent status files...", "SYSTEM")
+        self._clear_agent_status()
 
         # 2. Copy kết quả về máy chủ (nếu có AUTO path VÀ có ảnh)
         # v1.0.74: Chỉ copy nếu có ảnh - tránh copy project rỗng
