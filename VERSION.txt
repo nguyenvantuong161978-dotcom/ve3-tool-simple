@@ -1,19 +1,19 @@
-1.0.96
-2026-02-05 02:50 (VN)
-Add: gspread + google-auth to requirements.txt
+1.0.97
+2026-02-05 02:55 (VN)
+Add: INSTALL.bat for new machine setup
 
-FIX:
-- requirements.txt thieu gspread va google-auth
-- google_login.py can cac thu vien nay de doc Google Sheets
-- Gio cai pip install -r requirements.txt se co day du thu vien
+ADD:
+- INSTALL.bat - Click de cai tat ca thu vien Python
+- Chay: pip install -r requirements.txt
+- May moi chi can click INSTALL.bat la xong
 
-1. v1.0.96: Add gspread + google-auth to requirements.txt
-2. v1.0.95: Fix skip child reference images on resume
-3. v1.0.94: Delete local folder - stronger retry logic
-4. v1.0.93: Auto-detect IPv6 on START
-5. v1.0.92: Fix IPv6 file name compatibility
-6. v1.0.91: GUI - IPv6 config moved to Setup VM
-7. v1.0.90: Copy/Delete reliability - file lock handling
-8. v1.0.89: Step 5 segment retry + status fix
-9. v1.0.88: EARLY CHECK fix all steps to COMPLETED
-10. v1.0.87: GUI Project list real-time update
+1. v1.0.97: Add INSTALL.bat for new machine setup
+2. v1.0.96: Add gspread + google-auth to requirements.txt
+3. v1.0.95: Fix skip child reference images on resume
+4. v1.0.94: Delete local folder - stronger retry logic
+5. v1.0.93: Auto-detect IPv6 on START
+6. v1.0.92: Fix IPv6 file name compatibility
+7. v1.0.91: GUI - IPv6 config moved to Setup VM
+8. v1.0.90: Copy/Delete reliability - file lock handling
+9. v1.0.89: Step 5 segment retry + status fix
+10. v1.0.88: EARLY CHECK fix all steps to COMPLETED
