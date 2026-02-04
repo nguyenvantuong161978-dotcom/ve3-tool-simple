@@ -1,20 +1,19 @@
-1.0.95
-2026-02-05 00:30 (VN)
-Fix: Skip child character reference images on resume
+1.0.96
+2026-02-05 02:50 (VN)
+Add: gspread + google-auth to requirements.txt
 
 FIX:
-- flow_image_generator.py thieu check is_child khi resume project
-- Them doc cot is_child tu Excel
-- Them check is_child vao skip logic (giong smart_engine.py va browser_flow_generator.py)
-- Child characters now properly skipped on both first run AND resume
+- requirements.txt thieu gspread va google-auth
+- google_login.py can cac thu vien nay de doc Google Sheets
+- Gio cai pip install -r requirements.txt se co day du thu vien
 
-1. v1.0.95: Fix skip child reference images on resume
-2. v1.0.94: Delete local folder - stronger retry logic
-3. v1.0.93: Auto-detect IPv6 on START
-4. v1.0.92: Fix IPv6 file name compatibility
-5. v1.0.91: GUI - IPv6 config moved to Setup VM
-6. v1.0.90: Copy/Delete reliability - file lock handling
-7. v1.0.89: Step 5 segment retry + status fix
-8. v1.0.88: EARLY CHECK fix all steps to COMPLETED
-9. v1.0.87: GUI Project list real-time update
-10. v1.0.86: Auto-reset ALL workers khi project xong
+1. v1.0.96: Add gspread + google-auth to requirements.txt
+2. v1.0.95: Fix skip child reference images on resume
+3. v1.0.94: Delete local folder - stronger retry logic
+4. v1.0.93: Auto-detect IPv6 on START
+5. v1.0.92: Fix IPv6 file name compatibility
+6. v1.0.91: GUI - IPv6 config moved to Setup VM
+7. v1.0.90: Copy/Delete reliability - file lock handling
+8. v1.0.89: Step 5 segment retry + status fix
+9. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+10. v1.0.87: GUI Project list real-time update

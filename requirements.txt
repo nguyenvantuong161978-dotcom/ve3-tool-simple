@@ -14,6 +14,10 @@ selenium>=4.15.0
 webdriver-manager>=4.0.0
 DrissionPage>=4.0.0
 
+# Google Sheets API (for google_login.py)
+gspread>=5.12.0
+google-auth>=2.23.0
+
 # Utils
 websocket-client>=1.6.0
 pyautogui>=0.9.54
