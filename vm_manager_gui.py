@@ -955,14 +955,6 @@ class SimpleGUI(tk.Tk):
                   bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
         self.toggle_btn.pack(side="left", padx=10)
 
-        # IPv6 toggle
-        self.ipv6_var = tk.BooleanVar(value=self._get_ipv6_setting())
-        self.ipv6_check = tk.Checkbutton(top, text="IPv6", variable=self.ipv6_var,
-                  command=self._toggle_ipv6, bg='#0f3460', fg='#00ff88',
-                  selectcolor='#1a1a2e', font=("Arial", 10, "bold"),
-                  activebackground='#0f3460', activeforeground='#00ff88')
-        self.ipv6_check.pack(side="left", padx=15)
-
         # Settings button - cau hinh
         self.settings_btn = tk.Button(top, text="SETTINGS", command=self._open_settings,
                   bg='#ff9f43', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
@@ -2511,66 +2503,66 @@ class SimpleGUI(tk.Tk):
         SettingsWindow(self)
 
     def _setup_vm(self):
-        """Setup SMB share cho may ao - ket noi Z: den may chu."""
+        """Setup SMB share + IPv6 cho may ao."""
         import tkinter.messagebox as msgbox
+        import yaml
+        import subprocess
+        import threading
 
-        # Default settings - co the thay doi trong popup
+        # Default settings
         default_ip = "192.168.88.254"
         default_share = "D"
         default_user = "smbuser"
         default_pass = "159753"
 
-        # Tao popup de nhap thong tin
+        # Tao popup
         popup = tk.Toplevel(self)
-        popup.title("Setup VM - Ket noi o mang")
-        popup.geometry("400x300")
+        popup.title("Setup VM")
+        popup.geometry("500x600")
         popup.configure(bg='#1a1a2e')
         popup.transient(self)
         popup.grab_set()
 
         # Center popup
         popup.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 400) // 2
-        y = self.winfo_y() + (self.winfo_height() - 300) // 2
+        x = self.winfo_x() + (self.winfo_width() - 500) // 2
+        y = self.winfo_y() + (self.winfo_height() - 600) // 2
         popup.geometry(f"+{x}+{y}")
 
-        # Title
-        tk.Label(popup, text="KET NOI O MANG (SMB SHARE)",
-                bg='#1a1a2e', fg='#00ff88', font=("Arial", 12, "bold")).pack(pady=10)
-
-        tk.Label(popup, text="Map o Z: den may chu de copy du lieu on dinh hon",
-                bg='#1a1a2e', fg='#aaa', font=("Arial", 9)).pack()
+        # ============ SECTION 1: SMB SHARE ============
+        tk.Label(popup, text="1. KET NOI O MANG (SMB SHARE)",
+                bg='#1a1a2e', fg='#00ff88', font=("Arial", 11, "bold")).pack(pady=(10, 5))
 
         # Form frame
         form = tk.Frame(popup, bg='#1a1a2e')
-        form.pack(pady=15, padx=20, fill="x")
+        form.pack(pady=5, padx=20, fill="x")
 
         # IP
-        tk.Label(form, text="IP May chu:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=0, column=0, sticky="e", pady=5)
+        tk.Label(form, text="IP May chu:", bg='#1a1a2e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
         ip_var = tk.StringVar(value=default_ip)
-        tk.Entry(form, textvariable=ip_var, width=25, font=("Arial", 10)).grid(row=0, column=1, pady=5, padx=5)
+        tk.Entry(form, textvariable=ip_var, width=22, font=("Arial", 9)).grid(row=0, column=1, pady=3, padx=5)
 
         # Share name
-        tk.Label(form, text="Ten Share:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=1, column=0, sticky="e", pady=5)
+        tk.Label(form, text="Ten Share:", bg='#1a1a2e', fg='white', font=("Arial", 9)).grid(row=1, column=0, sticky="e", pady=3)
         share_var = tk.StringVar(value=default_share)
-        tk.Entry(form, textvariable=share_var, width=25, font=("Arial", 10)).grid(row=1, column=1, pady=5, padx=5)
+        tk.Entry(form, textvariable=share_var, width=22, font=("Arial", 9)).grid(row=1, column=1, pady=3, padx=5)
 
         # Username
-        tk.Label(form, text="Username:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=2, column=0, sticky="e", pady=5)
+        tk.Label(form, text="Username:", bg='#1a1a2e', fg='white', font=("Arial", 9)).grid(row=2, column=0, sticky="e", pady=3)
         user_var = tk.StringVar(value=default_user)
-        tk.Entry(form, textvariable=user_var, width=25, font=("Arial", 10)).grid(row=2, column=1, pady=5, padx=5)
+        tk.Entry(form, textvariable=user_var, width=22, font=("Arial", 9)).grid(row=2, column=1, pady=3, padx=5)
 
         # Password
-        tk.Label(form, text="Password:", bg='#1a1a2e', fg='white', font=("Arial", 10)).grid(row=3, column=0, sticky="e", pady=5)
+        tk.Label(form, text="Password:", bg='#1a1a2e', fg='white', font=("Arial", 9)).grid(row=3, column=0, sticky="e", pady=3)
         pass_var = tk.StringVar(value=default_pass)
-        tk.Entry(form, textvariable=pass_var, width=25, font=("Arial", 10), show="*").grid(row=3, column=1, pady=5, padx=5)
+        tk.Entry(form, textvariable=pass_var, width=22, font=("Arial", 9), show="*").grid(row=3, column=1, pady=3, padx=5)
 
-        # Status label
-        status_var = tk.StringVar(value="")
-        status_lbl = tk.Label(popup, textvariable=status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
-        status_lbl.pack(pady=5)
+        # SMB Status
+        smb_status_var = tk.StringVar(value="")
+        smb_status_lbl = tk.Label(popup, textvariable=smb_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
+        smb_status_lbl.pack(pady=3)
 
-        def do_setup():
+        def do_smb_setup():
             """Thuc hien ket noi SMB."""
             ip = ip_var.get().strip()
             share = share_var.get().strip()
@@ -2578,103 +2570,193 @@ class SimpleGUI(tk.Tk):
             passwd = pass_var.get().strip()
 
             if not all([ip, share, user, passwd]):
-                status_var.set("Vui long nhap day du thong tin!")
-                status_lbl.config(fg='#e94560')
+                smb_status_var.set("Vui long nhap day du thong tin!")
+                smb_status_lbl.config(fg='#e94560')
                 return
 
-            status_var.set("Dang ket noi...")
-            status_lbl.config(fg='#ffd93d')
+            smb_status_var.set("Dang ket noi...")
+            smb_status_lbl.config(fg='#ffd93d')
             popup.update()
 
             try:
-                import subprocess
-
-                # Xoa mapping cu neu co
-                subprocess.run(['net', 'use', 'Z:', '/delete', '/y'],
-                             capture_output=True, text=True)
-
-                # Tao mapping moi
-                cmd = ['net', 'use', 'Z:', f'\\\\{ip}\\{share}',
-                       f'/user:{user}', passwd, '/persistent:yes']
+                subprocess.run(['net', 'use', 'Z:', '/delete', '/y'], capture_output=True, text=True)
+                cmd = ['net', 'use', 'Z:', f'\\\\{ip}\\{share}', f'/user:{user}', passwd, '/persistent:yes']
                 result = subprocess.run(cmd, capture_output=True, text=True)
 
                 if result.returncode == 0:
-                    # Kiem tra Z:\AUTO
-                    from pathlib import Path
-                    auto_path = Path("Z:\\AUTO")
-                    if auto_path.exists():
-                        status_var.set("THANH CONG! Z:\\AUTO da san sang")
-                        status_lbl.config(fg='#00ff88')
-                        msgbox.showinfo("Thanh cong",
-                            f"Da ket noi Z: den \\\\{ip}\\{share}\n\n"
-                            f"Z:\\AUTO da san sang su dung!")
-                    else:
-                        status_var.set(f"Da ket noi Z: nhung khong tim thay AUTO")
-                        status_lbl.config(fg='#ffd93d')
-                        msgbox.showwarning("Canh bao",
-                            f"Da ket noi Z: den \\\\{ip}\\{share}\n\n"
-                            f"Nhung khong tim thay thu muc AUTO.\n"
-                            f"Kiem tra lai may chu.")
+                    auto_path = TOOL_DIR.parent.parent / "Z:" / "AUTO"
+                    try:
+                        from pathlib import Path
+                        auto_path = Path("Z:\\AUTO")
+                        if auto_path.exists():
+                            smb_status_var.set("THANH CONG! Z:\\AUTO da san sang")
+                            smb_status_lbl.config(fg='#00ff88')
+                        else:
+                            smb_status_var.set("Da ket noi nhung khong tim thay AUTO")
+                            smb_status_lbl.config(fg='#ffd93d')
+                    except:
+                        smb_status_var.set("Da ket noi Z:")
+                        smb_status_lbl.config(fg='#00ff88')
                 else:
-                    error_msg = result.stderr or result.stdout or "Loi khong xac dinh"
-                    status_var.set(f"LOI: {error_msg[:50]}")
-                    status_lbl.config(fg='#e94560')
-                    msgbox.showerror("Loi ket noi",
-                        f"Khong the ket noi den \\\\{ip}\\{share}\n\n"
-                        f"Loi: {error_msg}\n\n"
-                        f"Kiem tra:\n"
-                        f"1. May chu {ip} co dang chay?\n"
-                        f"2. Thu muc {share} da share chua?\n"
-                        f"3. User {user} co quyen truy cap?")
+                    smb_status_var.set(f"LOI: {(result.stderr or result.stdout or 'Unknown')[:40]}")
+                    smb_status_lbl.config(fg='#e94560')
+            except Exception as e:
+                smb_status_var.set(f"LOI: {str(e)[:40]}")
+                smb_status_lbl.config(fg='#e94560')
+
+        tk.Button(popup, text="KET NOI SMB", command=do_smb_setup,
+                 bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
+                 relief="flat", padx=15, pady=3).pack(pady=5)
+
+        # ============ SEPARATOR ============
+        tk.Frame(popup, bg='#444', height=2).pack(fill="x", padx=20, pady=10)
+
+        # ============ SECTION 2: IPv6 ROTATION ============
+        tk.Label(popup, text="2. IPv6 ROTATION (Bypass Rate Limit)",
+                bg='#1a1a2e', fg='#00ff88', font=("Arial", 11, "bold")).pack(pady=(5, 5))
+
+        # Read current IPv6 setting
+        config_path = TOOL_DIR / "config" / "settings.yaml"
+        ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
+        current_ipv6_enabled = self._get_ipv6_setting()
+
+        # Radio buttons for IPv6 mode
+        ipv6_mode_var = tk.IntVar(value=1 if current_ipv6_enabled else 0)
+
+        mode_frame = tk.Frame(popup, bg='#1a1a2e')
+        mode_frame.pack(pady=5)
+
+        tk.Radiobutton(mode_frame, text="Khong dung IPv6 (Direct)", variable=ipv6_mode_var, value=0,
+                      bg='#1a1a2e', fg='white', selectcolor='#1a1a2e', font=("Arial", 9),
+                      activebackground='#1a1a2e', activeforeground='white').pack(side="left", padx=10)
+        tk.Radiobutton(mode_frame, text="Dung IPv6 Rotation", variable=ipv6_mode_var, value=1,
+                      bg='#1a1a2e', fg='#00ff88', selectcolor='#1a1a2e', font=("Arial", 9, "bold"),
+                      activebackground='#1a1a2e', activeforeground='#00ff88').pack(side="left", padx=10)
+
+        # IPv6 list frame
+        ipv6_frame = tk.Frame(popup, bg='#1a1a2e')
+        ipv6_frame.pack(pady=5, padx=20, fill="both", expand=True)
+
+        tk.Label(ipv6_frame, text="Danh sach IPv6 (config/ipv6.txt):",
+                bg='#1a1a2e', fg='#aaa', font=("Arial", 9)).pack(anchor="w")
+
+        # Text widget for IPv6 list
+        ipv6_text = tk.Text(ipv6_frame, height=8, width=50, bg='#2a2a4e', fg='white',
+                           font=("Consolas", 9), insertbackground='white')
+        ipv6_text.pack(fill="both", expand=True, pady=5)
+
+        # Load IPv6 list from file
+        if ipv6_file.exists():
+            with open(ipv6_file, "r", encoding="utf-8") as f:
+                ipv6_text.insert("1.0", f.read())
+
+        # IPv6 test status
+        ipv6_status_var = tk.StringVar(value="")
+        ipv6_status_lbl = tk.Label(popup, textvariable=ipv6_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
+        ipv6_status_lbl.pack(pady=3)
+
+        # Test results frame
+        test_results_var = tk.StringVar(value="")
+        test_results_lbl = tk.Label(popup, textvariable=test_results_var, bg='#1a1a2e', fg='#888', font=("Consolas", 8))
+        test_results_lbl.pack(pady=2)
+
+        def test_ipv6():
+            """Test IPv6 connectivity for all IPs in list."""
+            ipv6_list = [line.strip() for line in ipv6_text.get("1.0", "end").split("\n") if line.strip() and not line.strip().startswith("#")]
+
+            if not ipv6_list:
+                ipv6_status_var.set("Khong co IPv6 de test!")
+                ipv6_status_lbl.config(fg='#e94560')
+                return
+
+            ipv6_status_var.set(f"Dang test {len(ipv6_list)} IPv6...")
+            ipv6_status_lbl.config(fg='#ffd93d')
+            popup.update()
+
+            def run_test():
+                working = []
+                failed = []
+
+                for i, ipv6 in enumerate(ipv6_list):
+                    try:
+                        # Ping Google DNS IPv6
+                        cmd = f'ping -n 1 -w 2000 2001:4860:4860::8888'
+                        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0 and 'Reply from' in result.stdout:
+                            working.append(ipv6)
+                        else:
+                            failed.append(ipv6)
+                    except:
+                        failed.append(ipv6)
+
+                    # Update progress
+                    popup.after(0, lambda i=i: ipv6_status_var.set(f"Testing... {i+1}/{len(ipv6_list)}"))
+
+                # Update final results
+                def show_results():
+                    if working:
+                        ipv6_status_var.set(f"XONG: {len(working)} OK, {len(failed)} FAIL")
+                        ipv6_status_lbl.config(fg='#00ff88')
+                        test_results_var.set(f"Working: {', '.join(working[:3])}{'...' if len(working) > 3 else ''}")
+                    else:
+                        ipv6_status_var.set("KHONG CO IPv6 NAO HOAT DONG!")
+                        ipv6_status_lbl.config(fg='#e94560')
+                        test_results_var.set("Kiem tra lai danh sach IPv6 hoac ket noi mang")
+
+                popup.after(0, show_results)
+
+            threading.Thread(target=run_test, daemon=True).start()
+
+        def save_ipv6_config():
+            """Save IPv6 settings to config."""
+            try:
+                # Save IPv6 list to file
+                ipv6_content = ipv6_text.get("1.0", "end").strip()
+                with open(ipv6_file, "w", encoding="utf-8") as f:
+                    f.write(ipv6_content)
+
+                # Save enabled setting to settings.yaml
+                config = {}
+                if config_path.exists():
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        config = yaml.safe_load(f) or {}
+
+                if 'ipv6_rotation' not in config:
+                    config['ipv6_rotation'] = {}
+                config['ipv6_rotation']['enabled'] = (ipv6_mode_var.get() == 1)
+
+                with open(config_path, "w", encoding="utf-8") as f:
+                    yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+                # Update manager settings
+                if hasattr(self, 'manager') and self.manager:
+                    if hasattr(self.manager, 'settings') and hasattr(self.manager.settings, 'ipv6_rotation'):
+                        self.manager.settings.ipv6_rotation['enabled'] = (ipv6_mode_var.get() == 1)
+
+                status = "BAT" if ipv6_mode_var.get() == 1 else "TAT"
+                ipv6_status_var.set(f"Da luu! IPv6: {status}")
+                ipv6_status_lbl.config(fg='#00ff88')
+                print(f"[GUI] IPv6 saved: {status}")
 
             except Exception as e:
-                status_var.set(f"LOI: {str(e)[:50]}")
-                status_lbl.config(fg='#e94560')
-                msgbox.showerror("Loi", f"Loi khi setup: {e}")
+                ipv6_status_var.set(f"LOI: {str(e)[:40]}")
+                ipv6_status_lbl.config(fg='#e94560')
 
-        # Buttons
-        btn_frame = tk.Frame(popup, bg='#1a1a2e')
-        btn_frame.pack(pady=15)
+        # Buttons for IPv6
+        ipv6_btn_frame = tk.Frame(popup, bg='#1a1a2e')
+        ipv6_btn_frame.pack(pady=10)
 
-        tk.Button(btn_frame, text="KET NOI", command=do_setup,
-                 bg='#00ff88', fg='#1a1a2e', font=("Arial", 10, "bold"),
-                 relief="flat", padx=20, pady=5).pack(side="left", padx=10)
+        tk.Button(ipv6_btn_frame, text="TEST IPv6", command=test_ipv6,
+                 bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"),
+                 relief="flat", padx=15, pady=3).pack(side="left", padx=5)
 
-        tk.Button(btn_frame, text="DONG", command=popup.destroy,
-                 bg='#e94560', fg='white', font=("Arial", 10, "bold"),
-                 relief="flat", padx=20, pady=5).pack(side="left", padx=10)
+        tk.Button(ipv6_btn_frame, text="LUU CAU HINH", command=save_ipv6_config,
+                 bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
+                 relief="flat", padx=15, pady=3).pack(side="left", padx=5)
 
-    def _toggle_ipv6(self):
-        """Bat/tat IPv6 va luu vao settings.yaml."""
-        try:
-            import yaml
-            config_path = TOOL_DIR / "config" / "settings.yaml"
-
-            # Doc config hien tai
-            config = {}
-            if config_path.exists():
-                with open(config_path, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f) or {}
-
-            # Update IPv6 setting
-            if 'ipv6_rotation' not in config:
-                config['ipv6_rotation'] = {}
-            config['ipv6_rotation']['enabled'] = self.ipv6_var.get()
-
-            # Luu lai
-            with open(config_path, "w", encoding="utf-8") as f:
-                yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
-
-            # Update manager settings neu dang chay
-            if self.manager and hasattr(self.manager, 'settings'):
-                if hasattr(self.manager.settings, 'ipv6_rotation'):
-                    self.manager.settings.ipv6_rotation['enabled'] = self.ipv6_var.get()
-
-            status = "BAT" if self.ipv6_var.get() else "TAT"
-            print(f"[GUI] IPv6: {status}")
-
-        except Exception as e:
-            print(f"[GUI] Error toggling IPv6: {e}")
+        tk.Button(ipv6_btn_frame, text="DONG", command=popup.destroy,
+                 bg='#e94560', fg='white', font=("Arial", 9, "bold"),
+                 relief="flat", padx=15, pady=3).pack(side="left", padx=5)
 
     def _update_loop(self):
         self._update_workers()

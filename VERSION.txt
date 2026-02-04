@@ -1,22 +1,21 @@
-1.0.90
-2026-02-04 21:10 (VN)
-Fix: Copy/Delete reliability - file lock handling
+1.0.91
+2026-02-04 21:50 (VN)
+GUI: IPv6 config moved to Setup VM popup
 
-BUG:
-- Khi project xong, copy sang master nhung xoa local folder bi fail
-- Nguyen nhan: Wait time qua ngan (2s) + khong retry khi delete fail
-- Ket qua: Files van con tren local, Chrome/CMD chua tat het
+CHANGES:
+- Bo checkbox IPv6 o toolbar chinh
+- Them section IPv6 vao popup "SETUP VM":
+  + Radio buttons: "Khong dung IPv6" / "Dung IPv6"
+  + Text area hien thi/chinh sua danh sach IPv6
+  + Nut "TEST IPv6" de kiem tra cac IP hoat dong
+  + Nut "LUU CAU HINH" de save settings
+- Tool linh dong: chon mode trong Setup VM thay vi tick checkbox
 
-FIX:
-1. Tang wait time tu 2s len 5s sau khi kill Chrome/workers
-2. Them garbage collection de giai phong Python file handles
-3. Delete voi RETRY logic (5 lan, exponential backoff 2-8s)
-4. Neu folder delete fail, thu xoa tung file rieng le
-
-1. v1.0.90: Copy/Delete reliability - file lock handling
-2. v1.0.89: Step 5 segment retry + status fix
-3. v1.0.88: EARLY CHECK fix all steps to COMPLETED
-4. v1.0.87: GUI Project list real-time update
-5. v1.0.86: Auto-reset ALL workers khi project xong
-6. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
-7. v1.0.84: Mode SMALL = chi anh, khong video
+1. v1.0.91: GUI - IPv6 config moved to Setup VM
+2. v1.0.90: Copy/Delete reliability - file lock handling
+3. v1.0.89: Step 5 segment retry + status fix
+4. v1.0.88: EARLY CHECK fix all steps to COMPLETED
+5. v1.0.87: GUI Project list real-time update
+6. v1.0.86: Auto-reset ALL workers khi project xong
+7. v1.0.85: (Reverted) Chrome 2 timeout 3 phut
+8. v1.0.84: Mode SMALL = chi anh, khong video
