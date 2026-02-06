@@ -1670,22 +1670,25 @@ class VMManager:
         except Exception as e:
             self.log(f"Failed to create thumbnail: {e}", "SYSTEM", "ERROR")
 
-    def copy_project_to_master(self, project_code: str, delete_after: bool = True):
+    def copy_project_to_master(self, project_code: str, delete_after: bool = True) -> bool:
         """Copy project folder to master (AUTO path).
 
         v1.0.94: Tách riêng logic xóa ra function _delete_project_folder.
+        v1.0.100: Return True/False để caller biết kết quả.
         Args:
             project_code: Mã project
             delete_after: Nếu True, xóa local folder sau khi copy (default: True cho backward compat)
+        Returns:
+            True nếu copy thành công, False nếu thất bại
         """
         if not self.auto_path:
             self.log("No AUTO path detected, skip copy", "SYSTEM", "WARN")
-            return
+            return False
 
         src_dir = TOOL_DIR / "PROJECTS" / project_code
         if not src_dir.exists():
             self.log(f"Project {project_code} not found in PROJECTS/", "SYSTEM", "ERROR")
-            return
+            return False
 
         # Create thumbnail before copying
         self.create_thumbnail(project_code)
@@ -1710,11 +1713,16 @@ class VMManager:
                 self.log(f"Failed to copy {item.name}: {e}", "SYSTEM", "ERROR")
                 copy_success = False
 
-        self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
+        if copy_success:
+            self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
+        else:
+            self.log(f"Copy {project_code} had errors", "SYSTEM", "ERROR")
 
         # v1.0.94: Chỉ xóa nếu delete_after=True (backward compatible)
         if copy_success and delete_after:
             self._delete_project_folder(project_code)
+
+        return copy_success
 
     def _delete_project_folder(self, project_code: str):
         """v1.0.94: Xóa local project folder với retry logic mạnh hơn.

@@ -1,18 +1,19 @@
-1.0.99
-2026-02-05 04:30 (VN)
-Change: Completion threshold 95% -> 80%
+1.0.100
+2026-02-06 (VN)
+Fix: GUI "Da xong" button now properly checks copy result
 
-CHANGE:
-- VM Manager: Project "done" khi >= 80% anh xong (truoc la 95%)
-- Cho phep nhieu anh fail hon de khong bi ket
+FIX:
+- copy_project_to_master() now returns True/False
+- GUI shows error if copy fails (e.g. no AUTO path)
+- Prevents false "success" message when copy actually skipped
 
-1. v1.0.99: Change completion threshold 95% -> 80%
-2. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
-3. v1.0.97: Add INSTALL.bat for new machine setup
-4. v1.0.96: Add gspread + google-auth to requirements.txt
-5. v1.0.95: Fix skip child reference images on resume
-6. v1.0.94: Delete local folder - stronger retry logic
-7. v1.0.93: Auto-detect IPv6 on START
-8. v1.0.92: Fix IPv6 file name compatibility
-9. v1.0.91: GUI - IPv6 config moved to Setup VM
-10. v1.0.90: Copy/Delete reliability - file lock handling
+1. v1.0.100: Fix GUI "Da xong" button copy check
+2. v1.0.99: Change completion threshold 95% -> 80%
+3. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
+4. v1.0.97: Add INSTALL.bat for new machine setup
+5. v1.0.96: Add gspread + google-auth to requirements.txt
+6. v1.0.95: Fix skip child reference images on resume
+7. v1.0.94: Delete local folder - stronger retry logic
+8. v1.0.93: Auto-detect IPv6 on START
+9. v1.0.92: Fix IPv6 file name compatibility
+10. v1.0.91: GUI - IPv6 config moved to Setup VM

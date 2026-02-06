@@ -1238,8 +1238,11 @@ class SimpleGUI(tk.Tk):
         try:
             # Copy to master
             self.manager.log(f"Copying {current_project} to master...", "SYSTEM")
-            self.manager.copy_project_to_master(current_project)
-            self.manager.log(f"Copied {current_project} successfully", "SYSTEM", "SUCCESS")
+            copy_ok = self.manager.copy_project_to_master(current_project)
+
+            if not copy_ok:
+                messagebox.showerror("Loi", f"Khong the copy ma {current_project} sang may chu!\nKiem tra AUTO path.")
+                return
 
             # Mark as completed
             if not hasattr(self.manager, '_completed_projects'):
@@ -1282,8 +1285,11 @@ class SimpleGUI(tk.Tk):
         try:
             # Copy to master
             self.manager.log(f"Copying {project_code} to master...", "SYSTEM")
-            self.manager.copy_project_to_master(project_code)
-            self.manager.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
+            copy_ok = self.manager.copy_project_to_master(project_code)
+
+            if not copy_ok:
+                messagebox.showerror("Loi", f"Khong the copy ma {project_code} sang may chu!\nKiem tra AUTO path.")
+                return
 
             # Mark as completed
             if not hasattr(self.manager, '_completed_projects'):
