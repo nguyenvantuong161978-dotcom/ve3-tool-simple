@@ -170,6 +170,8 @@ def get_account_info(machine_code: str, max_retries: int = 3) -> dict:
                     code = str(row[0]).strip().upper()
                     account_id = str(row[1]).strip()
                     password = str(row[2]).strip()
+                    # v1.0.101: Đọc cột D - secret key cho 2FA (36 ký tự)
+                    totp_secret = str(row[3]).strip() if len(row) >= 4 else ""
 
                     if not account_id or not password:
                         continue
@@ -177,9 +179,12 @@ def get_account_info(machine_code: str, max_retries: int = 3) -> dict:
                     # Exact match
                     if code == machine_code_upper:
                         log(f"Found account for {machine_code}: {account_id}")
+                        if totp_secret:
+                            log(f"  -> 2FA secret found ({len(totp_secret)} chars)")
                         return {
                             "id": account_id,
                             "password": password,
+                            "totp_secret": totp_secret,  # v1.0.101: 2FA support
                             "row": row_idx
                         }
 
@@ -360,6 +365,60 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log("Pressed Enter")
         except Exception as e:
             log(f"Password step error: {e}", "WARN")
+
+        # === BƯỚC 3: XỬ LÝ 2FA (nếu có) ===
+        totp_secret = account_info.get("totp_secret", "")
+        if totp_secret:
+            log("Checking for 2FA prompt...")
+            time.sleep(3)
+
+            try:
+                # Tìm và click vào "Google Authenticator"
+                auth_option = driver.ele('text:Google Authenticator', timeout=5)
+                if auth_option:
+                    log("Found 2FA prompt - clicking Google Authenticator option...")
+                    auth_option.click()
+                    time.sleep(2)
+
+                    # Tạo mã TOTP từ secret
+                    log("Generating TOTP code...")
+                    try:
+                        import pyotp
+                        # Loại bỏ khoảng trắng và ký tự đặc biệt từ secret
+                        clean_secret = totp_secret.replace(" ", "").replace("-", "").upper()
+                        totp = pyotp.TOTP(clean_secret)
+                        otp_code = totp.now()
+                        log(f"Generated OTP: {otp_code}")
+
+                        # Copy OTP vào clipboard
+                        try:
+                            import pyperclip
+                            pyperclip.copy(otp_code)
+                            log("OTP copied to clipboard")
+                        except ImportError:
+                            import subprocess
+                            subprocess.run(['clip'], input=otp_code.encode(), check=True)
+                            log("OTP copied to clipboard (via clip)")
+
+                        # Paste OTP (Ctrl+V) và Enter
+                        time.sleep(1)
+                        from DrissionPage.common import Actions
+                        actions = Actions(driver)
+                        actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                        log("Sent Ctrl+V for OTP")
+                        time.sleep(0.5)
+                        actions.key_down('enter').key_up('enter')
+                        log("Pressed Enter for OTP")
+
+                    except ImportError:
+                        log("pyotp not installed! Run: pip install pyotp", "ERROR")
+                    except Exception as otp_err:
+                        log(f"OTP generation error: {otp_err}", "ERROR")
+                else:
+                    log("No 2FA prompt found - may already be authenticated")
+
+            except Exception as e:
+                log(f"2FA step skipped or error: {e}", "WARN")
 
         # === KIỂM TRA LOGIN THỰC SỰ THÀNH CÔNG ===
         log("Waiting for login to complete...")

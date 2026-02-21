@@ -1,19 +1,19 @@
-1.0.100
+1.0.101
 2026-02-06 (VN)
-Fix: GUI "Da xong" button now properly checks copy result
+Feature: Auto 2FA login support (Google Authenticator TOTP)
 
-FIX:
-- copy_project_to_master() now returns True/False
-- GUI shows error if copy fails (e.g. no AUTO path)
-- Prevents false "success" message when copy actually skipped
+NEW:
+- Đọc secret 2FA từ cột D trong Google Sheet (36 ký tự)
+- Tự động tạo mã TOTP và điền khi cần xác thực 2 bước
+- Thêm pyotp vào requirements.txt
 
-1. v1.0.100: Fix GUI "Da xong" button copy check
-2. v1.0.99: Change completion threshold 95% -> 80%
-3. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
-4. v1.0.97: Add INSTALL.bat for new machine setup
-5. v1.0.96: Add gspread + google-auth to requirements.txt
-6. v1.0.95: Fix skip child reference images on resume
-7. v1.0.94: Delete local folder - stronger retry logic
-8. v1.0.93: Auto-detect IPv6 on START
-9. v1.0.92: Fix IPv6 file name compatibility
-10. v1.0.91: GUI - IPv6 config moved to Setup VM
+1. v1.0.101: Auto 2FA login support (TOTP)
+2. v1.0.100: Fix GUI "Da xong" button copy check
+3. v1.0.99: Change completion threshold 95% -> 80%
+4. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
+5. v1.0.97: Add INSTALL.bat for new machine setup
+6. v1.0.96: Add gspread + google-auth to requirements.txt
+7. v1.0.95: Fix skip child reference images on resume
+8. v1.0.94: Delete local folder - stronger retry logic
+9. v1.0.93: Auto-detect IPv6 on START
+10. v1.0.92: Fix IPv6 file name compatibility

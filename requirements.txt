@@ -23,3 +23,6 @@ websocket-client>=1.6.0
 pyautogui>=0.9.54
 pyperclip>=1.8.2
 pywin32>=306
+
+# 2FA TOTP
+pyotp>=2.9.0
