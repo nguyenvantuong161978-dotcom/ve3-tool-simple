@@ -1,14 +1,15 @@
-1.0.102
+1.0.103
 2026-02-24 (VN)
-Fix: Skip child reference images on resume (is_child check in _load_prompts)
+Fix: Delete child character rows from Excel before image generation
 
 FIX:
-- _load_prompts() giờ check cột is_child khi load prompts
-- Ảnh tham chiếu trẻ con (is_child=True) sẽ bị bỏ qua khi resume
-- Thống nhất logic skip với _load_character_prompts()
+- Xóa dòng is_child=True trong sheet characters TRƯỚC khi load prompts
+- Đảm bảo ảnh tham chiếu trẻ con không bao giờ được tạo khi resume
+- Thêm function _delete_child_character_rows() trong smart_engine.py
 
-1. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)
-2. v1.0.101: Auto 2FA login support (TOTP)
+1. v1.0.103: Delete child rows from Excel before loading prompts
+2. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)
+3. v1.0.101: Auto 2FA login support (TOTP)
 3. v1.0.100: Fix GUI "Da xong" button copy check
 3. v1.0.99: Change completion threshold 95% -> 80%
 4. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion

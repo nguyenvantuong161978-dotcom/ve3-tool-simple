@@ -1116,6 +1116,89 @@ class SmartEngine:
             self.log(f"Lỗi lưu project_id vào Excel: {e}", "WARN")
             return False
 
+    def _delete_child_character_rows(self, excel_path: Path) -> int:
+        """
+        Xóa các dòng nhân vật trẻ con (is_child=True) trong sheet characters.
+        Gọi trước khi tạo ảnh để đảm bảo không tạo ảnh cho trẻ con.
+
+        v1.0.103: Fix issue khi resume - child characters vẫn được tạo ảnh.
+
+        Returns:
+            Số dòng đã xóa
+        """
+        import openpyxl
+
+        try:
+            wb = openpyxl.load_workbook(excel_path)
+
+            # Tìm sheet characters
+            sheet_name = None
+            for name in wb.sheetnames:
+                if 'character' in name.lower():
+                    sheet_name = name
+                    break
+
+            if not sheet_name:
+                self.log("  [SKIP] Không tìm thấy sheet characters")
+                wb.close()
+                return 0
+
+            ws = wb[sheet_name]
+
+            # Tìm cột is_child
+            is_child_col = None
+            id_col = None
+            headers = []
+            for i, cell in enumerate(ws[1], start=1):
+                h = str(cell.value or '').lower().strip()
+                headers.append(h)
+                if h == 'is_child':
+                    is_child_col = i
+                if h == 'id':
+                    id_col = i
+
+            if is_child_col is None:
+                self.log("  [SKIP] Không tìm thấy cột is_child")
+                wb.close()
+                return 0
+
+            # Tìm các dòng cần xóa (từ dưới lên để không bị lệch index)
+            rows_to_delete = []
+            for row_idx in range(2, ws.max_row + 1):
+                is_child_val = ws.cell(row=row_idx, column=is_child_col).value
+
+                # Parse is_child value
+                should_delete = False
+                if is_child_val is not None:
+                    if isinstance(is_child_val, bool):
+                        should_delete = is_child_val
+                    elif isinstance(is_child_val, (int, float)):
+                        should_delete = bool(is_child_val)
+                    elif isinstance(is_child_val, str):
+                        should_delete = is_child_val.lower().strip() in ('true', '1', 'yes')
+
+                if should_delete:
+                    char_id = ws.cell(row=row_idx, column=id_col).value if id_col else f"row_{row_idx}"
+                    rows_to_delete.append((row_idx, char_id))
+
+            # Xóa từ dưới lên
+            deleted_count = 0
+            for row_idx, char_id in reversed(rows_to_delete):
+                ws.delete_rows(row_idx)
+                self.log(f"  [DELETE] Xóa dòng {char_id} (is_child=True)")
+                deleted_count += 1
+
+            if deleted_count > 0:
+                wb.save(excel_path)
+                self.log(f"  [OK] Đã xóa {deleted_count} dòng trẻ con khỏi Excel")
+
+            wb.close()
+            return deleted_count
+
+        except Exception as e:
+            self.log(f"  [WARN] Lỗi xóa dòng trẻ con: {e}", "WARN")
+            return 0
+
     # ========== PARALLEL CHARACTER GENERATION ==========
 
     def _load_character_prompts(self, excel_path: Path, proj_dir: Path) -> List[Dict]:
@@ -2673,6 +2756,13 @@ class SmartEngine:
             else:
                 self.log("[FAIL] Không có SRT để tạo scenes!", "ERROR")
                 return {"error": "no_srt_no_scenes"}
+
+        # === v1.0.103: XÓA DÒNG TRẺ CON TRƯỚC KHI LOAD PROMPTS ===
+        # Đảm bảo không tạo ảnh tham chiếu cho trẻ con khi resume
+        if not self._skip_references:
+            deleted_count = self._delete_child_character_rows(excel_path)
+            if deleted_count > 0:
+                self.log(f"  [v] Đã xóa {deleted_count} dòng trẻ con (is_child=True) khỏi Excel")
 
         all_prompts = self._load_prompts(excel_path, proj_dir)
 
