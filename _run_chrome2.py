@@ -241,16 +241,23 @@ def get_chrome2_path():
     return None
 
 
-def is_local_pic_complete(project_dir: Path, name: str) -> bool:
-    """Check if local project has images created."""
+def get_project_completion_percent(project_dir: Path, name: str) -> tuple:
+    """
+    Get project completion percentage.
+    v1.0.104: Ưu tiên mã gần xong nhất.
+
+    Returns:
+        (percent, current, expected) - percent hoàn thành, số ảnh hiện tại, số ảnh cần
+    """
     img_dir = project_dir / "img"
     if not img_dir.exists():
-        return False
+        return (0, 0, 0)
 
     img_files = list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg"))
+    current = len(img_files)
 
-    if len(img_files) == 0:
-        return False
+    if current == 0:
+        return (0, 0, 0)
 
     try:
         from modules.excel_manager import PromptWorkbook
@@ -261,23 +268,32 @@ def is_local_pic_complete(project_dir: Path, name: str) -> bool:
             scenes = wb.get_scenes()
             expected = len([s for s in scenes if s.img_prompt])
 
-            # FIX: Nếu expected = 0, không coi là complete
             if expected == 0:
-                print(f"    [{name}] Images: {len(img_files)}/? - Excel invalid, treating as incomplete")
-                return False
+                return (0, current, 0)
 
-            if len(img_files) >= expected:
-                print(f"    [{name}] Images: {len(img_files)}/{expected} - COMPLETE")
-                return True
-            else:
-                print(f"    [{name}] Images: {len(img_files)}/{expected} - incomplete")
-                return False
+            percent = int(current / expected * 100)
+            return (percent, current, expected)
     except Exception as e:
-        print(f"    [{name}] Warning: {e}")
-        # Nếu có lỗi đọc Excel, không coi là complete
+        pass
+
+    return (0, current, 0)
+
+
+def is_local_pic_complete(project_dir: Path, name: str) -> bool:
+    """Check if local project has ALL images created (both Chrome 1 and 2)."""
+    percent, current, expected = get_project_completion_percent(project_dir, name)
+
+    if expected == 0:
+        if current > 0:
+            print(f"    [{name}] Images: {current}/? - Excel invalid, treating as incomplete")
         return False
 
-    return False  # Không có Excel = không complete
+    if current >= expected:
+        print(f"    [{name}] Images: {current}/{expected} - COMPLETE")
+        return True
+    else:
+        print(f"    [{name}] Images: {current}/{expected} ({percent}%) - incomplete")
+        return False
 
 
 def is_chrome2_odd_scenes_complete(project_dir: Path, name: str) -> bool:
@@ -697,11 +713,14 @@ def get_chrome1_current_project() -> Optional[str]:
 
 
 def scan_incomplete_local_projects() -> list:
-    """Scan local PROJECTS for incomplete projects."""
-    incomplete = []
+    """
+    Scan local PROJECTS for incomplete projects.
+    v1.0.104: Ưu tiên mã gần xong nhất (sort by completion % descending).
+    """
+    incomplete = []  # List of (code, percent, current, expected)
 
     if not LOCAL_PROJECTS.exists():
-        return incomplete
+        return []
 
     for item in LOCAL_PROJECTS.iterdir():
         if not item.is_dir():
@@ -721,15 +740,28 @@ def scan_incomplete_local_projects() -> list:
         # Chrome Worker CHỈ xử lý projects có Excel với prompts (Step 7 done)
         # Projects chỉ có SRT → đợi Excel Worker hoàn thành trước
         if has_excel_with_prompts(item, code):
-            print(f"    - {code}: incomplete (has Excel with prompts, no images)")
-            incomplete.append(code)
+            # Get completion percentage for sorting
+            percent, current, expected = get_project_completion_percent(item, code)
+            print(f"    - {code}: {current}/{expected} ({percent}%) incomplete")
+            incomplete.append((code, percent, current, expected))
         else:
             # Log để debug nhưng KHÔNG thêm vào list
             srt_path = item / f"{code}.srt"
             if srt_path.exists():
                 print(f"    - {code}: has SRT, waiting for Excel Worker (Step 7)")
 
-    return sorted(incomplete)
+    # v1.0.104: Sort by completion % descending (highest first)
+    # Ưu tiên mã gần xong để giải quyết backlog
+    incomplete.sort(key=lambda x: x[1], reverse=True)
+
+    # Log sorted order
+    if incomplete:
+        print(f"  [PRIORITY] Thứ tự ưu tiên (gần xong nhất trước):")
+        for i, (code, percent, current, expected) in enumerate(incomplete[:5]):  # Show top 5
+            print(f"    {i+1}. {code}: {percent}% ({current}/{expected})")
+
+    # Return only codes
+    return [x[0] for x in incomplete]
 
 
 def scan_master_projects() -> list:

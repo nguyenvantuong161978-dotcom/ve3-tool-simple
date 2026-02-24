@@ -1,15 +1,17 @@
-1.0.103
+1.0.104
 2026-02-24 (VN)
-Fix: Delete child character rows from Excel before image generation
+Feature: Prioritize projects by completion percentage (highest first)
 
-FIX:
-- Xóa dòng is_child=True trong sheet characters TRƯỚC khi load prompts
-- Đảm bảo ảnh tham chiếu trẻ con không bao giờ được tạo khi resume
-- Thêm function _delete_child_character_rows() trong smart_engine.py
+NEW:
+- Ưu tiên xử lý mã gần xong nhất (% hoàn thành cao nhất)
+- Giải quyết backlog nhanh hơn bằng cách hoàn thành các mã đang dở
+- Thêm function get_project_completion_percent() để tính % hoàn thành
+- Log thứ tự ưu tiên khi scan projects
 
-1. v1.0.103: Delete child rows from Excel before loading prompts
-2. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)
-3. v1.0.101: Auto 2FA login support (TOTP)
+1. v1.0.104: Prioritize projects by completion % (highest first)
+2. v1.0.103: Delete child rows from Excel before loading prompts
+3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)
+4. v1.0.101: Auto 2FA login support (TOTP)
 3. v1.0.100: Fix GUI "Da xong" button copy check
 3. v1.0.99: Change completion threshold 95% -> 80%
 4. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
