@@ -776,31 +776,28 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                         otp_code = totp.now()
                         log(f"Generated OTP: {otp_code}")
 
-                        # Click để focus vào input
-                        otp_input.click()
-                        time.sleep(0.3)
+                        # v1.0.124: Dùng Ctrl+V để paste OTP (như cũ)
+                        # Copy OTP vào clipboard
+                        try:
+                            import pyperclip
+                            pyperclip.copy(otp_code)
+                            log("OTP copied to clipboard")
+                        except ImportError:
+                            import subprocess
+                            subprocess.run(['clip'], input=otp_code.encode(), check=True)
+                            log("OTP copied to clipboard (via clip)")
 
-                        # Nhập OTP trực tiếp bằng input() method
-                        otp_input.clear()
-                        otp_input.input(otp_code)
-                        log(f"OTP entered: {otp_code}")
+                        # Paste OTP bằng Ctrl+V
+                        time.sleep(0.5)
+                        from DrissionPage.common import Actions
+                        actions = Actions(driver)
+                        actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                        log("Sent Ctrl+V for OTP")
                         time.sleep(0.5)
 
-                        # Nhấn Enter hoặc click Next
-                        try:
-                            next_btn = driver.ele('button:contains("Next")', timeout=2) or \
-                                       driver.ele('button:contains("Tiếp")', timeout=1) or \
-                                       driver.ele('button:contains("Verify")', timeout=1) or \
-                                       driver.ele('button:contains("Xác minh")', timeout=1)
-                            if next_btn:
-                                next_btn.click()
-                                log("Clicked Next/Verify button")
-                            else:
-                                otp_input.input('\n')
-                                log("Pressed Enter for OTP")
-                        except:
-                            otp_input.input('\n')
-                            log("Pressed Enter for OTP (fallback)")
+                        # Nhấn Enter
+                        actions.key_down('enter').key_up('enter')
+                        log("Pressed Enter for OTP")
 
                     except ImportError:
                         log("pyotp not installed! Run: pip install pyotp", "ERROR")
