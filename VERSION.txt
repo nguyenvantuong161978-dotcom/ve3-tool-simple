@@ -1,11 +1,12 @@
-1.0.116
+1.0.117
 2026-02-25 (VN)
-Fix: PRE-LOGIN CMD visible với CREATE_NEW_CONSOLE
+Fix: PRE-LOGIN dùng machine_code từ folder path
 
 FLOW MỚI khi nhấn "BAT DAU":
 1. Start Excel worker (CMD 1)
 2. PRE-LOGIN CMD mở lên (visible):
-   - Tìm project có 0% ảnh
+   - Detect machine_code từ folder (AR8-T1)
+   - Tìm account trong Google Sheet
    - Xóa Chrome data cả 2
    - Login Chrome 1 → tắt
    - Login Chrome 2 → tắt
@@ -14,9 +15,10 @@ FLOW MỚI khi nhấn "BAT DAU":
 3. Start Chrome 1 worker (CMD 2)
 4. Start Chrome 2 worker (CMD 3)
 
-1. v1.0.116: Fix PRE-LOGIN CMD visible (CREATE_NEW_CONSOLE)
-2. v1.0.115: PRE-LOGIN chạy như CMD riêng (visible)
-3. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
+1. v1.0.117: Fix PRE-LOGIN dùng machine_code từ folder path
+2. v1.0.116: Fix PRE-LOGIN CMD visible (CREATE_NEW_CONSOLE)
+3. v1.0.115: PRE-LOGIN chạy như CMD riêng (visible)
+4. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
 2. v1.0.113: Login cả 2 Chrome trước khi vào Flow
 3. v1.0.112: Login Google cả khi RESUME với 0% ảnh
 4. v1.0.111: Đăng nhập Google trước khi vào Flow

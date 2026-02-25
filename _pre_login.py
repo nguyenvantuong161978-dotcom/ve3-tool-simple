@@ -77,19 +77,21 @@ def main():
     try:
         from google_login import (
             extract_channel_from_machine_code, get_current_account_for_channel,
-            save_account_to_excel, login_google_chrome
+            save_account_to_excel, login_google_chrome, detect_machine_code
         )
     except ImportError as e:
         print(f"[PRE-LOGIN] Import error: {e}")
         input("\nPress Enter to close...")
         return
 
-    channel = extract_channel_from_machine_code(code)
-    print(f"[PRE-LOGIN] Channel: {channel}, Machine code: {code}")
+    # v1.0.117: Dùng machine_code từ folder path (AR8-T1), KHÔNG phải project code (AR8-0003)
+    machine_code = detect_machine_code()
+    channel = extract_channel_from_machine_code(machine_code)
+    print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
     # Lấy account từ Google Sheet
     print("[PRE-LOGIN] Getting account from Google Sheet...")
-    current_account = get_current_account_for_channel(channel, machine_code=code)
+    current_account = get_current_account_for_channel(channel, machine_code=machine_code)
 
     if not current_account:
         print("[PRE-LOGIN] ERROR: No account found in sheet!")
