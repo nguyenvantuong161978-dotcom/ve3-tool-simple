@@ -1,15 +1,16 @@
-1.0.107
+1.0.108
 2026-02-25 (VN)
-Feature: Clear Chrome data when starting NEW project
+Feature: GUI chọn tài khoản Veo3
 
 NEW:
-- Khi bắt đầu project MỚI → xóa Chrome data → đăng nhập tài khoản mới
-- Khi RESUME project dở → giữ nguyên Chrome data → sử dụng session cũ
-- Logic: NEW = xóa data + lưu account | RESUME = không xóa + đọc account
+- GUI Settings: Listbox hiển thị danh sách tài khoản (dễ nhìn hơn)
+- Nút "CHON TAI KHOAN NAY": Chọn tài khoản bất kỳ làm tài khoản tiếp theo
+- Có thể đổi thứ tự tài khoản theo ý muốn (không chỉ xoay vòng)
 
-1. v1.0.107: Clear Chrome data on NEW project (not resume)
-2. v1.0.106: Save account to Excel for proper resume
-3. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
+1. v1.0.108: GUI select account (Listbox + chọn tài khoản)
+2. v1.0.107: Clear Chrome data on NEW project (not resume)
+3. v1.0.106: Save account to Excel for proper resume
+4. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
 2. v1.0.104: Prioritize projects by completion % (highest first)
 3. v1.0.103: Delete child rows from Excel before loading prompts
 3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)

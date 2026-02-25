@@ -192,26 +192,45 @@ class SettingsWindow(tk.Toplevel):
         tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
                   bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
 
-        # === VEO3 ACCOUNTS (v1.0.105) ===
+        # === VEO3 ACCOUNTS (v1.0.108) ===
         account_frame = tk.LabelFrame(main_frame, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
                                        font=("Arial", 10, "bold"), padx=10, pady=10)
         account_frame.pack(fill="x", pady=5)
 
-        # Account info display
-        self.account_info_text = tk.Text(account_frame, height=6, width=60,
-                                          font=("Consolas", 9), bg='#0f3460', fg='#00ff88',
-                                          state="disabled", wrap="word")
-        self.account_info_text.pack(fill="x", pady=5)
+        # Header info
+        self.account_header = tk.Label(account_frame, text="", bg='#16213e', fg='#00ff88',
+                                        font=("Consolas", 9), anchor="w")
+        self.account_header.pack(fill="x")
+
+        # Account listbox with scrollbar (v1.0.108: Có thể chọn để đổi thứ tự)
+        list_frame = tk.Frame(account_frame, bg='#16213e')
+        list_frame.pack(fill="x", pady=5)
+
+        self.account_listbox = tk.Listbox(list_frame, height=5, width=50,
+                                           font=("Consolas", 10), bg='#0f3460', fg='#00ff88',
+                                           selectbackground='#e17055', selectforeground='white',
+                                           activestyle='none')
+        self.account_listbox.pack(side="left", fill="x", expand=True)
+
+        scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=self.account_listbox.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.account_listbox.config(yscrollcommand=scrollbar.set)
+
+        # Store accounts data for selection
+        self._accounts_data = []
 
         # Buttons row
         account_btn_row = tk.Frame(account_frame, bg='#16213e')
         account_btn_row.pack(fill="x", pady=5)
 
-        tk.Button(account_btn_row, text="Tai lai thong tin", command=self._load_account_info,
-                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=10).pack(side="left", padx=5)
+        tk.Button(account_btn_row, text="Tai lai", command=self._load_account_info,
+                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(side="left", padx=3)
 
-        tk.Button(account_btn_row, text="Xoay tai khoan", command=self._rotate_account,
-                  bg='#e17055', fg='white', font=("Arial", 9), relief="flat", padx=10).pack(side="left", padx=5)
+        tk.Button(account_btn_row, text="Xoay vong", command=self._rotate_account,
+                  bg='#6c5ce7', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(side="left", padx=3)
+
+        tk.Button(account_btn_row, text="CHON TAI KHOAN NAY", command=self._select_account,
+                  bg='#e17055', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10).pack(side="left", padx=3)
 
         # Load account info on init
         self.after(500, self._load_account_info)
@@ -281,7 +300,8 @@ class SettingsWindow(tk.Toplevel):
 
     def _load_account_info(self):
         """
-        v1.0.105: Load va hien thi thong tin tai khoan Veo3 cho kenh hien tai.
+        v1.0.108: Load va hien thi thong tin tai khoan Veo3 trong Listbox.
+        Cho phep chon tai khoan de dat lam hien tai.
         """
         try:
             from google_login import (
@@ -289,47 +309,92 @@ class SettingsWindow(tk.Toplevel):
                 get_channel_accounts, load_account_index
             )
 
-            # Enable text widget for editing
-            self.account_info_text.config(state="normal")
-            self.account_info_text.delete("1.0", "end")
+            # Clear listbox
+            self.account_listbox.delete(0, "end")
+            self._accounts_data = []
 
             # Detect channel
             machine_code = detect_machine_code()
             if not machine_code:
-                self.account_info_text.insert("end", "Khong detect duoc ma may!\n")
-                self.account_info_text.insert("end", f"Path: {TOOL_DIR}")
-                self.account_info_text.config(state="disabled")
+                self.account_header.config(text=f"Loi: Khong detect duoc ma may! Path: {TOOL_DIR}")
                 return
 
             channel = extract_channel_from_machine_code(machine_code)
-            self.account_info_text.insert("end", f"Ma may: {machine_code}\n")
-            self.account_info_text.insert("end", f"Kenh: {channel}\n")
-            self.account_info_text.insert("end", "-" * 40 + "\n")
+            self._current_channel = channel
 
             # Get accounts
             accounts = get_channel_accounts(channel)
             current_index = load_account_index(channel)
 
             if not accounts:
-                self.account_info_text.insert("end", "Khong tim thay tai khoan nao!\n")
-                self.account_info_text.insert("end", "Kiem tra sheet THONG TIN, cot B va AT")
-            else:
-                self.account_info_text.insert("end", f"Tong: {len(accounts)} tai khoan\n")
-                self.account_info_text.insert("end", f"Dang dung: #{current_index + 1}\n\n")
+                self.account_header.config(text=f"Kenh: {channel} | Khong tim thay tai khoan!")
+                self.account_listbox.insert("end", "Kiem tra sheet THONG TIN, cot B va AT")
+                return
 
-                for i, acc in enumerate(accounts):
-                    marker = ">>> " if i == current_index else "    "
-                    self.account_info_text.insert("end", f"{marker}{i+1}. {acc['id']}\n")
-                    if acc.get('totp_secret'):
-                        self.account_info_text.insert("end", f"       (2FA: Co)\n")
+            # Update header
+            self.account_header.config(
+                text=f"Kenh: {channel} | Tong: {len(accounts)} TK | Dang dung: #{current_index + 1}"
+            )
 
-            self.account_info_text.config(state="disabled")
+            # Store accounts data
+            self._accounts_data = accounts
+
+            # Populate listbox
+            for i, acc in enumerate(accounts):
+                marker = ">>>" if i == current_index else "   "
+                has_2fa = " [2FA]" if acc.get('totp_secret') else ""
+                self.account_listbox.insert("end", f"{marker} {i+1}. {acc['id']}{has_2fa}")
+
+            # Select current account
+            if 0 <= current_index < len(accounts):
+                self.account_listbox.selection_set(current_index)
+                self.account_listbox.see(current_index)
 
         except Exception as e:
-            self.account_info_text.config(state="normal")
-            self.account_info_text.delete("1.0", "end")
-            self.account_info_text.insert("end", f"Loi: {e}")
-            self.account_info_text.config(state="disabled")
+            self.account_header.config(text=f"Loi: {e}")
+
+    def _select_account(self):
+        """
+        v1.0.108: Chon tai khoan duoc highlight trong listbox lam tai khoan hien tai.
+        """
+        try:
+            from google_login import save_account_index
+            from tkinter import messagebox
+
+            # Get selected index
+            selection = self.account_listbox.curselection()
+            if not selection:
+                messagebox.showwarning("Thong bao", "Vui long chon mot tai khoan trong danh sach!")
+                return
+
+            selected_idx = selection[0]
+
+            if not self._accounts_data or selected_idx >= len(self._accounts_data):
+                messagebox.showerror("Loi", "Du lieu tai khoan khong hop le!")
+                return
+
+            # Save selected index
+            channel = getattr(self, '_current_channel', None)
+            if not channel:
+                messagebox.showerror("Loi", "Khong xac dinh duoc kenh!")
+                return
+
+            save_account_index(channel, selected_idx)
+            selected_account = self._accounts_data[selected_idx]
+
+            messagebox.showinfo(
+                "Thanh cong",
+                f"Da chon tai khoan #{selected_idx + 1}/{len(self._accounts_data)}\n\n"
+                f"Email: {selected_account['id']}\n\n"
+                f"Tai khoan nay se duoc su dung cho ma tiep theo."
+            )
+
+            # Reload to update display
+            self._load_account_info()
+
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Loi", f"Khong the chon tai khoan: {e}")
 
     def _rotate_account(self):
         """
