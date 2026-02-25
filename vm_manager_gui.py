@@ -2474,10 +2474,15 @@ class SimpleGUI(tk.Tk):
             print("="*60)
             self.status_var.set("Dang chay pre-login...")
 
-            # Chạy _pre_login.py trong CMD riêng và ĐỢI nó xong
-            # Dùng cmd /c để chạy và đợi kết thúc
-            cmd = f'start "PRE-LOGIN" /wait cmd /c python "{pre_login_script}"'
-            subprocess.run(cmd, shell=True, cwd=str(TOOL_DIR))
+            # v1.0.116: Dùng Popen với CREATE_NEW_CONSOLE để mở CMD visible
+            # Đợi process kết thúc trước khi tiếp tục
+            CREATE_NEW_CONSOLE = 0x00000010
+            process = subprocess.Popen(
+                ['python', str(pre_login_script)],
+                cwd=str(TOOL_DIR),
+                creationflags=CREATE_NEW_CONSOLE
+            )
+            process.wait()  # Đợi CMD kết thúc
 
             print("[PRE-LOGIN] Pre-login CMD finished!")
             print("="*60 + "\n")
