@@ -1,6 +1,6 @@
-1.0.117
+1.0.118
 2026-02-25 (VN)
-Fix: PRE-LOGIN dùng machine_code từ folder path
+Fix: PRE-LOGIN CMD dùng os.system (thay vì subprocess)
 
 FLOW MỚI khi nhấn "BAT DAU":
 1. Start Excel worker (CMD 1)
@@ -15,10 +15,11 @@ FLOW MỚI khi nhấn "BAT DAU":
 3. Start Chrome 1 worker (CMD 2)
 4. Start Chrome 2 worker (CMD 3)
 
-1. v1.0.117: Fix PRE-LOGIN dùng machine_code từ folder path
-2. v1.0.116: Fix PRE-LOGIN CMD visible (CREATE_NEW_CONSOLE)
-3. v1.0.115: PRE-LOGIN chạy như CMD riêng (visible)
-4. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
+1. v1.0.118: Fix PRE-LOGIN CMD dùng os.system (thay vì subprocess)
+2. v1.0.117: Fix PRE-LOGIN dùng machine_code từ folder path
+3. v1.0.116: Fix PRE-LOGIN CMD visible (CREATE_NEW_CONSOLE)
+4. v1.0.115: PRE-LOGIN chạy như CMD riêng (visible)
+5. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
 2. v1.0.113: Login cả 2 Chrome trước khi vào Flow
 3. v1.0.112: Login Google cả khi RESUME với 0% ảnh
 4. v1.0.111: Đăng nhập Google trước khi vào Flow

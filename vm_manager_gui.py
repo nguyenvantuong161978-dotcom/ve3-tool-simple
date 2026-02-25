@@ -2449,7 +2449,7 @@ class SimpleGUI(tk.Tk):
 
     def _pre_login_chrome(self):
         """
-        v1.0.115: Chạy _pre_login.py như CMD riêng (visible window).
+        v1.0.118: Chạy _pre_login.py như CMD riêng (visible window).
 
         CMD này sẽ:
         1. Tìm project pending (có Excel, 0 ảnh)
@@ -2459,7 +2459,7 @@ class SimpleGUI(tk.Tk):
         5. Tự động tắt sau 3 giây
         """
         try:
-            import subprocess
+            import os
             from pathlib import Path
 
             TOOL_DIR = Path(__file__).parent
@@ -2472,17 +2472,11 @@ class SimpleGUI(tk.Tk):
             print("\n" + "="*60)
             print("[PRE-LOGIN] Starting pre-login CMD window...")
             print("="*60)
-            self.status_var.set("Dang chay pre-login...")
 
-            # v1.0.116: Dùng Popen với CREATE_NEW_CONSOLE để mở CMD visible
-            # Đợi process kết thúc trước khi tiếp tục
-            CREATE_NEW_CONSOLE = 0x00000010
-            process = subprocess.Popen(
-                ['python', str(pre_login_script)],
-                cwd=str(TOOL_DIR),
-                creationflags=CREATE_NEW_CONSOLE
-            )
-            process.wait()  # Đợi CMD kết thúc
+            # v1.0.118: Dùng os.system với start /wait để mở CMD visible
+            # start /wait: mở CMD mới và đợi nó kết thúc
+            cmd = f'start "PRE-LOGIN" /wait python "{pre_login_script}"'
+            os.system(cmd)
 
             print("[PRE-LOGIN] Pre-login CMD finished!")
             print("="*60 + "\n")
