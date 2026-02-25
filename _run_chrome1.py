@@ -33,6 +33,55 @@ from datetime import datetime
 TOOL_DIR = Path(__file__).parent
 sys.path.insert(0, str(TOOL_DIR))
 
+
+# ================================================================================
+# CHROME DATA MANAGEMENT (v1.0.107)
+# ================================================================================
+
+def clear_chrome_data_for_new_account():
+    """
+    v1.0.107: Xóa Chrome data để đăng nhập tài khoản mới.
+
+    Gọi khi bắt đầu project MỚI (không phải resume) để:
+    - Logout khỏi tài khoản cũ
+    - Login tài khoản mới khi Chrome khởi động lại
+    """
+    import shutil
+
+    # Chrome 1 data path (Chrome 1 là leader)
+    chrome1_data = TOOL_DIR / "GoogleChromePortable" / "Data" / "profile"
+    # Chrome 2 data path
+    chrome2_data = TOOL_DIR / "GoogleChromePortable - Copy" / "Data" / "profile"
+
+    cleared = []
+    for data_path in [chrome1_data, chrome2_data]:
+        if data_path.exists():
+            # Xóa tất cả trừ "First Run" file
+            first_run = data_path / "First Run"
+
+            for item in data_path.iterdir():
+                if item.name == "First Run":
+                    continue
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink()
+                except Exception as e:
+                    print(f"  Cannot delete {item.name}: {e}")
+
+            # Tạo lại First Run nếu đã bị xóa
+            if not first_run.exists():
+                first_run.touch()
+
+            cleared.append(data_path.parent.parent.name)
+
+    if cleared:
+        print(f"  [CHROME] Cleared data for: {', '.join(cleared)}")
+
+    return len(cleared) > 0
+
+
 # ================================================================================
 # AGENT PROTOCOL
 # ================================================================================
@@ -387,10 +436,16 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
 
             if account_info and account_info.get('email'):
                 # RESUME: Đã có account trong Excel → restore account index
+                # KHÔNG xóa Chrome data - giữ nguyên session
                 log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {account_info.get('index')})")
                 set_account_index_for_resume(str(excel_path), channel)
             else:
-                # NEW PROJECT: Chưa có account → lưu account hiện tại
+                # NEW PROJECT: Chưa có account
+                # v1.0.107: XÓA CHROME DATA để đăng nhập tài khoản mới
+                log(f"  [NEW PROJECT] Clearing Chrome data for new account login...")
+                clear_chrome_data_for_new_account()
+
+                # Lưu account hiện tại vào Excel
                 current_account = get_current_account_for_channel(channel)
                 if current_account:
                     log(f"  [NEW] Saving account to Excel: {current_account['id']} (index {current_account['index']})")

@@ -1,14 +1,15 @@
-1.0.106
+1.0.107
 2026-02-25 (VN)
-Feature: Save account info to Excel for resume
+Feature: Clear Chrome data when starting NEW project
 
 NEW:
-- Lưu thông tin tài khoản (email, index) vào Excel config sheet khi bắt đầu project
-- Khi resume project dở → đọc account từ Excel và sử dụng đúng tài khoản đó
-- Chrome 1: Lưu + đọc account | Chrome 2: Chỉ đọc account
+- Khi bắt đầu project MỚI → xóa Chrome data → đăng nhập tài khoản mới
+- Khi RESUME project dở → giữ nguyên Chrome data → sử dụng session cũ
+- Logic: NEW = xóa data + lưu account | RESUME = không xóa + đọc account
 
-1. v1.0.106: Save account to Excel for proper resume
-2. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
+1. v1.0.107: Clear Chrome data on NEW project (not resume)
+2. v1.0.106: Save account to Excel for proper resume
+3. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
 2. v1.0.104: Prioritize projects by completion % (highest first)
 3. v1.0.103: Delete child rows from Excel before loading prompts
 3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)
