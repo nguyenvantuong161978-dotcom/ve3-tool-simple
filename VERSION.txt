@@ -1,15 +1,17 @@
-1.0.112
+1.0.113
 2026-02-25 (VN)
-Fix: Đăng nhập Google cả khi RESUME với 0% ảnh
+Fix: Login CẢ 2 Chrome (Chrome 1 + Chrome 2) trước khi vào Flow
 
 FIX:
-- Trước: RESUME path không login → Flow không có session
-- Giờ: Nếu 0% completion (chưa có ảnh) → luôn login trước
-- Cả NEW và RESUME đều login khi bắt đầu mã mới
+- Xóa Chrome data
+- Mở Chrome 1 → đăng nhập → tắt
+- Mở Chrome 2 → đăng nhập → tắt
+- Sau đó mới vào Flow như bình thường
 
-1. v1.0.112: Login Google cả khi RESUME với 0% ảnh
-2. v1.0.111: Đăng nhập Google trước khi vào Flow
-3. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
+1. v1.0.113: Login cả 2 Chrome trước khi vào Flow
+2. v1.0.112: Login Google cả khi RESUME với 0% ảnh
+3. v1.0.111: Đăng nhập Google trước khi vào Flow
+4. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
 2. v1.0.109: Fix GUI Settings bị che + tự tắt
 3. v1.0.108: GUI select account (Listbox + chọn tài khoản)
 4. v1.0.107: Clear Chrome data on NEW project (not resume)

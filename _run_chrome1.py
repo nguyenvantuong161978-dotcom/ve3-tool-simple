@@ -450,17 +450,19 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
 
                     current_account = get_current_account_for_channel(channel, machine_code=code)
                     if current_account:
-                        log(f"  [RESUME] Logging into Google before Flow...")
-                        chrome_portable = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
-                        login_result = login_google_chrome(
-                            current_account,
-                            chrome_portable=chrome_portable,
-                            worker_id=0  # Chrome 1
-                        )
-                        if login_result:
-                            log(f"  [RESUME] Google login successful!")
-                        else:
-                            log(f"  [RESUME] Google login failed - Flow may ask for login", "WARN")
+                        # v1.0.113: Login CẢ 2 Chrome
+                        chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+                        chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
+
+                        # Login Chrome 1
+                        log(f"  [RESUME] Logging into Chrome 1...")
+                        login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
+
+                        # Login Chrome 2
+                        log(f"  [RESUME] Logging into Chrome 2...")
+                        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+
+                        log(f"  [RESUME] Both Chrome logged in!")
             else:
                 # NEW PROJECT: Chưa có account
                 # v1.0.107: XÓA CHROME DATA để đăng nhập tài khoản mới
@@ -479,19 +481,19 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                         current_account['id']
                     )
 
-                    # v1.0.111: Đăng nhập Google TRƯỚC khi vào Flow
-                    # Vì đã xóa Chrome data, phải login lại
-                    log(f"  [NEW] Logging into Google before Flow...")
-                    chrome_portable = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
-                    login_result = login_google_chrome(
-                        current_account,
-                        chrome_portable=chrome_portable,
-                        worker_id=0  # Chrome 1
-                    )
-                    if login_result:
-                        log(f"  [NEW] Google login successful!")
-                    else:
-                        log(f"  [NEW] Google login failed - Flow may ask for login", "WARN")
+                    # v1.0.113: Login CẢ 2 Chrome trước khi vào Flow
+                    chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+                    chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
+
+                    # Login Chrome 1
+                    log(f"  [NEW] Logging into Chrome 1...")
+                    login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
+
+                    # Login Chrome 2
+                    log(f"  [NEW] Logging into Chrome 2...")
+                    login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+
+                    log(f"  [NEW] Both Chrome logged in!")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 
