@@ -2418,7 +2418,23 @@ class SimpleGUI(tk.Tk):
             log("main", f"=== STARTED === Mode: {self.mode_var.get()}, IPv6: {ipv6_status}", "INFO")
 
         def run():
-            self.manager.start_all(gui_mode=True)  # True = ẩn CMD windows
+            # v1.0.114: Start Excel worker TRƯỚC, chạy PRE-LOGIN song song
+            # Flow: Excel starts → Pre-login runs → Chrome workers start
+
+            # 1. Start Excel worker first
+            if self.manager.enable_excel:
+                self.manager.start_worker("excel", gui_mode=True)
+                time.sleep(2)
+
+            # 2. PRE-LOGIN - Đăng nhập Chrome (chạy song song với Excel)
+            self._pre_login_chrome()
+
+            # 3. Start Chrome workers SAU khi đã login
+            for i in range(1, self.manager.num_chrome_workers + 1):
+                self.manager.start_worker(f"chrome_{i}", gui_mode=True)
+                time.sleep(2)
+
+            # 4. Start orchestration
             threading.Thread(target=self.manager.orchestrate, daemon=True).start()
 
             # Auto-hide CMD windows after workers start
@@ -2430,6 +2446,131 @@ class SimpleGUI(tk.Tk):
             self.after(0, lambda: self._auto_hide_windows())
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _pre_login_chrome(self):
+        """
+        v1.0.114: PRE-LOGIN Chrome trước khi start workers.
+
+        Flow:
+        1. Tìm project pending đầu tiên
+        2. Nếu project có 0% ảnh → cần login mới
+        3. Xóa Chrome data cả 2
+        4. Login Chrome 1 và Chrome 2
+        5. Lưu account vào Excel
+        """
+        try:
+            from pathlib import Path
+            import shutil
+
+            print("\n" + "="*60)
+            print("[PRE-LOGIN] Checking if login needed...")
+            print("="*60)
+
+            TOOL_DIR = Path(__file__).parent
+            LOCAL_PROJECTS = TOOL_DIR / "PROJECTS"
+
+            # Tìm project pending đầu tiên
+            if not LOCAL_PROJECTS.exists():
+                print("[PRE-LOGIN] No PROJECTS folder, skip login")
+                return
+
+            pending_project = None
+            for item in LOCAL_PROJECTS.iterdir():
+                if not item.is_dir():
+                    continue
+                code = item.name
+                excel_path = item / f"{code}_prompts.xlsx"
+                img_dir = item / "img"
+
+                # Chỉ xử lý project có Excel
+                if not excel_path.exists():
+                    continue
+
+                # Đếm số ảnh
+                img_count = 0
+                if img_dir.exists():
+                    img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
+
+                # Nếu 0 ảnh → cần login
+                if img_count == 0:
+                    pending_project = (code, item, excel_path)
+                    break
+
+            if not pending_project:
+                print("[PRE-LOGIN] No pending project with 0% - skip login")
+                return
+
+            code, project_dir, excel_path = pending_project
+            print(f"[PRE-LOGIN] Found pending project: {code} (0% images)")
+
+            # Import google_login functions
+            from google_login import (
+                extract_channel_from_machine_code, get_current_account_for_channel,
+                save_account_to_excel, login_google_chrome
+            )
+
+            channel = extract_channel_from_machine_code(code)
+            print(f"[PRE-LOGIN] Channel: {channel}, Machine code: {code}")
+
+            # Lấy account
+            current_account = get_current_account_for_channel(channel, machine_code=code)
+            if not current_account:
+                print("[PRE-LOGIN] No account found - skip login")
+                return
+
+            print(f"[PRE-LOGIN] Account: {current_account['id']}")
+
+            # Xóa Chrome data
+            print("[PRE-LOGIN] Clearing Chrome data...")
+            chrome1_data = TOOL_DIR / "GoogleChromePortable" / "Data" / "profile"
+            chrome2_data = TOOL_DIR / "GoogleChromePortable - Copy" / "Data" / "profile"
+
+            for data_path in [chrome1_data, chrome2_data]:
+                if data_path.exists():
+                    first_run = data_path / "First Run"
+                    for item in data_path.iterdir():
+                        if item.name == "First Run":
+                            continue
+                        try:
+                            if item.is_dir():
+                                shutil.rmtree(item, ignore_errors=True)
+                            else:
+                                item.unlink()
+                        except:
+                            pass
+                    if not first_run.exists():
+                        first_run.touch()
+
+            print("[PRE-LOGIN] Chrome data cleared!")
+
+            # Login Chrome 1
+            chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+            chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
+
+            print("[PRE-LOGIN] Logging into Chrome 1...")
+            self.status_var.set("Dang dang nhap Chrome 1...")
+            login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
+
+            print("[PRE-LOGIN] Logging into Chrome 2...")
+            self.status_var.set("Dang dang nhap Chrome 2...")
+            login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+
+            # Lưu account vào Excel
+            print(f"[PRE-LOGIN] Saving account to Excel: {excel_path.name}")
+            save_account_to_excel(
+                str(excel_path),
+                channel,
+                current_account['index'],
+                current_account['id']
+            )
+
+            print("[PRE-LOGIN] Done! Both Chrome logged in.")
+            print("="*60 + "\n")
+
+        except Exception as e:
+            print(f"[PRE-LOGIN] Error (non-critical): {e}")
+            import traceback
+            traceback.print_exc()
 
     def _stop(self):
         if self.manager:

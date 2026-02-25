@@ -1,17 +1,23 @@
-1.0.113
+1.0.114
 2026-02-25 (VN)
-Fix: Login CẢ 2 Chrome (Chrome 1 + Chrome 2) trước khi vào Flow
+Fix: PRE-LOGIN trong GUI trước khi start workers
 
-FIX:
-- Xóa Chrome data
-- Mở Chrome 1 → đăng nhập → tắt
-- Mở Chrome 2 → đăng nhập → tắt
-- Sau đó mới vào Flow như bình thường
+FLOW MỚI khi nhấn "BAT DAU":
+1. Start Excel worker (CMD 1)
+2. PRE-LOGIN chạy song song:
+   - Tìm project có 0% ảnh
+   - Xóa Chrome data cả 2
+   - Login Chrome 1 → tắt
+   - Login Chrome 2 → tắt
+   - Lưu account vào Excel
+3. Start Chrome 1 worker (CMD 2)
+4. Start Chrome 2 worker (CMD 3)
 
-1. v1.0.113: Login cả 2 Chrome trước khi vào Flow
-2. v1.0.112: Login Google cả khi RESUME với 0% ảnh
-3. v1.0.111: Đăng nhập Google trước khi vào Flow
-4. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
+1. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
+2. v1.0.113: Login cả 2 Chrome trước khi vào Flow
+3. v1.0.112: Login Google cả khi RESUME với 0% ảnh
+4. v1.0.111: Đăng nhập Google trước khi vào Flow
+5. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
 2. v1.0.109: Fix GUI Settings bị che + tự tắt
 3. v1.0.108: GUI select account (Listbox + chọn tài khoản)
 4. v1.0.107: Clear Chrome data on NEW project (not resume)
