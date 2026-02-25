@@ -709,17 +709,63 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         # === BƯỚC 3: XỬ LÝ 2FA (nếu có) ===
         totp_secret = account_info.get("totp_secret", "")
         if totp_secret:
-            log("Checking for 2FA prompt...")
+            log(f"2FA secret found ({len(totp_secret)} chars), checking for 2FA prompt...")
             time.sleep(3)
 
             try:
-                # Tìm và click vào "Google Authenticator"
-                auth_option = driver.ele('text:Google Authenticator', timeout=5)
-                if auth_option:
-                    log("Found 2FA prompt - clicking Google Authenticator option...")
-                    auth_option.click()
-                    time.sleep(2)
+                # v1.0.122: Cải thiện 2FA handling - thử nhiều selectors
+                # Google có thể show nhiều dạng UI khác nhau
 
+                # 1. Thử click vào option "Google Authenticator" / "Ứng dụng xác thực"
+                auth_selectors = [
+                    'text:Google Authenticator',
+                    'text:Ứng dụng xác thực',
+                    'text:Authenticator app',
+                    'text:Use your authenticator app',
+                    'text:Dùng ứng dụng xác thực',
+                    'text=Google Authenticator',
+                    'text=Authenticator',
+                ]
+
+                auth_clicked = False
+                for selector in auth_selectors:
+                    try:
+                        auth_option = driver.ele(selector, timeout=2)
+                        if auth_option:
+                            log(f"Found 2FA option with selector: {selector}")
+                            auth_option.click()
+                            auth_clicked = True
+                            time.sleep(2)
+                            break
+                    except:
+                        continue
+
+                if auth_clicked:
+                    log("Clicked 2FA option, waiting for OTP input...")
+                else:
+                    log("No 2FA option button found, checking for direct OTP input...")
+
+                # 2. Tìm input OTP (có thể xuất hiện trực tiếp hoặc sau khi click option)
+                otp_input = None
+                otp_selectors = [
+                    'input[type="tel"]',  # Google thường dùng type="tel" cho OTP
+                    'input[name="totpPin"]',
+                    'input[aria-label*="code"]',
+                    'input[aria-label*="mã"]',
+                    '#totpPin',
+                    'input[autocomplete="one-time-code"]',
+                ]
+
+                for selector in otp_selectors:
+                    try:
+                        otp_input = driver.ele(selector, timeout=2)
+                        if otp_input:
+                            log(f"Found OTP input with selector: {selector}")
+                            break
+                    except:
+                        continue
+
+                if otp_input:
                     # Tạo mã TOTP từ secret
                     log("Generating TOTP code...")
                     try:
@@ -730,35 +776,41 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                         otp_code = totp.now()
                         log(f"Generated OTP: {otp_code}")
 
-                        # Copy OTP vào clipboard
-                        try:
-                            import pyperclip
-                            pyperclip.copy(otp_code)
-                            log("OTP copied to clipboard")
-                        except ImportError:
-                            import subprocess
-                            subprocess.run(['clip'], input=otp_code.encode(), check=True)
-                            log("OTP copied to clipboard (via clip)")
+                        # Click để focus vào input
+                        otp_input.click()
+                        time.sleep(0.3)
 
-                        # Paste OTP (Ctrl+V) và Enter
-                        time.sleep(1)
-                        from DrissionPage.common import Actions
-                        actions = Actions(driver)
-                        actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
-                        log("Sent Ctrl+V for OTP")
+                        # Nhập OTP trực tiếp bằng input() method
+                        otp_input.clear()
+                        otp_input.input(otp_code)
+                        log(f"OTP entered: {otp_code}")
                         time.sleep(0.5)
-                        actions.key_down('enter').key_up('enter')
-                        log("Pressed Enter for OTP")
+
+                        # Nhấn Enter hoặc click Next
+                        try:
+                            next_btn = driver.ele('button:contains("Next")', timeout=2) or \
+                                       driver.ele('button:contains("Tiếp")', timeout=1) or \
+                                       driver.ele('button:contains("Verify")', timeout=1) or \
+                                       driver.ele('button:contains("Xác minh")', timeout=1)
+                            if next_btn:
+                                next_btn.click()
+                                log("Clicked Next/Verify button")
+                            else:
+                                otp_input.input('\n')
+                                log("Pressed Enter for OTP")
+                        except:
+                            otp_input.input('\n')
+                            log("Pressed Enter for OTP (fallback)")
 
                     except ImportError:
                         log("pyotp not installed! Run: pip install pyotp", "ERROR")
                     except Exception as otp_err:
-                        log(f"OTP generation error: {otp_err}", "ERROR")
+                        log(f"OTP generation/input error: {otp_err}", "ERROR")
                 else:
-                    log("No 2FA prompt found - may already be authenticated")
+                    log("No OTP input found - may already be authenticated or different 2FA method")
 
             except Exception as e:
-                log(f"2FA step skipped or error: {e}", "WARN")
+                log(f"2FA step error: {e}", "WARN")
 
         # === KIỂM TRA LOGIN THỰC SỰ THÀNH CÔNG ===
         log("Waiting for login to complete...")
