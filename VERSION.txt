@@ -1,15 +1,17 @@
-1.0.124
+1.0.125
 2026-02-25 (VN)
-Fix: 2FA dùng Ctrl+V (revert direct input)
+Fix: 2FA thử Ctrl+V trực tiếp trước, nếu có option thì click rồi Ctrl+V
 
 Thay đổi:
-- Revert 2FA: dùng Ctrl+V để paste OTP (không dùng direct input)
-- Giữ multiple selectors cho 2FA option/input
+- Một số nick: sau pass → OTP input xuất hiện luôn → Ctrl+V trực tiếp
+- Một số nick: sau pass → cần click "Google Authenticator" → rồi Ctrl+V
+- Flow: Ctrl+V+Enter trước → nếu có option thì click → Ctrl+V+Enter lại
 
-1. v1.0.124: 2FA dùng Ctrl+V (revert direct input)
-2. v1.0.123: Login tuần tự Chrome 1 → Chrome 2
-3. v1.0.122: 2FA login cải thiện (multiple selectors)
-4. v1.0.121: PRE-LOGIN trong Chrome workers (revert CMD riêng)
+1. v1.0.125: 2FA thử Ctrl+V trực tiếp trước
+2. v1.0.124: 2FA dùng Ctrl+V (revert direct input)
+3. v1.0.123: Login tuần tự Chrome 1 → Chrome 2
+4. v1.0.122: 2FA login cải thiện (multiple selectors)
+5. v1.0.121: PRE-LOGIN trong Chrome workers (revert CMD riêng)
 2. v1.0.120: Fix PRE-LOGIN dùng Popen + CREATE_NEW_CONSOLE + sys.executable
 3. v1.0.119: Fix PRE-LOGIN dùng subprocess.call + cmd.exe /c start
 4. v1.0.118: Fix PRE-LOGIN CMD dùng os.system (thay vì subprocess)

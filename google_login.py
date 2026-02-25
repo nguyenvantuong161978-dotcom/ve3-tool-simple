@@ -713,10 +713,39 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             time.sleep(3)
 
             try:
-                # v1.0.122: Cải thiện 2FA handling - thử nhiều selectors
-                # Google có thể show nhiều dạng UI khác nhau
+                # v1.0.125: Cải thiện 2FA handling
+                # Một số nick: sau pass → OTP input xuất hiện luôn (không cần click option)
+                # Một số nick: sau pass → cần click "Google Authenticator" → rồi mới nhập OTP
 
-                # 1. Thử click vào option "Google Authenticator" / "Ứng dụng xác thực"
+                # 1. Tạo OTP và copy vào clipboard trước
+                import pyotp
+                clean_secret = totp_secret.replace(" ", "").replace("-", "").upper()
+                totp = pyotp.TOTP(clean_secret)
+                otp_code = totp.now()
+                log(f"Generated OTP: {otp_code}")
+
+                try:
+                    import pyperclip
+                    pyperclip.copy(otp_code)
+                    log("OTP copied to clipboard")
+                except ImportError:
+                    import subprocess
+                    subprocess.run(['clip'], input=otp_code.encode(), check=True)
+                    log("OTP copied to clipboard (via clip)")
+
+                from DrissionPage.common import Actions
+                actions = Actions(driver)
+
+                # 2. Thử Ctrl+V + Enter trực tiếp (cho nick không cần click option)
+                log("Trying direct Ctrl+V for OTP...")
+                actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                time.sleep(0.5)
+                actions.key_down('enter').key_up('enter')
+                log("Sent Ctrl+V + Enter")
+                time.sleep(2)
+
+                # 3. Kiểm tra xem có cần click option không (nếu vẫn còn trên trang 2FA)
+                # Nếu có option "Google Authenticator" → click và nhập lại OTP
                 auth_selectors = [
                     'text:Google Authenticator',
                     'text:Ứng dụng xác thực',
@@ -727,85 +756,26 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                     'text=Authenticator',
                 ]
 
-                auth_clicked = False
                 for selector in auth_selectors:
                     try:
-                        auth_option = driver.ele(selector, timeout=2)
+                        auth_option = driver.ele(selector, timeout=1)
                         if auth_option:
-                            log(f"Found 2FA option with selector: {selector}")
+                            log(f"Found 2FA option: {selector} - clicking...")
                             auth_option.click()
-                            auth_clicked = True
                             time.sleep(2)
+
+                            # Ctrl+V + Enter lại sau khi click option
+                            log("Sending Ctrl+V + Enter after clicking option...")
+                            actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                            time.sleep(0.5)
+                            actions.key_down('enter').key_up('enter')
+                            log("Sent Ctrl+V + Enter")
                             break
                     except:
                         continue
 
-                if auth_clicked:
-                    log("Clicked 2FA option, waiting for OTP input...")
-                else:
-                    log("No 2FA option button found, checking for direct OTP input...")
-
-                # 2. Tìm input OTP (có thể xuất hiện trực tiếp hoặc sau khi click option)
-                otp_input = None
-                otp_selectors = [
-                    'input[type="tel"]',  # Google thường dùng type="tel" cho OTP
-                    'input[name="totpPin"]',
-                    'input[aria-label*="code"]',
-                    'input[aria-label*="mã"]',
-                    '#totpPin',
-                    'input[autocomplete="one-time-code"]',
-                ]
-
-                for selector in otp_selectors:
-                    try:
-                        otp_input = driver.ele(selector, timeout=2)
-                        if otp_input:
-                            log(f"Found OTP input with selector: {selector}")
-                            break
-                    except:
-                        continue
-
-                if otp_input:
-                    # Tạo mã TOTP từ secret
-                    log("Generating TOTP code...")
-                    try:
-                        import pyotp
-                        # Loại bỏ khoảng trắng và ký tự đặc biệt từ secret
-                        clean_secret = totp_secret.replace(" ", "").replace("-", "").upper()
-                        totp = pyotp.TOTP(clean_secret)
-                        otp_code = totp.now()
-                        log(f"Generated OTP: {otp_code}")
-
-                        # v1.0.124: Dùng Ctrl+V để paste OTP (như cũ)
-                        # Copy OTP vào clipboard
-                        try:
-                            import pyperclip
-                            pyperclip.copy(otp_code)
-                            log("OTP copied to clipboard")
-                        except ImportError:
-                            import subprocess
-                            subprocess.run(['clip'], input=otp_code.encode(), check=True)
-                            log("OTP copied to clipboard (via clip)")
-
-                        # Paste OTP bằng Ctrl+V
-                        time.sleep(0.5)
-                        from DrissionPage.common import Actions
-                        actions = Actions(driver)
-                        actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
-                        log("Sent Ctrl+V for OTP")
-                        time.sleep(0.5)
-
-                        # Nhấn Enter
-                        actions.key_down('enter').key_up('enter')
-                        log("Pressed Enter for OTP")
-
-                    except ImportError:
-                        log("pyotp not installed! Run: pip install pyotp", "ERROR")
-                    except Exception as otp_err:
-                        log(f"OTP generation/input error: {otp_err}", "ERROR")
-                else:
-                    log("No OTP input found - may already be authenticated or different 2FA method")
-
+            except ImportError:
+                log("pyotp not installed! Run: pip install pyotp", "ERROR")
             except Exception as e:
                 log(f"2FA step error: {e}", "WARN")
 
