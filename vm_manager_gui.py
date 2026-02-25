@@ -2418,18 +2418,15 @@ class SimpleGUI(tk.Tk):
             log("main", f"=== STARTED === Mode: {self.mode_var.get()}, IPv6: {ipv6_status}", "INFO")
 
         def run():
-            # v1.0.114: Start Excel worker TRƯỚC, chạy PRE-LOGIN song song
-            # Flow: Excel starts → Pre-login runs → Chrome workers start
+            # v1.0.121: Revert - PRE-LOGIN xử lý trong Chrome workers
+            # Flow: Excel starts → Chrome workers start (login trong worker)
 
             # 1. Start Excel worker first
             if self.manager.enable_excel:
                 self.manager.start_worker("excel", gui_mode=True)
                 time.sleep(2)
 
-            # 2. PRE-LOGIN - Đăng nhập Chrome (chạy song song với Excel)
-            self._pre_login_chrome()
-
-            # 3. Start Chrome workers SAU khi đã login
+            # 2. Start Chrome workers (login sẽ xử lý trong mỗi worker)
             for i in range(1, self.manager.num_chrome_workers + 1):
                 self.manager.start_worker(f"chrome_{i}", gui_mode=True)
                 time.sleep(2)
@@ -2449,50 +2446,9 @@ class SimpleGUI(tk.Tk):
 
     def _pre_login_chrome(self):
         """
-        v1.0.119: Chạy _pre_login.py như CMD riêng (visible window).
-
-        CMD này sẽ:
-        1. Tìm project pending (có Excel, 0 ảnh)
-        2. Xóa Chrome data cả 2
-        3. Login Chrome 1 và Chrome 2
-        4. Lưu account vào Excel
-        5. Tự động tắt sau 3 giây
+        v1.0.121: Không dùng nữa - login xử lý trong Chrome workers.
         """
-        try:
-            import subprocess
-            from pathlib import Path
-
-            TOOL_DIR = Path(__file__).parent
-            pre_login_script = TOOL_DIR / "_pre_login.py"
-
-            if not pre_login_script.exists():
-                print("[PRE-LOGIN] Script _pre_login.py not found, skip")
-                return
-
-            print("\n" + "="*60)
-            print("[PRE-LOGIN] Starting pre-login CMD window...")
-            print("="*60)
-
-            # v1.0.120: Dùng subprocess.Popen trực tiếp (không qua shell)
-            # Mở CMD visible riêng và đợi nó kết thúc
-            import sys
-            python_exe = sys.executable  # Lấy python.exe đang chạy
-            CREATE_NEW_CONSOLE = 0x00000010
-
-            process = subprocess.Popen(
-                [python_exe, str(pre_login_script)],
-                cwd=str(TOOL_DIR),
-                creationflags=CREATE_NEW_CONSOLE
-            )
-            process.wait()  # Đợi process kết thúc
-
-            print("[PRE-LOGIN] Pre-login CMD finished!")
-            print("="*60 + "\n")
-
-        except Exception as e:
-            print(f"[PRE-LOGIN] Error (non-critical): {e}")
-            import traceback
-            traceback.print_exc()
+        pass
 
     def _stop(self):
         if self.manager:

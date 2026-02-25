@@ -905,6 +905,90 @@ def process_project_with_agent(code: str) -> bool:
         raise
 
 
+def _do_pre_login_if_needed():
+    """
+    v1.0.121: PRE-LOGIN trước khi bắt đầu tạo ảnh.
+
+    Flow:
+    1. Tìm project có 0% images
+    2. Nếu có → clear Chrome data + login → tắt Chrome
+    3. Rồi mới bắt đầu scan loop
+    """
+    print("\n[PRE-LOGIN] Checking if login needed...")
+
+    # Tìm project có Excel nhưng 0 images
+    pending_project = None
+    if LOCAL_PROJECTS.exists():
+        for item in LOCAL_PROJECTS.iterdir():
+            if not item.is_dir():
+                continue
+            code = item.name
+            excel_path = item / f"{code}_prompts.xlsx"
+            img_dir = item / "img"
+
+            if not excel_path.exists():
+                continue
+
+            img_count = 0
+            if img_dir.exists():
+                img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
+
+            if img_count == 0:
+                pending_project = (code, item, excel_path)
+                break
+
+    if not pending_project:
+        print("[PRE-LOGIN] No pending project with 0% - skip login")
+        return
+
+    code, project_dir, excel_path = pending_project
+    print(f"[PRE-LOGIN] Found pending project: {code}")
+
+    try:
+        from google_login import (
+            detect_machine_code, extract_channel_from_machine_code,
+            get_current_account_for_channel, save_account_to_excel,
+            login_google_chrome
+        )
+
+        # Lấy machine_code từ folder path
+        machine_code = detect_machine_code()
+        channel = extract_channel_from_machine_code(machine_code)
+        print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
+
+        # Lấy account từ Google Sheet
+        current_account = get_current_account_for_channel(channel, machine_code=machine_code)
+        if not current_account:
+            print("[PRE-LOGIN] No account found - skip login")
+            return
+
+        print(f"[PRE-LOGIN] Account: {current_account['id']}")
+
+        # Xóa Chrome data
+        print("[PRE-LOGIN] Clearing Chrome data...")
+        clear_chrome_data_for_new_account()
+
+        # Login Chrome 1
+        chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+        print("[PRE-LOGIN] Logging into Chrome 1...")
+        login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
+        print("[PRE-LOGIN] Chrome 1 login done!")
+
+        # Lưu account vào Excel
+        save_account_to_excel(
+            str(excel_path),
+            channel,
+            current_account['index'],
+            current_account['id']
+        )
+        print("[PRE-LOGIN] Account saved to Excel")
+
+    except Exception as e:
+        print(f"[PRE-LOGIN] Error (non-critical): {e}")
+
+    print("[PRE-LOGIN] Done!\n")
+
+
 def run_scan_loop_with_agent():
     """Run scan loop với Agent Protocol."""
     global _agent
@@ -913,6 +997,10 @@ def run_scan_loop_with_agent():
     print(f"  CHROME WORKER 1 - PIC BASIC MODE")
     print(f"  Agent: {'Enabled' if _agent else 'Disabled'}")
     print(f"{'='*60}\n")
+
+    # v1.0.121: PRE-LOGIN trước khi bắt đầu scan loop
+    # Kiểm tra có project nào cần login không (0% images)
+    _do_pre_login_if_needed()
 
     cycle = 0
     current_project = None  # Track project đang làm
