@@ -340,12 +340,14 @@ class SettingsWindow(tk.Toplevel):
 
             channel = extract_channel_from_machine_code(machine_code)
             self._current_channel = channel
-            self.account_header.config(text=f"Kenh: {channel} | Dang ket noi Google Sheet...")
+            self._current_machine_code = machine_code  # v1.0.110: Lưu machine_code
+            self.account_header.config(text=f"Ma may: {machine_code} | Dang ket noi...")
             self.update_idletasks()
 
             # Get accounts (có thể mất thời gian do network)
+            # v1.0.110: Dùng machine_code để tìm trong sheet (cột B có mã đầy đủ)
             try:
-                accounts = get_channel_accounts(channel)
+                accounts = get_channel_accounts(machine_code)
             except Exception as net_err:
                 self.account_header.config(text=f"Kenh: {channel} | Loi mang: {net_err}")
                 self.account_listbox.insert("end", "Khong ket noi duoc Google Sheet")
@@ -355,13 +357,14 @@ class SettingsWindow(tk.Toplevel):
             current_index = load_account_index(channel)
 
             if not accounts:
-                self.account_header.config(text=f"Kenh: {channel} | Khong tim thay tai khoan!")
-                self.account_listbox.insert("end", "Kiem tra sheet THONG TIN, cot B va AT")
+                self.account_header.config(text=f"Ma may: {machine_code} | Khong tim thay!")
+                self.account_listbox.insert("end", f"Khong tim thay ma '{machine_code}' trong cot B")
+                self.account_listbox.insert("end", "Kiem tra sheet THONG TIN")
                 return
 
             # Update header
             self.account_header.config(
-                text=f"Kenh: {channel} | Tong: {len(accounts)} TK | Dang dung: #{current_index + 1}"
+                text=f"Ma may: {machine_code} | Tong: {len(accounts)} TK | Dang dung: #{current_index + 1}"
             )
 
             # Store accounts data
@@ -447,14 +450,15 @@ class SettingsWindow(tk.Toplevel):
                 return
 
             channel = extract_channel_from_machine_code(machine_code)
-            accounts = get_channel_accounts(channel)
+            # v1.0.110: Dùng machine_code để tìm (cột B có mã đầy đủ)
+            accounts = get_channel_accounts(machine_code)
 
             if not accounts:
-                messagebox.showerror("Loi", f"Khong tim thay tai khoan cho kenh {channel}")
+                messagebox.showerror("Loi", f"Khong tim thay ma '{machine_code}' trong sheet!")
                 return
 
             if len(accounts) == 1:
-                messagebox.showinfo("Thong bao", f"Kenh {channel} chi co 1 tai khoan")
+                messagebox.showinfo("Thong bao", f"Ma {machine_code} chi co 1 tai khoan")
                 return
 
             # Rotate

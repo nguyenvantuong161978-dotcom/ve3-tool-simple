@@ -1,18 +1,19 @@
-1.0.109
+1.0.110
 2026-02-25 (VN)
-Fix: GUI Settings bị che + tự tắt
+Fix: Tìm mã máy đầy đủ trong sheet (AR8-T1, không chỉ AR8)
 
 FIX:
-- Tăng kích thước cửa sổ Settings (800x850)
-- Thêm scrollbar cho nội dung (không bị che)
-- Fix lỗi tự tắt khi load account (better error handling)
-- Hiển thị trạng thái "Đang tải..." khi kết nối Google Sheet
+- Cột B trong sheet THÔNG TIN có mã đầy đủ (AR8-T1, KA2-T2...)
+- Trước đây chỉ tìm theo channel (AR8) → không khớp
+- Giờ tìm theo machine_code đầy đủ (AR8-T1)
+- GUI hiển thị mã máy đầy đủ thay vì chỉ kênh
 
-1. v1.0.109: Fix GUI Settings bị che + tự tắt
-2. v1.0.108: GUI select account (Listbox + chọn tài khoản)
-3. v1.0.107: Clear Chrome data on NEW project (not resume)
-4. v1.0.106: Save account to Excel for proper resume
-5. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
+1. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
+2. v1.0.109: Fix GUI Settings bị che + tự tắt
+3. v1.0.108: GUI select account (Listbox + chọn tài khoản)
+4. v1.0.107: Clear Chrome data on NEW project (not resume)
+5. v1.0.106: Save account to Excel for proper resume
+6. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
 2. v1.0.104: Prioritize projects by completion % (highest first)
 3. v1.0.103: Delete child rows from Excel before loading prompts
 3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)

@@ -125,12 +125,12 @@ def get_channel_accounts(channel_code: str, max_retries: int = 3) -> list:
     """
     Lấy danh sách tài khoản Veo3 cho một kênh từ Google Sheet.
 
-    v1.0.105: Đọc từ sheet THÔNG TIN
-    - Cột B: Mã kênh (AR35, AR47, KA2...)
+    v1.0.110: Tìm cả mã đầy đủ (AR8-T1) và mã channel (AR8)
+    - Cột B: Mã máy đầy đủ (AR8-T1, KA2-T2...)
     - Cột AT: Tài khoản Veo3 (format: id|pass|2fa per line)
 
     Args:
-        channel_code: Mã kênh cần tìm (VD: AR35, AR47)
+        channel_code: Mã cần tìm (có thể là AR8-T1 hoặc AR8)
         max_retries: Số lần retry khi gặp lỗi
 
     Returns:
@@ -138,7 +138,7 @@ def get_channel_accounts(channel_code: str, max_retries: int = 3) -> list:
     """
     import time
 
-    channel_upper = channel_code.upper()
+    code_upper = channel_code.upper()
     last_error = None
 
     # Get column indices
@@ -164,29 +164,39 @@ def get_channel_accounts(channel_code: str, max_retries: int = 3) -> list:
                 log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
                 return []
 
-            # Tìm dòng có mã kênh khớp
+            # v1.0.110: Tìm theo nhiều cách:
+            # 1. Khớp chính xác (AR8-T1 == AR8-T1)
+            # 2. Khớp bắt đầu bằng (AR8-T1 starts with AR8)
+            # 3. Khớp channel (AR8 == AR8)
             for row_idx, row in enumerate(all_data, start=1):
                 if len(row) <= max(channel_col_idx, accounts_col_idx):
                     continue
 
-                row_channel = str(row[channel_col_idx]).strip().upper()
+                row_code = str(row[channel_col_idx]).strip().upper()
 
-                if row_channel == channel_upper:
+                # Kiểm tra khớp: chính xác HOẶC bắt đầu bằng
+                is_match = (
+                    row_code == code_upper or  # Khớp chính xác
+                    row_code.startswith(code_upper + "-") or  # AR8 matches AR8-T1
+                    code_upper.startswith(row_code + "-")  # AR8-T1 matches AR8
+                )
+
+                if is_match:
                     accounts_cell = str(row[accounts_col_idx]).strip()
                     accounts = parse_accounts_cell(accounts_cell)
 
                     if accounts:
-                        log(f"Found {len(accounts)} accounts for channel {channel_code}")
+                        log(f"Found {len(accounts)} accounts for {code_upper} (matched: {row_code})")
                         for i, acc in enumerate(accounts):
                             log(f"  Account {i+1}: {acc['id']} (2FA: {'Yes' if acc['totp_secret'] else 'No'})")
                         return accounts
                     else:
-                        log(f"No valid accounts in cell AT for channel {channel_code}", "WARN")
+                        log(f"No valid accounts in cell AT for {row_code}", "WARN")
                         return []
 
-            last_error = f"Channel '{channel_code}' not found in sheet"
+            last_error = f"Code '{code_upper}' not found in sheet column B"
             if attempt < max_retries - 1:
-                log(f"Không tìm thấy kênh {channel_code}, thử lại...", "WARN")
+                log(f"Không tìm thấy mã {code_upper}, thử lại...", "WARN")
                 continue
 
         except Exception as e:
@@ -194,23 +204,34 @@ def get_channel_accounts(channel_code: str, max_retries: int = 3) -> list:
             log(f"Error reading sheet (attempt {attempt + 1}): {e}", "WARN")
             continue
 
-    log(f"Channel '{channel_code}' not found after {max_retries} attempts: {last_error}", "ERROR")
+    log(f"Code '{code_upper}' not found after {max_retries} attempts: {last_error}", "ERROR")
     return []
 
 
-def get_current_account_for_channel(channel_code: str) -> dict:
+def get_current_account_for_channel(channel_code: str, machine_code: str = None) -> dict:
     """
     Lấy tài khoản hiện tại cho một kênh (theo index rotation).
+
+    v1.0.110: Dùng machine_code (mã đầy đủ) để tìm trong sheet,
+    nhưng dùng channel_code để track rotation (tất cả máy cùng kênh dùng chung).
+
+    Args:
+        channel_code: Mã kênh (AR8, KA2) - dùng để track rotation
+        machine_code: Mã máy đầy đủ (AR8-T1, KA2-T2) - dùng để tìm trong sheet
+                      Nếu không có, dùng channel_code
 
     Returns:
         Account dict: {"id": "...", "password": "...", "totp_secret": "...", "index": N, "total": M}
         or None if no accounts found
     """
-    accounts = get_channel_accounts(channel_code)
+    # Dùng machine_code để tìm trong sheet, fallback to channel_code
+    search_code = machine_code if machine_code else channel_code
+    accounts = get_channel_accounts(search_code)
 
     if not accounts:
         return None
 
+    # Dùng channel_code để track rotation
     current_index = load_account_index(channel_code)
     # Ensure index is within bounds
     if current_index >= len(accounts):
@@ -221,7 +242,7 @@ def get_current_account_for_channel(channel_code: str) -> dict:
     account["index"] = current_index
     account["total"] = len(accounts)
 
-    log(f"Using account {current_index + 1}/{len(accounts)} for channel {channel_code}: {account['id']}")
+    log(f"Using account {current_index + 1}/{len(accounts)} for {channel_code}: {account['id']}")
     return account
 
 

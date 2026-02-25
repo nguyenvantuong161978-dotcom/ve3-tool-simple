@@ -446,7 +446,8 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                 clear_chrome_data_for_new_account()
 
                 # Lưu account hiện tại vào Excel
-                current_account = get_current_account_for_channel(channel)
+                # v1.0.110: Truyền cả machine_code (code) để tìm trong sheet
+                current_account = get_current_account_for_channel(channel, machine_code=code)
                 if current_account:
                     log(f"  [NEW] Saving account to Excel: {current_account['id']} (index {current_account['index']})")
                     save_account_to_excel(
