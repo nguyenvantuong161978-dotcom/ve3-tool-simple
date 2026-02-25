@@ -5,13 +5,17 @@ VE3 Tool - Google Login Helper
 
 Đọc thông tin tài khoản từ Google Sheet và đăng nhập vào Chrome.
 
-Sheet: ve3
-- Cột A: Mã máy (ví dụ: AR57-T1)
-- Cột B: ID (email Google)
-- Cột C: Password
+v1.0.105: Đọc từ sheet THÔNG TIN (thay vì ve3)
+- Cột B: Mã kênh (AR35, AR47, KA2...)
+- Cột AT: Tài khoản Veo3 (nhiều dòng, format: id|pass|2fa)
 
-Cách detect mã máy:
-- Từ đường dẫn: Documents\AR57-T1\ve3-tool-simple\ → mã là AR57-T1
+Hỗ trợ xoay vòng tài khoản:
+- Mỗi kênh có thể có 1-3 tài khoản
+- Mỗi khi xong 1 mã, sẽ chuyển sang tài khoản tiếp theo
+- Xoay vòng khi hết danh sách
+
+Cách detect mã kênh:
+- Từ đường dẫn: Documents\AR35-T1\ve3-tool-simple\ → kênh là AR35
 """
 
 import sys
@@ -25,13 +29,200 @@ TOOL_DIR = Path(__file__).parent
 sys.path.insert(0, str(TOOL_DIR))
 
 CONFIG_FILE = TOOL_DIR / "config" / "config.json"
-SHEET_NAME = "ve3"  # Sheet chứa thông tin tài khoản
+ACCOUNT_INDEX_FILE = TOOL_DIR / "config" / ".account_index.json"  # Track account rotation
+SHEET_NAME = "THÔNG TIN"  # v1.0.105: Sheet mới chứa thông tin tài khoản
+CHANNEL_COLUMN = "B"  # Cột B: Mã kênh (AR35, AR47, KA2...)
+ACCOUNTS_COLUMN = "AT"  # Cột AT: Tài khoản Veo3 (nhiều dòng, format: id|pass|2fa)
 
 
 def log(msg: str, level: str = "INFO"):
     """Print log with timestamp."""
     timestamp = time.strftime("%H:%M:%S")
     print(f"[{timestamp}] [{level}] {msg}")
+
+
+def col_letter_to_index(col: str) -> int:
+    """
+    Convert column letter to 0-based index.
+    A=0, B=1, ..., Z=25, AA=26, ..., AT=45
+    """
+    col = col.upper()
+    result = 0
+    for char in col:
+        result = result * 26 + (ord(char) - ord('A') + 1)
+    return result - 1  # 0-based
+
+
+def load_account_index(channel: str) -> int:
+    """Load current account index for a channel from file."""
+    try:
+        if ACCOUNT_INDEX_FILE.exists():
+            data = json.loads(ACCOUNT_INDEX_FILE.read_text(encoding="utf-8"))
+            return data.get(channel, 0)
+    except Exception as e:
+        log(f"Error loading account index: {e}", "WARN")
+    return 0
+
+
+def save_account_index(channel: str, index: int):
+    """Save current account index for a channel to file."""
+    try:
+        data = {}
+        if ACCOUNT_INDEX_FILE.exists():
+            data = json.loads(ACCOUNT_INDEX_FILE.read_text(encoding="utf-8"))
+        data[channel] = index
+        ACCOUNT_INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ACCOUNT_INDEX_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as e:
+        log(f"Error saving account index: {e}", "WARN")
+
+
+def rotate_account_index(channel: str, total_accounts: int) -> int:
+    """
+    Rotate to next account index for a channel.
+    Returns new index (wraps around if exceeds total).
+    """
+    current = load_account_index(channel)
+    new_index = (current + 1) % total_accounts
+    save_account_index(channel, new_index)
+    log(f"Account rotated: {channel} -> index {new_index + 1}/{total_accounts}")
+    return new_index
+
+
+def parse_accounts_cell(cell_value: str) -> list:
+    """
+    Parse accounts from cell value.
+    Format per line: id|pass|2fa
+
+    Returns list of dicts: [{"id": "...", "password": "...", "totp_secret": "..."}, ...]
+    """
+    accounts = []
+    if not cell_value:
+        return accounts
+
+    # Split by newlines (cell có thể có nhiều dòng)
+    lines = cell_value.strip().split('\n')
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        parts = line.split('|')
+        if len(parts) >= 2:
+            account = {
+                "id": parts[0].strip(),
+                "password": parts[1].strip(),
+                "totp_secret": parts[2].strip() if len(parts) >= 3 else ""
+            }
+            if account["id"] and account["password"]:
+                accounts.append(account)
+
+    return accounts
+
+
+def get_channel_accounts(channel_code: str, max_retries: int = 3) -> list:
+    """
+    Lấy danh sách tài khoản Veo3 cho một kênh từ Google Sheet.
+
+    v1.0.105: Đọc từ sheet THÔNG TIN
+    - Cột B: Mã kênh (AR35, AR47, KA2...)
+    - Cột AT: Tài khoản Veo3 (format: id|pass|2fa per line)
+
+    Args:
+        channel_code: Mã kênh cần tìm (VD: AR35, AR47)
+        max_retries: Số lần retry khi gặp lỗi
+
+    Returns:
+        List of account dicts: [{"id": "...", "password": "...", "totp_secret": "..."}, ...]
+    """
+    import time
+
+    channel_upper = channel_code.upper()
+    last_error = None
+
+    # Get column indices
+    channel_col_idx = col_letter_to_index(CHANNEL_COLUMN)  # B = 1
+    accounts_col_idx = col_letter_to_index(ACCOUNTS_COLUMN)  # AT = 45
+
+    for attempt in range(max_retries):
+        if attempt > 0:
+            wait_time = 2 * attempt
+            log(f"Retry đọc Google Sheet ({attempt + 1}/{max_retries}) sau {wait_time}s...")
+            time.sleep(wait_time)
+
+        gc, spreadsheet_name = load_gsheet_client()
+        if not gc:
+            last_error = "Cannot load gsheet client"
+            continue
+
+        try:
+            ws = gc.open(spreadsheet_name).worksheet(SHEET_NAME)
+            all_data = ws.get_all_values()
+
+            if not all_data:
+                log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
+                return []
+
+            # Tìm dòng có mã kênh khớp
+            for row_idx, row in enumerate(all_data, start=1):
+                if len(row) <= max(channel_col_idx, accounts_col_idx):
+                    continue
+
+                row_channel = str(row[channel_col_idx]).strip().upper()
+
+                if row_channel == channel_upper:
+                    accounts_cell = str(row[accounts_col_idx]).strip()
+                    accounts = parse_accounts_cell(accounts_cell)
+
+                    if accounts:
+                        log(f"Found {len(accounts)} accounts for channel {channel_code}")
+                        for i, acc in enumerate(accounts):
+                            log(f"  Account {i+1}: {acc['id']} (2FA: {'Yes' if acc['totp_secret'] else 'No'})")
+                        return accounts
+                    else:
+                        log(f"No valid accounts in cell AT for channel {channel_code}", "WARN")
+                        return []
+
+            last_error = f"Channel '{channel_code}' not found in sheet"
+            if attempt < max_retries - 1:
+                log(f"Không tìm thấy kênh {channel_code}, thử lại...", "WARN")
+                continue
+
+        except Exception as e:
+            last_error = str(e)
+            log(f"Error reading sheet (attempt {attempt + 1}): {e}", "WARN")
+            continue
+
+    log(f"Channel '{channel_code}' not found after {max_retries} attempts: {last_error}", "ERROR")
+    return []
+
+
+def get_current_account_for_channel(channel_code: str) -> dict:
+    """
+    Lấy tài khoản hiện tại cho một kênh (theo index rotation).
+
+    Returns:
+        Account dict: {"id": "...", "password": "...", "totp_secret": "...", "index": N, "total": M}
+        or None if no accounts found
+    """
+    accounts = get_channel_accounts(channel_code)
+
+    if not accounts:
+        return None
+
+    current_index = load_account_index(channel_code)
+    # Ensure index is within bounds
+    if current_index >= len(accounts):
+        current_index = 0
+        save_account_index(channel_code, 0)
+
+    account = accounts[current_index].copy()
+    account["index"] = current_index
+    account["total"] = len(accounts)
+
+    log(f"Using account {current_index + 1}/{len(accounts)} for channel {channel_code}: {account['id']}")
+    return account
 
 
 def detect_machine_code() -> str:
@@ -125,83 +316,53 @@ def load_gsheet_client():
         return None, None
 
 
+def extract_channel_from_machine_code(machine_code: str) -> str:
+    """
+    Extract channel code from machine code.
+    Examples:
+        AR35-T1 -> AR35
+        AR47-T2 -> AR47
+        KA2-T1 -> KA2
+    """
+    if "-T" in machine_code.upper():
+        return machine_code.upper().split("-T")[0]
+    if "-" in machine_code:
+        return machine_code.rsplit("-", 1)[0].upper()
+    return machine_code.upper()
+
+
 def get_account_info(machine_code: str, max_retries: int = 3) -> dict:
     """
     Lấy thông tin tài khoản từ Google Sheet.
 
-    Tìm exact match theo mã máy. Nếu gặp lỗi network sẽ tự động retry.
+    v1.0.105: Đọc từ sheet THÔNG TIN theo mã kênh (không phải mã máy).
+    - Cột B: Mã kênh (AR35, AR47, KA2...)
+    - Cột AT: Tài khoản Veo3 (format: id|pass|2fa per line)
+
+    Hỗ trợ xoay vòng tài khoản: mỗi kênh có thể có nhiều tài khoản,
+    sẽ lần lượt sử dụng từng tài khoản.
 
     Args:
-        machine_code: Mã máy cần tìm (exact match)
-        max_retries: Số lần retry khi gặp lỗi (default 3)
+        machine_code: Mã máy (VD: AR35-T1) - sẽ extract thành mã kênh (AR35)
+        max_retries: Số lần retry khi gặp lỗi
 
     Returns:
-        {"id": "email@gmail.com", "password": "xxx"} or None
+        {"id": "email@gmail.com", "password": "xxx", "totp_secret": "...", "index": N, "total": M}
+        or None if not found
     """
-    import time
+    # Extract channel from machine code
+    channel_code = extract_channel_from_machine_code(machine_code)
+    log(f"Machine code: {machine_code} -> Channel: {channel_code}")
 
-    machine_code_upper = machine_code.upper()
-    last_error = None
+    # Get current account for this channel (with rotation support)
+    account = get_current_account_for_channel(channel_code)
 
-    for attempt in range(max_retries):
-        if attempt > 0:
-            wait_time = 2 * attempt  # 2s, 4s
-            log(f"Retry đọc Google Sheet ({attempt + 1}/{max_retries}) sau {wait_time}s...")
-            time.sleep(wait_time)
+    if account:
+        log(f"Account for {channel_code}: {account['id']} (index {account['index']+1}/{account['total']})")
+        if account.get('totp_secret'):
+            log(f"  -> 2FA secret found ({len(account['totp_secret'])} chars)")
 
-        gc, spreadsheet_name = load_gsheet_client()
-        if not gc:
-            last_error = "Cannot load gsheet client"
-            continue
-
-        try:
-            ws = gc.open(spreadsheet_name).worksheet(SHEET_NAME)
-
-            # Đọc tất cả dữ liệu
-            all_data = ws.get_all_values()
-
-            if not all_data:
-                log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
-                return None
-
-            # Tìm exact match
-            for row_idx, row in enumerate(all_data, start=1):
-                if len(row) >= 3:
-                    code = str(row[0]).strip().upper()
-                    account_id = str(row[1]).strip()
-                    password = str(row[2]).strip()
-                    # v1.0.101: Đọc cột D - secret key cho 2FA (36 ký tự)
-                    totp_secret = str(row[3]).strip() if len(row) >= 4 else ""
-
-                    if not account_id or not password:
-                        continue
-
-                    # Exact match
-                    if code == machine_code_upper:
-                        log(f"Found account for {machine_code}: {account_id}")
-                        if totp_secret:
-                            log(f"  -> 2FA secret found ({len(totp_secret)} chars)")
-                        return {
-                            "id": account_id,
-                            "password": password,
-                            "totp_secret": totp_secret,  # v1.0.101: 2FA support
-                            "row": row_idx
-                        }
-
-            # Không tìm thấy - có thể do sheet chưa sync, retry
-            last_error = f"Machine code '{machine_code}' not found"
-            if attempt < max_retries - 1:
-                log(f"Không tìm thấy {machine_code}, thử lại...", "WARN")
-                continue
-
-        except Exception as e:
-            last_error = str(e)
-            log(f"Error reading sheet (attempt {attempt + 1}): {e}", "WARN")
-            continue
-
-    # Hết retry
-    log(f"Machine code '{machine_code}' not found in sheet after {max_retries} attempts: {last_error}", "ERROR")
-    return None
+    return account
 
 
 def login_google_chrome(account_info: dict, chrome_portable: str = None, profile_dir: str = None, worker_id: int = 0) -> bool:

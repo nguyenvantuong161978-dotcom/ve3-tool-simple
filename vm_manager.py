@@ -1860,6 +1860,29 @@ class VMManager:
                 self.project_start_time = None
                 self.current_project_code = None
 
+                # === v1.0.105: XOAY VÒNG TÀI KHOẢN + XÓA CHROME DATA ===
+                self.log("Step 3.5: Rotating account + clearing Chrome data...", "SYSTEM")
+                try:
+                    from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts
+
+                    # Get channel from project code
+                    channel = extract_channel_from_machine_code(project_code)
+                    accounts = get_channel_accounts(channel)
+
+                    if accounts and len(accounts) > 1:
+                        # Rotate to next account
+                        new_idx = rotate_account_index(channel, len(accounts))
+                        self.log(f"  -> Account rotated: {channel} -> index {new_idx + 1}/{len(accounts)}", "SYSTEM")
+                        self.log(f"  -> Next account: {accounts[new_idx]['id']}", "SYSTEM")
+
+                        # Clear Chrome data để login tài khoản mới
+                        self.log("  -> Clearing Chrome data for new account login...", "SYSTEM")
+                        self._clear_chrome_data_for_new_account()
+                    else:
+                        self.log(f"  -> Channel {channel}: Only 1 account, no rotation needed", "SYSTEM")
+                except Exception as e:
+                    self.log(f"  -> Account rotation error (non-critical): {e}", "SYSTEM", "WARN")
+
                 # v1.0.94: STEP 4 - RESET (restart all workers) để chạy mã mới
                 self.log("Step 4: Restarting all workers for next project...", "SYSTEM")
                 for wid in list(self.workers.keys()):
@@ -1974,6 +1997,48 @@ class VMManager:
                         self.log(f"  Cannot delete {f.name}: {e}", "SYSTEM", "WARN")
         except Exception as e:
             self.log(f"Error clearing agent status: {e}", "SYSTEM", "WARN")
+
+    def _clear_chrome_data_for_new_account(self):
+        """
+        v1.0.105: Xóa Chrome data để đăng nhập tài khoản mới.
+
+        Khi xoay vòng tài khoản, cần xóa data Chrome để:
+        - Logout khỏi tài khoản cũ
+        - Login tài khoản mới khi Chrome khởi động lại
+        """
+        try:
+            import shutil
+
+            # Chrome 1 data path
+            chrome1_data = TOOL_DIR / "GoogleChromePortable" / "Data" / "profile"
+            # Chrome 2 data path
+            chrome2_data = TOOL_DIR / "GoogleChromePortable - Copy" / "Data" / "profile"
+
+            for data_path in [chrome1_data, chrome2_data]:
+                if data_path.exists():
+                    # Xóa tất cả trừ "First Run" file
+                    first_run = data_path / "First Run"
+                    first_run_exists = first_run.exists()
+
+                    for item in data_path.iterdir():
+                        if item.name == "First Run":
+                            continue
+                        try:
+                            if item.is_dir():
+                                shutil.rmtree(item, ignore_errors=True)
+                            else:
+                                item.unlink()
+                        except Exception as e:
+                            self.log(f"Cannot delete {item.name}: {e}", "SYSTEM", "WARN")
+
+                    # Tạo lại First Run nếu đã bị xóa
+                    if not first_run.exists():
+                        first_run.touch()
+
+                    self.log(f"Cleared Chrome data: {data_path.parent.parent.name}", "SYSTEM")
+
+        except Exception as e:
+            self.log(f"Error clearing Chrome data: {e}", "SYSTEM", "WARN")
 
     def kill_all_chrome(self):
         """Kill TẤT CẢ Chrome + CMD windows khi tắt tool."""

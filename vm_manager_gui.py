@@ -192,6 +192,30 @@ class SettingsWindow(tk.Toplevel):
         tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
                   bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
 
+        # === VEO3 ACCOUNTS (v1.0.105) ===
+        account_frame = tk.LabelFrame(main_frame, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
+                                       font=("Arial", 10, "bold"), padx=10, pady=10)
+        account_frame.pack(fill="x", pady=5)
+
+        # Account info display
+        self.account_info_text = tk.Text(account_frame, height=6, width=60,
+                                          font=("Consolas", 9), bg='#0f3460', fg='#00ff88',
+                                          state="disabled", wrap="word")
+        self.account_info_text.pack(fill="x", pady=5)
+
+        # Buttons row
+        account_btn_row = tk.Frame(account_frame, bg='#16213e')
+        account_btn_row.pack(fill="x", pady=5)
+
+        tk.Button(account_btn_row, text="Tai lai thong tin", command=self._load_account_info,
+                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=10).pack(side="left", padx=5)
+
+        tk.Button(account_btn_row, text="Xoay tai khoan", command=self._rotate_account,
+                  bg='#e17055', fg='white', font=("Arial", 9), relief="flat", padx=10).pack(side="left", padx=5)
+
+        # Load account info on init
+        self.after(500, self._load_account_info)
+
         # === BUTTONS ===
         btn_frame = tk.Frame(self, bg='#1a1a2e')
         btn_frame.pack(fill="x", padx=10, pady=10)
@@ -254,6 +278,103 @@ class SettingsWindow(tk.Toplevel):
         except Exception as e:
             from tkinter import messagebox
             messagebox.showerror("Loi", f"Khong the luu: {e}")
+
+    def _load_account_info(self):
+        """
+        v1.0.105: Load va hien thi thong tin tai khoan Veo3 cho kenh hien tai.
+        """
+        try:
+            from google_login import (
+                detect_machine_code, extract_channel_from_machine_code,
+                get_channel_accounts, load_account_index
+            )
+
+            # Enable text widget for editing
+            self.account_info_text.config(state="normal")
+            self.account_info_text.delete("1.0", "end")
+
+            # Detect channel
+            machine_code = detect_machine_code()
+            if not machine_code:
+                self.account_info_text.insert("end", "Khong detect duoc ma may!\n")
+                self.account_info_text.insert("end", f"Path: {TOOL_DIR}")
+                self.account_info_text.config(state="disabled")
+                return
+
+            channel = extract_channel_from_machine_code(machine_code)
+            self.account_info_text.insert("end", f"Ma may: {machine_code}\n")
+            self.account_info_text.insert("end", f"Kenh: {channel}\n")
+            self.account_info_text.insert("end", "-" * 40 + "\n")
+
+            # Get accounts
+            accounts = get_channel_accounts(channel)
+            current_index = load_account_index(channel)
+
+            if not accounts:
+                self.account_info_text.insert("end", "Khong tim thay tai khoan nao!\n")
+                self.account_info_text.insert("end", "Kiem tra sheet THONG TIN, cot B va AT")
+            else:
+                self.account_info_text.insert("end", f"Tong: {len(accounts)} tai khoan\n")
+                self.account_info_text.insert("end", f"Dang dung: #{current_index + 1}\n\n")
+
+                for i, acc in enumerate(accounts):
+                    marker = ">>> " if i == current_index else "    "
+                    self.account_info_text.insert("end", f"{marker}{i+1}. {acc['id']}\n")
+                    if acc.get('totp_secret'):
+                        self.account_info_text.insert("end", f"       (2FA: Co)\n")
+
+            self.account_info_text.config(state="disabled")
+
+        except Exception as e:
+            self.account_info_text.config(state="normal")
+            self.account_info_text.delete("1.0", "end")
+            self.account_info_text.insert("end", f"Loi: {e}")
+            self.account_info_text.config(state="disabled")
+
+    def _rotate_account(self):
+        """
+        v1.0.105: Xoay sang tai khoan tiep theo.
+        """
+        try:
+            from google_login import (
+                detect_machine_code, extract_channel_from_machine_code,
+                get_channel_accounts, rotate_account_index
+            )
+            from tkinter import messagebox
+
+            machine_code = detect_machine_code()
+            if not machine_code:
+                messagebox.showerror("Loi", "Khong detect duoc ma may!")
+                return
+
+            channel = extract_channel_from_machine_code(machine_code)
+            accounts = get_channel_accounts(channel)
+
+            if not accounts:
+                messagebox.showerror("Loi", f"Khong tim thay tai khoan cho kenh {channel}")
+                return
+
+            if len(accounts) == 1:
+                messagebox.showinfo("Thong bao", f"Kenh {channel} chi co 1 tai khoan")
+                return
+
+            # Rotate
+            new_idx = rotate_account_index(channel, len(accounts))
+            new_account = accounts[new_idx]
+
+            messagebox.showinfo(
+                "Thanh cong",
+                f"Da chuyen sang tai khoan #{new_idx + 1}/{len(accounts)}\n\n"
+                f"Email: {new_account['id']}\n\n"
+                f"Luu y: Can khoi dong lai Chrome de dang nhap tai khoan moi."
+            )
+
+            # Reload account info
+            self._load_account_info()
+
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Loi", f"Khong the xoay tai khoan: {e}")
 
     def _check_resources(self):
         """Kiem tra cac tai nguyen."""
