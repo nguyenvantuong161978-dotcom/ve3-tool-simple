@@ -426,7 +426,7 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
         from google_login import (
             get_account_from_excel, save_account_to_excel,
             extract_channel_from_machine_code, get_current_account_for_channel,
-            set_account_index_for_resume
+            set_account_index_for_resume, login_google_chrome
         )
 
         channel = extract_channel_from_machine_code(code)
@@ -456,6 +456,20 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                         current_account['index'],
                         current_account['id']
                     )
+
+                    # v1.0.111: Đăng nhập Google TRƯỚC khi vào Flow
+                    # Vì đã xóa Chrome data, phải login lại
+                    log(f"  [NEW] Logging into Google before Flow...")
+                    chrome_portable = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+                    login_result = login_google_chrome(
+                        current_account,
+                        chrome_portable=chrome_portable,
+                        worker_id=0  # Chrome 1
+                    )
+                    if login_result:
+                        log(f"  [NEW] Google login successful!")
+                    else:
+                        log(f"  [NEW] Google login failed - Flow may ask for login", "WARN")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 

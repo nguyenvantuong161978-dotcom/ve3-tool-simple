@@ -1,14 +1,15 @@
-1.0.110
+1.0.111
 2026-02-25 (VN)
-Fix: Tìm mã máy đầy đủ trong sheet (AR8-T1, không chỉ AR8)
+Add: Đăng nhập Google trước khi vào Flow (sau khi xóa Chrome data)
 
-FIX:
-- Cột B trong sheet THÔNG TIN có mã đầy đủ (AR8-T1, KA2-T2...)
-- Trước đây chỉ tìm theo channel (AR8) → không khớp
-- Giờ tìm theo machine_code đầy đủ (AR8-T1)
-- GUI hiển thị mã máy đầy đủ thay vì chỉ kênh
+NEW:
+- Khi bắt đầu project MỚI (không phải resume)
+- Sau khi xóa Chrome data → Gọi login_google_chrome()
+- Đăng nhập Gmail trước → Sau đó mới vào Flow
+- Tránh lỗi Flow yêu cầu login
 
-1. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
+1. v1.0.111: Đăng nhập Google trước khi vào Flow
+2. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
 2. v1.0.109: Fix GUI Settings bị che + tự tắt
 3. v1.0.108: GUI select account (Listbox + chọn tài khoản)
 4. v1.0.107: Clear Chrome data on NEW project (not resume)
