@@ -2473,10 +2473,18 @@ class SimpleGUI(tk.Tk):
             print("[PRE-LOGIN] Starting pre-login CMD window...")
             print("="*60)
 
-            # v1.0.119: Dùng subprocess.call với cmd.exe /c start
-            # Đây là cách reliable nhất để mở CMD visible từ GUI
-            cmd = f'cmd.exe /c start "PRE-LOGIN" /wait python "{pre_login_script}"'
-            subprocess.call(cmd, shell=True, cwd=str(TOOL_DIR))
+            # v1.0.120: Dùng subprocess.Popen trực tiếp (không qua shell)
+            # Mở CMD visible riêng và đợi nó kết thúc
+            import sys
+            python_exe = sys.executable  # Lấy python.exe đang chạy
+            CREATE_NEW_CONSOLE = 0x00000010
+
+            process = subprocess.Popen(
+                [python_exe, str(pre_login_script)],
+                cwd=str(TOOL_DIR),
+                creationflags=CREATE_NEW_CONSOLE
+            )
+            process.wait()  # Đợi process kết thúc
 
             print("[PRE-LOGIN] Pre-login CMD finished!")
             print("="*60 + "\n")
