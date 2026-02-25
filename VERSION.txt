@@ -1,16 +1,18 @@
-1.0.108
+1.0.109
 2026-02-25 (VN)
-Feature: GUI chọn tài khoản Veo3
+Fix: GUI Settings bị che + tự tắt
 
-NEW:
-- GUI Settings: Listbox hiển thị danh sách tài khoản (dễ nhìn hơn)
-- Nút "CHON TAI KHOAN NAY": Chọn tài khoản bất kỳ làm tài khoản tiếp theo
-- Có thể đổi thứ tự tài khoản theo ý muốn (không chỉ xoay vòng)
+FIX:
+- Tăng kích thước cửa sổ Settings (800x850)
+- Thêm scrollbar cho nội dung (không bị che)
+- Fix lỗi tự tắt khi load account (better error handling)
+- Hiển thị trạng thái "Đang tải..." khi kết nối Google Sheet
 
-1. v1.0.108: GUI select account (Listbox + chọn tài khoản)
-2. v1.0.107: Clear Chrome data on NEW project (not resume)
-3. v1.0.106: Save account to Excel for proper resume
-4. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
+1. v1.0.109: Fix GUI Settings bị che + tự tắt
+2. v1.0.108: GUI select account (Listbox + chọn tài khoản)
+3. v1.0.107: Clear Chrome data on NEW project (not resume)
+4. v1.0.106: Save account to Excel for proper resume
+5. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
 2. v1.0.104: Prioritize projects by completion % (highest first)
 3. v1.0.103: Delete child rows from Excel before loading prompts
 3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)

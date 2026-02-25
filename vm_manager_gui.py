@@ -79,10 +79,10 @@ class SettingsWindow(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("CAU HINH - Settings")
-        self.geometry("750x700")
+        self.geometry("800x850")  # v1.0.109: Tăng kích thước
         self.configure(bg='#1a1a2e')
         self.resizable(True, True)
-        self.minsize(700, 650)
+        self.minsize(750, 750)
 
         self._build()
         self._load_settings()
@@ -96,9 +96,25 @@ class SettingsWindow(tk.Toplevel):
         tk.Label(header, text="CAU HINH HE THONG", bg='#e94560', fg='white',
                  font=("Arial", 14, "bold")).pack(pady=12)
 
-        # Main content with scroll
-        main_frame = tk.Frame(self, bg='#1a1a2e')
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # v1.0.109: Scrollable main content
+        container = tk.Frame(self, bg='#1a1a2e')
+        container.pack(fill="both", expand=True, padx=10, pady=10)
+
+        canvas = tk.Canvas(container, bg='#1a1a2e', highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        main_frame = tk.Frame(canvas, bg='#1a1a2e')
+
+        main_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=main_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Mouse wheel scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         # === KIEM TRA TAI NGUYEN ===
         check_frame = tk.LabelFrame(main_frame, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
@@ -300,30 +316,42 @@ class SettingsWindow(tk.Toplevel):
 
     def _load_account_info(self):
         """
-        v1.0.108: Load va hien thi thong tin tai khoan Veo3 trong Listbox.
+        v1.0.109: Load va hien thi thong tin tai khoan Veo3 trong Listbox.
         Cho phep chon tai khoan de dat lam hien tai.
         """
         try:
+            # Clear listbox first
+            self.account_listbox.delete(0, "end")
+            self._accounts_data = []
+            self.account_header.config(text="Dang tai thong tin...")
+            self.update_idletasks()  # Force UI update
+
             from google_login import (
                 detect_machine_code, extract_channel_from_machine_code,
                 get_channel_accounts, load_account_index
             )
 
-            # Clear listbox
-            self.account_listbox.delete(0, "end")
-            self._accounts_data = []
-
             # Detect channel
             machine_code = detect_machine_code()
             if not machine_code:
-                self.account_header.config(text=f"Loi: Khong detect duoc ma may! Path: {TOOL_DIR}")
+                self.account_header.config(text=f"Loi: Khong detect duoc ma may!")
+                self.account_listbox.insert("end", f"Path: {TOOL_DIR}")
                 return
 
             channel = extract_channel_from_machine_code(machine_code)
             self._current_channel = channel
+            self.account_header.config(text=f"Kenh: {channel} | Dang ket noi Google Sheet...")
+            self.update_idletasks()
 
-            # Get accounts
-            accounts = get_channel_accounts(channel)
+            # Get accounts (có thể mất thời gian do network)
+            try:
+                accounts = get_channel_accounts(channel)
+            except Exception as net_err:
+                self.account_header.config(text=f"Kenh: {channel} | Loi mang: {net_err}")
+                self.account_listbox.insert("end", "Khong ket noi duoc Google Sheet")
+                self.account_listbox.insert("end", "Nhan 'Tai lai' de thu lai")
+                return
+
             current_index = load_account_index(channel)
 
             if not accounts:
@@ -351,7 +379,13 @@ class SettingsWindow(tk.Toplevel):
                 self.account_listbox.see(current_index)
 
         except Exception as e:
-            self.account_header.config(text=f"Loi: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                self.account_header.config(text=f"Loi: {e}")
+                self.account_listbox.insert("end", "Nhan 'Tai lai' de thu lai")
+            except:
+                pass  # Window may be closed
 
     def _select_account(self):
         """
