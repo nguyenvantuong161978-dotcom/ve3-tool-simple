@@ -410,7 +410,24 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             log(f"  No Excel after 120s, skip!")
             return False
 
-    # Step 3.5: VALIDATOR - Kiểm tra tất cả NV references trước khi tạo scenes
+    # Step 3.5a: Account tracking (v1.0.106)
+    # Chrome 2 chỉ đọc account từ Excel (Chrome 1 đã lưu)
+    try:
+        from google_login import (
+            get_account_from_excel, extract_channel_from_machine_code,
+            set_account_index_for_resume
+        )
+
+        channel = extract_channel_from_machine_code(code)
+        if channel:
+            account_info = get_account_from_excel(str(excel_path))
+            if account_info and account_info.get('email'):
+                log(f"  [RESUME] Account from Excel: {account_info.get('email')} (index {account_info.get('index')})")
+                set_account_index_for_resume(str(excel_path), channel)
+    except Exception as e:
+        log(f"  Account tracking error (non-critical): {e}", "WARN")
+
+    # Step 3.5b: VALIDATOR - Kiểm tra tất cả NV references trước khi tạo scenes
     log(f"  ============================================================")
     log(f"  STEP 3.5: REFERENCE VALIDATOR")
     log(f"  ============================================================")

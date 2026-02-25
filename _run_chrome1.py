@@ -371,6 +371,38 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
         log(f"  Excel exists but no prompts - waiting for Excel Worker to complete")
         return False
 
+    # Step 3.5: Account tracking (v1.0.106)
+    # Lưu/đọc thông tin tài khoản để resume đúng account
+    try:
+        from google_login import (
+            get_account_from_excel, save_account_to_excel,
+            extract_channel_from_machine_code, get_current_account_for_channel,
+            set_account_index_for_resume
+        )
+
+        channel = extract_channel_from_machine_code(code)
+        if channel:
+            # Kiểm tra Excel có thông tin account chưa
+            account_info = get_account_from_excel(str(excel_path))
+
+            if account_info and account_info.get('email'):
+                # RESUME: Đã có account trong Excel → restore account index
+                log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {account_info.get('index')})")
+                set_account_index_for_resume(str(excel_path), channel)
+            else:
+                # NEW PROJECT: Chưa có account → lưu account hiện tại
+                current_account = get_current_account_for_channel(channel)
+                if current_account:
+                    log(f"  [NEW] Saving account to Excel: {current_account['id']} (index {current_account['index']})")
+                    save_account_to_excel(
+                        str(excel_path),
+                        channel,
+                        current_account['index'],
+                        current_account['id']
+                    )
+    except Exception as e:
+        log(f"  Account tracking error (non-critical): {e}", "WARN")
+
     # Step 4: Create images using SmartEngine (same as worker_pic)
     # Basic mode just means we created Excel with segment-based approach
     # Image generation uses the same SmartEngine

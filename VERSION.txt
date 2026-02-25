@@ -1,15 +1,14 @@
-1.0.105
+1.0.106
 2026-02-25 (VN)
-Feature: Multi-account rotation per channel
+Feature: Save account info to Excel for resume
 
 NEW:
-- Đọc tài khoản từ sheet THÔNG TIN (cột B: kênh, cột AT: tài khoản)
-- Hỗ trợ nhiều tài khoản per kênh (format: id|pass|2fa per line)
-- Tự động xoay vòng tài khoản khi xong 1 mã
-- Xóa Chrome data để login tài khoản mới
-- GUI: Hiển thị + xoay tài khoản trong cài đặt
+- Lưu thông tin tài khoản (email, index) vào Excel config sheet khi bắt đầu project
+- Khi resume project dở → đọc account từ Excel và sử dụng đúng tài khoản đó
+- Chrome 1: Lưu + đọc account | Chrome 2: Chỉ đọc account
 
-1. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
+1. v1.0.106: Save account to Excel for proper resume
+2. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
 2. v1.0.104: Prioritize projects by completion % (highest first)
 3. v1.0.103: Delete child rows from Excel before loading prompts
 3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)

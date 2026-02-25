@@ -225,6 +225,164 @@ def get_current_account_for_channel(channel_code: str) -> dict:
     return account
 
 
+# ============================================================================
+# EXCEL ACCOUNT TRACKING (v1.0.106)
+# Lưu/đọc thông tin tài khoản trong Excel để resume đúng account
+# ============================================================================
+
+def save_account_to_excel(excel_path: str, channel: str, account_index: int, account_email: str) -> bool:
+    """
+    Lưu thông tin tài khoản đang sử dụng vào Excel config sheet.
+
+    Args:
+        excel_path: Đường dẫn đến file Excel
+        channel: Mã kênh (VD: AR35, AR47)
+        account_index: Index của tài khoản (0-based)
+        account_email: Email của tài khoản
+
+    Returns:
+        True nếu lưu thành công
+    """
+    try:
+        from openpyxl import load_workbook
+        from pathlib import Path
+
+        path = Path(excel_path)
+        if not path.exists():
+            log(f"Excel file not found: {excel_path}", "WARN")
+            return False
+
+        wb = load_workbook(str(path))
+
+        # Tạo sheet config nếu chưa có
+        if 'config' not in wb.sheetnames:
+            ws = wb.create_sheet('config')
+            ws['A1'] = 'key'
+            ws['B1'] = 'value'
+        else:
+            ws = wb['config']
+
+        # Các key cần lưu
+        config_items = {
+            'account_channel': channel,
+            'account_index': str(account_index),
+            'account_email': account_email,
+        }
+
+        for key, value in config_items.items():
+            # Tìm row có key này để update
+            found = False
+            for row in range(2, ws.max_row + 1):
+                cell_key = ws.cell(row=row, column=1).value
+                if cell_key and str(cell_key).strip().lower() == key.lower():
+                    ws.cell(row=row, column=2, value=value)
+                    found = True
+                    break
+
+            # Nếu chưa có, thêm row mới
+            if not found:
+                next_row = ws.max_row + 1
+                ws.cell(row=next_row, column=1, value=key)
+                ws.cell(row=next_row, column=2, value=value)
+
+        wb.save(str(path))
+        log(f"Saved account info to Excel: {account_email} (index {account_index})")
+        return True
+
+    except Exception as e:
+        log(f"Error saving account to Excel: {e}", "ERROR")
+        return False
+
+
+def get_account_from_excel(excel_path: str) -> dict:
+    """
+    Đọc thông tin tài khoản từ Excel config sheet.
+
+    Args:
+        excel_path: Đường dẫn đến file Excel
+
+    Returns:
+        {"channel": "AR35", "index": 0, "email": "xxx@gmail.com"} hoặc None nếu chưa có
+    """
+    try:
+        from openpyxl import load_workbook
+        from pathlib import Path
+
+        path = Path(excel_path)
+        if not path.exists():
+            return None
+
+        wb = load_workbook(str(path), read_only=True)
+
+        if 'config' not in wb.sheetnames:
+            wb.close()
+            return None
+
+        ws = wb['config']
+
+        result = {}
+        for row in range(2, ws.max_row + 1):
+            cell_key = ws.cell(row=row, column=1).value
+            cell_value = ws.cell(row=row, column=2).value
+
+            if not cell_key:
+                continue
+
+            key = str(cell_key).strip().lower()
+            value = str(cell_value) if cell_value else ""
+
+            if key == 'account_channel':
+                result['channel'] = value
+            elif key == 'account_index':
+                try:
+                    result['index'] = int(value)
+                except:
+                    result['index'] = 0
+            elif key == 'account_email':
+                result['email'] = value
+
+        wb.close()
+
+        # Chỉ trả về nếu có đủ thông tin
+        if 'channel' in result and 'index' in result and 'email' in result:
+            log(f"Read account from Excel: {result['email']} (index {result['index']})")
+            return result
+
+        return None
+
+    except Exception as e:
+        log(f"Error reading account from Excel: {e}", "WARN")
+        return None
+
+
+def set_account_index_for_resume(excel_path: str, channel: str) -> bool:
+    """
+    Đọc thông tin account từ Excel và set vào index tracker để resume đúng account.
+
+    Args:
+        excel_path: Đường dẫn đến file Excel
+        channel: Mã kênh hiện tại
+
+    Returns:
+        True nếu đã restore account index từ Excel
+    """
+    account_info = get_account_from_excel(excel_path)
+
+    if not account_info:
+        return False
+
+    # Kiểm tra channel khớp
+    if account_info.get('channel', '').upper() != channel.upper():
+        log(f"Channel mismatch: Excel has {account_info.get('channel')}, current is {channel}", "WARN")
+        return False
+
+    # Set account index
+    saved_index = account_info.get('index', 0)
+    save_account_index(channel, saved_index)
+    log(f"Restored account index {saved_index} for channel {channel} from Excel")
+    return True
+
+
 def detect_machine_code() -> str:
     """
     Detect mã máy từ đường dẫn thư mục tool.
