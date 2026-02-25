@@ -1,14 +1,15 @@
-1.0.122
+1.0.123
 2026-02-25 (VN)
-Fix: 2FA login cải thiện (multiple selectors + direct OTP input)
+Fix: Login tuần tự Chrome 1 → Chrome 2 (tránh xung đột)
 
 Thay đổi:
-- Thử nhiều selectors cho 2FA option (Google Authenticator, Ứng dụng xác thực...)
-- Tìm OTP input trực tiếp (input[type="tel"], totpPin...)
-- Nhập OTP trực tiếp vào input thay vì Ctrl+V
+- Chrome 1 login CẢ 2 Chrome TUẦN TỰ (không song song)
+- Chrome 2 KHÔNG login (đợi Chrome 1 làm xong)
+- Fix lỗi login song song gây xung đột
 
-1. v1.0.122: 2FA login cải thiện (multiple selectors)
-2. v1.0.121: PRE-LOGIN trong Chrome workers (revert CMD riêng)
+1. v1.0.123: Login tuần tự Chrome 1 → Chrome 2
+2. v1.0.122: 2FA login cải thiện (multiple selectors)
+3. v1.0.121: PRE-LOGIN trong Chrome workers (revert CMD riêng)
 2. v1.0.120: Fix PRE-LOGIN dùng Popen + CREATE_NEW_CONSOLE + sys.executable
 3. v1.0.119: Fix PRE-LOGIN dùng subprocess.call + cmd.exe /c start
 4. v1.0.118: Fix PRE-LOGIN CMD dùng os.system (thay vì subprocess)

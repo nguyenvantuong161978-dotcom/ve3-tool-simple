@@ -1176,68 +1176,12 @@ def process_project_with_agent(code: str) -> bool:
 
 def _do_pre_login_if_needed():
     """
-    v1.0.121: PRE-LOGIN cho Chrome 2.
+    v1.0.123: Chrome 2 KHÔNG login.
 
-    Chrome 1 đã clear data cho cả 2, Chrome 2 chỉ cần login.
+    Chrome 1 đã login CẢ 2 Chrome tuần tự rồi.
+    Chrome 2 chỉ cần đợi và bắt đầu tạo ảnh.
     """
-    print("\n[PRE-LOGIN Chrome2] Checking if login needed...")
-
-    # Tìm project có Excel nhưng 0 images
-    pending_project = None
-    if LOCAL_PROJECTS.exists():
-        for item in LOCAL_PROJECTS.iterdir():
-            if not item.is_dir():
-                continue
-            code = item.name
-            excel_path = item / f"{code}_prompts.xlsx"
-            img_dir = item / "img"
-
-            if not excel_path.exists():
-                continue
-
-            img_count = 0
-            if img_dir.exists():
-                img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
-
-            if img_count == 0:
-                pending_project = (code, item, excel_path)
-                break
-
-    if not pending_project:
-        print("[PRE-LOGIN Chrome2] No pending project with 0% - skip login")
-        return
-
-    code, project_dir, excel_path = pending_project
-    print(f"[PRE-LOGIN Chrome2] Found pending project: {code}")
-
-    try:
-        from google_login import (
-            detect_machine_code, extract_channel_from_machine_code,
-            get_current_account_for_channel, login_google_chrome
-        )
-
-        # Lấy machine_code từ folder path
-        machine_code = detect_machine_code()
-        channel = extract_channel_from_machine_code(machine_code)
-        print(f"[PRE-LOGIN Chrome2] Machine code: {machine_code}, Channel: {channel}")
-
-        # Lấy account từ Google Sheet
-        current_account = get_current_account_for_channel(channel, machine_code=machine_code)
-        if not current_account:
-            print("[PRE-LOGIN Chrome2] No account found - skip login")
-            return
-
-        print(f"[PRE-LOGIN Chrome2] Account: {current_account['id']}")
-
-        # Login Chrome 2
-        chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
-        print("[PRE-LOGIN Chrome2] Logging into Chrome 2...")
-        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
-        print("[PRE-LOGIN Chrome2] Chrome 2 login done!")
-
-    except Exception as e:
-        print(f"[PRE-LOGIN Chrome2] Error (non-critical): {e}")
-
+    print("\n[PRE-LOGIN Chrome2] Chrome 1 handles login for both - skipping")
     print("[PRE-LOGIN Chrome2] Done!\n")
 
 

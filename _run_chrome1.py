@@ -968,11 +968,18 @@ def _do_pre_login_if_needed():
         print("[PRE-LOGIN] Clearing Chrome data...")
         clear_chrome_data_for_new_account()
 
-        # Login Chrome 1
+        # v1.0.123: Login CẢ 2 Chrome TUẦN TỰ (không song song)
+        # Chrome 1 login trước
         chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 1...")
         login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
         print("[PRE-LOGIN] Chrome 1 login done!")
+
+        # Chrome 2 login SAU khi Chrome 1 xong
+        chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
+        print("[PRE-LOGIN] Logging into Chrome 2...")
+        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+        print("[PRE-LOGIN] Chrome 2 login done!")
 
         # Lưu account vào Excel
         save_account_to_excel(
