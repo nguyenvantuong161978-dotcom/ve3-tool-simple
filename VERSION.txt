@@ -1,15 +1,15 @@
-1.0.111
+1.0.112
 2026-02-25 (VN)
-Add: Đăng nhập Google trước khi vào Flow (sau khi xóa Chrome data)
+Fix: Đăng nhập Google cả khi RESUME với 0% ảnh
 
-NEW:
-- Khi bắt đầu project MỚI (không phải resume)
-- Sau khi xóa Chrome data → Gọi login_google_chrome()
-- Đăng nhập Gmail trước → Sau đó mới vào Flow
-- Tránh lỗi Flow yêu cầu login
+FIX:
+- Trước: RESUME path không login → Flow không có session
+- Giờ: Nếu 0% completion (chưa có ảnh) → luôn login trước
+- Cả NEW và RESUME đều login khi bắt đầu mã mới
 
-1. v1.0.111: Đăng nhập Google trước khi vào Flow
-2. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
+1. v1.0.112: Login Google cả khi RESUME với 0% ảnh
+2. v1.0.111: Đăng nhập Google trước khi vào Flow
+3. v1.0.110: Fix tìm mã máy đầy đủ trong sheet (AR8-T1)
 2. v1.0.109: Fix GUI Settings bị che + tự tắt
 3. v1.0.108: GUI select account (Listbox + chọn tài khoản)
 4. v1.0.107: Clear Chrome data on NEW project (not resume)

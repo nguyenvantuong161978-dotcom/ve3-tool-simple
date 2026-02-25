@@ -434,11 +434,33 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             # Kiểm tra Excel có thông tin account chưa
             account_info = get_account_from_excel(str(excel_path))
 
+            # v1.0.112: Kiểm tra % hoàn thành để quyết định có cần login không
+            percent, current, expected = get_project_completion_percent(local_dir, code)
+            is_fresh_start = (current == 0)  # Chưa có ảnh nào = bắt đầu mới
+
             if account_info and account_info.get('email'):
                 # RESUME: Đã có account trong Excel → restore account index
-                # KHÔNG xóa Chrome data - giữ nguyên session
                 log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {account_info.get('index')})")
                 set_account_index_for_resume(str(excel_path), channel)
+
+                # v1.0.112: Nếu 0% (chưa có ảnh) → vẫn cần login vì có thể Chrome data bị xóa
+                if is_fresh_start:
+                    log(f"  [RESUME] 0% completion - need to login first...")
+                    clear_chrome_data_for_new_account()
+
+                    current_account = get_current_account_for_channel(channel, machine_code=code)
+                    if current_account:
+                        log(f"  [RESUME] Logging into Google before Flow...")
+                        chrome_portable = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+                        login_result = login_google_chrome(
+                            current_account,
+                            chrome_portable=chrome_portable,
+                            worker_id=0  # Chrome 1
+                        )
+                        if login_result:
+                            log(f"  [RESUME] Google login successful!")
+                        else:
+                            log(f"  [RESUME] Google login failed - Flow may ask for login", "WARN")
             else:
                 # NEW PROJECT: Chưa có account
                 # v1.0.107: XÓA CHROME DATA để đăng nhập tài khoản mới
