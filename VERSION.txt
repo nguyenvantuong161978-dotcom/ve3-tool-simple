@@ -1,19 +1,21 @@
-1.0.114
+1.0.115
 2026-02-25 (VN)
-Fix: PRE-LOGIN trong GUI trước khi start workers
+Fix: PRE-LOGIN chạy như CMD riêng (visible window)
 
 FLOW MỚI khi nhấn "BAT DAU":
 1. Start Excel worker (CMD 1)
-2. PRE-LOGIN chạy song song:
+2. PRE-LOGIN CMD (CMD 4) mở lên:
    - Tìm project có 0% ảnh
    - Xóa Chrome data cả 2
    - Login Chrome 1 → tắt
    - Login Chrome 2 → tắt
    - Lưu account vào Excel
+   - Tự tắt sau 3 giây
 3. Start Chrome 1 worker (CMD 2)
 4. Start Chrome 2 worker (CMD 3)
 
-1. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
+1. v1.0.115: PRE-LOGIN chạy như CMD riêng (visible)
+2. v1.0.114: PRE-LOGIN trong GUI trước khi start workers
 2. v1.0.113: Login cả 2 Chrome trước khi vào Flow
 3. v1.0.112: Login Google cả khi RESUME với 0% ảnh
 4. v1.0.111: Đăng nhập Google trước khi vào Flow

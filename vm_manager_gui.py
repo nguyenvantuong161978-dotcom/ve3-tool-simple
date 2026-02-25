@@ -2449,122 +2449,37 @@ class SimpleGUI(tk.Tk):
 
     def _pre_login_chrome(self):
         """
-        v1.0.114: PRE-LOGIN Chrome trước khi start workers.
+        v1.0.115: Chạy _pre_login.py như CMD riêng (visible window).
 
-        Flow:
-        1. Tìm project pending đầu tiên
-        2. Nếu project có 0% ảnh → cần login mới
-        3. Xóa Chrome data cả 2
-        4. Login Chrome 1 và Chrome 2
-        5. Lưu account vào Excel
+        CMD này sẽ:
+        1. Tìm project pending (có Excel, 0 ảnh)
+        2. Xóa Chrome data cả 2
+        3. Login Chrome 1 và Chrome 2
+        4. Lưu account vào Excel
+        5. Tự động tắt sau 3 giây
         """
         try:
+            import subprocess
             from pathlib import Path
-            import shutil
-
-            print("\n" + "="*60)
-            print("[PRE-LOGIN] Checking if login needed...")
-            print("="*60)
 
             TOOL_DIR = Path(__file__).parent
-            LOCAL_PROJECTS = TOOL_DIR / "PROJECTS"
+            pre_login_script = TOOL_DIR / "_pre_login.py"
 
-            # Tìm project pending đầu tiên
-            if not LOCAL_PROJECTS.exists():
-                print("[PRE-LOGIN] No PROJECTS folder, skip login")
+            if not pre_login_script.exists():
+                print("[PRE-LOGIN] Script _pre_login.py not found, skip")
                 return
 
-            pending_project = None
-            for item in LOCAL_PROJECTS.iterdir():
-                if not item.is_dir():
-                    continue
-                code = item.name
-                excel_path = item / f"{code}_prompts.xlsx"
-                img_dir = item / "img"
+            print("\n" + "="*60)
+            print("[PRE-LOGIN] Starting pre-login CMD window...")
+            print("="*60)
+            self.status_var.set("Dang chay pre-login...")
 
-                # Chỉ xử lý project có Excel
-                if not excel_path.exists():
-                    continue
+            # Chạy _pre_login.py trong CMD riêng và ĐỢI nó xong
+            # Dùng cmd /c để chạy và đợi kết thúc
+            cmd = f'start "PRE-LOGIN" /wait cmd /c python "{pre_login_script}"'
+            subprocess.run(cmd, shell=True, cwd=str(TOOL_DIR))
 
-                # Đếm số ảnh
-                img_count = 0
-                if img_dir.exists():
-                    img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
-
-                # Nếu 0 ảnh → cần login
-                if img_count == 0:
-                    pending_project = (code, item, excel_path)
-                    break
-
-            if not pending_project:
-                print("[PRE-LOGIN] No pending project with 0% - skip login")
-                return
-
-            code, project_dir, excel_path = pending_project
-            print(f"[PRE-LOGIN] Found pending project: {code} (0% images)")
-
-            # Import google_login functions
-            from google_login import (
-                extract_channel_from_machine_code, get_current_account_for_channel,
-                save_account_to_excel, login_google_chrome
-            )
-
-            channel = extract_channel_from_machine_code(code)
-            print(f"[PRE-LOGIN] Channel: {channel}, Machine code: {code}")
-
-            # Lấy account
-            current_account = get_current_account_for_channel(channel, machine_code=code)
-            if not current_account:
-                print("[PRE-LOGIN] No account found - skip login")
-                return
-
-            print(f"[PRE-LOGIN] Account: {current_account['id']}")
-
-            # Xóa Chrome data
-            print("[PRE-LOGIN] Clearing Chrome data...")
-            chrome1_data = TOOL_DIR / "GoogleChromePortable" / "Data" / "profile"
-            chrome2_data = TOOL_DIR / "GoogleChromePortable - Copy" / "Data" / "profile"
-
-            for data_path in [chrome1_data, chrome2_data]:
-                if data_path.exists():
-                    first_run = data_path / "First Run"
-                    for item in data_path.iterdir():
-                        if item.name == "First Run":
-                            continue
-                        try:
-                            if item.is_dir():
-                                shutil.rmtree(item, ignore_errors=True)
-                            else:
-                                item.unlink()
-                        except:
-                            pass
-                    if not first_run.exists():
-                        first_run.touch()
-
-            print("[PRE-LOGIN] Chrome data cleared!")
-
-            # Login Chrome 1
-            chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
-            chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
-
-            print("[PRE-LOGIN] Logging into Chrome 1...")
-            self.status_var.set("Dang dang nhap Chrome 1...")
-            login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
-
-            print("[PRE-LOGIN] Logging into Chrome 2...")
-            self.status_var.set("Dang dang nhap Chrome 2...")
-            login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
-
-            # Lưu account vào Excel
-            print(f"[PRE-LOGIN] Saving account to Excel: {excel_path.name}")
-            save_account_to_excel(
-                str(excel_path),
-                channel,
-                current_account['index'],
-                current_account['id']
-            )
-
-            print("[PRE-LOGIN] Done! Both Chrome logged in.")
+            print("[PRE-LOGIN] Pre-login CMD finished!")
             print("="*60 + "\n")
 
         except Exception as e:
