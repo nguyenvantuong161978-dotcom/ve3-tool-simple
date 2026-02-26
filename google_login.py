@@ -811,9 +811,24 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
+        # v1.0.131: Navigate đến Flow để set cookies (domain khác accounts.google.com)
+        # Nếu không visit Flow, khi worker mở Chrome sẽ không có session
+        log("Navigating to Flow to set cookies...")
+        flow_url = "https://labs.google/fx/vi/tools/flow/project/test"
+        try:
+            driver.get(flow_url)
+            time.sleep(5)  # Đợi Flow load và set cookies
+            current = driver.url.lower()
+            if "labs.google" in current:
+                log(f"Flow session set: {current[:50]}")
+            else:
+                log(f"Flow redirected to: {current[:50]} (may need manual login)", "WARN")
+        except Exception as e:
+            log(f"Flow navigation error (non-critical): {e}", "WARN")
+
         # Đợi thêm để trang load đầy đủ trước khi tắt
         log("Waiting for page to fully load...")
-        time.sleep(5)
+        time.sleep(3)
         log("Page loaded, closing browser...", "OK")
 
         # Đóng Chrome (drission_flow_api.py sẽ tự navigate đến project)

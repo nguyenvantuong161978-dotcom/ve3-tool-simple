@@ -1,13 +1,14 @@
-1.0.130
+1.0.131
 2026-02-26 (VN)
-Fix: Không xóa Chrome data 2 lần - giữ session sau PRE-LOGIN
+Fix: Visit Flow sau login để set cookies (giữ session)
 
 Thay đổi:
-- Bỏ xóa profile data trong _auto_login_google()
-- PRE-LOGIN đã xóa và đăng nhập → không cần xóa lại
-- Giữ session để vào link test với tài khoản đã đăng nhập
+- Sau login Google thành công, navigate đến Flow URL
+- Flow là domain khác (labs.google) cần visit để set cookies riêng
+- Đợi Flow load xong rồi mới đóng Chrome
 
-1. v1.0.130: Không xóa Chrome data 2 lần
+1. v1.0.131: Visit Flow sau login để set cookies
+2. v1.0.130: Không xóa Chrome data 2 lần
 2. v1.0.129: Check logout ngay từ đầu
 3. v1.0.128: Thêm click "Create with Flow" khi mồi
 4. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
