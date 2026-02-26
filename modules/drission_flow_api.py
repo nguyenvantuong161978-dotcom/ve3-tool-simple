@@ -2858,9 +2858,9 @@ class DrissionFlowAPI:
                 self.log("[v] Đã ở trong project!")
                 # KHÔNG F5 - để _wait_for_textarea_visible() tự F5 nếu textarea không sẵn sàng
 
-        # 5. Đợi textarea sẵn sàng - TEXTAREA = page đã load xong
-        # IPv6 cần thời gian lâu hơn, tự động F5 nếu không thấy
-        self.log("Đợi project load (textarea = ready)...")
+        # 5. Đợi page load xong
+        # v1.0.135: Bỏ đợi textarea - giao diện mới không có textarea cố định
+        self.log("Đợi project load...")
 
         # Kiểm tra logout trước
         if self._is_logged_out():
@@ -2874,22 +2874,12 @@ class DrissionFlowAPI:
                 self.log("[PROJECT] [x] Login lại thất bại", "ERROR")
                 return False
 
-        # Đợi textarea - tự động F5 nếu không thấy (IPv6 friendly)
-        if not self._wait_for_textarea_visible():
-            # Thử navigate lại project 1 lần nữa
-            self.log("[PROJECT] [WARN] Không thấy textarea, thử load lại project...")
-            try:
-                project_url = f"https://labs.google/fx/tools/video-fx/projects/{self.project_id}"
-                self.driver.run_js(f"window.location.href = '{project_url}';", timeout=2)
-                time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
-                if not self._wait_for_textarea_visible():
-                    self.log("[x] Không thể tìm textarea sau nhiều lần thử", "ERROR")
-                    return False
-            except Exception as e:
-                self.log(f"[PROJECT] Navigate error: {e}", "ERROR")
-                return False
+        # v1.0.135: Đợi page ready thay vì textarea (giao diện mới)
+        wait_time = 8 if getattr(self, '_ipv6_activated', False) else 5
+        self.log(f"Đợi page ready ({wait_time}s)...")
+        time.sleep(wait_time)
 
-        self.log("[v] Project đã sẵn sàng (textarea visible)!")
+        self.log("[v] Project đã sẵn sàng!")
 
         # Mode đã được chọn ở _auto_setup_project()
         # Không cần chọn lại ở đây
@@ -3427,20 +3417,17 @@ class DrissionFlowAPI:
 
     def _click_textarea(self, wait_visible: bool = True, max_retry: int = 3):
         """
-        Click vào textarea để focus - QUAN TRỌNG để nhập prompt.
-        Đợi textarea visible trước khi click, nếu không thấy sẽ F5 refresh.
-        VERIFY focus bằng cách điền text test và đọc lại.
+        Click vào input để focus - QUAN TRỌNG để nhập prompt.
+        v1.0.135: Hỗ trợ cả textarea và contenteditable (giao diện mới).
 
         Args:
-            wait_visible: True = đợi textarea visible trước khi click
+            wait_visible: True = đợi page load trước khi click (bỏ đợi textarea)
             max_retry: Số lần retry nếu click nhầm chỗ (default: 3)
         """
         try:
-            # QUAN TRỌNG: Đợi textarea visible trước khi click
+            # v1.0.135: Đợi page load thay vì textarea
             if wait_visible:
-                if not self._wait_for_textarea_visible(timeout=10, max_refresh=2):
-                    self.log("[x] Textarea không visible sau khi refresh", "ERROR")
-                    return False
+                time.sleep(2)
 
             # RETRY LOOP: Click và verify focus
             for attempt in range(max_retry):
@@ -5111,15 +5098,15 @@ class DrissionFlowAPI:
                 if self.driver:
                     self.log("[VIDEO] [SYNC] F5 refresh để tránh 403...")
                     self.driver.refresh()
-                    # Đợi textarea xuất hiện = page load xong (tự động F5 nếu không thấy)
-                    if not self._wait_for_textarea_visible():
-                        self.log("[VIDEO] [WARN] Không thấy textarea sau nhiều lần F5", "WARN")
+                    # v1.0.135: Đợi page load thay vì textarea
+                    wait_time = 8 if getattr(self, '_ipv6_activated', False) else 5
+                    time.sleep(wait_time)
 
                     # Re-inject JS Interceptor sau khi refresh (bị mất sau F5)
                     self._reset_tokens()
                     self.driver.run_js(JS_INTERCEPTOR)
-                    # Click vào textarea để focus
-                    self._click_textarea()
+                    # Click vào input để focus
+                    self._click_textarea(wait_visible=False)
                     self.log("[VIDEO] [SYNC] Refreshed + ready")
             except Exception as e:
                 self.log(f"[VIDEO] [WARN] Refresh warning: {e}", "WARN")

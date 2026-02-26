@@ -1,13 +1,14 @@
-1.0.134
+1.0.135
 2026-02-26 (VN)
-Fix: _wait_for_textarea_visible() hỗ trợ contenteditable
+Fix: Bỏ đợi textarea - giao diện mới không có textarea
 
 Thay đổi:
-- Verification step dùng _find_textarea() thay vì chỉ tag:textarea
-- Hỗ trợ cả giao diện cũ (textarea) và mới (contenteditable div)
-- Không bị timeout chờ textarea khi Flow dùng contenteditable
+- Bỏ _wait_for_textarea_visible() - thay bằng time.sleep()
+- Giao diện Flow mới (2026-02) không có textarea cố định
+- Đợi page load xong là đủ (5s IPv4, 8s IPv6)
 
-1. v1.0.134: Fix verification trong _wait_for_textarea_visible()
+1. v1.0.135: Bỏ đợi textarea, dùng time.sleep()
+2. v1.0.134: Fix verification trong _wait_for_textarea_visible()
 2. v1.0.133: Click "Quay lại dự án" sau Create with Flow
 2. v1.0.132: PRE-LOGIN dùng cùng logic chọn project
 2. v1.0.131: Visit Flow sau login để set cookies
