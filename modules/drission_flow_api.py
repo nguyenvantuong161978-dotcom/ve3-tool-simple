@@ -2531,6 +2531,45 @@ class DrissionFlowAPI:
                     else:
                         self.log(f"[WARN] Warm up page chưa ready (timeout)", "WARN")
 
+                    # v1.0.128: Click "Create with Flow" button (giao diện mới 2026-02)
+                    self.log(f"[MỒI] Click 'Create with Flow'...")
+                    for click_attempt in range(3):
+                        click_result = self.driver.run_js('''
+                            (function() {
+                                // Tìm button "Create with Flow"
+                                var btns = document.querySelectorAll('button');
+                                for (var b of btns) {
+                                    var text = (b.textContent || '').trim();
+                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                        b.click();
+                                        return 'CLICKED_CREATE_WITH_FLOW';
+                                    }
+                                }
+
+                                // Fallback: tìm span chứa text
+                                var spans = document.querySelectorAll('span');
+                                for (var s of spans) {
+                                    var text = (s.textContent || '').trim();
+                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                        var btn = s.closest('button');
+                                        if (btn) {
+                                            btn.click();
+                                            return 'CLICKED_VIA_SPAN';
+                                        }
+                                    }
+                                }
+
+                                return 'NOT_FOUND';
+                            })();
+                        ''')
+                        if click_result and 'CLICKED' in str(click_result):
+                            self.log(f"[v] {click_result}")
+                            time.sleep(2)  # Đợi sau khi click
+                            break
+                        else:
+                            self.log(f"[MỒI] Retry click ({click_attempt+1}/3)...")
+                            time.sleep(1)
+
                     # Đợi thêm 15s cho JS/AJAX (DÙ page ready hay không)
                     self.log(f"[MỒI] Đợi thêm 15s cho JS/AJAX load xong...")
                     time.sleep(15)
@@ -2548,6 +2587,37 @@ class DrissionFlowAPI:
                             time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
                             if self._wait_for_page_ready(timeout=30):
                                 self.log(f"[v] Page ready!")
+
+                            # v1.0.128: Click "Create with Flow" sau login lại
+                            self.log(f"[MỒI] Click 'Create with Flow' sau login...")
+                            for click_attempt in range(3):
+                                click_result = self.driver.run_js('''
+                                    (function() {
+                                        var btns = document.querySelectorAll('button');
+                                        for (var b of btns) {
+                                            var text = (b.textContent || '').trim();
+                                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                                b.click();
+                                                return 'CLICKED';
+                                            }
+                                        }
+                                        var spans = document.querySelectorAll('span');
+                                        for (var s of spans) {
+                                            var text = (s.textContent || '').trim();
+                                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                                var btn = s.closest('button');
+                                                if (btn) { btn.click(); return 'CLICKED'; }
+                                            }
+                                        }
+                                        return 'NOT_FOUND';
+                                    })();
+                                ''')
+                                if click_result and 'CLICKED' in str(click_result):
+                                    self.log(f"[v] Clicked Create with Flow")
+                                    time.sleep(2)
+                                    break
+                                time.sleep(1)
+
                             time.sleep(15)  # Đợi 15s nữa
                             self.log(f"[v] Warm up lại done!")
                         else:

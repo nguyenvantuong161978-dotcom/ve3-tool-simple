@@ -1,19 +1,14 @@
-1.0.127
+1.0.128
 2026-02-26 (VN)
-Fix: Hoàn thiện hỗ trợ giao diện Flow mới (2026-02)
+Fix: Thêm click "Create with Flow" khi mồi (giao diện mới 2026-02)
 
 Thay đổi:
-- Giao diện Flow đã thay đổi:
-  + Không còn combobox chọn mode
-  + Prompt input là contenteditable div (không phải textarea)
-  + API endpoint: flowMedia:batch (không phải batchGenerateImages)
-  + Response: media[].image.generatedImage.fifeUrl (không phải encodedImage)
-- Cập nhật _paste_prompt_ctrlv dùng Ctrl+V (clipboard paste)
-- Thêm _click_generate_button fallback
-- Cập nhật generate_image_forward dùng Enter key
-- Backward compatible với giao diện cũ
+- Giao diện mới: Sau khi vào /project/test cần click "Create with Flow"
+- Thêm retry logic (3 lần) với delay giữa các lần click
+- Áp dụng cho cả warm up lần đầu và sau khi login lại
 
-1. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
+1. v1.0.128: Thêm click "Create with Flow" khi mồi
+2. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
 2. v1.0.126: Cập nhật cho giao diện Flow mới
 2. v1.0.125: 2FA thử Ctrl+V trực tiếp trước
 2. v1.0.124: 2FA dùng Ctrl+V (revert direct input)
