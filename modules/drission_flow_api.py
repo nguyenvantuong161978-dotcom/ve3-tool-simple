@@ -718,6 +718,7 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
 '''
 
 # JS để click dự án (ưu tiên dự án có sẵn, sau đó mới tạo mới)
+# v1.0.126: Cập nhật cho giao diện Flow mới (2026-02)
 JS_CLICK_NEW_PROJECT = '''
 (function() {
     // 1. Ưu tiên: Click vào dự án có sẵn (thường là div với thumbnail)
@@ -741,23 +742,38 @@ JS_CLICK_NEW_PROJECT = '''
         }
     }
 
-    // 3. Fallback: Tìm button "Dự án mới" / "New project"
+    // 3. Tìm button có chứa nút edit (project có sẵn) - giao diện mới
     var btns = document.querySelectorAll('button');
     for (var b of btns) {
+        var text = (b.textContent || '').toLowerCase();
+        if (text.includes('edit') && text.includes('d') && text.includes('án')) {
+            // Tìm parent card của nút edit
+            var card = b.closest('div');
+            if (card && card.offsetWidth > 100) {
+                card.click();
+                console.log('[AUTO] Clicked project card (via edit button)');
+                return 'CLICKED';
+            }
+        }
+    }
+
+    // 4. Tìm button "Dự án mới" / "New project" - hỗ trợ cả icon prefix (add_2)
+    for (var b of btns) {
         var text = b.textContent || '';
-        if (text.includes('Dự án mới') || text.includes('New project')) {
+        // Giao diện mới: "add_2Dự án mới" hoặc text chứa "Dự án mới"
+        if (text.includes('Dự án mới') || text.includes('New project') ||
+            text.includes('án mới') || text.includes('project')) {
             b.click();
-            console.log('[AUTO] Clicked: Du an moi');
+            console.log('[AUTO] Clicked: Du an moi - ' + text.substring(0, 30));
             return 'CLICKED';
         }
     }
 
-    // 4. Tìm bất kỳ clickable element nào có text project
+    // 5. Fallback: Tìm bất kỳ clickable element nào có text project
     var allElements = document.querySelectorAll('*');
     for (var el of allElements) {
         var text = (el.textContent || '').trim();
         if (el.offsetWidth > 100 && el.offsetHeight > 50) {
-            // Có thể là project card
             var style = window.getComputedStyle(el);
             if (style.cursor === 'pointer' && text.length < 50) {
                 el.click();
@@ -1332,18 +1348,33 @@ class DrissionFlowAPI:
             self.log(f"[x] Không tìm thấy button 'Dự án mới' sau {MAX_REFRESH} lần refresh", "ERROR")
             return False
 
-        # 2. Chọn "Tạo hình ảnh" từ dropdown
+        # 2. v1.0.126: Skip mode selection - giao diện mới không còn dropdown
+        # Giao diện cũ: cần chọn "Tạo hình ảnh" từ combobox
+        # Giao diện mới (2026-02): không còn combobox, mode được chọn tự động
         time.sleep(1)
-        for i in range(10):
-            result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
-            if result == 'CLICKED':
-                self.log("[v] Chọn 'Tạo hình ảnh'")
-                self._image_mode_selected = True  # Đánh dấu đã chọn mode
-                time.sleep(2)
-                break
-            time.sleep(0.5)
-        else:
-            self.log("[WARN] Không tìm thấy dropdown - có thể đã ở mode đúng", "WARN")
+        try:
+            # Thử tìm combobox (backward compatibility)
+            has_combobox = self.driver.run_js('''
+                var combo = document.querySelector('button[role="combobox"]');
+                return combo ? 'YES' : 'NO';
+            ''')
+            if has_combobox == 'YES':
+                # Giao diện cũ - chọn mode
+                for i in range(5):
+                    result = self.driver.run_js(JS_SELECT_IMAGE_MODE)
+                    if result == 'CLICKED':
+                        self.log("[v] Chọn 'Tạo hình ảnh' (giao diện cũ)")
+                        self._image_mode_selected = True
+                        time.sleep(2)
+                        break
+                    time.sleep(0.5)
+            else:
+                # Giao diện mới - không cần chọn mode
+                self.log("[v] Giao diện mới - skip mode selection")
+                self._image_mode_selected = True
+        except Exception as e:
+            self.log(f"[WARN] Mode selection check: {e}", "WARN")
+            self._image_mode_selected = True  # Assume OK
 
         # 3. Đợi vào project
         self.log("→ Đợi vào project...")
@@ -2757,7 +2788,11 @@ class DrissionFlowAPI:
         return True
 
     def _find_textarea(self):
-        """Tìm textarea input (không click)."""
+        """
+        Tìm textarea input (không click).
+        v1.0.126: Hỗ trợ cả contenteditable div (giao diện mới)
+        """
+        # 1. Thử textarea truyền thống
         for sel in ["tag:textarea", "css:textarea"]:
             try:
                 el = self.driver.ele(sel, timeout=2)
@@ -2765,6 +2800,23 @@ class DrissionFlowAPI:
                     return el
             except:
                 pass
+
+        # 2. v1.0.126: Thử contenteditable div (giao diện mới 2026-02)
+        try:
+            el = self.driver.ele('css:[contenteditable="true"]', timeout=2)
+            if el and el.rect.width > 100:  # Phải đủ lớn để là prompt input
+                return el
+        except:
+            pass
+
+        # 3. Thử tìm bằng aria-label
+        try:
+            el = self.driver.ele('css:input[aria-label*="text"], div[aria-label*="text"]', timeout=1)
+            if el:
+                return el
+        except:
+            pass
+
         return None
 
     def _wait_for_textarea_visible(self, timeout: int = None, max_refresh: int = 1) -> bool:
@@ -2793,8 +2845,8 @@ class DrissionFlowAPI:
             start_time = time.time()
             while time.time() - start_time < timeout:
                 try:
-                    # Tìm textarea
-                    textarea = self.driver.ele('tag:textarea', timeout=2)
+                    # v1.0.126: Dùng _find_textarea() để hỗ trợ cả contenteditable
+                    textarea = self._find_textarea()
                     if textarea:
                         # === VERIFY: Textarea phải THẬT SỰ visible và có thể tương tác ===
                         try:
@@ -2937,73 +2989,122 @@ class DrissionFlowAPI:
 
     def _paste_prompt_ctrlv(self, textarea, prompt: str) -> bool:
         """
-        Nhập prompt bằng DrissionPage .input() - đơn giản và đáng tin cậy.
+        Nhập prompt bằng Ctrl+V (clipboard paste) - đáng tin cậy nhất.
+        v1.0.127: Hỗ trợ cả textarea và contenteditable div (giao diện mới 2026-02)
+
+        Flow: Click input → Clear → Copy to clipboard → Ctrl+V → Verify
 
         Args:
-            textarea: Element textarea đã tìm thấy
+            textarea: Element textarea/contenteditable đã tìm thấy (có thể None)
             prompt: Nội dung prompt cần nhập
 
         Returns:
             True nếu thành công
         """
         try:
-            # 1. Tìm textarea bằng DrissionPage
-            textarea = self.driver.ele('tag:textarea', timeout=10)
-            if not textarea:
-                self.log("[WARN] Không tìm thấy textarea", "WARN")
+            import pyperclip
+            from DrissionPage.common import Keys
+
+            # 1. Tìm input element (textarea HOẶC contenteditable)
+            input_elem = None
+            is_contenteditable = False
+
+            # Thử contenteditable trước (giao diện mới 2026-02)
+            try:
+                input_elem = self.driver.ele('css:[contenteditable="true"]', timeout=3)
+                if input_elem:
+                    is_contenteditable = True
+                    self.log("→ Found contenteditable div (new interface)")
+            except:
+                pass
+
+            # Fallback: textarea (giao diện cũ)
+            if not input_elem:
+                try:
+                    input_elem = self.driver.ele('tag:textarea', timeout=5)
+                    if input_elem:
+                        self.log("→ Found textarea (old interface)")
+                except:
+                    pass
+
+            if not input_elem:
+                self.log("[WARN] Không tìm thấy input element", "WARN")
                 return False
 
-            # 2. Click vào textarea và clear bằng JavaScript
+            # 2. Click để focus
             try:
-                textarea.click()
+                input_elem.click()
                 time.sleep(0.3)
-
-                # Clear textarea bằng JavaScript (đáng tin hơn)
-                self.driver.run_js("""
-                    var textarea = document.querySelector('textarea');
-                    if (textarea) {
-                        textarea.value = '';
-                        textarea.focus();
-                    }
-                """)
-                time.sleep(0.2)
-
-                self.log(f"→ Clicked & cleared textarea, entering {len(prompt)} chars...")
             except Exception as e:
-                self.log(f"[WARN] Click/clear textarea failed: {e}", "WARN")
+                self.log(f"[WARN] Click failed: {e}", "WARN")
 
-            # 3. Nhập prompt bằng .input()
+            # 3. Clear bằng JavaScript
             try:
-                textarea.input(prompt)
-                time.sleep(0.5)  # Đợi prompt được nhập xong
-                self.log(f"→ Prompt entered via .input()")
-            except Exception as e:
-                self.log(f"[WARN] Input prompt failed: {e}", "WARN")
-                return False
-
-            # 5. VERIFY: Textarea có prompt chưa?
-            try:
-                textarea_elem = self.driver.ele('tag:textarea', timeout=5)
-                if not textarea_elem:
-                    verify_result = 'not_found'
+                if is_contenteditable:
+                    self.driver.run_js("""
+                        var ed = document.querySelector('[contenteditable="true"]');
+                        if (ed) {
+                            ed.innerHTML = '';
+                            ed.focus();
+                        }
+                    """)
                 else:
-                    # Đọc value từ element property
-                    textarea_value = textarea_elem.property('value')
-                    if textarea_value is None:
-                        textarea_value = ''
+                    self.driver.run_js("""
+                        var textarea = document.querySelector('textarea');
+                        if (textarea) {
+                            textarea.value = '';
+                            textarea.focus();
+                        }
+                    """)
+                time.sleep(0.2)
+            except Exception as e:
+                self.log(f"[WARN] Clear failed: {e}", "WARN")
 
-                    actual_len = len(textarea_value)
-                    expected_len = len(prompt)
+            # 4. Copy prompt to clipboard
+            pyperclip.copy(prompt)
+            self.log(f"→ Copied {len(prompt)} chars to clipboard")
 
-                    if actual_len >= expected_len * 0.9:
+            # 5. Ctrl+V để paste
+            try:
+                self.driver.actions.key_down(Keys.CONTROL).key_down('v').key_up('v').key_up(Keys.CONTROL)
+                time.sleep(0.5)
+                self.log(f"→ Ctrl+V sent")
+            except Exception as e:
+                self.log(f"[WARN] Ctrl+V failed: {e}", "WARN")
+                # Fallback: try .input()
+                try:
+                    input_elem.input(prompt)
+                    self.log(f"→ Fallback: used .input()")
+                except:
+                    return False
+
+            # 6. VERIFY: Input có prompt chưa?
+            try:
+                if is_contenteditable:
+                    verify_result = self.driver.run_js("""
+                        var ed = document.querySelector('[contenteditable="true"]');
+                        if (!ed) return 'not_found';
+                        var text = ed.textContent || ed.innerText || '';
+                        return text.length;
+                    """)
+                    if verify_result and int(verify_result) >= len(prompt) * 0.8:
                         verify_result = 'ok'
                     else:
-                        verify_result = f'failed:{actual_len}'
+                        verify_result = f'failed:{verify_result}'
+                else:
+                    textarea_elem = self.driver.ele('tag:textarea', timeout=5)
+                    if not textarea_elem:
+                        verify_result = 'not_found'
+                    else:
+                        textarea_value = textarea_elem.property('value') or ''
+                        if len(textarea_value) >= len(prompt) * 0.8:
+                            verify_result = 'ok'
+                        else:
+                            verify_result = f'failed:{len(textarea_value)}'
             except Exception as e:
                 self.log(f"[WARN] Verify exception: {e}", "WARN")
                 verify_result = None
 
-            # Log verify result để debug
             self.log(f"→ Verify result: {verify_result}")
 
             if verify_result == 'ok':
@@ -3017,33 +3118,96 @@ class DrissionFlowAPI:
             self.log(f"[WARN] Paste prompt failed: {e}", "WARN")
             return False
 
-        except Exception as e:
-            self.log(f"[WARN] Paste prompt failed: {e}", "WARN")
-            return False
-
     def _paste_prompt_js(self, prompt: str) -> bool:
-        """Fallback: Paste prompt bằng JavaScript."""
+        """
+        Fallback: Paste prompt bằng JavaScript.
+        v1.0.127: Hỗ trợ cả textarea và contenteditable div
+        """
         try:
             time.sleep(1)
+            # Escape prompt for JavaScript
+            prompt_escaped = prompt.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
             result = self.driver.run_js(f"""
                 (function() {{
+                    // 1. Thử contenteditable trước (giao diện mới)
+                    var ed = document.querySelector('[contenteditable="true"]');
+                    if (ed && ed.offsetWidth > 100) {{
+                        ed.scrollIntoView({{block: 'center'}});
+                        ed.focus();
+                        ed.innerHTML = '';
+                        ed.textContent = "{prompt_escaped}";
+                        ed.dispatchEvent(new Event('input', {{bubbles: true}}));
+                        return 'ok_contenteditable';
+                    }}
+
+                    // 2. Fallback textarea (giao diện cũ)
                     var textarea = document.querySelector('textarea');
-                    if (!textarea) return 'not_found';
+                    if (textarea) {{
+                        textarea.scrollIntoView({{block: 'center'}});
+                        textarea.focus();
+                        textarea.value = "{prompt_escaped}";
+                        textarea.dispatchEvent(new Event('input', {{bubbles: true}}));
+                        return 'ok_textarea';
+                    }}
 
-                    textarea.scrollIntoView({{block: 'center'}});
-                    textarea.focus();
-                    textarea.value = {repr(prompt)};
-                    textarea.dispatchEvent(new Event('input', {{bubbles: true}}));
-
-                    return 'ok';
+                    return 'not_found';
                 }})();
             """)
-            if result == 'ok':
-                self.log("→ Pasted with JS [v]")
+            if result and result.startswith('ok'):
+                self.log(f"→ Pasted with JS [{result}]")
                 return True
             return False
         except Exception as e:
             self.log(f"[WARN] JS paste failed: {e}", "WARN")
+            return False
+
+    def _click_generate_button(self) -> bool:
+        """
+        v1.0.127: Click nút Tạo (Generate) để tạo ảnh.
+        Giao diện mới dùng button thay vì Enter key.
+        """
+        try:
+            result = self.driver.run_js("""
+                (function() {
+                    var btns = document.querySelectorAll('button');
+
+                    // 1. Tìm nút "arrow_forward Tạo" (giao diện mới)
+                    for (var b of btns) {
+                        var text = b.textContent || '';
+                        if (text.includes('arrow_forward') && text.includes('Tạo')) {
+                            b.click();
+                            return 'clicked_arrow_forward';
+                        }
+                    }
+
+                    // 2. Tìm nút "Tạo" (không phải "Tạo thêm")
+                    for (var b of btns) {
+                        var text = b.textContent || '';
+                        if (text.includes('Tạo') && !text.includes('thêm') && !text.includes('cảnh')) {
+                            b.click();
+                            return 'clicked_tao';
+                        }
+                    }
+
+                    // 3. Tìm nút "Generate" (English)
+                    for (var b of btns) {
+                        var text = (b.textContent || '').toLowerCase();
+                        if (text.includes('generate') || text.includes('create')) {
+                            b.click();
+                            return 'clicked_generate';
+                        }
+                    }
+
+                    return 'not_found';
+                })();
+            """)
+            if result and result.startswith('clicked'):
+                self.log(f"→ Clicked generate button [{result}]")
+                return True
+            self.log(f"[WARN] Generate button not found: {result}", "WARN")
+            return False
+        except Exception as e:
+            self.log(f"[WARN] Click generate button failed: {e}", "WARN")
             return False
 
     def _setup_window_layout(self):
@@ -3626,23 +3790,26 @@ class DrissionFlowAPI:
         # Đợi 4 giây để reCAPTCHA chuẩn bị token (với references, cần lâu hơn)
         time.sleep(4)
 
-        # Focus lại textarea trước khi Enter (đảm bảo textarea ready)
+        # v1.0.127: Gửi prompt bằng Enter key (hoạt động cho cả giao diện mới và cũ)
+        generate_sent = False
         try:
-            textarea = self.driver.ele('tag:textarea', timeout=5)
-            if textarea:
-                textarea.click()
-                time.sleep(0.3)
-                self.log("→ Re-focused textarea before Enter")
-        except Exception as e:
-            self.log(f"[WARN] Re-focus failed: {e}", "WARN")
+            from DrissionPage.common import Keys
 
-        # Nhấn Enter bằng DrissionPage .input()
-        try:
-            textarea.input('\n')
+            # Enter key - hoạt động cho cả contenteditable và textarea
+            self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
             self.log("→ Pressed Enter to send")
+            generate_sent = True
         except Exception as e:
-            self.log(f"[ERROR] Failed to send Enter: {e}", "ERROR")
-            return [], f"Failed to send Enter: {e}"
+            self.log(f"[WARN] Enter key failed: {e}", "WARN")
+
+            # Fallback: Click generate button
+            if self._click_generate_button():
+                self.log("→ Fallback: Clicked generate button")
+                generate_sent = True
+
+        if not generate_sent:
+            self.log("[ERROR] Failed to send generate request", "ERROR")
+            return [], "Failed to send generate request"
 
         self.log("→ Chrome đang gửi request...")
 
@@ -3664,21 +3831,19 @@ class DrissionFlowAPI:
             # EARLY DETECTION: Sau 10s, check xem có request chưa
             if not request_detected and elapsed > 10:
                 if not result.get('pending') and not result.get('response') and not result.get('error'):
-                    self.log("[WARN] Không thấy request sau 10s - Enter có thể bị trượt!", "WARN")
-                    self.log("[RETRY] Thử gửi Enter lại...")
+                    self.log("[WARN] Không thấy request sau 10s - generate có thể bị trượt!", "WARN")
+                    self.log("[RETRY] Thử gửi generate lại...")
 
-                    # RETRY: Focus lại và gửi Enter lần nữa
+                    # RETRY: v1.0.127 - Enter key (hoạt động cho cả giao diện mới và cũ)
                     try:
-                        textarea = self.driver.ele('tag:textarea', timeout=3)
-                        if textarea:
-                            textarea.click()
-                            time.sleep(0.3)
-                            textarea.input('\n')
-                            self.log("→ Retry Enter sent")
-                        else:
-                            self.log("[WARN] Không tìm thấy textarea để retry", "WARN")
+                        from DrissionPage.common import Keys
+                        self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+                        self.log("→ Retry Enter sent")
                     except Exception as e:
                         self.log(f"[WARN] Retry Enter failed: {e}", "WARN")
+                        # Fallback: Click button
+                        if self._click_generate_button():
+                            self.log("→ Retry button clicked")
 
                     # Đánh dấu đã detect để không retry nhiều lần
                     request_detected = True

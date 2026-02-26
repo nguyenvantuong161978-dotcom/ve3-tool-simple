@@ -1,13 +1,21 @@
-1.0.125
-2026-02-25 (VN)
-Fix: 2FA thử Ctrl+V trực tiếp trước, nếu có option thì click rồi Ctrl+V
+1.0.127
+2026-02-26 (VN)
+Fix: Hoàn thiện hỗ trợ giao diện Flow mới (2026-02)
 
 Thay đổi:
-- Một số nick: sau pass → OTP input xuất hiện luôn → Ctrl+V trực tiếp
-- Một số nick: sau pass → cần click "Google Authenticator" → rồi Ctrl+V
-- Flow: Ctrl+V+Enter trước → nếu có option thì click → Ctrl+V+Enter lại
+- Giao diện Flow đã thay đổi:
+  + Không còn combobox chọn mode
+  + Prompt input là contenteditable div (không phải textarea)
+  + API endpoint: flowMedia:batch (không phải batchGenerateImages)
+  + Response: media[].image.generatedImage.fifeUrl (không phải encodedImage)
+- Cập nhật _paste_prompt_ctrlv dùng Ctrl+V (clipboard paste)
+- Thêm _click_generate_button fallback
+- Cập nhật generate_image_forward dùng Enter key
+- Backward compatible với giao diện cũ
 
-1. v1.0.125: 2FA thử Ctrl+V trực tiếp trước
+1. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
+2. v1.0.126: Cập nhật cho giao diện Flow mới
+2. v1.0.125: 2FA thử Ctrl+V trực tiếp trước
 2. v1.0.124: 2FA dùng Ctrl+V (revert direct input)
 3. v1.0.123: Login tuần tự Chrome 1 → Chrome 2
 4. v1.0.122: 2FA login cải thiện (multiple selectors)
