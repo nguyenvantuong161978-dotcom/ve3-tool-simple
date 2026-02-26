@@ -5126,20 +5126,7 @@ class DrissionFlowAPI:
                         self.log("[Mode] [x] Login thất bại", "ERROR")
                         return False
 
-                # === CHECK COMBOBOX TỒN TẠI ===
-                has_combobox = self.driver.run_js("""
-                    return document.querySelector('button[role="combobox"]') !== null;
-                """)
-
-                if not has_combobox:
-                    self.log(f"[Mode] [WARN] Không tìm thấy combobox, F5 refresh... (attempt {attempt + 1})")
-                    self.driver.refresh()
-                    time.sleep(3)
-                    # Re-inject JS Interceptor sau refresh
-                    self._reset_tokens()
-                    self.driver.run_js(JS_INTERCEPTOR)
-                    continue
-
+                # v1.0.138: Bỏ check combobox - giao diện mới không cần
                 self.log(f"[Mode] Chuyển sang Image mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
                 # Dùng JS với setTimeout (đợi dropdown mở)
