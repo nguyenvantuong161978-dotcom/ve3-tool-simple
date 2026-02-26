@@ -1,12 +1,14 @@
-1.0.136
+1.0.137
 2026-02-26 (VN)
-Fix: Bỏ navigate Flow sau login - không cần thiết
+Fix: Bỏ clear JS - dùng Ctrl+A thay thế
 
 Thay đổi:
-- Bỏ bước "Navigating to Flow to set cookies" sau login
-- Login Google xong là đủ, worker sẽ tự navigate đến Flow
+- Bỏ clear bằng JavaScript (Flow detect và block)
+- Thay bằng Ctrl+A → Ctrl+V (như người thật)
+- Flow: Click → Ctrl+A → Ctrl+V → Enter
 
-1. v1.0.136: Bỏ navigate Flow sau login
+1. v1.0.137: Bỏ clear JS, dùng Ctrl+A + Ctrl+V
+2. v1.0.136: Bỏ navigate Flow sau login
 2. v1.0.135: Bỏ đợi textarea, dùng time.sleep()
 2. v1.0.134: Fix verification trong _wait_for_textarea_visible()
 2. v1.0.133: Click "Quay lại dự án" sau Create with Flow

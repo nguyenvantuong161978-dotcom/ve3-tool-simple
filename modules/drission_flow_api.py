@@ -3168,33 +3168,20 @@ class DrissionFlowAPI:
             except Exception as e:
                 self.log(f"[WARN] Click failed: {e}", "WARN")
 
-            # 3. Clear bằng JavaScript
+            # v1.0.137: Bỏ clear bằng JS - Flow detect và block
+            # Thay bằng Ctrl+A để select all, Ctrl+V sẽ replace (như người thật)
             try:
-                if is_contenteditable:
-                    self.driver.run_js("""
-                        var ed = document.querySelector('[contenteditable="true"]');
-                        if (ed) {
-                            ed.innerHTML = '';
-                            ed.focus();
-                        }
-                    """)
-                else:
-                    self.driver.run_js("""
-                        var textarea = document.querySelector('textarea');
-                        if (textarea) {
-                            textarea.value = '';
-                            textarea.focus();
-                        }
-                    """)
+                self.driver.actions.key_down(Keys.CONTROL).key_down('a').key_up('a').key_up(Keys.CONTROL)
                 time.sleep(0.2)
+                self.log("→ Ctrl+A (select all)")
             except Exception as e:
-                self.log(f"[WARN] Clear failed: {e}", "WARN")
+                self.log(f"[WARN] Ctrl+A failed: {e}", "WARN")
 
-            # 4. Copy prompt to clipboard
+            # 3. Copy prompt to clipboard
             pyperclip.copy(prompt)
             self.log(f"→ Copied {len(prompt)} chars to clipboard")
 
-            # 5. Ctrl+V để paste
+            # 4. Ctrl+V để paste (replace selected text)
             try:
                 self.driver.actions.key_down(Keys.CONTROL).key_down('v').key_up('v').key_up(Keys.CONTROL)
                 time.sleep(0.5)
@@ -3208,7 +3195,7 @@ class DrissionFlowAPI:
                 except:
                     return False
 
-            # 6. VERIFY: Input có prompt chưa?
+            # 5. VERIFY: Input có prompt chưa?
             try:
                 if is_contenteditable:
                     verify_result = self.driver.run_js("""
