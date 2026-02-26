@@ -1,14 +1,15 @@
-1.0.132
+1.0.133
 2026-02-26 (VN)
-Fix: PRE-LOGIN dùng cùng logic chọn project với cycle loop
+Fix: Click "Create with Flow" + "Quay lại dự án" khi mồi
 
 Thay đổi:
-- PRE-LOGIN dùng scan_incomplete_local_projects() (giống cycle loop)
-- PRE-LOGIN và cycle loop luôn chọn CÙNG project
-- Không còn xóa Chrome data sau khi đã login
-- Đơn giản hóa logic (không cần session flag)
+- Retry 3 lần với delay tăng dần (2s, 4s, 6s)
+- Sau click "Create with Flow" → đợi trang mới load
+- Click "Quay lại dự án" để về trang chủ Flow
+- Rồi mới có thể click "Tạo dự án mới"
 
-1. v1.0.132: PRE-LOGIN dùng cùng logic chọn project
+1. v1.0.133: Click "Quay lại dự án" sau Create with Flow
+2. v1.0.132: PRE-LOGIN dùng cùng logic chọn project
 2. v1.0.131: Visit Flow sau login để set cookies
 3. v1.0.130: Không xóa Chrome data 2 lần
 2. v1.0.129: Check logout ngay từ đầu

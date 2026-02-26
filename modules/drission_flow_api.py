@@ -2529,8 +2529,11 @@ class DrissionFlowAPI:
                     else:
                         self.log(f"[v] Đang đăng nhập!")
 
-                    # v1.0.128: Click "Create with Flow" button (giao diện mới 2026-02)
+                    # v1.0.133: Click "Create with Flow" button (giao diện mới 2026-02)
+                    # Retry 3 lần với delay tăng dần: 2s, 4s, 6s
                     self.log(f"[MỒI] Click 'Create with Flow'...")
+                    click_delays = [2, 4, 6]  # Delay tăng dần giữa các lần retry
+                    click_success = False
                     for click_attempt in range(3):
                         click_result = self.driver.run_js('''
                             (function() {
@@ -2562,15 +2565,53 @@ class DrissionFlowAPI:
                         ''')
                         if click_result and 'CLICKED' in str(click_result):
                             self.log(f"[v] {click_result}")
-                            time.sleep(2)  # Đợi sau khi click
+                            click_success = True
+                            time.sleep(3)  # Đợi trang chuyển
                             break
                         else:
-                            self.log(f"[MỒI] Retry click ({click_attempt+1}/3)...")
-                            time.sleep(1)
+                            delay = click_delays[click_attempt]
+                            self.log(f"[MỒI] Retry click ({click_attempt+1}/3) sau {delay}s...")
+                            time.sleep(delay)
 
-                    # Đợi thêm 15s cho JS/AJAX (DÙ page ready hay không)
-                    self.log(f"[MỒI] Đợi thêm 15s cho JS/AJAX load xong...")
-                    time.sleep(15)
+                    # v1.0.133: Sau khi click Create with Flow → sang trang mới
+                    # Cần click "Quay lại dự án" để về trang chủ Flow
+                    if click_success:
+                        self.log(f"[MỒI] Đợi trang mới load...")
+                        time.sleep(5)
+
+                        self.log(f"[MỒI] Click 'Quay lại dự án' để về trang chủ...")
+                        for back_attempt in range(3):
+                            back_result = self.driver.run_js('''
+                                (function() {
+                                    // Tìm link "Quay lại dự án" hoặc "Back to project"
+                                    var links = document.querySelectorAll('a');
+                                    for (var a of links) {
+                                        var text = (a.textContent || '').trim();
+                                        if (text.includes('Quay lại dự án') || text.includes('Back to project') || text.includes('arrow_back')) {
+                                            a.click();
+                                            return 'CLICKED_BACK';
+                                        }
+                                    }
+                                    // Fallback: tìm theo href
+                                    var backLink = document.querySelector('a[href*="/tools/flow"]');
+                                    if (backLink && backLink.textContent.includes('arrow_back')) {
+                                        backLink.click();
+                                        return 'CLICKED_BACK_VIA_HREF';
+                                    }
+                                    return 'NOT_FOUND';
+                                })();
+                            ''')
+                            if back_result and 'CLICKED' in str(back_result):
+                                self.log(f"[v] {back_result}")
+                                time.sleep(3)
+                                break
+                            else:
+                                self.log(f"[MỒI] Retry back ({back_attempt+1}/3)...")
+                                time.sleep(2)
+
+                    # Đợi thêm cho trang chủ Flow load
+                    self.log(f"[MỒI] Đợi trang chủ Flow load...")
+                    time.sleep(5)
                     self.log(f"[v] Warm up done!")
 
                     # CHECK LOGOUT sau warm up
@@ -2586,8 +2627,11 @@ class DrissionFlowAPI:
                             if self._wait_for_page_ready(timeout=30):
                                 self.log(f"[v] Page ready!")
 
-                            # v1.0.128: Click "Create with Flow" sau login lại
+                            # v1.0.133: Click "Create with Flow" sau login lại
+                            # Retry 3 lần với delay tăng dần
                             self.log(f"[MỒI] Click 'Create with Flow' sau login...")
+                            click_delays2 = [2, 4, 6]
+                            click_success2 = False
                             for click_attempt in range(3):
                                 click_result = self.driver.run_js('''
                                     (function() {
@@ -2612,11 +2656,38 @@ class DrissionFlowAPI:
                                 ''')
                                 if click_result and 'CLICKED' in str(click_result):
                                     self.log(f"[v] Clicked Create with Flow")
-                                    time.sleep(2)
+                                    click_success2 = True
+                                    time.sleep(3)
                                     break
-                                time.sleep(1)
+                                delay2 = click_delays2[click_attempt]
+                                self.log(f"[MỒI] Retry ({click_attempt+1}/3) sau {delay2}s...")
+                                time.sleep(delay2)
 
-                            time.sleep(15)  # Đợi 15s nữa
+                            # Click "Quay lại dự án" nếu click thành công
+                            if click_success2:
+                                time.sleep(5)
+                                self.log(f"[MỒI] Click 'Quay lại dự án'...")
+                                for back_attempt in range(3):
+                                    back_result = self.driver.run_js('''
+                                        (function() {
+                                            var links = document.querySelectorAll('a');
+                                            for (var a of links) {
+                                                var text = (a.textContent || '').trim();
+                                                if (text.includes('Quay lại dự án') || text.includes('Back to project') || text.includes('arrow_back')) {
+                                                    a.click();
+                                                    return 'CLICKED_BACK';
+                                                }
+                                            }
+                                            return 'NOT_FOUND';
+                                        })();
+                                    ''')
+                                    if back_result and 'CLICKED' in str(back_result):
+                                        self.log(f"[v] {back_result}")
+                                        time.sleep(3)
+                                        break
+                                    time.sleep(2)
+
+                            time.sleep(5)
                             self.log(f"[v] Warm up lại done!")
                         else:
                             self.log("[x] Auto-login thất bại", "ERROR")
