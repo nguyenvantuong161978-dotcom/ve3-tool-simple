@@ -1,13 +1,14 @@
-1.0.138
+1.0.139
 2026-02-26 (VN)
-Fix: Bỏ check combobox - giao diện mới không cần
+Fix: Sau login → vào Flow → click "Create with Flow"
 
 Thay đổi:
-- Bỏ check combobox trong switch_to_image_mode()
-- Giao diện Flow mới không có combobox
-- 403 → clear data → login lại (đã có sẵn)
+- Sau login Google xong → navigate đến Flow
+- Click "Create with Flow" với retry 3 lần (delay 2s, 4s, 6s)
+- Mồi session trước khi tắt Chrome
 
-1. v1.0.138: Bỏ check combobox
+1. v1.0.139: Warm up session sau login (click Create with Flow)
+2. v1.0.138: Bỏ check combobox
 2. v1.0.137: Bỏ clear JS, dùng Ctrl+A + Ctrl+V
 2. v1.0.136: Bỏ navigate Flow sau login
 2. v1.0.135: Bỏ đợi textarea, dùng time.sleep()

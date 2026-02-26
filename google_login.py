@@ -811,11 +811,55 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
-        # v1.0.136: Bỏ navigate đến Flow - không cần thiết
-        # Login Google xong là đủ, worker sẽ tự navigate đến Flow
-        log("Login complete, closing browser...")
+        # v1.0.139: Sau login → vào Flow → click "Create with Flow" để mồi session
+        log("Navigating to Flow to warm up session...")
+        flow_url = "https://labs.google/fx/vi/tools/flow"
+        try:
+            driver.get(flow_url)
+            time.sleep(5)
+            log(f"Flow loaded: {driver.url[:50]}")
 
-        # Đóng Chrome (drission_flow_api.py sẽ tự navigate đến project)
+            # Click "Create with Flow" với retry
+            click_delays = [2, 4, 6]  # Delay tăng dần
+            click_success = False
+
+            for attempt in range(3):
+                log(f"Clicking 'Create with Flow' (attempt {attempt + 1}/3)...")
+                click_result = driver.run_js('''
+                    (function() {
+                        var btns = document.querySelectorAll('button');
+                        for (var b of btns) {
+                            var text = (b.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                b.click();
+                                return 'CLICKED';
+                            }
+                        }
+                        return 'NOT_FOUND';
+                    })();
+                ''')
+
+                if click_result and 'CLICKED' in str(click_result):
+                    log("Clicked 'Create with Flow' successfully!")
+                    click_success = True
+                    time.sleep(3)
+                    break
+
+                delay = click_delays[attempt]
+                log(f"Button not found, retry after {delay}s...")
+                time.sleep(delay)
+
+            if click_success:
+                log("Session warmed up successfully!")
+            else:
+                log("Could not click 'Create with Flow' - continuing anyway", "WARN")
+
+        except Exception as e:
+            log(f"Flow warm up error (non-critical): {e}", "WARN")
+
+        log("Closing browser...")
+
+        # Đóng Chrome
         try:
             driver.quit()
             log("Chrome closed")
