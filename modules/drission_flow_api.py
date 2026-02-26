@@ -2531,6 +2531,24 @@ class DrissionFlowAPI:
                     else:
                         self.log(f"[WARN] Warm up page chưa ready (timeout)", "WARN")
 
+                    # v1.0.129: CHECK LOGOUT NGAY từ đầu (trước khi làm gì khác)
+                    self.log(f"[MỒI] Check logout ngay từ đầu...")
+                    if self._is_logged_out():
+                        self.log("[WARN] Phát hiện bị LOGOUT ngay từ đầu!", "WARN")
+                        if self._auto_login_google():
+                            self.log("[v] Đã login thành công!")
+                            # Sau login, vào lại /project/test
+                            self.log("[MỒI] Vào lại project/test sau login...")
+                            self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
+                            time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
+                            if self._wait_for_page_ready(timeout=30):
+                                self.log(f"[v] Page ready!")
+                        else:
+                            self.log("[x] Auto-login thất bại", "ERROR")
+                            return False
+                    else:
+                        self.log(f"[v] Đang đăng nhập!")
+
                     # v1.0.128: Click "Create with Flow" button (giao diện mới 2026-02)
                     self.log(f"[MỒI] Click 'Create with Flow'...")
                     for click_attempt in range(3):

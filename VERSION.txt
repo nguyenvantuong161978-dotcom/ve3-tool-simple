@@ -1,14 +1,15 @@
-1.0.128
+1.0.129
 2026-02-26 (VN)
-Fix: Thêm click "Create with Flow" khi mồi (giao diện mới 2026-02)
+Fix: Check logout ngay từ đầu khi chưa có link dự án
 
 Thay đổi:
-- Giao diện mới: Sau khi vào /project/test cần click "Create with Flow"
-- Thêm retry logic (3 lần) với delay giữa các lần click
-- Áp dụng cho cả warm up lần đầu và sau khi login lại
+- Check logout NGAY sau khi page ready (trước click "Create with Flow")
+- Nếu bị logout → auto login → vào lại /project/test
+- Đảm bảo phát hiện logout sớm nhất có thể
 
-1. v1.0.128: Thêm click "Create with Flow" khi mồi
-2. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
+1. v1.0.129: Check logout ngay từ đầu
+2. v1.0.128: Thêm click "Create with Flow" khi mồi
+3. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
 2. v1.0.126: Cập nhật cho giao diện Flow mới
 2. v1.0.125: 2FA thử Ctrl+V trực tiếp trước
 2. v1.0.124: 2FA dùng Ctrl+V (revert direct input)
