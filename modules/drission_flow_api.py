@@ -1550,32 +1550,12 @@ class DrissionFlowAPI:
             self.close()
             time.sleep(2)
 
-            # 4. XÓA PROFILE DATA (như xử lý 403)
-            if self.profile_dir:
-                self.log(f"[CLEAR] Xóa profile data...")
-                try:
-                    import shutil
-                    profile_path = Path(self.profile_dir)
-                    if profile_path.exists():
-                        for folder in ["Default/Cache", "Default/Code Cache", "Default/GPUCache",
-                                       "Default/Service Worker", "Default/Session Storage",
-                                       "Default/Local Storage", "Default/IndexedDB",
-                                       "Default/Cookies", "Default/Cookies-journal"]:
-                            target = profile_path / folder
-                            if target.exists():
-                                try:
-                                    if target.is_dir():
-                                        shutil.rmtree(str(target), ignore_errors=True)
-                                    else:
-                                        target.unlink(missing_ok=True)
-                                except:
-                                    pass
-                        self.log("[CLEAR] Đã xóa profile data")
-                except Exception as e:
-                    self.log(f"[CLEAR] Lỗi: {e}", "WARN")
-                time.sleep(1)
+            # v1.0.130: KHÔNG XÓA PROFILE DATA ở đây nữa
+            # Vì PRE-LOGIN đã xóa và đăng nhập rồi
+            # Chỉ cần login lại mà không cần xóa (giữ session cho link test)
+            self.log("[v] Giữ nguyên profile data (PRE-LOGIN đã xử lý)")
 
-            # 5. Chạy login với retry
+            # 4. Chạy login với retry
             # Logic: Thử 2 lần → nếu fail → xóa profile → thử thêm 2 lần
             fail_count = 0
             total_attempts = max_retries * 2  # 6 lần tổng

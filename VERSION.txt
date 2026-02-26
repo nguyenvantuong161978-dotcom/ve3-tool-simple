@@ -1,15 +1,16 @@
-1.0.129
+1.0.130
 2026-02-26 (VN)
-Fix: Check logout ngay từ đầu khi chưa có link dự án
+Fix: Không xóa Chrome data 2 lần - giữ session sau PRE-LOGIN
 
 Thay đổi:
-- Check logout NGAY sau khi page ready (trước click "Create with Flow")
-- Nếu bị logout → auto login → vào lại /project/test
-- Đảm bảo phát hiện logout sớm nhất có thể
+- Bỏ xóa profile data trong _auto_login_google()
+- PRE-LOGIN đã xóa và đăng nhập → không cần xóa lại
+- Giữ session để vào link test với tài khoản đã đăng nhập
 
-1. v1.0.129: Check logout ngay từ đầu
-2. v1.0.128: Thêm click "Create with Flow" khi mồi
-3. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
+1. v1.0.130: Không xóa Chrome data 2 lần
+2. v1.0.129: Check logout ngay từ đầu
+3. v1.0.128: Thêm click "Create with Flow" khi mồi
+4. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới
 2. v1.0.126: Cập nhật cho giao diện Flow mới
 2. v1.0.125: 2FA thử Ctrl+V trực tiếp trước
 2. v1.0.124: 2FA dùng Ctrl+V (revert direct input)
