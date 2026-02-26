@@ -1,14 +1,14 @@
 1.0.132
 2026-02-26 (VN)
-Fix: Không xóa Chrome data trong cycle loop nếu PRE-LOGIN đã login
+Fix: PRE-LOGIN dùng cùng logic chọn project với cycle loop
 
 Thay đổi:
-- Thêm _SESSION_LOGGED_IN flag để track đã login trong session
-- PRE-LOGIN set flag = True sau khi login thành công
-- Cycle loop check flag trước khi clear/login
-- Tránh xóa session sau khi PRE-LOGIN đã đăng nhập
+- PRE-LOGIN dùng scan_incomplete_local_projects() (giống cycle loop)
+- PRE-LOGIN và cycle loop luôn chọn CÙNG project
+- Không còn xóa Chrome data sau khi đã login
+- Đơn giản hóa logic (không cần session flag)
 
-1. v1.0.132: Session-level login tracking
+1. v1.0.132: PRE-LOGIN dùng cùng logic chọn project
 2. v1.0.131: Visit Flow sau login để set cookies
 3. v1.0.130: Không xóa Chrome data 2 lần
 2. v1.0.129: Check logout ngay từ đầu
