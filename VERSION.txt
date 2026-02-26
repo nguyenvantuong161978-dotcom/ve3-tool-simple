@@ -1,14 +1,14 @@
-1.0.133
+1.0.134
 2026-02-26 (VN)
-Fix: Click "Create with Flow" + "Quay lại dự án" khi mồi
+Fix: _wait_for_textarea_visible() hỗ trợ contenteditable
 
 Thay đổi:
-- Retry 3 lần với delay tăng dần (2s, 4s, 6s)
-- Sau click "Create with Flow" → đợi trang mới load
-- Click "Quay lại dự án" để về trang chủ Flow
-- Rồi mới có thể click "Tạo dự án mới"
+- Verification step dùng _find_textarea() thay vì chỉ tag:textarea
+- Hỗ trợ cả giao diện cũ (textarea) và mới (contenteditable div)
+- Không bị timeout chờ textarea khi Flow dùng contenteditable
 
-1. v1.0.133: Click "Quay lại dự án" sau Create with Flow
+1. v1.0.134: Fix verification trong _wait_for_textarea_visible()
+2. v1.0.133: Click "Quay lại dự án" sau Create with Flow
 2. v1.0.132: PRE-LOGIN dùng cùng logic chọn project
 2. v1.0.131: Visit Flow sau login để set cookies
 3. v1.0.130: Không xóa Chrome data 2 lần

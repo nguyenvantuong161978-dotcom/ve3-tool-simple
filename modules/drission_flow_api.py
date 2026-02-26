@@ -2999,10 +2999,11 @@ class DrissionFlowAPI:
                             textarea.click()
                             time.sleep(0.3)
 
-                            # Check 3: Verify textarea vẫn còn sau khi click (page không bị redirect)
-                            verify = self.driver.ele('tag:textarea', timeout=1)
+                            # Check 3: Verify input vẫn còn sau khi click (page không bị redirect)
+                            # v1.0.133: Dùng _find_textarea() để hỗ trợ cả contenteditable
+                            verify = self._find_textarea()
                             if verify:
-                                self.log(f"[TEXTAREA] [v] Textarea visible và interactive!")
+                                self.log(f"[TEXTAREA] [v] Input visible và interactive!")
                                 return True
                         except Exception as verify_err:
                             self.log(f"[TEXTAREA] Element found but not ready: {verify_err}")
@@ -3014,7 +3015,7 @@ class DrissionFlowAPI:
 
             # Timeout - thử F5 refresh nếu còn lượt
             if refresh_count < max_refresh:
-                self.log(f"[TEXTAREA] [WARN] Không thấy textarea sau {timeout}s, F5 refresh...")
+                self.log(f"[TEXTAREA] [WARN] Không thấy input sau {timeout}s, F5 refresh...")
                 try:
                     self.driver.refresh()
                     # Đợi 8s sau F5 (với references, page load lâu)
@@ -3023,7 +3024,7 @@ class DrissionFlowAPI:
                 except Exception as e:
                     self.log(f"[TEXTAREA] Refresh error: {e}")
 
-        self.log("[TEXTAREA] [x] Không tìm thấy textarea", "ERROR")
+        self.log("[TEXTAREA] [x] Không tìm thấy input (textarea/contenteditable)", "ERROR")
         return False
 
     def _get_page_load_timeout(self) -> int:
