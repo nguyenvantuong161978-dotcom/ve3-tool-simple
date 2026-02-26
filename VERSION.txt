@@ -1,13 +1,13 @@
-1.0.135
+1.0.136
 2026-02-26 (VN)
-Fix: Bỏ đợi textarea - giao diện mới không có textarea
+Fix: Bỏ navigate Flow sau login - không cần thiết
 
 Thay đổi:
-- Bỏ _wait_for_textarea_visible() - thay bằng time.sleep()
-- Giao diện Flow mới (2026-02) không có textarea cố định
-- Đợi page load xong là đủ (5s IPv4, 8s IPv6)
+- Bỏ bước "Navigating to Flow to set cookies" sau login
+- Login Google xong là đủ, worker sẽ tự navigate đến Flow
 
-1. v1.0.135: Bỏ đợi textarea, dùng time.sleep()
+1. v1.0.136: Bỏ navigate Flow sau login
+2. v1.0.135: Bỏ đợi textarea, dùng time.sleep()
 2. v1.0.134: Fix verification trong _wait_for_textarea_visible()
 2. v1.0.133: Click "Quay lại dự án" sau Create with Flow
 2. v1.0.132: PRE-LOGIN dùng cùng logic chọn project
