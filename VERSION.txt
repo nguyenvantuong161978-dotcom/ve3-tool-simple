@@ -1,14 +1,16 @@
-1.0.131
+1.0.132
 2026-02-26 (VN)
-Fix: Visit Flow sau login để set cookies (giữ session)
+Fix: Không xóa Chrome data trong cycle loop nếu PRE-LOGIN đã login
 
 Thay đổi:
-- Sau login Google thành công, navigate đến Flow URL
-- Flow là domain khác (labs.google) cần visit để set cookies riêng
-- Đợi Flow load xong rồi mới đóng Chrome
+- Thêm _SESSION_LOGGED_IN flag để track đã login trong session
+- PRE-LOGIN set flag = True sau khi login thành công
+- Cycle loop check flag trước khi clear/login
+- Tránh xóa session sau khi PRE-LOGIN đã đăng nhập
 
-1. v1.0.131: Visit Flow sau login để set cookies
-2. v1.0.130: Không xóa Chrome data 2 lần
+1. v1.0.132: Session-level login tracking
+2. v1.0.131: Visit Flow sau login để set cookies
+3. v1.0.130: Không xóa Chrome data 2 lần
 2. v1.0.129: Check logout ngay từ đầu
 3. v1.0.128: Thêm click "Create with Flow" khi mồi
 4. v1.0.127: Hoàn thiện hỗ trợ giao diện Flow mới

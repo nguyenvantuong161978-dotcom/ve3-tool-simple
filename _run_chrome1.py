@@ -38,6 +38,10 @@ sys.path.insert(0, str(TOOL_DIR))
 # CHROME DATA MANAGEMENT (v1.0.107)
 # ================================================================================
 
+# v1.0.132: Session-level login tracking
+# Nếu đã login trong session này → KHÔNG xóa Chrome data nữa
+_SESSION_LOGGED_IN = False
+
 def clear_chrome_data_for_new_account():
     """
     v1.0.107: Xóa Chrome data để đăng nhập tài khoản mới.
@@ -444,7 +448,8 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                 set_account_index_for_resume(str(excel_path), channel)
 
                 # v1.0.112: Nếu 0% (chưa có ảnh) → vẫn cần login vì có thể Chrome data bị xóa
-                if is_fresh_start:
+                # v1.0.132: Nhưng nếu đã login trong session này → skip
+                if is_fresh_start and not _SESSION_LOGGED_IN:
                     log(f"  [RESUME] 0% completion - need to login first...")
                     clear_chrome_data_for_new_account()
 
@@ -463,37 +468,57 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
 
                         log(f"  [RESUME] Both Chrome logged in!")
+                elif is_fresh_start:
+                    log(f"  [RESUME] 0% but session already logged in, skipping login...")
             else:
-                # NEW PROJECT: Chưa có account
-                # v1.0.107: XÓA CHROME DATA để đăng nhập tài khoản mới
-                log(f"  [NEW PROJECT] Clearing Chrome data for new account login...")
-                clear_chrome_data_for_new_account()
+                # NEW PROJECT: Chưa có account trong Excel
+                global _SESSION_LOGGED_IN
 
-                # Lưu account hiện tại vào Excel
-                # v1.0.110: Truyền cả machine_code (code) để tìm trong sheet
-                current_account = get_current_account_for_channel(channel, machine_code=code)
-                if current_account:
-                    log(f"  [NEW] Saving account to Excel: {current_account['id']} (index {current_account['index']})")
-                    save_account_to_excel(
-                        str(excel_path),
-                        channel,
-                        current_account['index'],
-                        current_account['id']
-                    )
+                # v1.0.132: Nếu đã login trong session này (PRE-LOGIN) → KHÔNG xóa/login lại
+                if _SESSION_LOGGED_IN:
+                    log(f"  [NEW PROJECT] Session already logged in, skipping login...")
+                    # Chỉ lưu account info vào Excel (để resume đúng account)
+                    current_account = get_current_account_for_channel(channel, machine_code=code)
+                    if current_account:
+                        log(f"  [NEW] Saving account to Excel: {current_account['id']} (index {current_account['index']})")
+                        save_account_to_excel(
+                            str(excel_path),
+                            channel,
+                            current_account['index'],
+                            current_account['id']
+                        )
+                else:
+                    # Chưa login trong session → xóa data và login
+                    # v1.0.107: XÓA CHROME DATA để đăng nhập tài khoản mới
+                    log(f"  [NEW PROJECT] Clearing Chrome data for new account login...")
+                    clear_chrome_data_for_new_account()
 
-                    # v1.0.113: Login CẢ 2 Chrome trước khi vào Flow
-                    chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
-                    chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
+                    # Lưu account hiện tại vào Excel
+                    # v1.0.110: Truyền cả machine_code (code) để tìm trong sheet
+                    current_account = get_current_account_for_channel(channel, machine_code=code)
+                    if current_account:
+                        log(f"  [NEW] Saving account to Excel: {current_account['id']} (index {current_account['index']})")
+                        save_account_to_excel(
+                            str(excel_path),
+                            channel,
+                            current_account['index'],
+                            current_account['id']
+                        )
 
-                    # Login Chrome 1
-                    log(f"  [NEW] Logging into Chrome 1...")
-                    login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
+                        # v1.0.113: Login CẢ 2 Chrome trước khi vào Flow
+                        chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+                        chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
 
-                    # Login Chrome 2
-                    log(f"  [NEW] Logging into Chrome 2...")
-                    login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+                        # Login Chrome 1
+                        log(f"  [NEW] Logging into Chrome 1...")
+                        login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
 
-                    log(f"  [NEW] Both Chrome logged in!")
+                        # Login Chrome 2
+                        log(f"  [NEW] Logging into Chrome 2...")
+                        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+
+                        log(f"  [NEW] Both Chrome logged in!")
+                        _SESSION_LOGGED_IN = True
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 
@@ -989,6 +1014,11 @@ def _do_pre_login_if_needed():
             current_account['id']
         )
         print("[PRE-LOGIN] Account saved to Excel")
+
+        # v1.0.132: Set session flag để tránh xóa Chrome data lần nữa
+        global _SESSION_LOGGED_IN
+        _SESSION_LOGGED_IN = True
+        print("[PRE-LOGIN] Session logged in flag set")
 
     except Exception as e:
         print(f"[PRE-LOGIN] Error (non-critical): {e}")
