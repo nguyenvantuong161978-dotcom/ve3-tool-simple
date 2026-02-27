@@ -1329,9 +1329,10 @@ class VMManager:
             self.log(f"403 count: {self.worker_error_counts[worker_id]}/9 ({worker_id}), "
                      f"model {current_model}: {model_403_count}/{threshold}", "ERROR", "WARN")
 
-            # Check if need IPv6 rotation
-            if self.consecutive_403_count >= self.max_403_before_ipv6:
-                return "rotate_ipv6"
+            # Check if need IPv6 rotation (chỉ khi có IPv6 enabled)
+            if self.ipv6_manager and self.ipv6_manager.enabled:
+                if self.consecutive_403_count >= self.max_403_before_ipv6:
+                    return "rotate_ipv6"
 
             # Check if need to switch model
             if model_403_count >= threshold:
