@@ -1,14 +1,17 @@
-1.0.141
+1.0.145
 2026-02-27 (VN)
-Fix: Tìm button với nhiều pattern hơn
+Fix: Có "Dự án mới" = đã vào đúng trang
 
 Thay đổi:
-- Tìm cả buttons và links
-- Nhiều keywords: create, flow, tạo, mới, new, add
-- Log kết quả chi tiết để debug
-- Tìm cả elements có icon add
+- Kiểm tra có "Dự án mới" → xong (không click)
+- Chỉ click "Create with Flow" nếu chưa thấy
+- Retry 10 lần
 
-1. v1.0.141: Nhiều pattern tìm button
+1. v1.0.145: Có "Dự án mới" = success
+2. v1.0.144: Tìm button "add_2Dự án mới"
+3. v1.0.143: Kiểm tra nút "Tạo dự án"
+4. v1.0.142: Retry click button stubborn
+2. v1.0.141: Nhiều pattern tìm button
 2. v1.0.140: Tăng retry/delay cho Create with Flow
 2. v1.0.139: Warm up session sau login (click Create with Flow)
 2. v1.0.138: Bỏ check combobox
