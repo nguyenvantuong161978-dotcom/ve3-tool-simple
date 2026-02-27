@@ -819,40 +819,67 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             time.sleep(8)  # Đợi page load lâu hơn
             log(f"Flow loaded: {driver.url[:50]}")
 
-            # Click "Create with Flow" với retry nhiều hơn và delay dài hơn
+            # v1.0.141: Click button với nhiều pattern hơn
             click_delays = [3, 5, 8, 10, 15]  # 5 lần, delay tăng dần
             click_success = False
 
             for attempt in range(5):
-                log(f"Clicking 'Create with Flow' (attempt {attempt + 1}/5)...")
+                log(f"Finding button (attempt {attempt + 1}/5)...")
+
+                # Thử nhiều pattern khác nhau
                 click_result = driver.run_js('''
                     (function() {
+                        // Tìm trong buttons
                         var btns = document.querySelectorAll('button');
                         for (var b of btns) {
-                            var text = (b.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                            var text = (b.textContent || '').toLowerCase();
+                            // Nhiều pattern
+                            if (text.includes('create') || text.includes('flow') ||
+                                text.includes('tạo') || text.includes('mới') ||
+                                text.includes('new') || text.includes('add')) {
                                 b.click();
-                                return 'CLICKED';
+                                return 'CLICKED_BTN: ' + text.substring(0, 30);
                             }
                         }
-                        return 'NOT_FOUND';
+
+                        // Tìm trong links
+                        var links = document.querySelectorAll('a');
+                        for (var a of links) {
+                            var text = (a.textContent || '').toLowerCase();
+                            if (text.includes('create') || text.includes('flow') ||
+                                text.includes('tạo') || text.includes('mới')) {
+                                a.click();
+                                return 'CLICKED_LINK: ' + text.substring(0, 30);
+                            }
+                        }
+
+                        // Tìm element có icon add
+                        var addIcons = document.querySelectorAll('[class*="add"], [aria-label*="add"], [aria-label*="new"], [aria-label*="create"]');
+                        if (addIcons.length > 0) {
+                            addIcons[0].click();
+                            return 'CLICKED_ICON';
+                        }
+
+                        return 'NOT_FOUND (btns:' + btns.length + ', links:' + links.length + ')';
                     })();
                 ''')
 
+                log(f"Result: {click_result}")
+
                 if click_result and 'CLICKED' in str(click_result):
-                    log("Clicked 'Create with Flow' successfully!")
+                    log("Button clicked successfully!")
                     click_success = True
                     time.sleep(3)
                     break
 
                 delay = click_delays[attempt]
-                log(f"Button not found, retry after {delay}s...")
+                log(f"Retry after {delay}s...")
                 time.sleep(delay)
 
             if click_success:
                 log("Session warmed up successfully!")
             else:
-                log("Could not click 'Create with Flow' - continuing anyway", "WARN")
+                log("Could not find button - continuing anyway", "WARN")
 
         except Exception as e:
             log(f"Flow warm up error (non-critical): {e}", "WARN")

@@ -1,13 +1,15 @@
-1.0.140
-2026-02-26 (VN)
-Fix: Tăng retry và delay cho "Create with Flow"
+1.0.141
+2026-02-27 (VN)
+Fix: Tìm button với nhiều pattern hơn
 
 Thay đổi:
-- Đợi page load 8s (thay vì 5s)
-- Retry 5 lần (thay vì 3 lần)
-- Delay: 3s, 5s, 8s, 10s, 15s (tổng ~41s nếu cần)
+- Tìm cả buttons và links
+- Nhiều keywords: create, flow, tạo, mới, new, add
+- Log kết quả chi tiết để debug
+- Tìm cả elements có icon add
 
-1. v1.0.140: Tăng retry/delay cho Create with Flow
+1. v1.0.141: Nhiều pattern tìm button
+2. v1.0.140: Tăng retry/delay cho Create with Flow
 2. v1.0.139: Warm up session sau login (click Create with Flow)
 2. v1.0.138: Bỏ check combobox
 2. v1.0.137: Bỏ clear JS, dùng Ctrl+A + Ctrl+V
