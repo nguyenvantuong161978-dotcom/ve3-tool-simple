@@ -873,7 +873,7 @@ class VMManager:
         self.consecutive_403_count = 0  # Tổng 403 liên tiếp (all workers)
         self.worker_error_counts: Dict[str, int] = {}  # Per-worker consecutive errors
         self.max_403_before_ipv6 = 5  # Đổi IPv6 sau 5 lần 403
-        self.max_errors_before_clear = 3  # Xóa data Chrome sau 3 lần lỗi liên tiếu tiếp
+        self.max_errors_before_clear = 5  # Xóa data Chrome sau 5 lần lỗi liên tiếp
 
         # Auto-restart Chrome workers
         self.chrome_restart_interval = 3600  # 1 tiếng = 3600 giây
