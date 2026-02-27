@@ -1,13 +1,15 @@
-1.0.155
+1.0.157
 2026-02-27 (VN)
-Change: Warm-up reload page mỗi 5 lần (thay vì 10)
+Change: Tìm khung chat "Bạn muốn tạo gì" + tăng retry reload
 
 Thay đổi:
-- _warmup_after_login() reload mỗi 5 lần thay vì 10
-- google_login.py warm-up cũng reload mỗi 5 lần
-- Retry nhanh hơn khi page chưa load xong
+- Thêm tìm khung chat theo placeholder/aria-label "muốn tạo"
+- Tăng max_refresh=3 (từ 1) khi không tìm thấy khung chat
+- Reload page tự động nếu không thấy prompt input
 
-1. v1.0.155: Warm-up reload mỗi 5 lần
+1. v1.0.157: Tìm khung chat + tăng retry reload
+2. v1.0.156: Fix prompt input cho project đã tạo
+3. v1.0.155: Warm-up reload mỗi 5 lần
 2. v1.0.154: Fix get_account_by_index dùng machine_code
 3. v1.0.153: Tìm prompt input đúng (contenteditable)
 4. v1.0.152: Auto-login đọc từ Excel (không cần JSON)

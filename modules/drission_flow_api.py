@@ -788,32 +788,38 @@ JS_CLICK_NEW_PROJECT = '''
 '''
 
 # JS để chọn "Tạo hình ảnh" từ dropdown
-# Dùng cách giống T2V: click dropdown 2 lần với setTimeout
+# v1.0.156: Check null trước khi click (project đã tạo không có combobox)
 # Vietnamese: "Tạo hình ảnh" = 12 ký tự
 JS_SELECT_IMAGE_MODE = '''
-// Tìm bằng "hình ảnh" + length 12
+// v1.0.156: Check null - project đã tạo không có combobox
 var btn = document.querySelector('button[role="combobox"]');
-btn.click();
-setTimeout(() => {
+if (!btn) {
+    // Không có combobox = project đã tạo, skip
+    console.log('[IMAGE] No combobox - project mode, skip');
+    window._imageResult = 'NO_COMBOBOX';
+} else {
     btn.click();
     setTimeout(() => {
-        var spans = document.querySelectorAll('span');
-        for (var el of spans) {
-            var text = el.textContent.trim();
-            // Vietnamese: "Tạo hình ảnh" = 12 chars
-            // English: "Generate image" = 14 chars
-            if ((text.includes('hình ảnh') && text.length === 12) ||
-                (text.includes('image') && text.length === 14)) {
-                console.log('[IMAGE] FOUND:', text);
-                el.click();
-                window._imageResult = 'CLICKED';
-                return;
+        btn.click();
+        setTimeout(() => {
+            var spans = document.querySelectorAll('span');
+            for (var el of spans) {
+                var text = el.textContent.trim();
+                // Vietnamese: "Tạo hình ảnh" = 12 chars
+                // English: "Generate image" = 14 chars
+                if ((text.includes('hình ảnh') && text.length === 12) ||
+                    (text.includes('image') && text.length === 14)) {
+                    console.log('[IMAGE] FOUND:', text);
+                    el.click();
+                    window._imageResult = 'CLICKED';
+                    return;
+                }
             }
-        }
-        console.log('[IMAGE] NOT FOUND');
-        window._imageResult = 'NOT_FOUND';
-    }, 300);
-}, 100);
+            console.log('[IMAGE] NOT FOUND');
+            window._imageResult = 'NOT_FOUND';
+        }, 300);
+    }, 100);
+}
 '''
 
 # JS để chọn "Tạo video từ các thành phần" từ dropdown (cho I2V)
@@ -3015,13 +3021,24 @@ class DrissionFlowAPI:
     def _find_textarea(self):
         """
         Tìm prompt input (không click).
-        v1.0.153: Ưu tiên contenteditable/role=textbox (giao diện mới 2026-02)
+        v1.0.156: Ưu tiên contenteditable/role=textbox (giao diện mới 2026-02)
                   Textarea cũ là g-recaptcha-response, không phải prompt input!
+                  Fix: Bỏ check rect.width vì gây lỗi AttributeError
+        v1.0.157: Thêm tìm theo placeholder "Bạn muốn tạo gì"
         """
-        # 1. v1.0.153: Ưu tiên contenteditable div (giao diện mới - khung chat "Bạn muốn tạo gì")
+        # 1. v1.0.157: Tìm khung chat "Bạn muốn tạo gì" theo placeholder/aria-label
+        try:
+            # Tìm element có text hint "Bạn muốn tạo gì"
+            el = self.driver.ele('xpath://*[contains(@aria-label, "muốn tạo") or contains(@placeholder, "muốn tạo")]', timeout=1)
+            if el:
+                return el
+        except:
+            pass
+
+        # 2. v1.0.156: contenteditable div (giao diện mới - khung chat)
         try:
             el = self.driver.ele('css:[contenteditable="true"]', timeout=2)
-            if el and el.rect.width > 100:  # Phải đủ lớn để là prompt input
+            if el:
                 return el
         except:
             pass
@@ -3029,7 +3046,7 @@ class DrissionFlowAPI:
         # 2. Thử role=textbox (cùng element với contenteditable)
         try:
             el = self.driver.ele('css:[role="textbox"]', timeout=2)
-            if el and el.rect.width > 100:
+            if el:
                 return el
         except:
             pass
@@ -3037,7 +3054,7 @@ class DrissionFlowAPI:
         # 3. Thử aria-multiline (cũng là prompt input)
         try:
             el = self.driver.ele('css:[aria-multiline="true"]', timeout=2)
-            if el and el.rect.width > 100:
+            if el:
                 return el
         except:
             pass
@@ -3051,8 +3068,7 @@ class DrissionFlowAPI:
                 ta_name = ta.attr('name') or ''
                 if 'recaptcha' in ta_class.lower() or 'recaptcha' in ta_name.lower():
                     continue
-                if ta.rect.width > 100:  # Phải đủ lớn
-                    return ta
+                return ta
         except:
             pass
 
@@ -3066,11 +3082,12 @@ class DrissionFlowAPI:
 
         return None
 
-    def _wait_for_textarea_visible(self, timeout: int = None, max_refresh: int = 1) -> bool:
+    def _wait_for_textarea_visible(self, timeout: int = None, max_refresh: int = 3) -> bool:
         """
         Đợi textarea xuất hiện VÀ có thể tương tác.
         Textarea là dấu hiệu page đã load xong.
         PHẢI verify textarea thật sự visible, không chỉ có trong DOM.
+        v1.0.157: Tăng max_refresh=3 (từ 1) để đảm bảo load được khung chat
         """
         # Timeout 20s (với references, page load lâu hơn)
         if timeout is None:
@@ -5262,6 +5279,10 @@ class DrissionFlowAPI:
                 if result == 'CLICKED':
                     self.log("[Mode] [v] Đã chuyển sang Image mode")
                     time.sleep(0.3)
+                    return True
+                elif result == 'NO_COMBOBOX':
+                    # v1.0.156: Project đã tạo không có combobox, skip mode selection
+                    self.log("[Mode] [v] Không có combobox (project mode) - skip")
                     return True
                 else:
                     self.log(f"[Mode] Không tìm thấy Image option: {result}", "WARN")
