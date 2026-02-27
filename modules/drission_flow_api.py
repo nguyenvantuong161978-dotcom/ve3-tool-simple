@@ -1072,6 +1072,58 @@ JS_SELECT_NANO_BANANA_PRO = '''
 })();
 '''
 
+# v1.0.173: JS để chọn model theo index
+# Index 0: Nano Banana Pro, Index 1: Nano Banana 2 (NARWHAL), Index 2: Imagen 4
+JS_SELECT_MODEL_BY_INDEX = '''
+(function(modelIndex) {
+    window._modelSelectResult = 'PENDING';
+
+    // Buoc 1: Mo menu chinh
+    var btn1 = document.querySelector('button.sc-46973129-1');
+    if (!btn1) {
+        window._modelSelectResult = 'NO_MENU_BUTTON';
+        return;
+    }
+    btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+    btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+
+    // Buoc 2: Click dropdown model
+    setTimeout(function() {
+        var btn2 = document.querySelector('button.sc-a0dcecfb-1');
+        if (!btn2) {
+            window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
+            return;
+        }
+        btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+
+        // Buoc 3: Chon model theo index
+        setTimeout(function() {
+            var menuItems = document.querySelectorAll('[role="menuitem"]');
+            if (menuItems.length > modelIndex) {
+                var item = menuItems[modelIndex];
+                var modelName = item.textContent || 'Unknown';
+                item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                item.click();
+                console.log('[MODEL] Selected: ' + modelName);
+
+                // Buoc 4: Dong menu
+                setTimeout(function() {
+                    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                    setTimeout(function() {
+                        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                        window._modelSelectResult = 'SELECTED_' + modelIndex;
+                    }, 300);
+                }, 300);
+            } else {
+                window._modelSelectResult = 'INVALID_INDEX';
+            }
+        }, 800);
+    }, 800);
+})(%d);
+'''
+
 
 class DrissionFlowAPI:
     """
@@ -5386,6 +5438,44 @@ class DrissionFlowAPI:
                 self.log(f"[Model] [WARN] Kết quả: {result}", "WARN")
 
             return False
+
+        except Exception as e:
+            self.log(f"[Model] Error: {e}", "ERROR")
+            return False
+
+    def select_model_by_index(self, model_index: int) -> bool:
+        """
+        v1.0.173: Chọn model theo index.
+        Index 0: Nano Banana Pro (GEM_PIX_2)
+        Index 1: Nano Banana 2 (NARWHAL)
+        Index 2: Imagen 4 (IMAGEN_3_5)
+        """
+        if not self._ready or not self.driver:
+            return False
+
+        model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+        model_name = model_names[model_index] if model_index < len(model_names) else f"Model {model_index}"
+
+        try:
+            self.log(f"[Model] Đang chọn {model_name} (index {model_index})...")
+
+            # Chạy JS chọn model
+            self.driver.run_js("window._modelSelectResult = 'PENDING';")
+            js_code = JS_SELECT_MODEL_BY_INDEX % model_index
+            self.driver.run_js(js_code)
+
+            # Đợi JS async hoàn thành
+            time.sleep(3.0)
+
+            # Kiểm tra kết quả
+            result = self.driver.run_js("return window._modelSelectResult;")
+
+            if result and result.startswith('SELECTED_'):
+                self.log(f"[Model] [v] Đã chọn {model_name}!")
+                return True
+            else:
+                self.log(f"[Model] [WARN] Kết quả: {result}", "WARN")
+                return False
 
         except Exception as e:
             self.log(f"[Model] Error: {e}", "ERROR")

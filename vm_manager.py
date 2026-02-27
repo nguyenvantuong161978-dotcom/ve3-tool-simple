@@ -1523,10 +1523,10 @@ class VMManager:
         self.worker_current_model[worker_id] = new_idx
         self.worker_model_403_counts[worker_id] = 0  # Reset 403 count cho model mới
 
-        self.log(f"[{worker_id}] Chuyển model: {old_model} → {new_model}", worker_id, "WARN")
+        self.log(f"[{worker_id}] Chuyển model: {old_model} → {new_model} (index {new_idx})", worker_id, "WARN")
 
-        # Ghi model mới vào file để worker đọc
-        self._write_worker_model(worker_id, new_model)
+        # Ghi model index vào file để worker đọc và click chọn trên giao diện
+        self._write_worker_model(worker_id, str(new_idx))
 
         # Restart worker để áp dụng model mới
         self.restart_worker(worker_id)

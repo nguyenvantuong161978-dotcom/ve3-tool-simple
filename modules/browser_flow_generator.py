@@ -3608,19 +3608,28 @@ class BrowserFlowGenerator:
         # Track failed prompts để retry sau
         failed_prompts = []  # List[Tuple[prompt_data, index, error]]
 
-        # v1.0.173: Đọc force_model từ file (vm_manager ghi khi chuyển model)
-        # Nếu không có file, dùng từ config
+        # v1.0.173: Đọc model index từ file và chọn trên giao diện Chrome
+        # vm_manager ghi model index khi chuyển model do 403
         force_model = self.config.get('force_model', 'auto')
         try:
             worker_id = f"chrome_{self.worker_id + 1}"  # chrome_1 hoặc chrome_2
             model_file = Path(__file__).parent.parent / ".agent" / "status" / f"{worker_id}_model.txt"
             if model_file.exists():
-                file_model = model_file.read_text().strip()
-                if file_model:
-                    force_model = file_model
-                    self._log(f"[MODEL] Đọc từ file: {force_model}")
+                file_content = model_file.read_text().strip()
+                if file_content:
+                    # Nếu là số (index), chọn model trên giao diện
+                    if file_content.isdigit():
+                        model_index = int(file_content)
+                        self._log(f"[MODEL] Chuyển sang model index {model_index}...")
+                        if hasattr(self.api, 'select_model_by_index'):
+                            self.api.select_model_by_index(model_index)
+                        force_model = ""  # Không cần force trong API, Chrome đã chọn
+                    else:
+                        # Nếu là tên model, dùng force_model như cũ
+                        force_model = file_content
+                        self._log(f"[MODEL] Đọc từ file: {force_model}")
         except Exception as e:
-            pass
+            self._log(f"[MODEL] Error reading model file: {e}", "warn")
         if force_model:
             self._log(f"[MODEL] Force model: {force_model}")
 
