@@ -1,15 +1,16 @@
-1.0.151
+1.0.152
 2026-02-27 (VN)
-Fix: Auto-login dùng account đã lưu (không bị rotate)
+Fix: Auto-login dùng account đã lưu trong Excel
 
 Thay đổi:
-- PRE-LOGIN lưu account vào config/last_login_account.json
-- _auto_login_google() đọc từ JSON trước khi gọi Sheet
+- _auto_login_google() đọc account từ Excel của project
+- Thêm get_account_by_index() để lấy account theo index cố định
 - Đảm bảo login lại đúng account đã dùng ban đầu
-- Không bị lấy nhầm account do rotation
+- Không cần file JSON riêng, dùng chung Excel
 
-1. v1.0.151: Auto-login dùng account từ JSON
-2. v1.0.150: 403 → login + warm-up
+1. v1.0.152: Auto-login đọc từ Excel (không cần JSON)
+2. v1.0.151: Auto-login dùng account từ JSON
+3. v1.0.150: 403 → login + warm-up
 2. v1.0.149: Retry 30x, reload/10
 2. v1.0.148: Giống test logic
 3. v1.0.147: Đơn giản warm-up
