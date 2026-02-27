@@ -1,17 +1,18 @@
-1.0.167
+1.0.168
 2026-02-27 (VN)
-Change: Fix Chrome connection fail - kill zombie processes
+Change: Fix Chrome Portable launcher issue
 
 Thay doi:
-- Fix loi Chrome mo len nhung khong dieu khien duoc
-- Goi _auto_kill_conflicting_chrome() truoc khi start Chrome moi
-- Kill tat ca Chrome co remote-debugging-port (zombie processes)
-- Tang aggressive kill khi retry: kill all tool Chrome instances
-- Sua loi "The browser connection fails" khi co Chrome zombie
+- Fix loi "browser connection fails" khi dung GoogleChromePortable.exe
+- GoogleChromePortable.exe la LAUNCHER, khong phai Chrome thuc su
+- Launcher khong truyen --remote-debugging-port → DrissionPage khong ket noi duoc
+- Tu dong chuyen tu launcher sang App/Chrome-bin/chrome.exe (Chrome thuc su)
+- Fix cho ca auto-detect va config chrome_portable
 
-1. v1.0.167: Fix Chrome zombie connection fail
-2. v1.0.166: Fix reference image format (imageInputType)
-3. v1.0.165: Fix interceptor cho API format moi
+1. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
+2. v1.0.167: Fix Chrome zombie connection fail
+3. v1.0.166: Fix reference image format (imageInputType)
+4. v1.0.165: Fix interceptor cho API format moi
 2. v1.0.164: Bo het switch_to_image_mode() o tat ca files
 3. v1.0.163: Bo switch_to_image_mode() - chi can chon model
 2. v1.0.162: JS_SELECT_IMAGE_MODE dung PointerEvent
@@ -26,7 +27,7 @@ Thay doi:
 3. v1.0.153: Tim prompt input dung (contenteditable)
 4. v1.0.152: Auto-login doc tu Excel (khong can JSON)
 5. v1.0.151: Auto-login dung account tu JSON
-6. v1.0.150: 403 -> login + warm-up
+6. v1.0.150: 403 → login + warm-up
 2. v1.0.149: Retry 30x, reload/10
 2. v1.0.148: Giong test logic
 3. v1.0.147: Don gian warm-up
@@ -53,35 +54,6 @@ Thay doi:
 2. v1.0.126: Cap nhat cho giao dien Flow moi
 2. v1.0.125: 2FA thu Ctrl+V truc tiep truoc
 2. v1.0.124: 2FA dung Ctrl+V (revert direct input)
-3. v1.0.123: Login tuan tu Chrome 1 -> Chrome 2
+3. v1.0.123: Login tuan tu Chrome 1 → Chrome 2
 4. v1.0.122: 2FA login cai thien (multiple selectors)
 5. v1.0.121: PRE-LOGIN trong Chrome workers (revert CMD rieng)
-2. v1.0.120: Fix PRE-LOGIN dung Popen + CREATE_NEW_CONSOLE + sys.executable
-3. v1.0.119: Fix PRE-LOGIN dung subprocess.call + cmd.exe /c start
-4. v1.0.118: Fix PRE-LOGIN CMD dung os.system (thay vi subprocess)
-5. v1.0.117: Fix PRE-LOGIN dung machine_code tu folder path
-6. v1.0.116: Fix PRE-LOGIN CMD visible (CREATE_NEW_CONSOLE)
-7. v1.0.115: PRE-LOGIN chay nhu CMD rieng (visible)
-8. v1.0.114: PRE-LOGIN trong GUI truoc khi start workers
-2. v1.0.113: Login ca 2 Chrome truoc khi vao Flow
-3. v1.0.112: Login Google ca khi RESUME voi 0% anh
-4. v1.0.111: Dang nhap Google truoc khi vao Flow
-5. v1.0.110: Fix tim ma may day du trong sheet (AR8-T1)
-2. v1.0.109: Fix GUI Settings bi che + tu tat
-3. v1.0.108: GUI select account (Listbox + chon tai khoan)
-4. v1.0.107: Clear Chrome data on NEW project (not resume)
-5. v1.0.106: Save account to Excel for proper resume
-6. v1.0.105: Multi-account rotation per channel (sheet THONG TIN)
-2. v1.0.104: Prioritize projects by completion % (highest first)
-3. v1.0.103: Delete child rows from Excel before loading prompts
-3. v1.0.102: Fix skip child ref images on resume (is_child in _load_prompts)
-4. v1.0.101: Auto 2FA login support (TOTP)
-3. v1.0.100: Fix GUI "Da xong" button copy check
-3. v1.0.99: Change completion threshold 95% -> 80%
-4. v1.0.98: Fix Chrome 2 infinite retry + Allow 95% completion
-5. v1.0.97: Add INSTALL.bat for new machine setup
-6. v1.0.96: Add gspread + google-auth to requirements.txt
-7. v1.0.95: Fix skip child reference images on resume
-8. v1.0.94: Delete local folder - stronger retry logic
-9. v1.0.93: Auto-detect IPv6 on START
-10. v1.0.92: Fix IPv6 file name compatibility
