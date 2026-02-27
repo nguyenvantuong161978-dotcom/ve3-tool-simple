@@ -121,6 +121,8 @@ window._customPayload=null; // Payload đầy đủ từ Python (có media_id) c
 window._videoResponse=null;window._videoError=null;window._videoPending=false;
 window._customVideoPayload=null; // Payload đầy đủ từ Python cho VIDEO (có referenceImages.mediaId)
 window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (thêm referenceImages, đổi model)
+// v1.0.165: Counter để chặn API calls thừa khi Chrome gửi nhiều calls cho nhiều ảnh
+window._imageCallCount=0;window._maxImageCalls=1;
 
 (function(){
     if(window.__interceptReady) return 'ALREADY_READY';
@@ -136,6 +138,18 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
         if (urlStr.includes('aisandbox') && (urlStr.includes('batchGenerate') || urlStr.includes('flowMedia'))) {
             console.log('[IMG] Request intercepted:', urlStr);
 
+            // v1.0.165: Chặn API calls thừa khi Chrome gửi nhiều calls
+            if (window._maxImageCalls > 0 && window._imageCallCount >= window._maxImageCalls) {
+                console.log('[IMG] BLOCKED - Already have ' + window._imageCallCount + '/' + window._maxImageCalls + ' images');
+                // Return fake success để Chrome không hiển thị lỗi
+                return new Response(JSON.stringify({blocked: true, reason: 'max_images_reached'}), {
+                    status: 200,
+                    headers: {'Content-Type': 'application/json'}
+                });
+            }
+            window._imageCallCount++;
+            console.log('[IMG] Call count: ' + window._imageCallCount + '/' + window._maxImageCalls);
+
             // ============================================
             // FORCE VIDEO MODE: Thay đổi URL và payload thành VIDEO request
             // Ý tưởng: Gửi prompt như tạo ảnh, nhưng Interceptor đổi thành video
@@ -150,7 +164,12 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
                     try {
                         chromeBodyForVideo = JSON.parse(opts.body);
                         if (chromeBodyForVideo.clientContext) {
-                            freshRecaptchaForVideo = chromeBodyForVideo.clientContext.recaptchaToken;
+                            // v1.0.165: Hỗ trợ cả format cũ và mới
+                            if (chromeBodyForVideo.clientContext.recaptchaContext && chromeBodyForVideo.clientContext.recaptchaContext.token) {
+                                freshRecaptchaForVideo = chromeBodyForVideo.clientContext.recaptchaContext.token;
+                            } else if (chromeBodyForVideo.clientContext.recaptchaToken) {
+                                freshRecaptchaForVideo = chromeBodyForVideo.clientContext.recaptchaToken;
+                            }
                         }
                     } catch(e) {}
                 }
@@ -252,15 +271,23 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (th�
             if (opts && opts.body) {
                 try {
                     chromeBody = JSON.parse(opts.body);
-                    // Lấy reCAPTCHA token từ Chrome (FRESH!)
+                    // v1.0.165: Lấy reCAPTCHA token - hỗ trợ cả format cũ và mới
                     if (chromeBody.recaptchaToken) {
                         freshRecaptcha = chromeBody.recaptchaToken;
-                    } else if (chromeBody.clientContext && chromeBody.clientContext.recaptchaToken) {
-                        freshRecaptcha = chromeBody.clientContext.recaptchaToken;
+                    } else if (chromeBody.clientContext) {
+                        // Format mới: recaptchaContext.token
+                        if (chromeBody.clientContext.recaptchaContext && chromeBody.clientContext.recaptchaContext.token) {
+                            freshRecaptcha = chromeBody.clientContext.recaptchaContext.token;
+                        }
+                        // Format cũ: recaptchaToken
+                        else if (chromeBody.clientContext.recaptchaToken) {
+                            freshRecaptcha = chromeBody.clientContext.recaptchaToken;
+                        }
                     }
                     window._rct = freshRecaptcha;
                     window._pj = chromeBody.clientContext ? chromeBody.clientContext.projectId : null;
                     window._sid = chromeBody.clientContext ? chromeBody.clientContext.sessionId : null;
+                    console.log('[INTERCEPT] reCAPTCHA found:', freshRecaptcha ? 'YES' : 'NO');
                 } catch(e) {
                     console.log('[ERROR] Parse Chrome body failed:', e);
                 }
@@ -4079,14 +4106,18 @@ class DrissionFlowAPI:
 
         if image_inputs and len(image_inputs) > 0:
             modify_config["imageInputs"] = image_inputs
-            self.driver.run_js(f"window._modifyConfig = {json.dumps(modify_config)};")
-            self.log(f"→ MODIFY MODE: {len(image_inputs)} reference image(s), {modify_config['imageCount']} image(s)")
+            # v1.0.165: Reset counter và set max calls
+            num_img = modify_config.get('imageCount', 1)
+            self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {num_img}; window._modifyConfig = {json.dumps(modify_config)};")
+            self.log(f"→ MODIFY MODE: {len(image_inputs)} ref(s), max {num_img} image(s)")
             # Log chi tiết từng reference
             for idx, img_inp in enumerate(image_inputs):
                 self.log(f"   [IMG_INPUT #{idx+1}] name={img_inp.get('name', 'N/A')[:40]}..., type={img_inp.get('imageInputType', 'N/A')}")
         else:
-            self.driver.run_js(f"window._modifyConfig = {json.dumps(modify_config)};")
-            self.log(f"→ MODIFY MODE: {modify_config['imageCount']} image(s), no reference")
+            # v1.0.165: Reset counter và set max calls
+            num_img = modify_config.get('imageCount', 1)
+            self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {num_img}; window._modifyConfig = {json.dumps(modify_config)};")
+            self.log(f"→ MODIFY MODE: max {num_img} image(s), no reference")
 
         # 3. Tìm textarea và nhập prompt bằng Ctrl+V (tránh bot detection)
         self.log(f"→ Prompt: {prompt[:50]}...")
