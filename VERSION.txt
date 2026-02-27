@@ -1,15 +1,15 @@
-1.0.169
+1.0.171
 2026-02-27 (VN)
-Change: Fix kill Chrome Portable khong can remote-debugging-port
+Change: Kill chi dung Chrome cua worker hien tai
 
 Thay doi:
-- Khi dung launcher, Chrome mo ra KHONG co --remote-debugging-port
-- Nen phai kill dua vao PATH thay vi arguments
-- Kill tat ca Chrome co "GoogleChromePortable" hoac "Chrome-bin" trong path
-- Khong can check remote-debugging-port nua
+- Chi kill Chrome cua WORKER NAY, khong kill Chrome cua worker khac
+- Chrome 1: Kill "GoogleChromePortable\" (khong co "- Copy")
+- Chrome 2: Kill "GoogleChromePortable - Copy\"
+- Tranh loi khi kill nham Chrome cua worker khac
 
-1. v1.0.169: Kill Chrome Portable dua vao PATH (khong can debug port)
-2. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
-3. v1.0.167: Fix Chrome zombie connection fail
-4. v1.0.166: Fix reference image format (imageInputType)
-5. v1.0.165: Fix interceptor cho API format moi
+1. v1.0.171: Kill chi dung Chrome cua worker hien tai
+2. v1.0.169: Kill Chrome Portable dua vao PATH (khong can debug port)
+3. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
+4. v1.0.167: Fix Chrome zombie connection fail
+5. v1.0.166: Fix reference image format (imageInputType)

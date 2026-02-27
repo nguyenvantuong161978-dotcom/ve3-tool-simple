@@ -6907,9 +6907,10 @@ class DrissionFlowAPI:
 
     def _auto_kill_conflicting_chrome(self):
         """
-        Tự động kill Chrome đang conflict với profile hoặc port.
-        Gọi trước khi start Chrome mới.
-        v1.0.169: Kill TẤT CẢ Chrome Portable, không cần check remote-debugging-port.
+        Tự động kill Chrome của WORKER NÀY, không kill Chrome của worker khác.
+        v1.0.171: Chỉ kill đúng Chrome của worker hiện tại dựa vào path.
+        - Chrome 1: GoogleChromePortable\ (không có " - Copy")
+        - Chrome 2: GoogleChromePortable - Copy\
         """
         import subprocess
         import platform
@@ -6918,9 +6919,28 @@ class DrissionFlowAPI:
 
         if platform.system() == 'Windows':
             try:
-                # === v1.0.169: Kill TẤT CẢ Chrome Portable (kể cả không có remote-debugging-port) ===
-                # Khi dùng launcher, Chrome mở ra KHÔNG có --remote-debugging-port
-                # Nên phải kill dựa vào path thay vì arguments
+                # Xác định Chrome path của worker này
+                # Chrome 1: GoogleChromePortable\ (không có " - Copy")
+                # Chrome 2: GoogleChromePortable - Copy\
+                is_chrome2 = False
+                if hasattr(self, '_chrome_portable') and self._chrome_portable:
+                    is_chrome2 = "- Copy" in str(self._chrome_portable)
+                elif self.worker_id > 0:
+                    is_chrome2 = True
+
+                if is_chrome2:
+                    # Chrome 2: Kill Chrome có "GoogleChromePortable - Copy"
+                    chrome_marker = "GoogleChromePortable - Copy"
+                    exclude_marker = None
+                    worker_name = "Chrome 2"
+                else:
+                    # Chrome 1: Kill Chrome có "GoogleChromePortable" nhưng KHÔNG có "- Copy"
+                    chrome_marker = "GoogleChromePortable"
+                    exclude_marker = "- Copy"
+                    worker_name = "Chrome 1"
+
+                self.log(f"  [KILL] Killing only {worker_name} processes...")
+
                 result = subprocess.run(
                     ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
                     capture_output=True, text=True, timeout=15
@@ -6929,18 +6949,12 @@ class DrissionFlowAPI:
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines:
-                        # v1.0.169: Kill Chrome Portable dựa vào PATH (không cần remote-debugging-port)
-                        # Kill nếu có BẤT KỲ pattern nào sau:
-                        should_kill = any(x in line for x in [
-                            'GoogleChromePortable',    # Chrome Portable folder
-                            'Chrome-bin',              # Actual Chrome binary folder
-                            've3',                     # Legacy ve3 folder
-                            'chrome_profile',          # Tool profile
-                            'remote-debugging-port',   # Tool Chrome với debug port
-                            str(self.profile_dir).replace('/', '\\')
-                        ])
+                        # Check nếu là Chrome của worker này
+                        if chrome_marker in line:
+                            # Nếu là Chrome 1, đảm bảo KHÔNG chứa "- Copy"
+                            if exclude_marker and exclude_marker in line:
+                                continue  # Skip Chrome 2
 
-                        if should_kill:
                             # Lấy PID ở cuối dòng
                             parts = line.strip().split()
                             if parts:
@@ -6948,10 +6962,10 @@ class DrissionFlowAPI:
                                 if pid.isdigit():
                                     subprocess.run(['taskkill', '/F', '/PID', pid],
                                                  capture_output=True, timeout=5)
-                                    self.log(f"  → Killed Chrome (PID: {pid})")
+                                    self.log(f"  → Killed {worker_name} (PID: {pid})")
                                     killed_any = True
 
-                # === CÁCH 2: Kill Chrome trên port 9222 (backup) ===
+                # Backup: Kill Chrome trên port này
                 if self._kill_chrome_on_port(self.chrome_port):
                     killed_any = True
 
