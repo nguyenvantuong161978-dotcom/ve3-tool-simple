@@ -819,54 +819,34 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             time.sleep(8)  # Đợi page load lâu hơn
             log(f"Flow loaded: {driver.url[:50]}")
 
-            # v1.0.145: Kiểm tra có "Dự án mới" = đã vào đúng trang
-            # Nếu có "Dự án mới" → xong, không cần click gì thêm
+            # v1.0.146: Dùng DrissionPage elements thay vì JavaScript (fix None return)
+            # Có "Dự án mới" = đã vào đúng trang → xong
             click_success = False
 
             for attempt in range(10):
                 log(f"Checking Flow page (attempt {attempt + 1}/10)...")
 
-                # Kiểm tra có nút "Dự án mới" không
-                has_new_project = driver.run_js('''
-                    (function() {
-                        var btns = document.querySelectorAll('button');
-                        for (var b of btns) {
-                            var text = (b.textContent || '');
-                            if (text.includes('add_2') || text.includes('Dự án mới') ||
-                                text.includes('New project')) {
-                                return 'FOUND';
-                            }
-                        }
-                        return 'NOT_FOUND';
-                    })();
-                ''')
+                try:
+                    # Tìm button "Dự án mới" (chứa "add_2" icon)
+                    btn = driver.ele('tag:button@@text():add_2', timeout=2)
+                    if btn:
+                        log("Found 'Dự án mới' button - page ready!")
+                        click_success = True
+                        break
+                except:
+                    pass
 
-                log(f"  → 'Dự án mới' button: {has_new_project}")
+                # Chưa thấy → thử click "Create with Flow"
+                try:
+                    create_btn = driver.ele('tag:button@@text():Create', timeout=2)
+                    if create_btn:
+                        log("Clicking 'Create' button...")
+                        create_btn.click()
+                        time.sleep(3)
+                except:
+                    pass
 
-                if has_new_project == 'FOUND':
-                    log("Flow page ready - has 'Dự án mới' button!")
-                    click_success = True
-                    break
-
-                # Chưa thấy → có thể cần click "Create with Flow" (trang khác)
-                click_result = driver.run_js('''
-                    (function() {
-                        var btns = document.querySelectorAll('button');
-                        for (var b of btns) {
-                            var text = (b.textContent || '');
-                            if (text.includes('Create with Flow') || text.includes('Create')) {
-                                b.click();
-                                return 'CLICKED_CREATE';
-                            }
-                        }
-                        return 'NO_CREATE';
-                    })();
-                ''')
-
-                if click_result == 'CLICKED_CREATE':
-                    log(f"  → Clicked 'Create with Flow'")
-
-                time.sleep(3)
+                time.sleep(2)
 
             if click_success:
                 log("Session warmed up successfully!")
