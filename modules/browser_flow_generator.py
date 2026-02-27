@@ -3189,8 +3189,8 @@ class BrowserFlowGenerator:
             # Delay giữa các video
             time.sleep(3)
 
-        # Chuyển lại image mode sau khi xong
-        drission_api.switch_to_image_mode()
+        # v1.0.163: Bỏ switch_to_image_mode() - giao diện mới không cần
+        # drission_api.switch_to_image_mode()
 
         # Close Chrome
         drission_api.close()
@@ -4292,10 +4292,9 @@ class BrowserFlowGenerator:
                             if drission_api.setup(project_url=saved_url):
                                 self._log("   [v] Chrome đã sẵn sàng!")
 
-                                # 3. Chọn mode tạo hình ảnh
-                                if drission_api.switch_to_image_mode():
-                                    drission_api._image_mode_selected = True
-                                    self._log("   [v] Image mode selected")
+                                # v1.0.163: Reset model flag để chọn lại khi generate
+                                drission_api._model_selected = False
+                                self._log("   → Model flag reset")
 
                                 # 4. Thử lại các ảnh thiếu
                                 still_missing = []
@@ -4616,8 +4615,8 @@ class BrowserFlowGenerator:
                     # Delay giữa các video
                     time.sleep(3)
 
-                # Chuyển lại image mode sau khi xong video
-                drission_api.switch_to_image_mode()
+                # v1.0.163: Bỏ switch_to_image_mode() - giao diện mới không cần
+                # drission_api.switch_to_image_mode()
 
                 self._log(f"[I2V] Hoàn tất: {video_success} OK, {video_failed} failed")
             else:

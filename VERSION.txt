@@ -1,13 +1,14 @@
-1.0.163
+1.0.164
 2026-02-27 (VN)
-Change: Bỏ switch_to_image_mode() - giao diện mới chỉ cần chọn model
+Change: Bỏ hết switch_to_image_mode() ở tất cả files
 
 Thay đổi:
-- Bỏ gọi switch_to_image_mode() vì giao diện mới không còn dropdown mode
-- Chỉ giữ _select_nano_banana_pro() để chọn model
-- Reset model flag sau restart Chrome để chọn lại
+- Bỏ gọi switch_to_image_mode() trong browser_flow_generator.py (3 chỗ)
+- Bỏ gọi switch_to_image_mode() trong chrome_manager.py (1 chỗ)
+- Reset _model_selected thay vì gọi switch_to_image_mode
 
-1. v1.0.163: Bỏ switch_to_image_mode() - chỉ cần chọn model
+1. v1.0.164: Bỏ hết switch_to_image_mode() ở tất cả files
+2. v1.0.163: Bỏ switch_to_image_mode() - chỉ cần chọn model
 2. v1.0.162: JS_SELECT_IMAGE_MODE dùng PointerEvent
 3. v1.0.161: Retry vòng 2 cho references bị thiếu
 4. v1.0.160: Đóng menu sau khi chọn model

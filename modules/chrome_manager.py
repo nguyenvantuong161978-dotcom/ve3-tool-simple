@@ -240,11 +240,10 @@ class ChromeManager:
             project_url = worker.project_url or getattr(api, '_current_project_url', None)
 
             if api.setup(project_url=project_url):
-                # 3. Chọn mode nếu cần
-                if hasattr(api, 'switch_to_image_mode'):
-                    if api.switch_to_image_mode():
-                        api._image_mode_selected = True
-                        self.log(f"   [v] Image mode selected")
+                # v1.0.163: Reset model flag để chọn lại khi generate
+                if hasattr(api, '_model_selected'):
+                    api._model_selected = False
+                    self.log(f"   → Model flag reset")
 
                 worker.status = ChromeStatus.RUNNING
                 worker.error_count = 0
