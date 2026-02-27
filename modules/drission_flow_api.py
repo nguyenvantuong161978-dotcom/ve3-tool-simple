@@ -4250,17 +4250,8 @@ class DrissionFlowAPI:
         if not self._ready:
             return False, [], "API chưa setup! Gọi setup() trước."
 
-        # Chọn mode "Tạo hình ảnh" nếu chưa chọn
-        if not getattr(self, '_image_mode_selected', False):
-            self.log("[Image] Chọn mode 'Tạo hình ảnh'...")
-            if self.switch_to_image_mode():
-                self._image_mode_selected = True
-                self.log("[Image] [v] Đã chọn Image mode")
-                time.sleep(0.5)
-            else:
-                self.log("[Image] [WARN] Không chọn được mode, thử tiếp...", "WARN")
-
-        # v1.0.159: Chọn model "Nano Banana Pro" nếu chưa chọn
+        # v1.0.163: Bỏ switch_to_image_mode() - giao diện mới không cần
+        # Chỉ cần chọn model "Nano Banana Pro"
         if not getattr(self, '_model_selected', False):
             self.log("[Model] Chọn Nano Banana Pro...")
             if self._select_nano_banana_pro():
@@ -7121,15 +7112,11 @@ class DrissionFlowAPI:
         if self.setup(project_url=saved_project_url, skip_mode_selection=skip_mode):
             self.log("[v] Chrome restarted thành công!")
 
-            # Chọn lại mode "Tạo hình ảnh" ngay sau restart (nếu không phải video mode)
-            # Đảm bảo mode được set đúng trước khi tiếp tục generate
+            # v1.0.163: Bỏ switch_to_image_mode() - giao diện mới không cần
+            # Reset model flag để chọn lại Nano Banana Pro khi generate tiếp
             if not skip_mode:
-                self.log("  → Chọn lại mode 'Tạo hình ảnh'...")
-                if self.switch_to_image_mode():
-                    self._image_mode_selected = True
-                    self.log("  [v] Image mode selected")
-                else:
-                    self.log("  [WARN] Không chọn được mode, sẽ thử lại khi generate", "WARN")
+                self._model_selected = False
+                self.log("  → Model flag reset, sẽ chọn lại khi generate")
 
             return True
         else:

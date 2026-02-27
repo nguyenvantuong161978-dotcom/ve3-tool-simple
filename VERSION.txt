@@ -1,16 +1,17 @@
-1.0.162
+1.0.163
 2026-02-27 (VN)
-Change: JS_SELECT_IMAGE_MODE dùng PointerEvent
+Change: Bỏ switch_to_image_mode() - giao diện mới chỉ cần chọn model
 
 Thay đổi:
-- JS chọn Image mode dùng PointerEvent thay cho click() cũ
-- Hoạt động với UI mới của Google Flow
-- Tăng wait time cho JS async
+- Bỏ gọi switch_to_image_mode() vì giao diện mới không còn dropdown mode
+- Chỉ giữ _select_nano_banana_pro() để chọn model
+- Reset model flag sau restart Chrome để chọn lại
 
-1. v1.0.162: JS_SELECT_IMAGE_MODE dùng PointerEvent
-2. v1.0.161: Retry vòng 2 cho references bị thiếu
-3. v1.0.160: Đóng menu sau khi chọn model
-4. v1.0.159: Auto-select Nano Banana Pro
+1. v1.0.163: Bỏ switch_to_image_mode() - chỉ cần chọn model
+2. v1.0.162: JS_SELECT_IMAGE_MODE dùng PointerEvent
+3. v1.0.161: Retry vòng 2 cho references bị thiếu
+4. v1.0.160: Đóng menu sau khi chọn model
+5. v1.0.159: Auto-select Nano Banana Pro
 2. v1.0.158: Tối ưu tốc độ warm-up
 3. v1.0.157: Tìm khung chat + tăng retry reload
 3. v1.0.156: Fix prompt input cho project đã tạo
