@@ -2056,10 +2056,10 @@ class VMManager:
             exclude_marker = None
 
         try:
-            # 1. List tất cả chrome.exe processes với command line
+            # v1.0.174: Tăng timeout wmic lên 15s và thêm fallback
             result = subprocess.run(
                 ["wmic", "process", "where", "name='chrome.exe'", "get", "processid,commandline"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=15  # Tăng từ 5s lên 15s
             )
 
             killed_count = 0
@@ -2075,14 +2075,21 @@ class VMManager:
                     if parts:
                         pid = parts[-1]
                         if pid.isdigit():
-                            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+                            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
                             killed_count += 1
 
-            self.log(f"Killed {killed_count} Chrome processes for {worker_id}", worker_id, "SUCCESS")
+            self.log(f"Killed {killed_count} Chrome for {worker_id}", worker_id, "SUCCESS")
 
+        except subprocess.TimeoutExpired:
+            # v1.0.174: wmic timeout - fallback kill tất cả Chrome
+            self.log(f"wmic timeout, killing ALL Chrome...", worker_id, "WARN")
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True, timeout=10)
+                self.log(f"Killed all Chrome (fallback)", worker_id, "WARN")
+            except:
+                pass
         except Exception as e:
-            # v1.0.172: KHÔNG fallback kill_all_chrome - tránh reset all CMD
-            self.log(f"Error killing Chrome for {worker_id}: {e}", worker_id, "WARN")
+            self.log(f"Error killing Chrome: {e}", worker_id, "WARN")
 
     def _clear_agent_status(self):
         """

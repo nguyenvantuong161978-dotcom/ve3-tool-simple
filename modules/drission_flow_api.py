@@ -2149,28 +2149,34 @@ class DrissionFlowAPI:
 
                     self.log(f"  [KILL] Killing {worker_name} processes only...")
 
-                    # List all chrome.exe processes with command line
-                    result = subprocess.run(
-                        ["wmic", "process", "where", "name='chrome.exe'", "get", "processid,commandline"],
-                        capture_output=True, text=True, timeout=5
-                    )
+                    try:
+                        # v1.0.174: Tăng timeout từ 5s lên 15s
+                        result = subprocess.run(
+                            ["wmic", "process", "where", "name='chrome.exe'", "get", "processid,commandline"],
+                            capture_output=True, text=True, timeout=15
+                        )
 
-                    killed_count = 0
-                    for line in result.stdout.split('\n'):
-                        if chrome_marker in line:
-                            # Nếu là Chrome 1, phải đảm bảo KHÔNG chứa "- Copy"
-                            if exclude_marker and exclude_marker in line:
-                                continue  # Skip Chrome 2
+                        killed_count = 0
+                        for line in result.stdout.split('\n'):
+                            if chrome_marker in line:
+                                # Nếu là Chrome 1, phải đảm bảo KHÔNG chứa "- Copy"
+                                if exclude_marker and exclude_marker in line:
+                                    continue  # Skip Chrome 2
 
-                            # Extract PID
-                            parts = line.strip().split()
-                            if parts:
-                                pid = parts[-1]
-                                if pid.isdigit():
-                                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
-                                    killed_count += 1
+                                # Extract PID
+                                parts = line.strip().split()
+                                if parts:
+                                    pid = parts[-1]
+                                    if pid.isdigit():
+                                        subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
+                                        killed_count += 1
 
-                    self.log(f"  [v] Killed {killed_count} Chrome processes")
+                        self.log(f"  [v] Killed {killed_count} Chrome processes")
+                    except subprocess.TimeoutExpired:
+                        # Fallback: kill all Chrome
+                        self.log(f"  [WARN] wmic timeout, killing ALL Chrome...")
+                        subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True, timeout=10)
+                        self.log(f"  [v] Killed all Chrome (fallback)")
                 else:
                     # Fallback: kill all Chrome (không có chrome_portable)
                     self.log("  [KILL] Force killing ALL Chrome processes (no chrome_portable)...")
@@ -2712,7 +2718,7 @@ class DrissionFlowAPI:
                 pass
 
             # Thử khởi tạo Chrome với retry
-            # v1.0.167: Tăng aggressive kill khi gặp connection fails
+            # v1.0.174: Kill Chrome của worker này trước MỖI retry (tránh mở nhiều Chrome)
             max_retries = 3
             for attempt in range(max_retries):
                 try:
@@ -2722,18 +2728,19 @@ class DrissionFlowAPI:
                 except Exception as chrome_err:
                     err_msg = str(chrome_err)
                     self.log(f"Chrome attempt {attempt+1}/{max_retries} failed:\n{err_msg}", "WARN")
-                    if attempt < max_retries - 1:
-                        # v1.0.173: KHÔNG kill Chrome, chỉ thử port khác
-                        time.sleep(2)
 
-                        # Thử port khác
+                    if attempt < max_retries - 1:
+                        # v1.0.174: Kill Chrome TRƯỚC khi retry (tránh mở nhiều Chrome)
+                        self.log("  → Kill Chrome trước khi retry...")
+                        self._force_kill_all_chrome()
+                        time.sleep(3)  # Đợi Chrome tắt hoàn toàn
+
+                        # Đổi port mới
                         self.chrome_port = random.randint(9222, 9999)
                         options.set_local_port(self.chrome_port)
                         self.log(f"  → Retry với port {self.chrome_port}...")
-                        time.sleep(2)  # Thêm đợi sau khi đổi port
                     else:
-                        # Lần cuối: thử kill TẤT CẢ Chrome (không chỉ tool)
-                        self.log("  → Final attempt: killing ALL Chrome processes...")
+                        # Hết retry
                         self._force_kill_all_chrome()
                         raise chrome_err
 
