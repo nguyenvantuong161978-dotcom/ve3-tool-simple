@@ -791,35 +791,44 @@ JS_CLICK_NEW_PROJECT = '''
 # v1.0.156: Check null trước khi click (project đã tạo không có combobox)
 # Vietnamese: "Tạo hình ảnh" = 12 ký tự
 JS_SELECT_IMAGE_MODE = '''
-// v1.0.156: Check null - project đã tạo không có combobox
-var btn = document.querySelector('button[role="combobox"]');
-if (!btn) {
-    // Không có combobox = project đã tạo, skip
-    console.log('[IMAGE] No combobox - project mode, skip');
-    window._imageResult = 'NO_COMBOBOX';
-} else {
-    btn.click();
-    setTimeout(() => {
-        btn.click();
-        setTimeout(() => {
-            var spans = document.querySelectorAll('span');
-            for (var el of spans) {
-                var text = el.textContent.trim();
-                // Vietnamese: "Tạo hình ảnh" = 12 chars
-                // English: "Generate image" = 14 chars
-                if ((text.includes('hình ảnh') && text.length === 12) ||
-                    (text.includes('image') && text.length === 14)) {
-                    console.log('[IMAGE] FOUND:', text);
-                    el.click();
-                    window._imageResult = 'CLICKED';
-                    return;
-                }
+// v1.0.162: Dùng PointerEvent thay cho click() - hoạt động với UI mới
+(function() {
+    window._imageResult = 'PENDING';
+
+    var btn = document.querySelector('button[role="combobox"]');
+    if (!btn) {
+        // Không có combobox = project đã tạo, skip
+        console.log('[IMAGE] No combobox - project mode, skip');
+        window._imageResult = 'NO_COMBOBOX';
+        return;
+    }
+
+    // Click dropdown bằng PointerEvent
+    btn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+    btn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+    console.log('[IMAGE] Dropdown opened');
+
+    setTimeout(function() {
+        var spans = document.querySelectorAll('span');
+        for (var el of spans) {
+            var text = el.textContent.trim();
+            // Vietnamese: "Tạo hình ảnh" = 12 chars
+            // English: "Generate image" = 14 chars
+            if ((text.includes('hình ảnh') && text.length === 12) ||
+                (text.includes('image') && text.length === 14)) {
+                console.log('[IMAGE] FOUND:', text);
+                // Click bằng PointerEvent
+                el.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                el.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                el.click();
+                window._imageResult = 'CLICKED';
+                return;
             }
-            console.log('[IMAGE] NOT FOUND');
-            window._imageResult = 'NOT_FOUND';
-        }, 300);
-    }, 100);
-}
+        }
+        console.log('[IMAGE] NOT FOUND');
+        window._imageResult = 'NOT_FOUND';
+    }, 500);
+})();
 '''
 
 # JS để chọn "Tạo video từ các thành phần" từ dropdown (cho I2V)
@@ -5368,12 +5377,11 @@ class DrissionFlowAPI:
                 # v1.0.138: Bỏ check combobox - giao diện mới không cần
                 self.log(f"[Mode] Chuyển sang Image mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
-                # Dùng JS với setTimeout (đợi dropdown mở)
-                self.driver.run_js("window._imageResult = 'PENDING';")
+                # v1.0.162: Dùng JS với PointerEvent
                 self.driver.run_js(JS_SELECT_IMAGE_MODE)
 
-                # Đợi JS async hoàn thành (setTimeout 100ms + 300ms = ~500ms)
-                time.sleep(0.8)
+                # Đợi JS async hoàn thành (500ms + buffer)
+                time.sleep(1.0)
 
                 # Kiểm tra kết quả
                 result = self.driver.run_js("return window._imageResult;")
