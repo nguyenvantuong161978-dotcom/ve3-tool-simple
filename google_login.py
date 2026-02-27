@@ -811,46 +811,51 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
-        # v1.0.140: Sau login → vào Flow → click "Create with Flow" để mồi session
+        # v1.0.149: Retry 30 lần, reload mỗi 10 lần
         log("Navigating to Flow to warm up session...")
         flow_url = "https://labs.google/fx/vi/tools/flow"
         try:
             driver.get(flow_url)
-            time.sleep(8)  # Đợi page load lâu hơn
-            log(f"Flow loaded: {driver.url[:50]}")
+            time.sleep(3)  # Đợi ngắn rồi tìm ngay
+            log(f"Flow: {driver.url[:50]}")
 
-            # v1.0.148: Giống test - tìm add_2 button, nếu không có thì click Create
             click_success = False
 
-            for attempt in range(10):
-                log(f"Checking Flow page (attempt {attempt + 1}/10)...")
+            for attempt in range(30):
+                # Reload page mỗi 10 lần
+                if attempt > 0 and attempt % 10 == 0:
+                    log(f"Reloading page (attempt {attempt})...")
+                    driver.refresh()
+                    time.sleep(3)
 
+                log(f"Finding button ({attempt + 1}/30)...")
+
+                # Tìm button "add_2" (Dự án mới)
                 try:
-                    # Tìm button chứa "add_2" (icon Dự án mới)
                     btn = driver.ele('tag:button@@text():add_2', timeout=2)
                     if btn:
                         log("Found 'add_2' button - page ready!")
                         click_success = True
                         break
                 except:
-                    log("  add_2 not found")
+                    pass
 
-                # Thử click "Create" button nếu có
+                # Thử click "Create" button
                 try:
                     create_btn = driver.ele('tag:button@@text():Create', timeout=2)
                     if create_btn:
-                        log("Clicking 'Create' button...")
+                        log("Clicking 'Create'...")
                         create_btn.click()
-                        time.sleep(3)
+                        time.sleep(2)
                 except:
                     pass
 
-                time.sleep(2)
+                time.sleep(1)
 
             if click_success:
-                log("Session warmed up successfully!")
+                log("Session warmed up!")
             else:
-                log("Could not find add_2 button - continuing anyway", "WARN")
+                log("Button not found after 30 attempts", "WARN")
 
         except Exception as e:
             log(f"Flow warm up error (non-critical): {e}", "WARN")
