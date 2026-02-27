@@ -1,20 +1,15 @@
-1.0.175
+1.0.176
 2026-02-28 (VN)
-Change: Fix Chrome zombie - Kill truoc moi retry
+Change: Quay lai CMD don gian + Fix Chrome zombie
 
 Thay doi:
+- Quay lai dung CMD (bo PowerShell)
 - Kill Chrome TRUOC moi retry (tranh mo nhieu Chrome zombie)
 - Tang wmic timeout tu 5s len 15s
-- Them fallback taskkill /F /IM chrome.exe khi wmic timeout
-- Worker output ghi vao log file (PowerShell Tee-Object)
+- Them fallback taskkill khi wmic timeout
 
-Logic moi:
-1. Attempt 1: Mo Chrome
-2. Neu fail: Kill Chrome → Doi 3s → Doi port → Retry
-3. Lam vay den het 3 attempts
-
-1. v1.0.175: Fix Chrome zombie - Kill truoc moi retry
-2. v1.0.174: Fix auto-recovery - Worker output ghi vào log file
-3. v1.0.173: Auto switch model + Quay lại cách mở Chrome cũ
-4. v1.0.172: Bỏ log kill Chrome + Fix reset all CMD
-5. v1.0.171: Kill chỉ đúng Chrome của worker hiện tại
+1. v1.0.176: Quay lai CMD + Fix Chrome zombie
+2. v1.0.175: Fix Chrome zombie - Kill truoc moi retry
+3. v1.0.173: Auto switch model + Quay lai cach mo Chrome cu
+4. v1.0.172: Bo log kill Chrome + Fix reset all CMD
+5. v1.0.171: Kill chi dung Chrome cua worker hien tai
