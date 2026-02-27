@@ -3084,7 +3084,8 @@ class DrissionFlowAPI:
                 return False
 
         # v1.0.135: Đợi page ready thay vì textarea (giao diện mới)
-        wait_time = 8 if getattr(self, '_ipv6_activated', False) else 5
+        # v1.0.173: Tăng từ 5s lên 8s
+        wait_time = 10 if getattr(self, '_ipv6_activated', False) else 8
         self.log(f"Đợi page ready ({wait_time}s)...")
         time.sleep(wait_time)
 
