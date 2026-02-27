@@ -1,14 +1,15 @@
-1.0.150
+1.0.151
 2026-02-27 (VN)
-Fix: 403 xóa data → login + warm-up bắt buộc
+Fix: Auto-login dùng account đã lưu (không bị rotate)
 
 Thay đổi:
-- Thêm _warmup_after_login() trong drission_flow_api.py
-- Sau khi xóa Chrome data (403) → login + warm-up
-- Warm-up: retry 30 lần, reload/10, tìm add_2
-- Đảm bảo có thể tạo ảnh sau khi xóa data
+- PRE-LOGIN lưu account vào config/last_login_account.json
+- _auto_login_google() đọc từ JSON trước khi gọi Sheet
+- Đảm bảo login lại đúng account đã dùng ban đầu
+- Không bị lấy nhầm account do rotation
 
-1. v1.0.150: 403 → login + warm-up
+1. v1.0.151: Auto-login dùng account từ JSON
+2. v1.0.150: 403 → login + warm-up
 2. v1.0.149: Retry 30x, reload/10
 2. v1.0.148: Giống test logic
 3. v1.0.147: Đơn giản warm-up

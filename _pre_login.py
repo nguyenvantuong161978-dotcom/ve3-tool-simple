@@ -145,6 +145,23 @@ def main():
         current_account['id']
     )
 
+    # v1.0.151: Lưu account vào JSON để auto-login dùng lại đúng account
+    import json
+    account_json_path = TOOL_DIR / "config" / "last_login_account.json"
+    try:
+        account_data = {
+            'id': current_account['id'],
+            'totp': current_account.get('totp', ''),
+            'password': current_account.get('password', ''),
+            'channel': channel,
+            'index': current_account['index']
+        }
+        with open(account_json_path, 'w', encoding='utf-8') as f:
+            json.dump(account_data, f, indent=2)
+        print(f"[PRE-LOGIN] Saved account to JSON: {account_json_path.name}")
+    except Exception as e:
+        print(f"[PRE-LOGIN] WARN: Could not save JSON: {e}")
+
     print("\n" + "="*60)
     print("[PRE-LOGIN] DONE! Both Chrome logged in.")
     print("="*60)

@@ -1140,6 +1140,9 @@ class DrissionFlowAPI:
         self.captured_url: Optional[str] = None
         self.captured_payload: Optional[str] = None
 
+        # v1.0.151: Lưu account để re-login đúng (không bị rotate)
+        self._saved_account: Optional[dict] = None
+
         # State
         self._ready = False
 
@@ -1535,9 +1538,31 @@ class DrissionFlowAPI:
 
             self.log(f"Mã máy: {machine_code}")
 
-            # 2. Lấy thông tin tài khoản từ Google Sheet (đã có retry bên trong)
-            self.log("Đọc thông tin tài khoản từ Google Sheet...")
-            account_info = get_account_info(machine_code)
+            # v1.0.151: Ưu tiên dùng account đã lưu (từ PRE-LOGIN)
+            account_info = None
+
+            # 2a. Thử dùng account đã lưu trong memory
+            if self._saved_account:
+                self.log("Dùng account đã lưu trong memory...")
+                account_info = self._saved_account
+
+            # 2b. Thử đọc từ JSON file (PRE-LOGIN đã lưu)
+            if not account_info:
+                account_json_path = Path(__file__).parent.parent / "config" / "last_login_account.json"
+                if account_json_path.exists():
+                    try:
+                        with open(account_json_path, 'r', encoding='utf-8') as f:
+                            account_info = json.load(f)
+                        self.log(f"Đọc account từ JSON: {account_info.get('id', 'N/A')}")
+                    except Exception as e:
+                        self.log(f"[WARN] Không đọc được JSON: {e}", "WARN")
+                        account_info = None
+
+            # 2c. Fallback: Đọc từ Google Sheet (có thể bị rotate)
+            if not account_info:
+                self.log("Đọc thông tin tài khoản từ Google Sheet...")
+                account_info = get_account_info(machine_code)
+
             if not account_info:
                 self.log("[x] Không lấy được thông tin tài khoản", "ERROR")
                 return False
@@ -1584,6 +1609,8 @@ class DrissionFlowAPI:
 
                     if success:
                         self.log("[v] Đăng nhập thành công!")
+                        # v1.0.151: Lưu account để dùng lại cho lần login sau
+                        self._saved_account = account_info
                         time.sleep(2)
                         return True
                     else:
