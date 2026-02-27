@@ -1,13 +1,14 @@
-1.0.159
+1.0.160
 2026-02-27 (VN)
-Change: Auto-select Nano Banana Pro trước khi tạo ảnh
+Change: Đóng menu sau khi chọn model (Escape x2)
 
 Thay đổi:
-- Tự động chọn model "Nano Banana Pro" trước khi tạo ảnh
-- Dùng PointerEvent để click menu (hoạt động với UI mới)
-- Flow: Menu chính → Dropdown model → Chọn Pro
+- Sau khi chọn Nano Banana Pro, đóng menu bằng Escape 2 lần
+- Giải quyết lỗi prompt input không focus được do menu còn mở
+- Flow: Menu → Dropdown → Chọn Pro → Escape → Escape → Focus prompt
 
-1. v1.0.159: Auto-select Nano Banana Pro
+1. v1.0.160: Đóng menu sau khi chọn model
+2. v1.0.159: Auto-select Nano Banana Pro
 2. v1.0.158: Tối ưu tốc độ warm-up
 3. v1.0.157: Tìm khung chat + tăng retry reload
 3. v1.0.156: Fix prompt input cho project đã tạo

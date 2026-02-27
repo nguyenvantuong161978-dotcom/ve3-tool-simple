@@ -1018,7 +1018,16 @@ JS_SELECT_NANO_BANANA_PRO = '''
                 item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
                 item.click();
                 console.log('[MODEL] Step 3: Selected Nano Banana Pro!');
-                window._modelSelectResult = 'SELECTED_PRO';
+
+                // Buoc 4: Dong menu bang cach nhan Escape 2 lan (dong ca dropdown va menu chinh)
+                setTimeout(function() {
+                    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                    setTimeout(function() {
+                        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                        console.log('[MODEL] Step 4: Menu closed');
+                        window._modelSelectResult = 'SELECTED_PRO';
+                    }, 300);
+                }, 300);
             } else {
                 window._modelSelectResult = 'NO_MENU_ITEMS';
             }
@@ -5300,8 +5309,8 @@ class DrissionFlowAPI:
 
     def _select_nano_banana_pro(self) -> bool:
         """
-        v1.0.159: Chọn model "Nano Banana Pro" trước khi tạo ảnh.
-        Flow: Click menu chính → Click dropdown model → Chọn Nano Banana Pro
+        v1.0.160: Chọn model "Nano Banana Pro" trước khi tạo ảnh.
+        Flow: Click menu chính → Click dropdown model → Chọn Nano Banana Pro → Đóng menu (Escape x2)
         """
         if not self._ready or not self.driver:
             return False
@@ -5313,8 +5322,8 @@ class DrissionFlowAPI:
             self.driver.run_js("window._modelSelectResult = 'PENDING';")
             self.driver.run_js(JS_SELECT_NANO_BANANA_PRO)
 
-            # Đợi JS async hoàn thành (800ms + 800ms + buffer)
-            time.sleep(2.5)
+            # Đợi JS async hoàn thành (800ms + 800ms + 300ms + 300ms + buffer)
+            time.sleep(3.0)
 
             # Kiểm tra kết quả
             result = self.driver.run_js("return window._modelSelectResult;")
