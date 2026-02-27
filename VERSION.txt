@@ -1,14 +1,16 @@
-1.0.146
+1.0.148
 2026-02-27 (VN)
-Fix: Dùng DrissionPage elements thay vì JavaScript
+Fix: Giống test - tìm add_2 rồi click Create
 
 Thay đổi:
-- Dùng driver.ele() thay vì run_js() (fix None return)
-- Tìm button có "add_2" = "Dự án mới"
-- Retry 10 lần
+- Tìm button có "add_2" (Dự án mới)
+- Nếu không thấy → click "Create" button
+- Retry 10 lần (giống test)
 
-1. v1.0.146: Dùng DrissionPage elements
-2. v1.0.145: Có "Dự án mới" = success
+1. v1.0.148: Giống test logic
+2. v1.0.147: Đơn giản warm-up
+3. v1.0.146: Dùng DrissionPage elements
+4. v1.0.145: Có "Dự án mới" = success
 2. v1.0.144: Tìm button "add_2Dự án mới"
 3. v1.0.143: Kiểm tra nút "Tạo dự án"
 4. v1.0.142: Retry click button stubborn

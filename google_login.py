@@ -819,24 +819,23 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             time.sleep(8)  # Đợi page load lâu hơn
             log(f"Flow loaded: {driver.url[:50]}")
 
-            # v1.0.146: Dùng DrissionPage elements thay vì JavaScript (fix None return)
-            # Có "Dự án mới" = đã vào đúng trang → xong
+            # v1.0.148: Giống test - tìm add_2 button, nếu không có thì click Create
             click_success = False
 
             for attempt in range(10):
                 log(f"Checking Flow page (attempt {attempt + 1}/10)...")
 
                 try:
-                    # Tìm button "Dự án mới" (chứa "add_2" icon)
+                    # Tìm button chứa "add_2" (icon Dự án mới)
                     btn = driver.ele('tag:button@@text():add_2', timeout=2)
                     if btn:
-                        log("Found 'Dự án mới' button - page ready!")
+                        log("Found 'add_2' button - page ready!")
                         click_success = True
                         break
                 except:
-                    pass
+                    log("  add_2 not found")
 
-                # Chưa thấy → thử click "Create with Flow"
+                # Thử click "Create" button nếu có
                 try:
                     create_btn = driver.ele('tag:button@@text():Create', timeout=2)
                     if create_btn:
@@ -851,7 +850,7 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             if click_success:
                 log("Session warmed up successfully!")
             else:
-                log("Button stubborn - continuing anyway", "WARN")
+                log("Could not find add_2 button - continuing anyway", "WARN")
 
         except Exception as e:
             log(f"Flow warm up error (non-critical): {e}", "WARN")
