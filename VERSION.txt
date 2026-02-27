@@ -1,14 +1,15 @@
-1.0.160
+1.0.161
 2026-02-27 (VN)
-Change: Đóng menu sau khi chọn model (Escape x2)
+Change: Retry vòng 2 cho references bị thiếu
 
 Thay đổi:
-- Sau khi chọn Nano Banana Pro, đóng menu bằng Escape 2 lần
-- Giải quyết lỗi prompt input không focus được do menu còn mở
-- Flow: Menu → Dropdown → Chọn Pro → Escape → Escape → Focus prompt
+- Sau khi tạo references (nv/loc), kiểm tra file thực tế trong folder nv/
+- Nếu có reference thiếu file ảnh → retry vòng 2 để tạo lại
+- Đảm bảo tất cả references được tạo trước khi tạo scenes
 
-1. v1.0.160: Đóng menu sau khi chọn model
-2. v1.0.159: Auto-select Nano Banana Pro
+1. v1.0.161: Retry vòng 2 cho references bị thiếu
+2. v1.0.160: Đóng menu sau khi chọn model
+3. v1.0.159: Auto-select Nano Banana Pro
 2. v1.0.158: Tối ưu tốc độ warm-up
 3. v1.0.157: Tìm khung chat + tăng retry reload
 3. v1.0.156: Fix prompt input cho project đã tạo

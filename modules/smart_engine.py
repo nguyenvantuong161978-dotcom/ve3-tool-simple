@@ -2041,6 +2041,56 @@ class SmartEngine:
                             ref_media_ids_created += 1
 
                     self.log(f"[STEP 1/2] Media IDs: {ref_media_ids_created}/{len(ref_prompts)} references có media_id")
+
+                    # === VÒNG 2: RETRY NHỮNG REFERENCES BỊ THIẾU ===
+                    # v1.0.161: Kiểm tra file thực tế và retry nếu thiếu
+                    missing_refs = []
+                    project_dir = Path(excel_files[0]).parent
+                    nv_dir = project_dir / "nv"
+
+                    for ref_prompt in ref_prompts:
+                        ref_id = str(ref_prompt.get('id', ''))
+                        # Kiểm tra file ảnh tồn tại
+                        ref_file = nv_dir / f"{ref_id}.png"
+                        if not ref_file.exists():
+                            missing_refs.append(ref_prompt)
+
+                    if missing_refs:
+                        self.log(f"[STEP 1.5/2] VÒNG 2: Retry {len(missing_refs)} references bị thiếu: {[p['id'] for p in missing_refs]}")
+
+                        # Retry tạo những reference bị thiếu
+                        retry_result = generator.generate_from_prompts_auto(
+                            prompts=missing_refs,
+                            excel_path=excel_files[0],
+                            bearer_token=bearer_token if bearer_token else None
+                        )
+                        retry_stats = retry_result.get("stats", {})
+                        retry_success = retry_stats.get("success", 0)
+                        retry_failed = retry_stats.get("failed", 0)
+
+                        # Cập nhật stats
+                        total_success += retry_success
+                        total_failed += retry_failed
+                        ref_success += retry_success
+                        ref_failed = ref_failed - retry_success + retry_failed  # Adjust failed count
+
+                        self.log(f"[STEP 1.5/2] Vòng 2: {retry_success} OK, {retry_failed} fail")
+
+                        # Đếm lại media_ids
+                        time.sleep(2)
+                        wb = PromptWorkbook(excel_files[0])
+                        wb.load_or_create()
+                        media_ids = wb.get_media_ids()
+                        ref_media_ids_created = 0
+                        for ref_prompt in ref_prompts:
+                            ref_id = str(ref_prompt.get('id', ''))
+                            ref_id_lower = ref_id.lower()
+                            if any(k.lower() == ref_id_lower for k in media_ids.keys()):
+                                ref_media_ids_created += 1
+                        self.log(f"[STEP 1.5/2] Sau vòng 2: {ref_media_ids_created}/{len(ref_prompts)} references có media_id")
+                    else:
+                        self.log(f"[STEP 1/2] Tất cả {len(ref_prompts)} references đã có file ảnh!")
+
                 except Exception as e:
                     self.log(f"[STEP 1/2] Không thể kiểm tra media_ids: {e}", "WARN")
             elif ref_prompts and self._skip_references:
