@@ -1610,6 +1610,66 @@ class DrissionFlowAPI:
             traceback.print_exc()
             return False
 
+    def _warmup_after_login(self) -> bool:
+        """
+        v1.0.150: Warm-up sau khi login (do 403 clear data).
+        Retry 30 lần, reload mỗi 10 lần.
+        Success = tìm thấy button "add_2" (Dự án mới).
+        """
+        self.log("[WARMUP] Bắt đầu warm-up sau login...")
+        flow_url = "https://labs.google/fx/vi/tools/flow"
+
+        try:
+            # Khởi động Chrome nếu chưa có
+            if not self.driver:
+                self.log("[WARMUP] Starting Chrome...")
+                if not self.restart_chrome(rotate_ipv6=False):
+                    self.log("[WARMUP] Không khởi động được Chrome", "ERROR")
+                    return False
+
+            # Navigate to Flow
+            self.log(f"[WARMUP] Navigating to Flow...")
+            self.driver.get(flow_url)
+            time.sleep(3)
+
+            # Retry 30 lần, reload mỗi 10 lần
+            for attempt in range(30):
+                # Reload page mỗi 10 lần
+                if attempt > 0 and attempt % 10 == 0:
+                    self.log(f"[WARMUP] Reloading page (attempt {attempt})...")
+                    self.driver.refresh()
+                    time.sleep(3)
+
+                self.log(f"[WARMUP] Finding button ({attempt + 1}/30)...")
+
+                # Tìm button "add_2" (Dự án mới)
+                try:
+                    btn = self.driver.ele('tag:button@@text():add_2', timeout=2)
+                    if btn:
+                        self.log("[WARMUP] Found 'add_2' button - page ready!")
+                        return True
+                except:
+                    pass
+
+                # Thử click "Create" button
+                try:
+                    create_btn = self.driver.ele('tag:button@@text():Create', timeout=2)
+                    if create_btn:
+                        self.log("[WARMUP] Clicking 'Create'...")
+                        create_btn.click()
+                        time.sleep(2)
+                except:
+                    pass
+
+                time.sleep(1)
+
+            self.log("[WARMUP] Button not found after 30 attempts", "WARN")
+            return False
+
+        except Exception as e:
+            self.log(f"[WARMUP] Error: {e}", "ERROR")
+            return False
+
     def _kill_chrome(self):
         """
         Close Chrome của tool này (không kill tất cả Chrome).
@@ -4184,6 +4244,8 @@ class DrissionFlowAPI:
                         time.sleep(1)
                         # Login lại (sẽ tự khởi động Chrome mới)
                         self._auto_login_google()
+                        # v1.0.150: Warm-up sau login - đảm bảo có thể tạo ảnh
+                        self._warmup_after_login()
                         self._cleared_data_for_403 = True
                         self._consecutive_403 = 0  # Reset counter sau khi clear
 
@@ -5694,6 +5756,8 @@ class DrissionFlowAPI:
                         time.sleep(1)
                         # Login lại (sẽ tự khởi động Chrome mới)
                         self._auto_login_google()
+                        # v1.0.150: Warm-up sau login - đảm bảo có thể tạo ảnh
+                        self._warmup_after_login()
                         self._cleared_data_for_403 = True
                         self._consecutive_403 = 0
 

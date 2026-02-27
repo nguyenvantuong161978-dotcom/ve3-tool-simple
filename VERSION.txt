@@ -1,14 +1,15 @@
-1.0.149
+1.0.150
 2026-02-27 (VN)
-Fix: Retry 30 lần, reload mỗi 10 lần
+Fix: 403 xóa data → login + warm-up bắt buộc
 
 Thay đổi:
-- Bỏ đợi 8s, chỉ đợi 3s rồi tìm ngay
-- Retry 30 lần (button cứng đầu)
-- Reload page mỗi 10 lần để fix lỗi
-- Tìm add_2 hoặc click Create
+- Thêm _warmup_after_login() trong drission_flow_api.py
+- Sau khi xóa Chrome data (403) → login + warm-up
+- Warm-up: retry 30 lần, reload/10, tìm add_2
+- Đảm bảo có thể tạo ảnh sau khi xóa data
 
-1. v1.0.149: Retry 30x, reload/10
+1. v1.0.150: 403 → login + warm-up
+2. v1.0.149: Retry 30x, reload/10
 2. v1.0.148: Giống test logic
 3. v1.0.147: Đơn giản warm-up
 4. v1.0.146: Dùng DrissionPage elements
