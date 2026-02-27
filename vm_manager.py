@@ -2801,7 +2801,8 @@ class VMManager:
         Returns True if recovery was triggered.
         """
         # Check each Chrome worker's recent logs for connection errors
-        error_threshold = 5  # Number of consecutive errors to trigger recovery
+        # v1.0.173: Giảm từ 5 xuống 2 để reset nhanh hơn khi bị disconnect
+        error_threshold = 2  # Number of consecutive errors to trigger recovery
 
         for worker_id in self.workers:
             if not worker_id.startswith("chrome_"):
