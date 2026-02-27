@@ -246,33 +246,33 @@ def get_current_account_for_channel(channel_code: str, machine_code: str = None)
     return account
 
 
-def get_account_by_index(channel_code: str, index: int) -> dict:
+def get_account_by_index(machine_code: str, index: int) -> dict:
     """
-    v1.0.152: Lấy tài khoản theo index cố định (không rotate).
+    v1.0.154: Lấy tài khoản theo index cố định (không rotate).
     Dùng khi cần login lại đúng account đã dùng ban đầu.
 
     Args:
-        channel_code: Mã kênh (AR8, KA2)
+        machine_code: Mã máy đầy đủ (KA2-T2, AR8-T1) - KHÔNG phải channel code!
         index: Index của account (0-based)
 
     Returns:
         Account dict: {"id": "...", "password": "...", "totp": "...", "index": N}
         or None if not found
     """
-    accounts = get_channel_accounts(channel_code)
+    accounts = get_channel_accounts(machine_code)
     if not accounts:
-        log(f"No accounts found for channel: {channel_code}", "WARN")
+        log(f"No accounts found for machine: {machine_code}", "WARN")
         return None
 
     if index < 0 or index >= len(accounts):
-        log(f"Invalid index {index} for channel {channel_code} (total: {len(accounts)})", "WARN")
+        log(f"Invalid index {index} for machine {machine_code} (total: {len(accounts)})", "WARN")
         return None
 
     account = accounts[index].copy()
     account["index"] = index
     account["total"] = len(accounts)
 
-    log(f"Get account by index {index + 1}/{len(accounts)} for {channel_code}: {account['id']}")
+    log(f"Get account by index {index + 1}/{len(accounts)} for {machine_code}: {account['id']}")
     return account
 
 

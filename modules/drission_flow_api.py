@@ -1560,9 +1560,10 @@ class DrissionFlowAPI:
                         if excel_path.exists():
                             saved = get_account_from_excel(str(excel_path))
                             if saved and saved.get('email'):
-                                # Lấy full account info từ Sheet theo index
+                                # v1.0.154: Dùng machine_code (KA2-T2) thay vì channel (KA2)
+                                # vì get_channel_accounts cần machine_code đầy đủ
                                 self.log(f"Đọc account từ Excel: {saved['email']} (index {saved['index']})")
-                                account_info = get_account_by_index(saved['channel'], saved['index'])
+                                account_info = get_account_by_index(machine_code, saved['index'])
                                 if account_info:
                                     break
 
