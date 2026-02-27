@@ -1,18 +1,15 @@
-1.0.172
+1.0.173
 2026-02-28 (VN)
-Change: Bỏ log kill Chrome PIDs + Fix reset all CMD khi 403
+Change: KHÔNG kill Chrome tự động khi setup
 
 Thay doi:
-- Bỏ log "Chuyển từ launcher sang chrome.exe" (không cần thiết)
-- Bỏ log kill Chrome PIDs (đã kill theo thư mục, không cần log)
-- Bỏ log "Killing only Chrome X processes..."
-- Bỏ log "Đợi Chrome tắt hẳn..."
-- FIX: Khi kill chrome by worker lỗi, KHÔNG fallback kill_all_chrome
-  (nguyên nhân reset all CMD khi 403)
+- BỎ kill Chrome tự động khi setup (tránh tắt nhầm Chrome của worker khác)
+- BỎ kill Chrome khi retry (chỉ thử port khác)
+- Nếu có conflict, Chrome sẽ báo lỗi và retry với port khác
 
-1. v1.0.172: Bỏ log kill Chrome + Fix reset all CMD
-2. v1.0.171: Kill chỉ đúng Chrome của worker hiện tại
-3. v1.0.169: Kill Chrome Portable dựa vào PATH (không cần debug port)
-4. v1.0.168: Fix Chrome Portable launcher → dùng chrome.exe thực sự
-5. v1.0.167: Fix Chrome zombie connection fail
-6. v1.0.166: Fix reference image format (imageInputType)
+1. v1.0.173: KHÔNG kill Chrome tự động khi setup
+2. v1.0.172: Bỏ log kill Chrome + Fix reset all CMD
+3. v1.0.171: Kill chỉ đúng Chrome của worker hiện tại
+4. v1.0.169: Kill Chrome Portable dựa vào PATH
+5. v1.0.168: Fix Chrome Portable launcher
+6. v1.0.167: Fix Chrome zombie connection fail

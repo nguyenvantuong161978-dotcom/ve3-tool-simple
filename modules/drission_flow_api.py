@@ -2648,10 +2648,8 @@ class DrissionFlowAPI:
                 self._is_rotating_mode = False
                 self.log("[WARN] Không có proxy - chạy direct connection", "WARN")
 
-            # Tắt TẤT CẢ Chrome cũ của tool trước (tránh conflict zombie)
-            # v1.0.167: Dùng _auto_kill_conflicting_chrome() thay vì _kill_chrome_using_profile()
-            # để kill tất cả Chrome có remote-debugging-port (Chrome của tool)
-            self._auto_kill_conflicting_chrome()
+            # v1.0.173: KHÔNG kill Chrome tự động để tránh tắt nhầm Chrome của worker khác
+            # Nếu có conflict, Chrome sẽ báo lỗi và retry với port khác
 
             # === XÓA TẤT CẢ LOCK FILES ===
             try:
@@ -2679,10 +2677,8 @@ class DrissionFlowAPI:
                     err_msg = str(chrome_err)
                     self.log(f"Chrome attempt {attempt+1}/{max_retries} failed:\n{err_msg}", "WARN")
                     if attempt < max_retries - 1:
-                        # v1.0.167: Kill tất cả Chrome zombie thay vì chỉ port
-                        self.log("  → Kill all tool Chrome instances...")
-                        self._auto_kill_conflicting_chrome()  # Kill all với remote-debugging-port
-                        time.sleep(3)
+                        # v1.0.173: KHÔNG kill Chrome, chỉ thử port khác
+                        time.sleep(2)
 
                         # Thử port khác
                         self.chrome_port = random.randint(9222, 9999)
