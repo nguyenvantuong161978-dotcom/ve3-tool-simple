@@ -1,15 +1,15 @@
-1.0.169
+1.0.170
 2026-02-27 (VN)
-Change: Fix kill Chrome Portable khong can remote-debugging-port
+Change: Fix reset all khi khong co IPv6
 
 Thay doi:
-- Khi dung launcher, Chrome mo ra KHONG co --remote-debugging-port
-- Nen phai kill dua vao PATH thay vi arguments
-- Kill tat ca Chrome co "GoogleChromePortable" hoac "Chrome-bin" trong path
-- Khong can check remote-debugging-port nua
+- BUG: Khi chay direct (khong IPv6), 403 x5 KHONG reset all
+- Fix: Khi khong co IPv6, van restart all + clear data
+- Them ham _clear_all_chrome_data() de xoa data tat ca workers
+- Logic moi: 403 x5 → Stop all → Kill all → Clear data → Restart all
 
-1. v1.0.169: Kill Chrome Portable dua vao PATH (khong can debug port)
-2. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
-3. v1.0.167: Fix Chrome zombie connection fail
-4. v1.0.166: Fix reference image format (imageInputType)
-5. v1.0.165: Fix interceptor cho API format moi
+1. v1.0.170: Fix reset all khi khong co IPv6
+2. v1.0.169: Kill Chrome Portable dua vao PATH (khong can debug port)
+3. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
+4. v1.0.167: Fix Chrome zombie connection fail
+5. v1.0.166: Fix reference image format (imageInputType)
