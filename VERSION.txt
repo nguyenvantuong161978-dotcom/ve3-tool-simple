@@ -1,59 +1,15 @@
-1.0.168
+1.0.169
 2026-02-27 (VN)
-Change: Fix Chrome Portable launcher issue
+Change: Fix kill Chrome Portable khong can remote-debugging-port
 
 Thay doi:
-- Fix loi "browser connection fails" khi dung GoogleChromePortable.exe
-- GoogleChromePortable.exe la LAUNCHER, khong phai Chrome thuc su
-- Launcher khong truyen --remote-debugging-port → DrissionPage khong ket noi duoc
-- Tu dong chuyen tu launcher sang App/Chrome-bin/chrome.exe (Chrome thuc su)
-- Fix cho ca auto-detect va config chrome_portable
+- Khi dung launcher, Chrome mo ra KHONG co --remote-debugging-port
+- Nen phai kill dua vao PATH thay vi arguments
+- Kill tat ca Chrome co "GoogleChromePortable" hoac "Chrome-bin" trong path
+- Khong can check remote-debugging-port nua
 
-1. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
-2. v1.0.167: Fix Chrome zombie connection fail
-3. v1.0.166: Fix reference image format (imageInputType)
-4. v1.0.165: Fix interceptor cho API format moi
-2. v1.0.164: Bo het switch_to_image_mode() o tat ca files
-3. v1.0.163: Bo switch_to_image_mode() - chi can chon model
-2. v1.0.162: JS_SELECT_IMAGE_MODE dung PointerEvent
-3. v1.0.161: Retry vong 2 cho references bi thieu
-4. v1.0.160: Dong menu sau khi chon model
-5. v1.0.159: Auto-select Nano Banana Pro
-2. v1.0.158: Toi uu toc do warm-up
-3. v1.0.157: Tim khung chat + tang retry reload
-3. v1.0.156: Fix prompt input cho project da tao
-4. v1.0.155: Warm-up reload moi 5 lan
-2. v1.0.154: Fix get_account_by_index dung machine_code
-3. v1.0.153: Tim prompt input dung (contenteditable)
-4. v1.0.152: Auto-login doc tu Excel (khong can JSON)
-5. v1.0.151: Auto-login dung account tu JSON
-6. v1.0.150: 403 → login + warm-up
-2. v1.0.149: Retry 30x, reload/10
-2. v1.0.148: Giong test logic
-3. v1.0.147: Don gian warm-up
-4. v1.0.146: Dung DrissionPage elements
-5. v1.0.145: Co "Du an moi" = success
-2. v1.0.144: Tim button "add_2Du an moi"
-3. v1.0.143: Kiem tra nut "Tao du an"
-4. v1.0.142: Retry click button stubborn
-2. v1.0.141: Nhieu pattern tim button
-2. v1.0.140: Tang retry/delay cho Create with Flow
-2. v1.0.139: Warm up session sau login (click Create with Flow)
-2. v1.0.138: Bo check combobox
-2. v1.0.137: Bo clear JS, dung Ctrl+A + Ctrl+V
-2. v1.0.136: Bo navigate Flow sau login
-2. v1.0.135: Bo doi textarea, dung time.sleep()
-2. v1.0.134: Fix verification trong _wait_for_textarea_visible()
-2. v1.0.133: Click "Quay lai du an" sau Create with Flow
-2. v1.0.132: PRE-LOGIN dung cung logic chon project
-2. v1.0.131: Visit Flow sau login de set cookies
-3. v1.0.130: Khong xoa Chrome data 2 lan
-2. v1.0.129: Check logout ngay tu dau
-3. v1.0.128: Them click "Create with Flow" khi moi
-4. v1.0.127: Hoan thien ho tro giao dien Flow moi
-2. v1.0.126: Cap nhat cho giao dien Flow moi
-2. v1.0.125: 2FA thu Ctrl+V truc tiep truoc
-2. v1.0.124: 2FA dung Ctrl+V (revert direct input)
-3. v1.0.123: Login tuan tu Chrome 1 → Chrome 2
-4. v1.0.122: 2FA login cai thien (multiple selectors)
-5. v1.0.121: PRE-LOGIN trong Chrome workers (revert CMD rieng)
+1. v1.0.169: Kill Chrome Portable dua vao PATH (khong can debug port)
+2. v1.0.168: Fix Chrome Portable launcher → dung chrome.exe thuc su
+3. v1.0.167: Fix Chrome zombie connection fail
+4. v1.0.166: Fix reference image format (imageInputType)
+5. v1.0.165: Fix interceptor cho API format moi

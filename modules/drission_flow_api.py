@@ -6909,7 +6909,7 @@ class DrissionFlowAPI:
         """
         Tự động kill Chrome đang conflict với profile hoặc port.
         Gọi trước khi start Chrome mới.
-        MẠNH: Kill TẤT CẢ Chrome có remote-debugging-port để tránh conflict.
+        v1.0.169: Kill TẤT CẢ Chrome Portable, không cần check remote-debugging-port.
         """
         import subprocess
         import platform
@@ -6918,8 +6918,9 @@ class DrissionFlowAPI:
 
         if platform.system() == 'Windows':
             try:
-                # === CÁCH 1: Kill TẤT CẢ Chrome có remote-debugging-port (tool Chrome) ===
-                # Chrome của tool luôn có --remote-debugging-port, Chrome user thường không có
+                # === v1.0.169: Kill TẤT CẢ Chrome Portable (kể cả không có remote-debugging-port) ===
+                # Khi dùng launcher, Chrome mở ra KHÔNG có --remote-debugging-port
+                # Nên phải kill dựa vào path thay vì arguments
                 result = subprocess.run(
                     ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
                     capture_output=True, text=True, timeout=15
@@ -6928,15 +6929,18 @@ class DrissionFlowAPI:
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines:
-                        # Kill Chrome có remote-debugging-port (tool Chrome)
-                        # HOẶC Chrome portable/ve3
-                        if any(x in line for x in [
-                            'remote-debugging-port',  # Tool Chrome
-                            'GoogleChromePortable',
-                            've3',
-                            'chrome_profile',
+                        # v1.0.169: Kill Chrome Portable dựa vào PATH (không cần remote-debugging-port)
+                        # Kill nếu có BẤT KỲ pattern nào sau:
+                        should_kill = any(x in line for x in [
+                            'GoogleChromePortable',    # Chrome Portable folder
+                            'Chrome-bin',              # Actual Chrome binary folder
+                            've3',                     # Legacy ve3 folder
+                            'chrome_profile',          # Tool profile
+                            'remote-debugging-port',   # Tool Chrome với debug port
                             str(self.profile_dir).replace('/', '\\')
-                        ]):
+                        ])
+
+                        if should_kill:
                             # Lấy PID ở cuối dòng
                             parts = line.strip().split()
                             if parts:
