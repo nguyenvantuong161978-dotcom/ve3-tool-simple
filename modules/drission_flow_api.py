@@ -3916,7 +3916,7 @@ class DrissionFlowAPI:
         Args:
             prompt: Prompt (nếu None, dùng payload đã capture)
             num_images: Số ảnh cần tạo (mặc định 1)
-            image_inputs: List of reference images [{name, inputType}]
+            image_inputs: List of reference images [{name, imageInputType}]
 
         Returns:
             Tuple[list of GeneratedImage, error message]
@@ -4061,7 +4061,7 @@ class DrissionFlowAPI:
         Args:
             prompt: Prompt mô tả ảnh
             num_images: Số ảnh cần tạo
-            image_inputs: Reference images [{name, inputType}] với name = media_id
+            image_inputs: Reference images [{name, imageInputType}] với name = media_id
             timeout: Timeout đợi response (giây)
             force_model: Force model name (GEM_PIX_2, IMAGEN_4, etc.)
                          "" = không force, "auto" = auto-detect và force nếu cần
@@ -4270,7 +4270,7 @@ class DrissionFlowAPI:
             save_dir: Thư mục lưu ảnh (optional)
             filename: Tên file (không có extension)
             max_retries: Số lần retry khi gặp 403 (mặc định 3)
-            image_inputs: List of reference images [{name, inputType}]
+            image_inputs: List of reference images [{name, imageInputType}]
             force_model: Force model name (GEM_PIX_2, IMAGEN_4, etc.)
                          "" = không force, "auto" = auto-detect
             skip_400_retry: If True, return immediately on 400 (for validator mode)

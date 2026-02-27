@@ -1,14 +1,15 @@
-1.0.165
+1.0.166
 2026-02-27 (VN)
-Change: Fix interceptor cho API format mới của Google Flow
+Change: Fix reference image format (imageInputType)
 
 Thay đổi:
-- Fix lấy reCAPTCHA token: hỗ trợ recaptchaContext.token (format mới)
-- Thêm counter chặn API calls thừa: _imageCallCount/_maxImageCalls
-- Chrome gửi nhiều calls cho nhiều ảnh → chỉ cho phép 1 call
-- Log chi tiết hơn để debug interceptor
+- Fix format imageInputs: dùng {name, imageInputType} (không phải inputType)
+- Fix browser_flow_generator.py: inputType → imageInputType
+- Giá trị đúng: IMAGE_INPUT_TYPE_REFERENCE (không phải STYLE_REFERENCE)
+- Test OK: Chrome API với reference image hoạt động đúng
 
-1. v1.0.165: Fix interceptor cho API format mới
+1. v1.0.166: Fix reference image format
+2. v1.0.165: Fix interceptor cho API format mới
 2. v1.0.164: Bỏ hết switch_to_image_mode() ở tất cả files
 3. v1.0.163: Bỏ switch_to_image_mode() - chỉ cần chọn model
 2. v1.0.162: JS_SELECT_IMAGE_MODE dùng PointerEvent

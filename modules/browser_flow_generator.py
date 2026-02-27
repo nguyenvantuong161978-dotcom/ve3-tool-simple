@@ -4232,9 +4232,8 @@ class BrowserFlowGenerator:
                                                 break
                                     if media_id:
                                         image_inputs.append({
-                                            "inputType": "IMAGE_INPUT_TYPE_REFERENCE",
-                                            "referenceId": media_id,
-                                            "referenceType": "REFERENCE_TYPE_STYLE"
+                                            "name": media_id,
+                                            "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
                                         })
 
                             success, images, error = drission_api.generate_image(
