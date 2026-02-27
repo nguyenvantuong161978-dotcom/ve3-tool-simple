@@ -2382,15 +2382,14 @@ class DrissionFlowAPI:
             if not chrome_exe and not self._chrome_portable and platform.system() == 'Windows' and not self._skip_portable_detection:
                 chrome_locations = []
 
-                # 2a. Ưu tiên: Thư mục tool/GoogleChromePortable/App/Chrome-bin/chrome.exe (ACTUAL CHROME)
-                # v1.0.168: Dùng chrome.exe trực tiếp, KHÔNG dùng launcher (GoogleChromePortable.exe)
-                # Launcher không truyền --remote-debugging-port → gây lỗi "browser connection fails"
+                # v1.0.173: Quay lại dùng GoogleChromePortable.exe (launcher) như phiên bản cũ
+                # 2a. Ưu tiên: Thư mục tool/GoogleChromePortable/GoogleChromePortable.exe
                 tool_dir = Path(__file__).parent.parent  # ve3-tool-simple/
-                chrome_locations.append(tool_dir / "GoogleChromePortable" / "App" / "Chrome-bin" / "chrome.exe")
+                chrome_locations.append(tool_dir / "GoogleChromePortable" / "GoogleChromePortable.exe")
 
-                # 2b. Fallback: Documents\GoogleChromePortable\App\Chrome-bin\chrome.exe
+                # 2b. Fallback: Documents\GoogleChromePortable\
                 home = Path.home()
-                chrome_locations.append(home / "Documents" / "GoogleChromePortable" / "App" / "Chrome-bin" / "chrome.exe")
+                chrome_locations.append(home / "Documents" / "GoogleChromePortable" / "GoogleChromePortable.exe")
 
                 # 2c. Legacy paths (ve3)
                 for chrome_name in ["ve3.exe", "chrome.exe", "Chrome.exe"]:
@@ -2400,12 +2399,7 @@ class DrissionFlowAPI:
                 for chrome_path in chrome_locations:
                     if chrome_path.exists():
                         chrome_exe = str(chrome_path)
-                        # v1.0.168: chrome_dir là thư mục GoogleChromePortable, không phải App/Chrome-bin
-                        # Từ App/Chrome-bin/chrome.exe → lấy GoogleChromePortable/
-                        if "App" in str(chrome_path) and "Chrome-bin" in str(chrome_path):
-                            chrome_dir = chrome_path.parent.parent.parent  # GoogleChromePortable/
-                        else:
-                            chrome_dir = chrome_path.parent
+                        chrome_dir = chrome_path.parent
                         # Tìm User Data: Data/profile hoặc User Data
                         for data_path in [chrome_dir / "Data" / "profile", chrome_dir / "User Data"]:
                             if data_path.exists():
