@@ -1333,24 +1333,19 @@ class VMManager:
 
     def perform_ipv6_rotation(self) -> bool:
         """
-        Thực hiện IPv6 rotation (hoặc restart all nếu không có IPv6):
+        Thực hiện IPv6 rotation:
         1. Tắt tất cả Chrome workers
-        2. Đổi IPv6 (nếu có)
-        3. Clear Chrome data
-        4. Khởi động lại tất cả
-
-        v1.0.170: Khi không có IPv6, vẫn restart all + clear data
+        2. Đổi IPv6
+        3. Khởi động lại tất cả
 
         Returns:
             True nếu thành công
         """
-        has_ipv6 = self.ipv6_manager and self.ipv6_manager.enabled
+        if not self.ipv6_manager or not self.ipv6_manager.enabled:
+            self.log("IPv6 rotation disabled or not available", "IPv6", "WARN")
+            return False
 
-        if has_ipv6:
-            self.log("Starting IPv6 rotation + restart all...", "IPv6", "WARN")
-        else:
-            # v1.0.170: Không có IPv6 → vẫn restart all + clear data
-            self.log("No IPv6 - Restarting all Chrome + clearing data...", "SYSTEM", "WARN")
+        self.log("Starting IPv6 rotation...", "IPv6", "WARN")
 
         # 1. Stop all Chrome workers
         for wid, w in self.workers.items():
@@ -1361,65 +1356,26 @@ class VMManager:
         self.kill_all_chrome()
         time.sleep(2)
 
-        # 3. Rotate IPv6 (nếu có)
-        if has_ipv6:
-            result = self.ipv6_manager.rotate_ipv6()
-            if result["success"]:
-                self.log(f"IPv6 rotated: {result['message']}", "IPv6", "SUCCESS")
-            else:
-                self.log(f"IPv6 rotation failed: {result['message']}", "IPv6", "WARN")
+        # 3. Rotate IPv6
+        result = self.ipv6_manager.rotate_ipv6()
 
-        # 4. Clear Chrome data (v1.0.170: luôn clear khi reset all)
-        self.log("Clearing all Chrome data...", "SYSTEM", "WARN")
-        self._clear_all_chrome_data()
+        if result["success"]:
+            self.log(f"IPv6 rotated: {result['message']}", "IPv6", "SUCCESS")
 
-        # 5. Reset error tracking
-        self.reset_error_tracking()
+            # 4. Reset error tracking
+            self.reset_error_tracking()
 
-        # 6. Wait and restart Chrome workers
-        time.sleep(3)
-        for wid, w in self.workers.items():
-            if w.worker_type == "chrome":
-                self.start_worker(wid, gui_mode=self.gui_mode)
-                time.sleep(2)
+            # 5. Wait and restart Chrome workers
+            time.sleep(3)
+            for wid, w in self.workers.items():
+                if w.worker_type == "chrome":
+                    self.start_worker(wid, gui_mode=self.gui_mode)
+                    time.sleep(2)
 
-        return True
-
-    def _clear_all_chrome_data(self):
-        """Clear Chrome data cho tất cả workers (v1.0.170)."""
-        import shutil
-
-        chrome_folders = [
-            TOOL_DIR / "GoogleChromePortable" / "Data" / "profile",
-            TOOL_DIR / "GoogleChromePortable - Copy" / "Data" / "profile",
-        ]
-
-        for profile_dir in chrome_folders:
-            if profile_dir.exists():
-                try:
-                    # Giữ lại First Run
-                    first_run = profile_dir / "First Run"
-                    first_run_exists = first_run.exists()
-
-                    # Xóa tất cả trong profile
-                    for item in profile_dir.iterdir():
-                        if item.name == "First Run":
-                            continue
-                        try:
-                            if item.is_dir():
-                                shutil.rmtree(item, ignore_errors=True)
-                            else:
-                                item.unlink()
-                        except:
-                            pass
-
-                    # Tạo lại First Run nếu cần
-                    if not first_run_exists:
-                        first_run.touch()
-
-                    self.log(f"Cleared: {profile_dir}", "SYSTEM")
-                except Exception as e:
-                    self.log(f"Clear error: {e}", "SYSTEM", "WARN")
+            return True
+        else:
+            self.log(f"IPv6 rotation failed: {result['message']}", "IPv6", "ERROR")
+            return False
 
     def clear_chrome_data(self, worker_id: str) -> bool:
         """
