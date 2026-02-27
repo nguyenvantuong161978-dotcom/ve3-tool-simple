@@ -3013,19 +3013,11 @@ class DrissionFlowAPI:
 
     def _find_textarea(self):
         """
-        Tìm textarea input (không click).
-        v1.0.126: Hỗ trợ cả contenteditable div (giao diện mới)
+        Tìm prompt input (không click).
+        v1.0.153: Ưu tiên contenteditable/role=textbox (giao diện mới 2026-02)
+                  Textarea cũ là g-recaptcha-response, không phải prompt input!
         """
-        # 1. Thử textarea truyền thống
-        for sel in ["tag:textarea", "css:textarea"]:
-            try:
-                el = self.driver.ele(sel, timeout=2)
-                if el:
-                    return el
-            except:
-                pass
-
-        # 2. v1.0.126: Thử contenteditable div (giao diện mới 2026-02)
+        # 1. v1.0.153: Ưu tiên contenteditable div (giao diện mới - khung chat "Bạn muốn tạo gì")
         try:
             el = self.driver.ele('css:[contenteditable="true"]', timeout=2)
             if el and el.rect.width > 100:  # Phải đủ lớn để là prompt input
@@ -3033,7 +3025,37 @@ class DrissionFlowAPI:
         except:
             pass
 
-        # 3. Thử tìm bằng aria-label
+        # 2. Thử role=textbox (cùng element với contenteditable)
+        try:
+            el = self.driver.ele('css:[role="textbox"]', timeout=2)
+            if el and el.rect.width > 100:
+                return el
+        except:
+            pass
+
+        # 3. Thử aria-multiline (cũng là prompt input)
+        try:
+            el = self.driver.ele('css:[aria-multiline="true"]', timeout=2)
+            if el and el.rect.width > 100:
+                return el
+        except:
+            pass
+
+        # 4. Thử textarea (nhưng loại bỏ recaptcha)
+        try:
+            textareas = self.driver.eles('tag:textarea', timeout=2)
+            for ta in textareas:
+                # Bỏ qua recaptcha textarea
+                ta_class = ta.attr('class') or ''
+                ta_name = ta.attr('name') or ''
+                if 'recaptcha' in ta_class.lower() or 'recaptcha' in ta_name.lower():
+                    continue
+                if ta.rect.width > 100:  # Phải đủ lớn
+                    return ta
+        except:
+            pass
+
+        # 5. Thử tìm bằng aria-label
         try:
             el = self.driver.ele('css:input[aria-label*="text"], div[aria-label*="text"]', timeout=1)
             if el:

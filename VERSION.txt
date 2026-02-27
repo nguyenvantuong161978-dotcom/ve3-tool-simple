@@ -1,16 +1,17 @@
-1.0.152
+1.0.153
 2026-02-27 (VN)
-Fix: Auto-login dùng account đã lưu trong Excel
+Fix: Tìm prompt input đúng (contenteditable thay vì recaptcha textarea)
 
 Thay đổi:
-- _auto_login_google() đọc account từ Excel của project
-- Thêm get_account_by_index() để lấy account theo index cố định
-- Đảm bảo login lại đúng account đã dùng ban đầu
-- Không cần file JSON riêng, dùng chung Excel
+- _find_textarea() ưu tiên tìm contenteditable="true" (giao diện mới)
+- Tìm role="textbox", aria-multiline="true"
+- Bỏ qua textarea của recaptcha (g-recaptcha-response)
+- Khung chat "Bạn muốn tạo gì" = contenteditable div
 
-1. v1.0.152: Auto-login đọc từ Excel (không cần JSON)
-2. v1.0.151: Auto-login dùng account từ JSON
-3. v1.0.150: 403 → login + warm-up
+1. v1.0.153: Tìm prompt input đúng (contenteditable)
+2. v1.0.152: Auto-login đọc từ Excel (không cần JSON)
+3. v1.0.151: Auto-login dùng account từ JSON
+4. v1.0.150: 403 → login + warm-up
 2. v1.0.149: Retry 30x, reload/10
 2. v1.0.148: Giống test logic
 3. v1.0.147: Đơn giản warm-up
