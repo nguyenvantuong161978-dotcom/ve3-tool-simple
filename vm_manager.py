@@ -2620,30 +2620,36 @@ class VMManager:
             if sys.platform == "win32":
                 # Windows - start with cmd window
                 title = f"{w.worker_type.upper()} {w.worker_num or ''}"
-                cmd_args = f"python -X utf8 {script.name}"
-                if args:
-                    cmd_args += f" {args}"
 
                 # Prepare environment with UTF-8 encoding for subprocess
                 worker_env = os.environ.copy()
                 worker_env['PYTHONIOENCODING'] = 'utf-8'
                 worker_env['PYTHONUTF8'] = '1'
 
+                # v1.0.174: Use PowerShell Tee-Object to both display AND log output
+                # This allows check_and_auto_recover() to detect errors from log file
+                log_file_escaped = str(log_file).replace("'", "''")
+                ps_cmd = f"python -X utf8 {script.name}"
+                if args:
+                    ps_cmd += f" {args}"
+
+                # PowerShell command: run python, pipe to Tee-Object (display + log)
+                # Log file is cleared in Python above, Tee-Object appends to it
+                ps_script = f"cd '{TOOL_DIR}'; {ps_cmd} 2>&1 | Tee-Object -FilePath '{log_file_escaped}'"
+
                 if gui_mode:
-                    # GUI mode - start with visible CMD, will be moved off-screen later
-                    # Workers use central_logger to write to logs/central.log
-                    cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
+                    # GUI mode - PowerShell window will be moved off-screen
+                    cmd = f'start "{title}" powershell -NoProfile -ExecutionPolicy Bypass -Command "{ps_script}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
 
                     # Move CMD windows off-screen after a short delay
                     def move_cmd_offscreen():
-                        time.sleep(2)  # Wait for CMD to open
+                        time.sleep(2)  # Wait for window to open
                         self.hide_cmd_windows()
                     threading.Thread(target=move_cmd_offscreen, daemon=True).start()
                 else:
-                    # Normal mode - visible CMD window with UTF-8 code page
-                    # Workers use central_logger to write to logs/central.log
-                    cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
+                    # Normal mode - visible PowerShell window
+                    cmd = f'start "{title}" powershell -NoProfile -ExecutionPolicy Bypass -Command "{ps_script}"'
                     w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
             else:
                 # Linux/Mac

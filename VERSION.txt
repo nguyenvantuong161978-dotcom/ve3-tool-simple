@@ -1,22 +1,17 @@
-1.0.173
+1.0.174
 2026-02-28 (VN)
-Change: Auto switch model khi 403 + Quay lại cách mở Chrome cũ
+Change: Fix auto-recovery - Worker output ghi vào log file
 
 Thay doi:
-- KHÔNG kill Chrome tự động khi setup (tránh tắt nhầm Chrome worker khác)
-- Quay lại dùng GoogleChromePortable.exe (launcher) như v1.0.150
-- Tăng wait page ready từ 5s lên 8s
-- Auto switch model khi 403:
-  + Nano Banana Pro: 5 lần 403 → chuyển Nano Banana 2
-  + Nano Banana 2: 2 lần 403 → chuyển Imagen 4
-  + Imagen 4: 2 lần 403 → xóa Chrome data → reset về Nano Banana Pro
-- Chuyển model bằng click trên giao diện Chrome (không dùng force_model API)
-- Tạo ảnh thành công: reset 403 count, GIỮ model hiện tại
-- IPv6 rotation: 15 lần 403 liên tiếp (chỉ khi có IPv6 enabled)
+- Worker output duoc ghi vao log file (PowerShell Tee-Object)
+- check_and_auto_recover() co the detect "connection disconnected" errors
+- Log file: .agent/logs/{worker_id}.log
+- Output van hien thi tren CMD window nhu truoc
 
-1. v1.0.173: Auto switch model + Quay lại cách mở Chrome cũ
-2. v1.0.172: Bỏ log kill Chrome + Fix reset all CMD
-3. v1.0.171: Kill chỉ đúng Chrome của worker hiện tại
-4. v1.0.169: Kill Chrome Portable dựa vào PATH
-5. v1.0.168: Fix Chrome Portable launcher
-6. v1.0.167: Fix Chrome zombie connection fail
+1. v1.0.174: Fix auto-recovery - Worker output ghi vào log file
+2. v1.0.173: Auto switch model + Quay lại cách mở Chrome cũ
+3. v1.0.172: Bỏ log kill Chrome + Fix reset all CMD
+4. v1.0.171: Kill chỉ đúng Chrome của worker hiện tại
+5. v1.0.169: Kill Chrome Portable dựa vào PATH
+6. v1.0.168: Fix Chrome Portable launcher
+7. v1.0.167: Fix Chrome zombie connection fail
