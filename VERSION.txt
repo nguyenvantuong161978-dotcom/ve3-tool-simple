@@ -1,13 +1,20 @@
 1.0.173
 2026-02-28 (VN)
-Change: KHÔNG kill Chrome tự động khi setup
+Change: Auto switch model khi 403 + Quay lại cách mở Chrome cũ
 
 Thay doi:
-- BỎ kill Chrome tự động khi setup (tránh tắt nhầm Chrome của worker khác)
-- BỎ kill Chrome khi retry (chỉ thử port khác)
-- Nếu có conflict, Chrome sẽ báo lỗi và retry với port khác
+- KHÔNG kill Chrome tự động khi setup (tránh tắt nhầm Chrome worker khác)
+- Quay lại dùng GoogleChromePortable.exe (launcher) như v1.0.150
+- Tăng wait page ready từ 5s lên 8s
+- Auto switch model khi 403:
+  + Nano Banana Pro: 5 lần 403 → chuyển Nano Banana 2
+  + Nano Banana 2: 2 lần 403 → chuyển Imagen 4
+  + Imagen 4: 2 lần 403 → xóa Chrome data → reset về Nano Banana Pro
+- Chuyển model bằng click trên giao diện Chrome (không dùng force_model API)
+- Tạo ảnh thành công: reset 403 count, GIỮ model hiện tại
+- IPv6 rotation: 15 lần 403 liên tiếp (chỉ khi có IPv6 enabled)
 
-1. v1.0.173: KHÔNG kill Chrome tự động khi setup
+1. v1.0.173: Auto switch model + Quay lại cách mở Chrome cũ
 2. v1.0.172: Bỏ log kill Chrome + Fix reset all CMD
 3. v1.0.171: Kill chỉ đúng Chrome của worker hiện tại
 4. v1.0.169: Kill Chrome Portable dựa vào PATH
