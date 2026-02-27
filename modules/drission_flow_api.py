@@ -2632,9 +2632,10 @@ class DrissionFlowAPI:
                 self._is_rotating_mode = False
                 self.log("[WARN] Không có proxy - chạy direct connection", "WARN")
 
-            # Tắt Chrome đang dùng CÙNG profile này trước (tránh conflict)
-            # CHÚ Ý: Chỉ kill Chrome dùng profile này, KHÔNG kill Chrome khác
-            self._kill_chrome_using_profile()
+            # Tắt TẤT CẢ Chrome cũ của tool trước (tránh conflict zombie)
+            # v1.0.167: Dùng _auto_kill_conflicting_chrome() thay vì _kill_chrome_using_profile()
+            # để kill tất cả Chrome có remote-debugging-port (Chrome của tool)
+            self._auto_kill_conflicting_chrome()
 
             # === XÓA TẤT CẢ LOCK FILES ===
             try:
@@ -2651,6 +2652,7 @@ class DrissionFlowAPI:
                 pass
 
             # Thử khởi tạo Chrome với retry
+            # v1.0.167: Tăng aggressive kill khi gặp connection fails
             max_retries = 3
             for attempt in range(max_retries):
                 try:
@@ -2658,16 +2660,23 @@ class DrissionFlowAPI:
                     self.log("[v] Chrome started")
                     break
                 except Exception as chrome_err:
-                    self.log(f"Chrome attempt {attempt+1}/{max_retries} failed: {chrome_err}", "WARN")
+                    err_msg = str(chrome_err)
+                    self.log(f"Chrome attempt {attempt+1}/{max_retries} failed:\n{err_msg}", "WARN")
                     if attempt < max_retries - 1:
-                        # Kill Chrome trên port này trước khi thử lại
-                        self._kill_chrome_on_port(self.chrome_port)
+                        # v1.0.167: Kill tất cả Chrome zombie thay vì chỉ port
+                        self.log("  → Kill all tool Chrome instances...")
+                        self._auto_kill_conflicting_chrome()  # Kill all với remote-debugging-port
+                        time.sleep(3)
+
                         # Thử port khác
                         self.chrome_port = random.randint(9222, 9999)
                         options.set_local_port(self.chrome_port)
                         self.log(f"  → Retry với port {self.chrome_port}...")
-                        time.sleep(3)  # Đợi lâu hơn để Chrome cũ tắt hẳn
+                        time.sleep(2)  # Thêm đợi sau khi đổi port
                     else:
+                        # Lần cuối: thử kill TẤT CẢ Chrome (không chỉ tool)
+                        self.log("  → Final attempt: killing ALL Chrome processes...")
+                        self._force_kill_all_chrome()
                         raise chrome_err
 
             # === WINDOW LAYOUT - Chia màn hình theo số workers ===
