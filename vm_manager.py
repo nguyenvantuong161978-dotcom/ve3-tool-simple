@@ -1355,19 +1355,34 @@ class VMManager:
 
         return "none"
 
-    def reset_error_tracking(self, worker_id: str = None):
-        """Reset error tracking (sau khi action thành công)."""
+    def reset_error_tracking(self, worker_id: str = None, reset_model: bool = True):
+        """
+        Reset error tracking.
+
+        Args:
+            worker_id: Worker cụ thể hoặc None = tất cả
+            reset_model: True = reset về model 0 (sau xóa data), False = giữ model (sau thành công)
+        """
         if worker_id:
             self.worker_error_counts[worker_id] = 0
-            # v1.0.173: Reset model tracking
-            self.worker_current_model[worker_id] = 0
             self.worker_model_403_counts[worker_id] = 0
+            # v1.0.173: Chỉ reset model khi cần (sau xóa data)
+            if reset_model:
+                self.worker_current_model[worker_id] = 0
+                # Xóa file model để worker dùng mặc định
+                try:
+                    model_file = TOOL_DIR / ".agent" / "status" / f"{worker_id}_model.txt"
+                    if model_file.exists():
+                        model_file.unlink()
+                except:
+                    pass
         else:
             # Reset all
             self.consecutive_403_count = 0
             self.worker_error_counts.clear()
-            self.worker_current_model.clear()
             self.worker_model_403_counts.clear()
+            if reset_model:
+                self.worker_current_model.clear()
 
     def perform_ipv6_rotation(self) -> bool:
         """
@@ -1622,6 +1637,8 @@ class VMManager:
                         w.status = WorkerStatus.IDLE
                         if task.status == TaskStatus.COMPLETED:
                             w.completed_tasks += 1
+                            # v1.0.173: Reset 403 count khi thành công, GIỮ model hiện tại
+                            self.reset_error_tracking(task.assigned_to, reset_model=False)
                         else:
                             w.failed_tasks += 1
                             w.last_error = task.error
