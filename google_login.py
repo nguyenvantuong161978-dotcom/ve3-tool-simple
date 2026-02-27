@@ -841,7 +841,7 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
-        # v1.0.149: Retry 30 lần, reload mỗi 10 lần
+        # v1.0.155: Retry 30 lần, reload mỗi 5 lần (thay vì 10)
         log("Navigating to Flow to warm up session...")
         flow_url = "https://labs.google/fx/vi/tools/flow"
         try:
@@ -852,8 +852,8 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             click_success = False
 
             for attempt in range(30):
-                # Reload page mỗi 10 lần
-                if attempt > 0 and attempt % 10 == 0:
+                # Reload page mỗi 5 lần
+                if attempt > 0 and attempt % 5 == 0:
                     log(f"Reloading page (attempt {attempt})...")
                     driver.refresh()
                     time.sleep(3)

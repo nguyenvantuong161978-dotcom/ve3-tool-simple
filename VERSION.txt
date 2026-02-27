@@ -1,17 +1,18 @@
-1.0.154
+1.0.155
 2026-02-27 (VN)
-Fix: get_account_by_index dùng machine_code (KA2-T2) thay vì channel (KA2)
+Change: Warm-up reload page mỗi 5 lần (thay vì 10)
 
 Thay đổi:
-- get_account_by_index() nhận machine_code thay vì channel_code
-- _auto_login_google() truyền machine_code vào get_account_by_index()
-- Fix lỗi "No valid accounts in cell AT for KA2-T1"
+- _warmup_after_login() reload mỗi 5 lần thay vì 10
+- google_login.py warm-up cũng reload mỗi 5 lần
+- Retry nhanh hơn khi page chưa load xong
 
-1. v1.0.154: Fix get_account_by_index dùng machine_code
-2. v1.0.153: Tìm prompt input đúng (contenteditable)
-3. v1.0.152: Auto-login đọc từ Excel (không cần JSON)
-4. v1.0.151: Auto-login dùng account từ JSON
-5. v1.0.150: 403 → login + warm-up
+1. v1.0.155: Warm-up reload mỗi 5 lần
+2. v1.0.154: Fix get_account_by_index dùng machine_code
+3. v1.0.153: Tìm prompt input đúng (contenteditable)
+4. v1.0.152: Auto-login đọc từ Excel (không cần JSON)
+5. v1.0.151: Auto-login dùng account từ JSON
+6. v1.0.150: 403 → login + warm-up
 2. v1.0.149: Retry 30x, reload/10
 2. v1.0.148: Giống test logic
 3. v1.0.147: Đơn giản warm-up

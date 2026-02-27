@@ -1648,8 +1648,8 @@ class DrissionFlowAPI:
 
     def _warmup_after_login(self) -> bool:
         """
-        v1.0.150: Warm-up sau khi login (do 403 clear data).
-        Retry 30 lần, reload mỗi 10 lần.
+        v1.0.155: Warm-up sau khi login (do 403 clear data).
+        Retry 30 lần, reload mỗi 5 lần.
         Success = tìm thấy button "add_2" (Dự án mới).
         """
         self.log("[WARMUP] Bắt đầu warm-up sau login...")
@@ -1668,10 +1668,10 @@ class DrissionFlowAPI:
             self.driver.get(flow_url)
             time.sleep(3)
 
-            # Retry 30 lần, reload mỗi 10 lần
+            # v1.0.155: Retry 30 lần, reload mỗi 5 lần (thay vì 10)
             for attempt in range(30):
-                # Reload page mỗi 10 lần
-                if attempt > 0 and attempt % 10 == 0:
+                # Reload page mỗi 5 lần
+                if attempt > 0 and attempt % 5 == 0:
                     self.log(f"[WARMUP] Reloading page (attempt {attempt})...")
                     self.driver.refresh()
                     time.sleep(3)
