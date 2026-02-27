@@ -841,30 +841,21 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
-        # v1.0.155: Retry 30 lần, reload mỗi 5 lần (thay vì 10)
-        log("Navigating to Flow to warm up session...")
+        # v1.0.158: Tối ưu tốc độ warm-up
+        log("Warm-up Flow...")
         flow_url = "https://labs.google/fx/vi/tools/flow"
         try:
             driver.get(flow_url)
-            time.sleep(3)  # Đợi ngắn rồi tìm ngay
-            log(f"Flow: {driver.url[:50]}")
+            time.sleep(2)  # v1.0.158: Giảm từ 3s
 
             click_success = False
 
-            for attempt in range(30):
-                # Reload page mỗi 5 lần
-                if attempt > 0 and attempt % 5 == 0:
-                    log(f"Reloading page (attempt {attempt})...")
-                    driver.refresh()
-                    time.sleep(3)
-
-                log(f"Finding button ({attempt + 1}/30)...")
-
-                # Tìm button "add_2" (Dự án mới)
+            for attempt in range(20):  # v1.0.158: Giảm từ 30
+                # Tìm button "add_2" - timeout ngắn
                 try:
-                    btn = driver.ele('tag:button@@text():add_2', timeout=2)
+                    btn = driver.ele('tag:button@@text():add_2', timeout=1)
                     if btn:
-                        log("Found 'add_2' button - page ready!")
+                        log("[v] Page ready!")
                         click_success = True
                         break
                 except:
@@ -872,23 +863,30 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
 
                 # Thử click "Create" button
                 try:
-                    create_btn = driver.ele('tag:button@@text():Create', timeout=2)
+                    create_btn = driver.ele('tag:button@@text():Create', timeout=1)
                     if create_btn:
-                        log("Clicking 'Create'...")
+                        log("Click 'Create'...")
                         create_btn.click()
-                        time.sleep(2)
+                        time.sleep(1)
+                        continue
                 except:
                     pass
 
-                time.sleep(1)
+                # Reload page mỗi 5 lần
+                if attempt > 0 and attempt % 5 == 0:
+                    log(f"Reload Flow ({attempt}/20)...")
+                    driver.get(flow_url)
+                    time.sleep(2)
+
+                time.sleep(0.5)  # v1.0.158: Giảm từ 1s
 
             if click_success:
                 log("Session warmed up!")
             else:
-                log("Button not found after 30 attempts", "WARN")
+                log("Button not found", "WARN")
 
         except Exception as e:
-            log(f"Flow warm up error (non-critical): {e}", "WARN")
+            log(f"Warm up error: {e}", "WARN")
 
         log("Closing browser...")
 

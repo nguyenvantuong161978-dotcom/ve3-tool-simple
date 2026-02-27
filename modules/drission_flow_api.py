@@ -981,6 +981,52 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
 })();
 '''
 
+# v1.0.159: JS để chọn model "Nano Banana Pro" trước khi tạo ảnh
+# Flow: Click menu chính → Click dropdown model → Chọn Nano Banana Pro
+JS_SELECT_NANO_BANANA_PRO = '''
+(function() {
+    window._modelSelectResult = 'PENDING';
+
+    // Buoc 1: Mo menu chinh (button co class sc-46973129-1)
+    var btn1 = document.querySelector('button.sc-46973129-1');
+    if (!btn1) {
+        window._modelSelectResult = 'NO_MENU_BUTTON';
+        return;
+    }
+    btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+    btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+    console.log('[MODEL] Step 1: Menu opened');
+
+    // Buoc 2: Doi 800ms roi click dropdown model (button co class sc-a0dcecfb-1)
+    setTimeout(function() {
+        var btn2 = document.querySelector('button.sc-a0dcecfb-1');
+        if (!btn2) {
+            window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
+            return;
+        }
+        btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+        console.log('[MODEL] Step 2: Model dropdown opened');
+
+        // Buoc 3: Doi 800ms roi click menuitem dau tien (Nano Banana Pro)
+        setTimeout(function() {
+            var menuItems = document.querySelectorAll('[role="menuitem"]');
+            if (menuItems.length > 0) {
+                // Item dau tien la Nano Banana Pro
+                var item = menuItems[0];
+                item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                item.click();
+                console.log('[MODEL] Step 3: Selected Nano Banana Pro!');
+                window._modelSelectResult = 'SELECTED_PRO';
+            } else {
+                window._modelSelectResult = 'NO_MENU_ITEMS';
+            }
+        }, 800);
+    }, 800);
+})();
+'''
+
 
 class DrissionFlowAPI:
     """
@@ -4196,6 +4242,15 @@ class DrissionFlowAPI:
             else:
                 self.log("[Image] [WARN] Không chọn được mode, thử tiếp...", "WARN")
 
+        # v1.0.159: Chọn model "Nano Banana Pro" nếu chưa chọn
+        if not getattr(self, '_model_selected', False):
+            self.log("[Model] Chọn Nano Banana Pro...")
+            if self._select_nano_banana_pro():
+                self._model_selected = True
+                self.log("[Model] [v] Đã chọn Nano Banana Pro")
+            else:
+                self.log("[Model] [WARN] Không chọn được model, dùng mặc định", "WARN")
+
         # Nếu đang dùng fallback model (do quota), override force_model
         if self._use_fallback_model:
             force_model = "GEM_PIX"
@@ -5242,6 +5297,43 @@ class DrissionFlowAPI:
             self._consecutive_403 = 0
 
         return True, result_path, None
+
+    def _select_nano_banana_pro(self) -> bool:
+        """
+        v1.0.159: Chọn model "Nano Banana Pro" trước khi tạo ảnh.
+        Flow: Click menu chính → Click dropdown model → Chọn Nano Banana Pro
+        """
+        if not self._ready or not self.driver:
+            return False
+
+        try:
+            self.log("[Model] Đang chọn Nano Banana Pro...")
+
+            # Chạy JS chọn model
+            self.driver.run_js("window._modelSelectResult = 'PENDING';")
+            self.driver.run_js(JS_SELECT_NANO_BANANA_PRO)
+
+            # Đợi JS async hoàn thành (800ms + 800ms + buffer)
+            time.sleep(2.5)
+
+            # Kiểm tra kết quả
+            result = self.driver.run_js("return window._modelSelectResult;")
+
+            if result == 'SELECTED_PRO':
+                self.log("[Model] [v] Đã chọn Nano Banana Pro!")
+                return True
+            elif result == 'NO_MENU_BUTTON':
+                self.log("[Model] [WARN] Không tìm thấy menu button", "WARN")
+            elif result == 'NO_DROPDOWN_BUTTON':
+                self.log("[Model] [WARN] Không tìm thấy dropdown button", "WARN")
+            else:
+                self.log(f"[Model] [WARN] Kết quả: {result}", "WARN")
+
+            return False
+
+        except Exception as e:
+            self.log(f"[Model] Error: {e}", "ERROR")
+            return False
 
     def switch_to_image_mode(self) -> bool:
         """Chuyển Chrome về mode tạo ảnh. Dùng cách giống T2V: click dropdown 2 lần với setTimeout."""
