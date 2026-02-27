@@ -1654,11 +1654,12 @@ class DrissionFlowAPI:
 
     def _warmup_after_login(self) -> bool:
         """
-        v1.0.155: Warm-up sau khi login (do 403 clear data).
-        Retry 30 lần, reload mỗi 5 lần.
-        Success = tìm thấy button "add_2" (Dự án mới).
+        v1.0.158: Warm-up sau khi login - TỐI ƯU TỐC ĐỘ.
+        - Check button ngay, không đợi lâu
+        - Chỉ reload khi thực sự cần
+        - Timeout ngắn hơn (1s thay vì 2s)
         """
-        self.log("[WARMUP] Bắt đầu warm-up sau login...")
+        self.log("[WARMUP] Bắt đầu warm-up...")
         flow_url = "https://labs.google/fx/vi/tools/flow"
 
         try:
@@ -1669,43 +1670,43 @@ class DrissionFlowAPI:
                     self.log("[WARMUP] Không khởi động được Chrome", "ERROR")
                     return False
 
-            # Navigate to Flow
+            # Navigate to Flow - đợi ngắn
             self.log(f"[WARMUP] Navigating to Flow...")
             self.driver.get(flow_url)
-            time.sleep(3)
+            time.sleep(2)  # v1.0.158: Giảm từ 3s xuống 2s
 
-            # v1.0.155: Retry 30 lần, reload mỗi 5 lần (thay vì 10)
-            for attempt in range(30):
-                # Reload page mỗi 5 lần
-                if attempt > 0 and attempt % 5 == 0:
-                    self.log(f"[WARMUP] Reloading page (attempt {attempt})...")
-                    self.driver.refresh()
-                    time.sleep(3)
-
-                self.log(f"[WARMUP] Finding button ({attempt + 1}/30)...")
-
-                # Tìm button "add_2" (Dự án mới)
+            # v1.0.158: Retry 20 lần, reload mỗi 5 lần, timeout ngắn
+            for attempt in range(20):
+                # Tìm button "add_2" (Dự án mới) - timeout ngắn
                 try:
-                    btn = self.driver.ele('tag:button@@text():add_2', timeout=2)
+                    btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
                     if btn:
-                        self.log("[WARMUP] Found 'add_2' button - page ready!")
+                        self.log("[WARMUP] [v] Page ready!")
                         return True
                 except:
                     pass
 
-                # Thử click "Create" button
+                # Thử click "Create" button nếu có
                 try:
-                    create_btn = self.driver.ele('tag:button@@text():Create', timeout=2)
+                    create_btn = self.driver.ele('tag:button@@text():Create', timeout=1)
                     if create_btn:
-                        self.log("[WARMUP] Clicking 'Create'...")
+                        self.log("[WARMUP] Click 'Create'...")
                         create_btn.click()
-                        time.sleep(2)
+                        time.sleep(1)
+                        continue  # Check lại ngay
                 except:
                     pass
 
-                time.sleep(1)
+                # Reload page mỗi 5 lần (nếu chưa thấy button)
+                # v1.0.158: Dùng get(flow_url) thay vì refresh() để đảm bảo link đúng
+                if attempt > 0 and attempt % 5 == 0:
+                    self.log(f"[WARMUP] Reload Flow ({attempt}/20)...")
+                    self.driver.get(flow_url)
+                    time.sleep(2)
 
-            self.log("[WARMUP] Button not found after 30 attempts", "WARN")
+                time.sleep(0.5)  # v1.0.158: Giảm từ 1s xuống 0.5s
+
+            self.log("[WARMUP] Button not found after 20 attempts", "WARN")
             return False
 
         except Exception as e:

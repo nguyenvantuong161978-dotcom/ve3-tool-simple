@@ -1,15 +1,17 @@
-1.0.157
+1.0.158
 2026-02-27 (VN)
-Change: Tìm khung chat "Bạn muốn tạo gì" + tăng retry reload
+Change: Tối ưu tốc độ warm-up sau login
 
 Thay đổi:
-- Thêm tìm khung chat theo placeholder/aria-label "muốn tạo"
-- Tăng max_refresh=3 (từ 1) khi không tìm thấy khung chat
-- Reload page tự động nếu không thấy prompt input
+- Check button ngay, không đợi lâu
+- Giảm timeout tìm button (1s thay vì 2s)
+- Giảm sleep giữa attempts (0.5s thay vì 1s)
+- Giảm số retry (20 thay vì 30)
 
-1. v1.0.157: Tìm khung chat + tăng retry reload
-2. v1.0.156: Fix prompt input cho project đã tạo
-3. v1.0.155: Warm-up reload mỗi 5 lần
+1. v1.0.158: Tối ưu tốc độ warm-up
+2. v1.0.157: Tìm khung chat + tăng retry reload
+3. v1.0.156: Fix prompt input cho project đã tạo
+4. v1.0.155: Warm-up reload mỗi 5 lần
 2. v1.0.154: Fix get_account_by_index dùng machine_code
 3. v1.0.153: Tìm prompt input đúng (contenteditable)
 4. v1.0.152: Auto-login đọc từ Excel (không cần JSON)
