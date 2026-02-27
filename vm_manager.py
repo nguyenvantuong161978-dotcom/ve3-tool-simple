@@ -873,7 +873,15 @@ class VMManager:
         self.consecutive_403_count = 0  # Tổng 403 liên tiếp (all workers)
         self.worker_error_counts: Dict[str, int] = {}  # Per-worker consecutive errors
         self.max_403_before_ipv6 = 5  # Đổi IPv6 sau 5 lần 403
-        self.max_errors_before_clear = 5  # Xóa data Chrome sau 5 lần lỗi liên tiếp
+        self.max_errors_before_clear = 9  # Xóa data Chrome sau 9 lần lỗi (5 + 2 + 2)
+
+        # v1.0.173: Model switching khi 403
+        # Models: GEM_PIX_2 (default), NARWHAL, IMAGEN_3_5
+        self.available_models = ["GEM_PIX_2", "NARWHAL", "IMAGEN_3_5"]
+        self.worker_current_model: Dict[str, int] = {}  # Index of current model per worker
+        self.worker_model_403_counts: Dict[str, int] = {}  # 403 count for current model
+        self.first_model_threshold = 5  # 5 lần 403 trước khi chuyển model đầu
+        self.other_model_threshold = 2  # 2 lần 403 cho mỗi model khác
 
         # Auto-restart Chrome workers
         self.chrome_restart_interval = 3600  # 1 tiếng = 3600 giây
@@ -1284,31 +1292,55 @@ class VMManager:
         """
         Track lỗi của worker và quyết định hành động.
 
+        v1.0.173: Thử chuyển model trước khi xóa data
+        - Model hiện tại: 5 lần 403
+        - Model khác 1: 2 lần 403
+        - Model khác 2: 2 lần 403
+        - Tổng 9 lần → xóa data
+
         Returns:
             "none" - Không cần action
             "restart" - Restart worker đó
+            "switch_model" - Chuyển sang model khác
             "clear_data" - Xóa data Chrome và login lại
             "rotate_ipv6" - Đổi IPv6 và restart tất cả
         """
         # Track per-worker errors
         if worker_id not in self.worker_error_counts:
             self.worker_error_counts[worker_id] = 0
+        if worker_id not in self.worker_current_model:
+            self.worker_current_model[worker_id] = 0  # Start with first model
+        if worker_id not in self.worker_model_403_counts:
+            self.worker_model_403_counts[worker_id] = 0
 
         if error_type == "chrome_403":
             # Track 403 globally
             self.consecutive_403_count += 1
             self.worker_error_counts[worker_id] += 1
+            self.worker_model_403_counts[worker_id] += 1
 
-            self.log(f"403 count: {self.consecutive_403_count}/{self.max_403_before_ipv6} (global), "
-                     f"{self.worker_error_counts[worker_id]} ({worker_id})", "ERROR", "WARN")
+            current_model_idx = self.worker_current_model[worker_id]
+            current_model = self.available_models[current_model_idx]
+            model_403_count = self.worker_model_403_counts[worker_id]
+
+            # Threshold: 5 cho model đầu, 2 cho các model sau
+            threshold = self.first_model_threshold if current_model_idx == 0 else self.other_model_threshold
+
+            self.log(f"403 count: {self.worker_error_counts[worker_id]}/9 ({worker_id}), "
+                     f"model {current_model}: {model_403_count}/{threshold}", "ERROR", "WARN")
 
             # Check if need IPv6 rotation
             if self.consecutive_403_count >= self.max_403_before_ipv6:
                 return "rotate_ipv6"
 
-            # Check if need Chrome data clear (3 consecutive for same worker)
-            if self.worker_error_counts[worker_id] >= self.max_errors_before_clear:
-                return "clear_data"
+            # Check if need to switch model
+            if model_403_count >= threshold:
+                # Còn model khác để thử?
+                if current_model_idx < len(self.available_models) - 1:
+                    return "switch_model"
+                else:
+                    # Đã thử hết tất cả models → xóa data
+                    return "clear_data"
 
             return "restart"
 
@@ -1326,10 +1358,15 @@ class VMManager:
         """Reset error tracking (sau khi action thành công)."""
         if worker_id:
             self.worker_error_counts[worker_id] = 0
+            # v1.0.173: Reset model tracking
+            self.worker_current_model[worker_id] = 0
+            self.worker_model_403_counts[worker_id] = 0
         else:
             # Reset all
             self.consecutive_403_count = 0
             self.worker_error_counts.clear()
+            self.worker_current_model.clear()
+            self.worker_model_403_counts.clear()
 
     def perform_ipv6_rotation(self) -> bool:
         """
@@ -1443,8 +1480,10 @@ class VMManager:
     def handle_worker_error(self, worker_id: str, error_type: str):
         """
         Xử lý lỗi worker theo logic thông minh:
-        - Lỗi 1-2 lần → Restart
-        - Lỗi 3 lần liên tiếp → Clear data + Restart
+        - 403 lần 1-5 → Restart (model hiện tại)
+        - 403 lần 6-7 → Chuyển model 2, restart
+        - 403 lần 8-9 → Chuyển model 3, restart
+        - 403 lần 10+ → Clear data + Restart
         - 403 lỗi 5 lần (any worker) → Đổi IPv6 + Restart all
         """
         action = self.track_worker_error(worker_id, error_type)
@@ -1452,6 +1491,9 @@ class VMManager:
         if action == "rotate_ipv6":
             self.log(f"403 threshold reached ({self.consecutive_403_count}), rotating IPv6...", "MANAGER", "ERROR")
             self.perform_ipv6_rotation()
+
+        elif action == "switch_model":
+            self.switch_worker_model(worker_id)
 
         elif action == "clear_data":
             self.log(f"Error threshold reached for {worker_id}, clearing data...", worker_id, "ERROR")
@@ -1461,6 +1503,52 @@ class VMManager:
             self.restart_worker(worker_id)
             # Reset count cho worker này sau restart
             self.worker_error_counts[worker_id] = max(0, self.worker_error_counts.get(worker_id, 1) - 1)
+
+    def switch_worker_model(self, worker_id: str):
+        """
+        v1.0.173: Chuyển sang model khác khi gặp 403 nhiều lần.
+        """
+        # Chuyển sang model tiếp theo
+        current_idx = self.worker_current_model.get(worker_id, 0)
+        new_idx = current_idx + 1
+
+        if new_idx >= len(self.available_models):
+            self.log(f"[{worker_id}] Đã thử hết tất cả models!", worker_id, "ERROR")
+            return
+
+        new_model = self.available_models[new_idx]
+        old_model = self.available_models[current_idx]
+
+        self.worker_current_model[worker_id] = new_idx
+        self.worker_model_403_counts[worker_id] = 0  # Reset 403 count cho model mới
+
+        self.log(f"[{worker_id}] Chuyển model: {old_model} → {new_model}", worker_id, "WARN")
+
+        # Ghi model mới vào file để worker đọc
+        self._write_worker_model(worker_id, new_model)
+
+        # Restart worker để áp dụng model mới
+        self.restart_worker(worker_id)
+
+    def _write_worker_model(self, worker_id: str, model_name: str):
+        """Ghi model vào file để worker đọc."""
+        try:
+            model_file = TOOL_DIR / ".agent" / "status" / f"{worker_id}_model.txt"
+            model_file.parent.mkdir(parents=True, exist_ok=True)
+            model_file.write_text(model_name)
+            self.log(f"  → Model file: {model_file}", worker_id)
+        except Exception as e:
+            self.log(f"  → Error writing model file: {e}", worker_id, "WARN")
+
+    def get_worker_model(self, worker_id: str) -> str:
+        """Đọc model hiện tại của worker."""
+        try:
+            model_file = TOOL_DIR / ".agent" / "status" / f"{worker_id}_model.txt"
+            if model_file.exists():
+                return model_file.read_text().strip()
+        except:
+            pass
+        return self.available_models[0]  # Default: GEM_PIX_2
 
     # ================================================================================
     # TASK MANAGEMENT
