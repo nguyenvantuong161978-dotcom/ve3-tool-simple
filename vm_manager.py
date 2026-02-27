@@ -872,7 +872,7 @@ class VMManager:
         # Error tracking for intelligent restart/IPv6 rotation
         self.consecutive_403_count = 0  # Tổng 403 liên tiếp (all workers)
         self.worker_error_counts: Dict[str, int] = {}  # Per-worker consecutive errors
-        self.max_403_before_ipv6 = 5  # Đổi IPv6 sau 5 lần 403
+        self.max_403_before_ipv6 = 15  # Đổi IPv6 sau 15 lần 403 liên tiếp
         self.max_errors_before_clear = 9  # Xóa data Chrome sau 9 lần lỗi (5 + 2 + 2)
 
         # v1.0.173: Model switching khi 403
