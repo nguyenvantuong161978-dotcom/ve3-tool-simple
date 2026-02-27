@@ -1,13 +1,14 @@
-1.0.139
+1.0.140
 2026-02-26 (VN)
-Fix: Sau login → vào Flow → click "Create with Flow"
+Fix: Tăng retry và delay cho "Create with Flow"
 
 Thay đổi:
-- Sau login Google xong → navigate đến Flow
-- Click "Create with Flow" với retry 3 lần (delay 2s, 4s, 6s)
-- Mồi session trước khi tắt Chrome
+- Đợi page load 8s (thay vì 5s)
+- Retry 5 lần (thay vì 3 lần)
+- Delay: 3s, 5s, 8s, 10s, 15s (tổng ~41s nếu cần)
 
-1. v1.0.139: Warm up session sau login (click Create with Flow)
+1. v1.0.140: Tăng retry/delay cho Create with Flow
+2. v1.0.139: Warm up session sau login (click Create with Flow)
 2. v1.0.138: Bỏ check combobox
 2. v1.0.137: Bỏ clear JS, dùng Ctrl+A + Ctrl+V
 2. v1.0.136: Bỏ navigate Flow sau login

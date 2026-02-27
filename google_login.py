@@ -811,20 +811,20 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
-        # v1.0.139: Sau login → vào Flow → click "Create with Flow" để mồi session
+        # v1.0.140: Sau login → vào Flow → click "Create with Flow" để mồi session
         log("Navigating to Flow to warm up session...")
         flow_url = "https://labs.google/fx/vi/tools/flow"
         try:
             driver.get(flow_url)
-            time.sleep(5)
+            time.sleep(8)  # Đợi page load lâu hơn
             log(f"Flow loaded: {driver.url[:50]}")
 
-            # Click "Create with Flow" với retry
-            click_delays = [2, 4, 6]  # Delay tăng dần
+            # Click "Create with Flow" với retry nhiều hơn và delay dài hơn
+            click_delays = [3, 5, 8, 10, 15]  # 5 lần, delay tăng dần
             click_success = False
 
-            for attempt in range(3):
-                log(f"Clicking 'Create with Flow' (attempt {attempt + 1}/3)...")
+            for attempt in range(5):
+                log(f"Clicking 'Create with Flow' (attempt {attempt + 1}/5)...")
                 click_result = driver.run_js('''
                     (function() {
                         var btns = document.querySelectorAll('button');
