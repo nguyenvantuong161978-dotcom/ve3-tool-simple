@@ -1975,9 +1975,8 @@ class VMManager:
             self.log(f"Killed {killed_count} Chrome processes for {worker_id}", worker_id, "SUCCESS")
 
         except Exception as e:
+            # v1.0.172: KHÔNG fallback kill_all_chrome - tránh reset all CMD
             self.log(f"Error killing Chrome for {worker_id}: {e}", worker_id, "WARN")
-            self.log("Falling back to kill_all_chrome...", worker_id, "WARN")
-            self.kill_all_chrome()
 
     def _clear_agent_status(self):
         """

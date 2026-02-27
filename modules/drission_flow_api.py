@@ -2356,23 +2356,13 @@ class DrissionFlowAPI:
                     tool_dir = Path(__file__).parent.parent  # ve3-tool-simple/
                     chrome_exe = str(tool_dir / chrome_exe)
 
-                # v1.0.168: Nếu là launcher (GoogleChromePortable.exe), chuyển sang chrome.exe thực sự
-                # Launcher không truyền --remote-debugging-port → gây lỗi "browser connection fails"
+                # Xác định chrome_dir từ path
                 chrome_path = Path(chrome_exe)
-                if chrome_path.name.lower() == "googlechromeportable.exe":
-                    # GoogleChromePortable.exe → App/Chrome-bin/chrome.exe
-                    actual_chrome = chrome_path.parent / "App" / "Chrome-bin" / "chrome.exe"
-                    if actual_chrome.exists():
-                        self.log(f"[CHROME] Chuyển từ launcher sang chrome.exe thực sự")
-                        chrome_exe = str(actual_chrome)
-                        chrome_dir = chrome_path.parent  # Vẫn giữ GoogleChromePortable/ làm chrome_dir
-                    else:
-                        chrome_dir = chrome_path.parent
-                        self.log(f"[WARN] Không tìm thấy chrome.exe thực sự tại {actual_chrome}", "WARN")
-                elif "App" in str(chrome_path) and "Chrome-bin" in str(chrome_path):
-                    # Đã là chrome.exe thực sự trong App/Chrome-bin/
-                    chrome_dir = chrome_path.parent.parent.parent  # GoogleChromePortable/
+                if "App" in str(chrome_path) and "Chrome-bin" in str(chrome_path):
+                    # chrome.exe trong App/Chrome-bin/ → chrome_dir = GoogleChromePortable/
+                    chrome_dir = chrome_path.parent.parent.parent
                 else:
+                    # Các trường hợp khác
                     chrome_dir = chrome_path.parent
 
                 self.log(f"[CHROME] Dùng chrome_portable: {chrome_exe}")
@@ -6939,8 +6929,7 @@ class DrissionFlowAPI:
                     exclude_marker = "- Copy"
                     worker_name = "Chrome 1"
 
-                self.log(f"  [KILL] Killing only {worker_name} processes...")
-
+                # v1.0.172: Bỏ log kill (kill theo thư mục, không cần log)
                 result = subprocess.run(
                     ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
                     capture_output=True, text=True, timeout=15
@@ -6962,7 +6951,7 @@ class DrissionFlowAPI:
                                 if pid.isdigit():
                                     subprocess.run(['taskkill', '/F', '/PID', pid],
                                                  capture_output=True, timeout=5)
-                                    self.log(f"  → Killed {worker_name} (PID: {pid})")
+                                    # v1.0.172: Bỏ log kill PIDs (đã kill theo thư mục)
                                     killed_any = True
 
                 # Backup: Kill Chrome trên port này
@@ -6981,8 +6970,8 @@ class DrissionFlowAPI:
                 pass
 
         if killed_any:
-            self.log("  → Đợi Chrome tắt hẳn...")
-            time.sleep(3)  # Đợi Chrome tắt hẳn
+            # v1.0.172: Bỏ log, vẫn đợi Chrome tắt
+            time.sleep(3)
 
     def _kill_chrome_on_port(self, port: int) -> bool:
         """
@@ -7018,7 +7007,7 @@ class DrissionFlowAPI:
                                         ['taskkill', '/F', '/PID', pid],
                                         capture_output=True, timeout=5
                                     )
-                                    self.log(f"  → Killed Chrome trên port {port} (PID: {pid})")
+                                    # v1.0.172: Bỏ log kill PIDs
                                     return True
             else:
                 # Linux/Mac
@@ -7030,7 +7019,7 @@ class DrissionFlowAPI:
                     pid = result.stdout.strip().split('\n')[0]
                     if pid.isdigit():
                         subprocess.run(['kill', '-9', pid], capture_output=True, timeout=5)
-                        self.log(f"  → Killed Chrome trên port {port} (PID: {pid})")
+                        # v1.0.172: Bỏ log kill PIDs
                         return True
         except Exception as e:
             pass
