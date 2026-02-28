@@ -424,6 +424,18 @@ window._imageCallCount=0;window._maxImageCalls=1;
                         return response;
                     }
 
+                    // === 429 ERROR: Quota exceeded / Rate limit ===
+                    // v1.0.190: Thêm xử lý 429 và 253 (Google's quota error)
+                    if (response.status === 429 || response.status === 253 ||
+                        (data.error && (data.error.code === 429 || data.error.code === 253))) {
+                        console.log('[RESPONSE] [x] 429/253 QUOTA EXCEEDED!');
+                        var errorMsg = data.error ? data.error.message : 'Quota exceeded';
+                        window._response = {error: {code: 429, message: errorMsg}};
+                        window._responseError = 'Error 429: ' + errorMsg;
+                        window._requestPending = false;
+                        return response;
+                    }
+
                     // === 400 ERROR: Policy violation (prompt bị cấm) ===
                     if (response.status === 400 || (data.error && data.error.code === 400)) {
                         console.log('[RESPONSE] [x] 400 POLICY VIOLATION - Prompt rejected!');
@@ -4299,26 +4311,7 @@ class DrissionFlowAPI:
                 };
             """)
 
-            # v1.0.189: Check UI cho quota error SAU 30s (tránh false positive từ error cũ)
-            # Chỉ check khi: đã đợi lâu + không có response từ interceptor
-            if elapsed >= 30 and not result.get('response') and not result.get('error'):
-                try:
-                    quota_check = self.driver.run_js("""
-                        var els = document.querySelectorAll('[class*="sc-9a984650"]');
-                        for (var i = 0; i < els.length; i++) {
-                            var text = els[i].innerText || '';
-                            // Chỉ check text RẤT cụ thể về quota
-                            if (text.includes('hết hạn mức') || text.includes('số lượt tạo')) {
-                                return text;
-                            }
-                        }
-                        return null;
-                    """)
-                    if quota_check:
-                        self.log(f"[UI] Quota error sau 30s: {quota_check[:80]}...", "WARN")
-                        return [], f"429 quota: {quota_check}"
-                except:
-                    pass
+            # v1.0.190: Interceptor đã xử lý 429/253 - không cần UI check nữa
 
             # EARLY DETECTION: Sau 10s, check xem có request chưa
             if not request_detected and elapsed > 10:

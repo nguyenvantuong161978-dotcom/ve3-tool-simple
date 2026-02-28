@@ -1,14 +1,13 @@
-1.0.189
+1.0.190
 2026-02-28 (VN)
-Change: Them lai UI check quota sau 30s
+Change: Interceptor xu ly 429/253 quota error
 
 Thay doi:
-- UI check chi chay SAU 30s doi (tranh false positive tu error cu)
-- Chi check text rat cu the: "het han muc", "so luot tao"
-- Khong check "Khong thanh cong" (qua generic, gay nham)
-- Fix: Chrome bi treo khi quota error ma interceptor khong bat duoc
+- Them xu ly 429 va 253 (Google quota error) vao JS interceptor
+- Interceptor bat duoc quota error giong nhu bat 403
+- Bo UI check - interceptor da du
 
-1. v1.0.189: UI check quota sau 30s (an toan hon)
+1. v1.0.190: Interceptor xu ly 429/253 quota error
 2. v1.0.188: Reset 403 counter khi setup thanh cong
 3. v1.0.187: Auto login khi bi logout (prompt input timeout)
 4. v1.0.186: Bo UI check quota - chi dua vao interceptor
