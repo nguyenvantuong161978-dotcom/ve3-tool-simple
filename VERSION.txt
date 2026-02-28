@@ -1,17 +1,18 @@
-1.0.179
+1.0.180
 2026-02-28 (VN)
-Change: QUOTA EXHAUSTED - Switch model NGAY khi het han muc
+Change: Check UI truc tiep cho "het han muc" (quota)
 
 Thay doi:
-- Detect loi 429/quota/"het han muc" tu UI
-- Khi het han muc: SWITCH MODEL NGAY (khong doi 5 lan nhu 403)
-- Model 0 → Model 1 → Model 2 → Reset ve Model 0 (skip scene)
+- Them check UI moi 5s trong vong while loop cho response
+- Detect text: "het han muc", "dung het", "Khong thanh cong"
+- Class: sc-9a984650 (Google Flow error dialog)
+- Khi detect: return error ngay, khong doi timeout
 
-Logic:
-- 403 reCAPTCHA: 5-2-2 (doi 5/2/2 lan moi switch)
-- 429 QUOTA: Switch NGAY khi gap (khong doi)
+Logic QUOTA van giu nguyen:
+- Detect quota error → Switch model NGAY LAP TUC
+- Model 0 → 1 → 2 → Reset ve 0
 
-1. v1.0.179: QUOTA - Switch model ngay khi het han muc
-2. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
-3. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
-4. v1.0.176: Quay lai CMD + Fix Chrome zombie
+1. v1.0.180: Check UI truc tiep cho quota error
+2. v1.0.179: QUOTA - Switch model ngay khi het han muc
+3. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
+4. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)

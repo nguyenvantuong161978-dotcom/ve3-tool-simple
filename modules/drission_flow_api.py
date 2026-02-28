@@ -4240,6 +4240,27 @@ class DrissionFlowAPI:
         while time.time() - start_time < timeout:
             elapsed = time.time() - start_time
 
+            # v1.0.179: Check UI cho thông báo "hết hạn mức" (quota exhausted)
+            # Vì interceptor có thể không catch được 429 từ UI
+            if elapsed > 3 and int(elapsed) % 5 == 0:  # Check mỗi 5s
+                try:
+                    quota_check = self.driver.run_js("""
+                        var els = document.querySelectorAll('[class*="sc-9a984650"]');
+                        for (var i = 0; i < els.length; i++) {
+                            var text = els[i].innerText || '';
+                            if (text.includes('hết hạn mức') || text.includes('dùng hết') ||
+                                text.includes('Không thành công') || text.includes('quota')) {
+                                return text;
+                            }
+                        }
+                        return null;
+                    """)
+                    if quota_check:
+                        self.log(f"[UI] Detected quota error: {quota_check[:100]}...", "WARN")
+                        return [], f"429 quota: {quota_check}"
+                except:
+                    pass
+
             result = self.driver.run_js("""
                 return {
                     pending: window._requestPending,
