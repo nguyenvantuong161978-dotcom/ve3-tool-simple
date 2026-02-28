@@ -4299,8 +4299,26 @@ class DrissionFlowAPI:
                 };
             """)
 
-            # v1.0.186: BỎ UI check - chỉ dựa vào interceptor response
-            # UI error cũ có thể gây false positive, interceptor đáng tin hơn
+            # v1.0.189: Check UI cho quota error SAU 30s (tránh false positive từ error cũ)
+            # Chỉ check khi: đã đợi lâu + không có response từ interceptor
+            if elapsed >= 30 and not result.get('response') and not result.get('error'):
+                try:
+                    quota_check = self.driver.run_js("""
+                        var els = document.querySelectorAll('[class*="sc-9a984650"]');
+                        for (var i = 0; i < els.length; i++) {
+                            var text = els[i].innerText || '';
+                            // Chỉ check text RẤT cụ thể về quota
+                            if (text.includes('hết hạn mức') || text.includes('số lượt tạo')) {
+                                return text;
+                            }
+                        }
+                        return null;
+                    """)
+                    if quota_check:
+                        self.log(f"[UI] Quota error sau 30s: {quota_check[:80]}...", "WARN")
+                        return [], f"429 quota: {quota_check}"
+                except:
+                    pass
 
             # EARLY DETECTION: Sau 10s, check xem có request chưa
             if not request_detected and elapsed > 10:
