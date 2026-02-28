@@ -4810,27 +4810,12 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"[x] Download failed: {e}", "WARN")
 
-        # Restart Chrome sau mỗi ảnh (giống như 403 reset)
-        # restart_chrome() đã có sẵn: navigate + inject JS
-        self.log("[SYNC] Restarting Chrome...")
-        try:
-            # Đóng Chrome
-            self._kill_chrome()
-            self.close()
-            time.sleep(2)
-
-            # Restart Chrome (setup() sẽ navigate + inject JS)
-            if self.restart_chrome(rotate_ipv6=False):
-                self.log("[v] Chrome restarted!")
-            else:
-                self.log("[WARN] Restart Chrome failed", "WARN")
-
-        except Exception as e:
-            self.log(f"[WARN] Restart error: {e}", "WARN")
+        # v1.0.194: Bỏ restart sau mỗi ảnh - không cần thiết và gây chậm
+        # Chrome có thể tiếp tục tạo nhiều ảnh mà không cần restart mỗi lần
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
-            self.log(f"[IPv6] Reset 403 counter (was {self._consecutive_403})")
+            self.log(f"[v] Reset 403 counter (was {self._consecutive_403})")
             self._consecutive_403 = 0
             self._cleared_data_for_403 = False
 

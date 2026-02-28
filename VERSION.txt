@@ -1,14 +1,14 @@
-1.0.193
+1.0.194
 2026-02-28 (VN)
-Change: Fix double restart khi gap 403
+Change: Bo restart Chrome sau moi anh
 
 Thay doi:
-- Fix bug double restart khi gap 403 (restart trong if/elif roi restart lan nua)
-- Bo restart_chrome() thua o cuoi block 403 handling
-- Kill Chrome theo thu muc Chrome Portable (GoogleChromePortable/, GoogleChromePortable - Copy/)
+- Bo code restart Chrome sau moi anh thanh cong (khong can thiet, gay cham)
+- Chrome tiep tuc tao nhieu anh ma khong can restart moi lan
+- Fix bug double restart khi gap 403
 
-1. v1.0.193: Fix double restart khi gap 403
-2. v1.0.192: Kill Chrome theo thu muc Chrome Portable
-3. v1.0.191: Handle connection disconnected
-4. v1.0.190: Interceptor xu ly 429/253 quota error
-5. v1.0.188: Reset 403 counter khi setup thanh cong
+1. v1.0.194: Bo restart Chrome sau moi anh
+2. v1.0.193: Fix double restart khi gap 403
+3. v1.0.192: Kill Chrome theo thu muc Chrome Portable
+4. v1.0.191: Handle connection disconnected
+5. v1.0.190: Interceptor xu ly 429/253 quota error
