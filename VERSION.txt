@@ -1,15 +1,15 @@
-1.0.195
+1.0.196
 2026-02-28 (VN)
-Change: Fix 403 counter bi reset - khong tang len duoc
+Change: Cleanup localStorage/IndexedDB khi 403
 
 Thay doi:
-- Fix BUG: 403 counter bi reset ve 0 khi setup() duoc goi
-- Them skip_403_reset parameter vao setup() de giu counter khi 403 recovery
-- Disable 403 handling trong browser_flow_generator.py (drission_flow_api da xu ly)
-- Gio 403 counter se tang dung: 1/5 -> 2/5 -> ... -> 5/5 -> switch model
+- Google dung localStorage/IndexedDB de track va flag browser
+- Du doi IP van 403 vi browser van gui data cu bi flag
+- Them JS_CLEANUP de xoa localStorage/IndexedDB/cookies/cache
+- Tu dong chay cleanup khi restart Chrome sau 403
 
-1. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
-2. v1.0.194: Bo restart Chrome sau moi anh
-3. v1.0.193: Fix double restart khi gap 403
-4. v1.0.192: Kill Chrome theo thu muc Chrome Portable
-5. v1.0.191: Handle connection disconnected
+1. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
+2. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
+3. v1.0.194: Bo restart Chrome sau moi anh
+4. v1.0.193: Fix double restart khi gap 403
+5. v1.0.192: Kill Chrome theo thu muc Chrome Portable

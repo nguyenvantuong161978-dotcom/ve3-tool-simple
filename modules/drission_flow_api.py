@@ -112,6 +112,50 @@ class GeneratedImage:
     local_path: Optional[Path] = None
 
 
+# v1.0.196: JS Cleanup - Xóa localStorage/IndexedDB/cookies khi bị 403
+# Google dùng data này để track và flag browser, dù đổi IP vẫn 403
+JS_CLEANUP = '''
+(async function() {
+    console.log('[CLEANUP] Nuclear cleanup...');
+    try {
+        // 1. localStorage
+        localStorage.clear();
+        // 2. sessionStorage
+        sessionStorage.clear();
+        // 3. IndexedDB
+        if (window.indexedDB && window.indexedDB.databases) {
+            const dbs = await window.indexedDB.databases();
+            for (let db of dbs) {
+                window.indexedDB.deleteDatabase(db.name);
+            }
+        }
+        // 4. Cookies
+        document.cookie.split(";").forEach(function(c) {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+        // 5. Cache Storage
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            for (let name of cacheNames) {
+                await caches.delete(name);
+            }
+        }
+        // 6. Service Workers
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let reg of registrations) {
+                await reg.unregister();
+            }
+        }
+        console.log('[CLEANUP] Done!');
+        return 'CLEANUP_DONE';
+    } catch(e) {
+        console.log('[CLEANUP] Error:', e);
+        return 'CLEANUP_ERROR';
+    }
+})();
+'''
+
 # JS Interceptor - INJECT CUSTOM PAYLOAD với reCAPTCHA token fresh
 # Flow: Python chuẩn bị payload (có media_id) → Chrome trigger reCAPTCHA → Inject token → Gửi ngay
 JS_INTERCEPTOR = '''
@@ -2256,6 +2300,28 @@ class DrissionFlowAPI:
 
         return not path.exists()
 
+    def cleanup_browser_data(self) -> bool:
+        """
+        v1.0.196: Xóa localStorage/IndexedDB/cookies bằng JS.
+        Google dùng data này để track và flag browser - dù đổi IP vẫn 403.
+        Chạy TRƯỚC khi navigate đến trang mới sau khi reset.
+
+        Returns:
+            True nếu cleanup thành công
+        """
+        if not self.driver:
+            self.log("[CLEANUP] No driver, skip")
+            return False
+
+        try:
+            self.log("[CLEANUP] Xóa localStorage/IndexedDB/cookies...")
+            result = self.driver.run_js(JS_CLEANUP)
+            self.log(f"[CLEANUP] Result: {result}")
+            return result == 'CLEANUP_DONE'
+        except Exception as e:
+            self.log(f"[CLEANUP] Error: {e}", "WARN")
+            return False
+
     def reset_chrome_profile(self) -> bool:
         """
         Xóa dữ liệu Chrome profile để Chrome trắng như mới.
@@ -3217,6 +3283,13 @@ class DrissionFlowAPI:
         if warm_up:
             if not self._warm_up_session():
                 self.log("[WARN] Warm up không thành công, tiếp tục...", "WARN")
+
+        # 6.5. v1.0.196: Cleanup browser data nếu cần (sau 403)
+        # Google dùng localStorage/IndexedDB để track và flag browser
+        if getattr(self, '_need_browser_cleanup', False):
+            self.log("[CLEANUP] Xóa browser data sau 403...")
+            self.cleanup_browser_data()
+            self._need_browser_cleanup = False
 
         # 7. Inject interceptor (SAU khi warm up) - với xử lý ContextLostError
         self.log("Inject interceptor...")
@@ -4584,6 +4657,8 @@ class DrissionFlowAPI:
                         time.sleep(2)
                         # v1.0.183: Setup với project_url đã lưu (không làm warm up)
                         # v1.0.195: skip_403_reset=True để giữ counter
+                        # v1.0.196: Set flag để cleanup browser data
+                        self._need_browser_cleanup = True
                         saved_url = getattr(self, '_current_project_url', None)
                         self.setup(project_url=saved_url, skip_403_reset=True)
 
@@ -4604,6 +4679,8 @@ class DrissionFlowAPI:
                             time.sleep(2)
                             # v1.0.183: Setup với project_url đã lưu (không làm warm up)
                             # v1.0.195: skip_403_reset=True để giữ counter
+                            # v1.0.196: Set flag để cleanup browser data
+                            self._need_browser_cleanup = True
                             saved_url = getattr(self, '_current_project_url', None)
                             self.setup(project_url=saved_url, skip_403_reset=True)
 
