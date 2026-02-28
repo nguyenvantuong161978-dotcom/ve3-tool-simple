@@ -1,14 +1,13 @@
-1.0.184
+1.0.186
 2026-02-28 (VN)
-Change: Fix quota switch + Dynamic wait
+Change: Bo UI check quota - chi dua vao interceptor
 
 Thay doi:
-- Sau khi switch model do quota error → F5 refresh de clear UI cu
-- Thay 8s wait co dinh bang doi prompt input clickable (max 20-30s)
-- Fix: UI error cu bi detect nham khi retry voi model moi
+- Bo hoan toan UI check cho quota error (gay false positive)
+- Chi dua vao interceptor response (error code 253/429)
+- UI error cu van hien thi → gay nham lan → bo
 
-1. v1.0.184: Quota switch F5 refresh + Dynamic wait
-2. v1.0.183: Bo warm up khi restart (da co project URL)
-3. v1.0.182: Check UI quota moi 3s
-4. v1.0.179: QUOTA - Switch model ngay khi het han muc
-5. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
+1. v1.0.186: Bo UI check quota - chi dua vao interceptor
+2. v1.0.185: Fix quota switch + Dynamic wait (reverted UI check)
+3. v1.0.184: Quota switch F5 refresh + Dynamic wait
+4. v1.0.183: Bo warm up khi restart (da co project URL)

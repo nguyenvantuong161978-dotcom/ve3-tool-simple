@@ -4266,26 +4266,7 @@ class DrissionFlowAPI:
         while time.time() - start_time < timeout:
             elapsed = time.time() - start_time
 
-            # v1.0.182: Check UI cho "hết hạn mức" mỗi 3s (đơn giản)
-            if int(elapsed) % 3 == 0 and int(elapsed) > 0:
-                try:
-                    quota_check = self.driver.run_js("""
-                        var els = document.querySelectorAll('[class*="sc-9a984650"]');
-                        for (var i = 0; i < els.length; i++) {
-                            var text = els[i].innerText || '';
-                            if (text.includes('hết hạn mức') || text.includes('dùng hết') ||
-                                text.includes('Không thành công') || text.includes('quota')) {
-                                return text;
-                            }
-                        }
-                        return null;
-                    """)
-                    if quota_check:
-                        self.log(f"[UI] Detected quota error: {quota_check[:100]}...", "WARN")
-                        return [], f"429 quota: {quota_check}"
-                except:
-                    pass
-
+            # v1.0.185: Check interceptor TRƯỚC, chỉ check UI nếu không có response
             result = self.driver.run_js("""
                 return {
                     pending: window._requestPending,
@@ -4293,6 +4274,9 @@ class DrissionFlowAPI:
                     error: window._responseError
                 };
             """)
+
+            # v1.0.186: BỎ UI check - chỉ dựa vào interceptor response
+            # UI error cũ có thể gây false positive, interceptor đáng tin hơn
 
             # EARLY DETECTION: Sau 10s, check xem có request chưa
             if not request_detected and elapsed > 10:
