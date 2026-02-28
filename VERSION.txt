@@ -1,15 +1,19 @@
-1.0.176
+1.0.177
 2026-02-28 (VN)
-Change: Quay lai CMD don gian + Fix Chrome zombie
+Change: Logic SWITCH MODEL khi 403 (5-2-2)
 
-Thay doi:
+Logic moi:
+- Model 0 (Nano Banana Pro): 5 lan 403 → switch model 1
+- Model 1 (Nano Banana 2): 2 lan 403 → switch model 2
+- Model 2 (Imagen 4): 2 lan 403 → xoa data, reset ve model 0
+- Tong: 5 + 2 + 2 = 9 lan 403 truoc khi reset data
+- Switch model bang click tren UI (select_model_by_index)
+
+Thay doi khac:
 - Quay lai dung CMD (bo PowerShell)
-- Kill Chrome TRUOC moi retry (tranh mo nhieu Chrome zombie)
-- Tang wmic timeout tu 5s len 15s
-- Them fallback taskkill khi wmic timeout
+- Kill Chrome TRUOC moi retry
 
-1. v1.0.176: Quay lai CMD + Fix Chrome zombie
-2. v1.0.175: Fix Chrome zombie - Kill truoc moi retry
-3. v1.0.173: Auto switch model + Quay lai cach mo Chrome cu
-4. v1.0.172: Bo log kill Chrome + Fix reset all CMD
-5. v1.0.171: Kill chi dung Chrome cua worker hien tai
+1. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
+2. v1.0.176: Quay lai CMD + Fix Chrome zombie
+3. v1.0.175: Fix Chrome zombie - Kill truoc moi retry
+4. v1.0.173: Auto switch model + Quay lai cach mo Chrome cu

@@ -4457,14 +4457,19 @@ class DrissionFlowAPI:
                         return False, [], "POLICY_VIOLATION: Prompt bị cấm, skip"
 
                 # === 403 ERROR HANDLING ===
-                # Logic MỚI (cho 2 Chrome parallel):
-                # 1. 403 → Reset Chrome (2 lần)
-                # 2. Lần 3 → Clear data + login lại
-                # 3. Sau clear vẫn 403 → Mark ready_for_rotation
-                # 4. CHỈ đổi IPv6 khi CẢ 2 CHROME đều ready!
+                # v1.0.176: Logic SWITCH MODEL trước khi reset data
+                # Model 0 (Nano Banana Pro): 5 lần 403 → switch model 1
+                # Model 1 (Nano Banana 2): 2 lần 403 → switch model 2
+                # Model 2 (Imagen 4): 2 lần 403 → xóa data, reset về model 0
+                # Tổng: 5 + 2 + 2 = 9 lần 403 trước khi reset data
                 if "403" in error:
                     self._consecutive_403 += 1
+                    current_model = getattr(self, '_current_model_index', 0)  # 0, 1, 2
+                    model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
                     cleared_flag = getattr(self, '_cleared_data_for_403', False)
+
+                    # Tính threshold cho model hiện tại
+                    model_threshold = 5 if current_model == 0 else 2
 
                     # Get shared tracker
                     try:
@@ -4475,27 +4480,42 @@ class DrissionFlowAPI:
                         self.log(f"[403] Tracker error: {e}", "WARN")
                         tracker = None
 
-                    if self._consecutive_403 < 3 and not cleared_flag:
-                        # Bước 1: Reset Chrome (lần 1 và 2)
-                        self.log(f"[WARN] 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
+                    self.log(f"[403] Model {model_names[current_model]}: {self._consecutive_403}/{model_threshold}", "WARN")
+
+                    if self._consecutive_403 < model_threshold:
+                        # Chưa đủ threshold → chỉ restart Chrome
+                        self.log(f"[403] Restart Chrome...", "WARN")
                         self._kill_chrome()
                         self.close()
                         time.sleep(2)
 
-                    elif self._consecutive_403 >= 3 and not cleared_flag:
-                        # Bước 2: Lần 3 → XÓA TRIỆT ĐỂ PROFILE + đăng nhập lại
-                        self.log(f"[WARN] 403 lần {self._consecutive_403} → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
-                        # Dùng reset_chrome_profile() - xóa hoàn toàn thư mục profile
+                    elif current_model < 2:
+                        # Đủ threshold nhưng chưa hết model → SWITCH MODEL
+                        next_model = current_model + 1
+                        self.log(f"[403] Đủ {model_threshold} lần → SWITCH: {model_names[current_model]} → {model_names[next_model]}", "WARN")
+
+                        # Switch model trên UI
+                        if self.select_model_by_index(next_model):
+                            self._current_model_index = next_model
+                            self._consecutive_403 = 0  # Reset counter
+                            self.log(f"[403] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
+                        else:
+                            self.log(f"[403] Không switch được model, restart Chrome", "WARN")
+                            self._kill_chrome()
+                            self.close()
+                            time.sleep(2)
+
+                    elif not cleared_flag:
+                        # Hết 3 models (9 lần 403) → XÓA DATA + reset về model 0
+                        self.log(f"[403] Hết 3 models → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
                         self.reset_chrome_profile()
                         time.sleep(1)
-                        # Login lại (sẽ tự khởi động Chrome mới)
                         self._auto_login_google()
-                        # v1.0.150: Warm-up sau login - đảm bảo có thể tạo ảnh
                         self._warmup_after_login()
                         self._cleared_data_for_403 = True
-                        self._consecutive_403 = 0  # Reset counter sau khi clear
+                        self._consecutive_403 = 0
+                        self._current_model_index = 0  # Reset về model đầu
 
-                        # Mark cleared data in shared tracker
                         if tracker:
                             tracker.mark_cleared_data(self.worker_id)
 
