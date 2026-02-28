@@ -7268,22 +7268,28 @@ class DrissionFlowAPI:
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines:
-                        # Tìm Chrome chạy từ thư mục này (VD: GoogleChromePortable hoặc GoogleChromePortable - Copy)
-                        if search_path in line:
+                        # v1.0.192: Phân biệt GoogleChromePortable vs GoogleChromePortable - Copy
+                        # "GoogleChromePortable" là substring của "GoogleChromePortable - Copy"
+                        # Nên cần check chính xác
+                        should_kill = False
+                        if search_path == "GoogleChromePortable":
+                            # Chỉ kill nếu có "GoogleChromePortable\" nhưng KHÔNG có "GoogleChromePortable - Copy"
+                            if "GoogleChromePortable\\" in line and "GoogleChromePortable - Copy" not in line:
+                                should_kill = True
+                        else:
+                            # search_path = "GoogleChromePortable - Copy"
+                            if search_path in line:
+                                should_kill = True
+
+                        if should_kill:
                             # Tìm PID ở cuối dòng
                             parts = line.strip().split()
                             if parts:
                                 pid = parts[-1]
                                 if pid.isdigit():
-                                    # QUAN TRỌNG: Dùng graceful shutdown (không /F)
-                                    # Để Chrome có thời gian lưu cookies/session
-                                    subprocess.run(['taskkill', '/PID', pid],
-                                                 capture_output=True, timeout=5)
-                                    time.sleep(2)  # Đợi Chrome lưu dữ liệu
-                                    # Nếu vẫn chưa tắt, mới force kill
                                     subprocess.run(['taskkill', '/F', '/PID', pid],
                                                  capture_output=True, timeout=5)
-                                    self.log(f"  Đã tắt Chrome cũ (PID: {pid})")
+                                    self.log(f"  Killed Chrome (PID: {pid})")
             else:
                 # Linux/Mac: dùng SIGTERM trước (graceful), sau đó mới SIGKILL
                 result = subprocess.run(
