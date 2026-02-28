@@ -3143,6 +3143,7 @@ class DrissionFlowAPI:
                 return False
 
         # v1.0.184: Đợi prompt input có thể click được (thay vì wait cố định)
+        # v1.0.187: Thêm check logout nếu không tìm thấy prompt input sau 10s
         max_wait = 30 if getattr(self, '_ipv6_activated', False) else 20
         self.log(f"Đợi prompt input sẵn sàng (max {max_wait}s)...")
 
@@ -3168,6 +3169,22 @@ class DrissionFlowAPI:
                         break
             except Exception as e:
                 pass
+
+            # v1.0.187: Sau 10s mà chưa có prompt input → check logout
+            if i == 10:
+                self.log("[WARN] 10s chưa có prompt input, check logout...", "WARN")
+                if self._is_logged_out():
+                    self.log("[WARN] Phát hiện bị LOGOUT! Đăng nhập lại...", "WARN")
+                    if self._auto_login_google():
+                        self.log("[v] Đăng nhập lại thành công, quay lại project...")
+                        # Navigate lại project
+                        saved_url = getattr(self, '_current_project_url', None)
+                        if saved_url:
+                            self.driver.get(saved_url)
+                            time.sleep(5)
+                    else:
+                        self.log("[x] Không đăng nhập được!", "ERROR")
+                        return False
 
             time.sleep(1)
 

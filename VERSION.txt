@@ -1,13 +1,13 @@
-1.0.186
+1.0.187
 2026-02-28 (VN)
-Change: Bo UI check quota - chi dua vao interceptor
+Change: Auto login khi bi logout trong luc doi prompt input
 
 Thay doi:
-- Bo hoan toan UI check cho quota error (gay false positive)
-- Chi dua vao interceptor response (error code 253/429)
-- UI error cu van hien thi → gay nham lan → bo
+- Sau 10s khong tim thay prompt input → check logout
+- Neu bi logout → tu dong dang nhap lai Google
+- Sau khi login → quay lai project va tiep tuc
 
-1. v1.0.186: Bo UI check quota - chi dua vao interceptor
-2. v1.0.185: Fix quota switch + Dynamic wait (reverted UI check)
-3. v1.0.184: Quota switch F5 refresh + Dynamic wait
-4. v1.0.183: Bo warm up khi restart (da co project URL)
+1. v1.0.187: Auto login khi bi logout (prompt input timeout)
+2. v1.0.186: Bo UI check quota - chi dua vao interceptor
+3. v1.0.185: Fix quota switch + Dynamic wait (reverted UI check)
+4. v1.0.184: Quota switch F5 refresh + Dynamic wait
