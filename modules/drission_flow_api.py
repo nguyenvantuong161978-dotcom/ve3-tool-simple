@@ -3142,11 +3142,37 @@ class DrissionFlowAPI:
                 self.log("[PROJECT] [x] Login lại thất bại", "ERROR")
                 return False
 
-        # v1.0.135: Đợi page ready thay vì textarea (giao diện mới)
-        # v1.0.173: Tăng từ 5s lên 8s
-        wait_time = 10 if getattr(self, '_ipv6_activated', False) else 8
-        self.log(f"Đợi page ready ({wait_time}s)...")
-        time.sleep(wait_time)
+        # v1.0.184: Đợi prompt input có thể click được (thay vì wait cố định)
+        max_wait = 30 if getattr(self, '_ipv6_activated', False) else 20
+        self.log(f"Đợi prompt input sẵn sàng (max {max_wait}s)...")
+
+        prompt_ready = False
+        for i in range(max_wait):
+            try:
+                # Tìm prompt input
+                textarea = self._find_textarea()
+                if textarea:
+                    # Thử click để kiểm tra có thể focus được không
+                    textarea.click()
+                    time.sleep(0.3)
+
+                    # Kiểm tra đã focus chưa (activeElement)
+                    is_focused = self.driver.run_js("""
+                        var active = document.activeElement;
+                        return active && (active.contentEditable === 'true' || active.tagName === 'TEXTAREA');
+                    """)
+
+                    if is_focused:
+                        prompt_ready = True
+                        self.log(f"[v] Prompt input sẵn sàng sau {i+1}s!")
+                        break
+            except Exception as e:
+                pass
+
+            time.sleep(1)
+
+        if not prompt_ready:
+            self.log("[WARN] Timeout đợi prompt input, tiếp tục...", "WARN")
 
         self.log("[v] Project đã sẵn sàng!")
 
@@ -4432,8 +4458,14 @@ class DrissionFlowAPI:
                         if self.select_model_by_index(next_model):
                             self._current_model_index = next_model
                             self.log(f"[QUOTA] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
-                            # Retry ngay với model mới
-                            time.sleep(2)
+                            # v1.0.184: F5 refresh để clear UI error cũ trước khi retry
+                            self.log("[QUOTA] F5 refresh để clear UI cũ...")
+                            try:
+                                self.driver.refresh()
+                                time.sleep(5)  # Đợi page load
+                            except Exception as e:
+                                self.log(f"[QUOTA] Refresh error: {e}", "WARN")
+                                time.sleep(2)
                             attempt += 1
                             continue
                         else:
