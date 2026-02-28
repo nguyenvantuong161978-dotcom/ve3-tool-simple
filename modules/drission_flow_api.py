@@ -7232,11 +7232,22 @@ class DrissionFlowAPI:
         return False
 
     def _kill_chrome_using_profile(self):
-        """Tắt Chrome đang dùng profile này để tránh conflict."""
+        """
+        Tắt Chrome theo thư mục Chrome Portable (không phải profile).
+        v1.0.192: Dùng chrome_portable path thay vì profile_dir.
+        """
         import subprocess
         import platform
 
-        profile_path = str(self.profile_dir.absolute())
+        # v1.0.192: Ưu tiên dùng thư mục Chrome Portable
+        if self._chrome_portable:
+            # Lấy thư mục cha của chrome.exe (vd: GoogleChromePortable/App/Chrome-bin/)
+            chrome_dir = str(Path(self._chrome_portable).parent.parent.parent.absolute())
+        else:
+            chrome_dir = str(self.profile_dir.absolute())
+
+        profile_path = chrome_dir
+        self.log(f"[KILL] Tìm Chrome theo: {profile_path[:50]}...")
 
         try:
             if platform.system() == 'Windows':

@@ -1,14 +1,14 @@
-1.0.191
+1.0.192
 2026-02-28 (VN)
-Change: Kill Chrome theo profile + Handle connection disconnected
+Change: Kill Chrome theo thu muc Chrome Portable
 
 Thay doi:
-- Kill Chrome theo profile directory (khong kill all Chrome)
-- Fix: Chrome 1 restart khong lam mat Chrome 2
-- Handle "connection disconnected" error - tu dong restart Chrome va retry
-- Giu nguyen worker khac hoat dong binh thuong
+- Kill Chrome theo thu muc Chrome Portable (GoogleChromePortable/, GoogleChromePortable - Copy/)
+- Khong dung profile_dir, dung chrome_portable path
+- Chrome 1 restart chi kill Chrome trong GoogleChromePortable/
+- Chrome 2 van hoat dong binh thuong (o GoogleChromePortable - Copy/)
 
-1. v1.0.191: Kill Chrome theo profile + Handle disconnect
-2. v1.0.190: Interceptor xu ly 429/253 quota error
-3. v1.0.188: Reset 403 counter khi setup thanh cong
-4. v1.0.187: Auto login khi bi logout (prompt input timeout)
+1. v1.0.192: Kill Chrome theo thu muc Chrome Portable
+2. v1.0.191: Handle connection disconnected
+3. v1.0.190: Interceptor xu ly 429/253 quota error
+4. v1.0.188: Reset 403 counter khi setup thanh cong
