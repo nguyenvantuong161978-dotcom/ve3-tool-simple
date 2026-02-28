@@ -471,37 +471,75 @@ git push official main  # Push lên repo chính thức
 
 > **QUAN TRỌNG**: Claude Code phải cập nhật section này sau mỗi phiên làm việc để phiên sau sử dụng hiệu quả.
 
-### Phiên hiện tại: 2026-02-04 - EARLY CHECK Logic Fix (v1.0.82 ✅)
+### Phiên hiện tại: 2026-02-28 - 403 Handling Complete Overhaul (v1.0.192-198 ✅)
 
-**MISSION**: Fix EARLY CHECK logic - Dựa vào TRẠNG THÁI 7 BƯỚC, không phải scenes
+**MISSION**: Fix 403 errors - Giảm thiểu và xử lý 403 từ Google Flow
 
-**PROBLEM DISCOVERED**:
-- v1.0.79 EARLY CHECK: `if scenes exist → skip`
-- SAI! Vì scenes có thể tồn tại nhưng chưa đủ (API bị ngắt giữa chừng)
-- User: "nên dựa vào trạng thái của 7 bước để quyết định có làm hay không"
+**PROBLEMS DISCOVERED**:
+1. Chrome kill không đúng thư mục (kill cả Chrome khác)
+2. Double restart khi gặp 403
+3. Restart thừa sau mỗi ảnh thành công
+4. 403 counter bị reset về 0 trong setup() - không bao giờ switch model
+5. **CRITICAL**: Google dùng localStorage/IndexedDB để track và flag browser - dù đổi IP vẫn 403
 
-**ROOT CAUSE**:
-- Code kiểm tra `if existing_scenes and len(existing_scenes) > 0` → skip
-- Nhưng scenes có thể incomplete, step_7 chưa COMPLETED
-- Dẫn đến skip khi Excel chưa thực sự hoàn thành
+**SOLUTIONS**:
 
-**FIX ĐƠN GIẢN** (`modules/progressive_prompts.py` lines 3245-3259):
-```python
-# v1.0.82: EARLY CHECK dựa vào TRẠNG THÁI 7 BƯỚC, không phải scenes
-step7_status = workbook.get_step_status("step_7")
-if step7_status.get("status") == "COMPLETED":
-    # Skip - Excel đã hoàn thành
-    return True
-# Nếu không COMPLETED → tiếp tục chạy các bước
+**v1.0.192**: Kill Chrome theo thư mục Portable
+- Phân biệt `GoogleChromePortable/` và `GoogleChromePortable - Copy/`
+- Chỉ kill Chrome của worker đang xử lý
+
+**v1.0.193**: Fix double restart khi 403
+- Bỏ restart thừa sau các if/elif blocks
+
+**v1.0.194**: Bỏ restart sau mỗi ảnh thành công
+- Không cần thiết và gây chậm
+
+**v1.0.195**: Fix 403 counter không tăng
+- BUG: setup() luôn reset `_consecutive_403 = 0`
+- FIX: Thêm `skip_403_reset` parameter
+
+**v1.0.196-197**: Cleanup localStorage/IndexedDB khi 403
+- Phát hiện: Google dùng browser data để track
+- Thêm JS_CLEANUP xóa localStorage, IndexedDB, cookies, cache, service workers
+- Cleanup chạy NGAY SAU 403 trước khi restart
+
+**v1.0.198**: Cleanup + Restart sau mỗi ảnh thành công
+- Gửi prompt liên tiếp bằng API → bị 403
+- Flow: Ảnh thành công → Cleanup → Restart → Sẵn sàng cho ảnh tiếp
+
+**JS_CLEANUP** (`modules/drission_flow_api.py`):
+```javascript
+// Xóa localStorage, sessionStorage, IndexedDB, cookies, cache, service workers
+localStorage.clear();
+sessionStorage.clear();
+indexedDB.databases().then(dbs => dbs.forEach(db => indexedDB.deleteDatabase(db.name)));
+document.cookie.split(";").forEach(c => document.cookie = c.replace(/=.*/, "=;expires=..."));
+caches.keys().then(names => names.forEach(name => caches.delete(name)));
+navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
 ```
 
-**RESULT**:
-- ✅ Skip khi step_7 = COMPLETED (chính xác)
-- ✅ Chạy tiếp khi step_7 != COMPLETED (resume từ bước dở)
-- ✅ Không bị skip khi scenes incomplete
+**FLOW MỚI**:
+```
+403 xảy ra
+  → cleanup_browser_data() (xóa localStorage/IndexedDB)
+  → restart Chrome
+  → 403 counter tăng: 1/5 → 2/5 → 5/5
+  → switch model khi đủ threshold
 
-**VERSION**: 1.0.82
+Ảnh thành công
+  → cleanup_browser_data()
+  → restart Chrome (sạch)
+  → sẵn sàng cho ảnh tiếp
+```
+
+**VERSION**: 1.0.198
 **STATUS**: ✅ PRODUCTION READY
+
+---
+
+### Phiên trước: 2026-02-04 - EARLY CHECK Logic Fix (v1.0.82 ✅)
+
+**STATUS**: Đã hoàn thành - Fix EARLY CHECK dựa vào trạng thái 7 bước thay vì scenes
 
 ---
 
