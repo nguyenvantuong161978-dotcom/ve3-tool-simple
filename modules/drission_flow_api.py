@@ -4893,8 +4893,16 @@ class DrissionFlowAPI:
                         except Exception as e:
                             self.log(f"[x] Download failed: {e}", "WARN")
 
-        # v1.0.194: Bỏ restart sau mỗi ảnh - không cần thiết và gây chậm
-        # Chrome có thể tiếp tục tạo nhiều ảnh mà không cần restart mỗi lần
+        # v1.0.198: Thêm lại reset sau mỗi ảnh thành công
+        # Lý do: Gửi prompt liên tiếp bằng API sẽ bị 403
+        # Flow: Cleanup (xóa localStorage/IndexedDB) → Restart Chrome → Sẵn sàng cho ảnh tiếp
+        self.log("[SYNC] Cleanup + Restart Chrome sau ảnh thành công...")
+        self.cleanup_browser_data()  # Xóa data bị flag
+        saved_url = getattr(self, '_current_project_url', None)
+        self._kill_chrome()
+        self.close()
+        time.sleep(1)
+        self.setup(project_url=saved_url, skip_403_reset=True)
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):

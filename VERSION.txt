@@ -1,14 +1,15 @@
-1.0.197
+1.0.198
 2026-02-28 (VN)
-Change: Cleanup NGAY SAU 403 (truoc khi restart Chrome)
+Change: Cleanup + Restart Chrome sau moi anh thanh cong
 
 Thay doi:
-- Cleanup chay NGAY SAU khi gap 403, TRUOC khi restart Chrome
-- Xoa localStorage/IndexedDB/cookies ngay de luot sau khong bi flag
-- Khong can doi den setup() moi cleanup
+- Them lai reset Chrome sau moi anh thanh cong
+- Ly do: Gui prompt lien tiep bang API se bi 403
+- Flow: Anh thanh cong → Cleanup (xoa localStorage/IndexedDB) → Restart Chrome
+- Cleanup truoc restart giup Chrome sach, giam 403
 
-1. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
-2. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
-3. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
-4. v1.0.194: Bo restart Chrome sau moi anh
-5. v1.0.193: Fix double restart khi gap 403
+1. v1.0.198: Cleanup + Restart sau moi anh thanh cong
+2. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
+3. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
+4. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
+5. v1.0.194: Bo restart Chrome sau moi anh
