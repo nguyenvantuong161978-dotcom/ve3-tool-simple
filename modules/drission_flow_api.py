@@ -4663,18 +4663,14 @@ class DrissionFlowAPI:
                                 else:
                                     self.log(f"  → [WARN] Không rotate được IPv6!", "WARN")
 
+                    # v1.0.193: Bỏ restart thừa - các block if/elif trên đã restart+setup rồi
                     # Extend retries để đủ cho cả flow: reset x2 → clear data → IPv6 rotation
                     if effective_max_retries < 6:
                         effective_max_retries = 6
-                        self.log(f"  → Extend retries to {effective_max_retries} for 403 handling")
 
-                    # Restart Chrome
-                    if self.restart_chrome(rotate_ipv6=False):
-                        self.log("  → Chrome restarted, tiếp tục...")
-                        attempt += 1
-                        continue
-                    else:
-                        return False, [], "Không restart được Chrome sau 403"
+                    # Tiếp tục retry (đã restart trong các block if/elif)
+                    attempt += 1
+                    continue
 
                 # === TIMEOUT ERROR: Restart Chrome và retry ===
                 if "timeout" in error.lower():
