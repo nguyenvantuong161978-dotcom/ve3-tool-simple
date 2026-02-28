@@ -3255,70 +3255,61 @@ class DrissionFlowAPI:
         if is_create_page in ['CREATE_PAGE', 'HAS_CREATE_BUTTON']:
             self.log(f"[WARN] Đang ở trang Create with Flow! Thực hiện warm-up flow...", "WARN")
 
-            # Click "Create with Flow" với retry
-            click_delays = [2, 4, 6]
-            click_success = False
-            for click_attempt in range(3):
-                click_result = self.driver.run_js('''
-                    (function() {
-                        var btns = document.querySelectorAll('button');
-                        for (var b of btns) {
-                            var text = (b.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                b.click();
-                                return 'CLICKED';
-                            }
-                        }
-                        var spans = document.querySelectorAll('span');
-                        for (var s of spans) {
-                            var text = (s.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                var btn = s.closest('button');
-                                if (btn) { btn.click(); return 'CLICKED_VIA_SPAN'; }
-                            }
-                        }
-                        return 'NOT_FOUND';
-                    })();
-                ''')
-                if click_result and 'CLICKED' in str(click_result):
-                    self.log(f"[v] {click_result}")
-                    click_success = True
-                    time.sleep(3)
-                    break
-                else:
-                    delay = click_delays[click_attempt]
-                    self.log(f"[WARN] Retry click ({click_attempt+1}/3) sau {delay}s...")
-                    time.sleep(delay)
+            # v1.0.201: Logic giống warmup - 20 lần retry, reload mỗi 5 lần, không giới hạn thời gian
+            flow_url = "https://labs.google/fx/vi/tools/flow"
+            for attempt in range(20):
+                # Tìm button "Dự án mới" (add_2) - đây là mục tiêu cuối cùng
+                try:
+                    btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
+                    if btn:
+                        self.log(f"[v] 'Tạo dự án mới' đã xuất hiện! (attempt {attempt+1})")
+                        break
+                except:
+                    pass
 
-            if click_success:
-                # Đợi "Tạo dự án mới" xuất hiện
-                self.log(f"[v] Đợi 'Tạo dự án mới' xuất hiện (max 15s)...")
-                new_project_ready = False
-                for wait_np in range(15):
-                    check_np = self.driver.run_js('''
+                # Thử click "Create with Flow" nếu có
+                try:
+                    click_result = self.driver.run_js('''
                         (function() {
                             var btns = document.querySelectorAll('button');
                             for (var b of btns) {
-                                var text = b.textContent || '';
-                                if (text.includes('Dự án mới') || text.includes('New project') ||
-                                    text.includes('án mới') || text.includes('project')) {
-                                    return 'FOUND';
+                                var text = (b.textContent || '').trim();
+                                if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                    b.click();
+                                    return 'CLICKED';
+                                }
+                            }
+                            var spans = document.querySelectorAll('span');
+                            for (var s of spans) {
+                                var text = (s.textContent || '').trim();
+                                if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                    var btn = s.closest('button');
+                                    if (btn) { btn.click(); return 'CLICKED_VIA_SPAN'; }
                                 }
                             }
                             return 'NOT_FOUND';
                         })();
                     ''')
-                    if check_np == 'FOUND':
-                        self.log(f"[v] 'Tạo dự án mới' đã xuất hiện sau {wait_np+1}s!")
-                        new_project_ready = True
-                        break
-                    time.sleep(1)
+                    if click_result and 'CLICKED' in str(click_result):
+                        self.log(f"[v] Clicked 'Create with Flow' ({attempt+1}/20)")
+                        time.sleep(1)
+                        continue  # Check lại ngay
+                except:
+                    pass
 
-                # Quay lại project URL
-                if saved_url:
-                    self.log(f"[v] Quay lại project URL...")
-                    self.driver.get(saved_url)
-                    time.sleep(5)
+                # Reload page mỗi 5 lần (nếu chưa thấy button)
+                if attempt > 0 and attempt % 5 == 0:
+                    self.log(f"[WARN] Reload Flow page ({attempt}/20)...")
+                    self.driver.get(flow_url)
+                    time.sleep(2)
+
+                time.sleep(0.5)
+
+            # Quay lại project URL
+            if saved_url:
+                self.log(f"[v] Quay lại project URL...")
+                self.driver.get(saved_url)
+                time.sleep(5)
 
         for retry in range(max_retries):
             self.log(f"Đợi prompt input sẵn sàng (max {max_wait}s)..." + (f" [retry {retry+1}/{max_retries}]" if retry > 0 else ""))
@@ -4827,6 +4818,12 @@ class DrissionFlowAPI:
                         time.sleep(1)
                         self._auto_login_google()
                         self._warmup_after_login()
+                        # v1.0.201: Navigate về project URL sau warmup
+                        saved_url = getattr(self, '_current_project_url', None)
+                        if saved_url:
+                            self.log(f"[WARMUP] Quay lại project URL...")
+                            self.driver.get(saved_url)
+                            time.sleep(3)
                         self._cleared_data_for_403 = True
                         self._consecutive_403 = 0
                         self._current_model_index = 0  # Reset về model đầu
@@ -6406,6 +6403,12 @@ class DrissionFlowAPI:
                         self._auto_login_google()
                         # v1.0.150: Warm-up sau login - đảm bảo có thể tạo ảnh
                         self._warmup_after_login()
+                        # v1.0.201: Navigate về project URL sau warmup
+                        saved_url = getattr(self, '_current_project_url', None)
+                        if saved_url:
+                            self.log(f"[WARMUP] Quay lại project URL...")
+                            self.driver.get(saved_url)
+                            time.sleep(3)
                         self._cleared_data_for_403 = True
                         self._consecutive_403 = 0
 

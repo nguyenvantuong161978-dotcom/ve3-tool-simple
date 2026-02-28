@@ -1,14 +1,14 @@
-1.0.200
+1.0.201
 2026-02-28 (VN)
-Change: Fix Create with Flow - check NGAY DAU TIEN + doi "Tao du an moi"
+Change: Fix Create with Flow logic - 20 retries + quay lai project sau warmup
 
 Thay doi:
-- Check Create with Flow page NGAY DAU TIEN truoc khi doi prompt
-- Click "Create with Flow" voi retry 3 lan nhu login
-- Doi "Tao du an moi" xuat hien (max 15s) moi quay lai project
-- Neu sau 10s van o Create page thi reload project
+- Create with Flow: 20 lan retry, reload moi 5 lan (nhu warmup)
+- Sau warmup: Navigate ve project URL thay vi o Flow page
+- Fix loi "Khong tim thay textarea" sau khi reset Chrome
 
-1. v1.0.200: Fix Create with Flow - check ngay + doi "Tao du an moi"
+1. v1.0.201: Fix Create with Flow logic + quay lai project sau warmup
+2. v1.0.200: Fix Create with Flow - check ngay + doi "Tao du an moi"
 2. v1.0.199: Fix bi treo khi doi prompt input (Create with Flow page)
 3. v1.0.198: Cleanup + Restart sau moi anh thanh cong
 4. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
