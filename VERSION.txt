@@ -1,18 +1,20 @@
-1.0.180
+1.0.181
 2026-02-28 (VN)
-Change: Check UI truc tiep cho "het han muc" (quota)
+Change: Check UI LIEN TUC sau khi gui prompt (quota)
 
 Thay doi:
-- Them check UI moi 5s trong vong while loop cho response
-- Detect text: "het han muc", "dung het", "Khong thanh cong"
-- Class: sc-9a984650 (Google Flow error dialog)
-- Khi detect: return error ngay, khong doi timeout
+- Check UI MOI LAN LOOP (0.5s) thay vi moi 5s
+- Quota error xuat hien rat nhanh tren UI, can detect ngay
+- Khong doi 3s truoc khi bat dau check
 
-Logic QUOTA van giu nguyen:
-- Detect quota error → Switch model NGAY LAP TUC
-- Model 0 → 1 → 2 → Reset ve 0
+Logic:
+1. Gui prompt → Enter
+2. While loop cho response:
+   - Check UI cho "het han muc" (moi 0.5s)
+   - Check JS interceptor (_response, _error)
+3. Neu detect quota → return error → switch model
 
-1. v1.0.180: Check UI truc tiep cho quota error
-2. v1.0.179: QUOTA - Switch model ngay khi het han muc
-3. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
-4. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
+1. v1.0.181: Check UI LIEN TUC sau khi gui prompt
+2. v1.0.180: Check UI truc tiep cho quota error
+3. v1.0.179: QUOTA - Switch model ngay khi het han muc
+4. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
