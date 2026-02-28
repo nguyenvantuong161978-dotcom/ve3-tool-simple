@@ -3228,9 +3228,97 @@ class DrissionFlowAPI:
         # v1.0.184: Đợi prompt input có thể click được (thay vì wait cố định)
         # v1.0.187: Thêm check logout nếu không tìm thấy prompt input sau 10s
         # v1.0.199: Thêm retry logic + check "Create with Flow" page
+        # v1.0.200: Check Create with Flow NGAY ĐẦU TIÊN, không đợi
         max_wait = 30 if getattr(self, '_ipv6_activated', False) else 20
         max_retries = 3
         saved_url = getattr(self, '_current_project_url', None)
+
+        # v1.0.200: Check nếu đang ở trang "Create with Flow" NGAY ĐẦU TIÊN
+        self.log(f"Check trang hiện tại...")
+        is_create_page = self.driver.run_js('''
+            (function() {
+                var url = window.location.href;
+                if (url.includes('/tools/flow') && !url.includes('/project/')) {
+                    return 'CREATE_PAGE';
+                }
+                var btns = document.querySelectorAll('button');
+                for (var b of btns) {
+                    var text = (b.textContent || '').trim();
+                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                        return 'HAS_CREATE_BUTTON';
+                    }
+                }
+                return 'IN_PROJECT';
+            })();
+        ''')
+
+        if is_create_page in ['CREATE_PAGE', 'HAS_CREATE_BUTTON']:
+            self.log(f"[WARN] Đang ở trang Create with Flow! Thực hiện warm-up flow...", "WARN")
+
+            # Click "Create with Flow" với retry
+            click_delays = [2, 4, 6]
+            click_success = False
+            for click_attempt in range(3):
+                click_result = self.driver.run_js('''
+                    (function() {
+                        var btns = document.querySelectorAll('button');
+                        for (var b of btns) {
+                            var text = (b.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                b.click();
+                                return 'CLICKED';
+                            }
+                        }
+                        var spans = document.querySelectorAll('span');
+                        for (var s of spans) {
+                            var text = (s.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                var btn = s.closest('button');
+                                if (btn) { btn.click(); return 'CLICKED_VIA_SPAN'; }
+                            }
+                        }
+                        return 'NOT_FOUND';
+                    })();
+                ''')
+                if click_result and 'CLICKED' in str(click_result):
+                    self.log(f"[v] {click_result}")
+                    click_success = True
+                    time.sleep(3)
+                    break
+                else:
+                    delay = click_delays[click_attempt]
+                    self.log(f"[WARN] Retry click ({click_attempt+1}/3) sau {delay}s...")
+                    time.sleep(delay)
+
+            if click_success:
+                # Đợi "Tạo dự án mới" xuất hiện
+                self.log(f"[v] Đợi 'Tạo dự án mới' xuất hiện (max 15s)...")
+                new_project_ready = False
+                for wait_np in range(15):
+                    check_np = self.driver.run_js('''
+                        (function() {
+                            var btns = document.querySelectorAll('button');
+                            for (var b of btns) {
+                                var text = b.textContent || '';
+                                if (text.includes('Dự án mới') || text.includes('New project') ||
+                                    text.includes('án mới') || text.includes('project')) {
+                                    return 'FOUND';
+                                }
+                            }
+                            return 'NOT_FOUND';
+                        })();
+                    ''')
+                    if check_np == 'FOUND':
+                        self.log(f"[v] 'Tạo dự án mới' đã xuất hiện sau {wait_np+1}s!")
+                        new_project_ready = True
+                        break
+                    time.sleep(1)
+
+                # Quay lại project URL
+                if saved_url:
+                    self.log(f"[v] Quay lại project URL...")
+                    self.driver.get(saved_url)
+                    time.sleep(5)
 
         for retry in range(max_retries):
             self.log(f"Đợi prompt input sẵn sàng (max {max_wait}s)..." + (f" [retry {retry+1}/{max_retries}]" if retry > 0 else ""))
@@ -3238,51 +3326,21 @@ class DrissionFlowAPI:
             prompt_ready = False
             for i in range(max_wait):
                 try:
-                    # v1.0.199: Check nếu đang ở trang "Create with Flow" thay vì project
-                    if i == 5 or i == 15:
+                    # v1.0.200: Nếu sau 10s vẫn không có prompt, check lại Create page
+                    if i == 10:
                         is_create_page = self.driver.run_js('''
                             (function() {
-                                // Check URL hoặc button "Create with Flow" có hiện không
                                 var url = window.location.href;
-                                if (url.includes('/tools/flow') && !url.includes('/project/')) {
-                                    return 'CREATE_PAGE';
-                                }
-                                // Check có button "Create with Flow" không
-                                var btns = document.querySelectorAll('button');
-                                for (var b of btns) {
-                                    var text = (b.textContent || '').trim();
-                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                        return 'HAS_CREATE_BUTTON';
-                                    }
-                                }
+                                if (url.includes('/tools/flow') && !url.includes('/project/')) return 'CREATE_PAGE';
                                 return 'IN_PROJECT';
                             })();
                         ''')
-                        if is_create_page in ['CREATE_PAGE', 'HAS_CREATE_BUTTON']:
-                            self.log(f"[WARN] Đang ở trang Create with Flow! Click Create...", "WARN")
-                            # Click "Create with Flow"
-                            click_result = self.driver.run_js('''
-                                (function() {
-                                    var btns = document.querySelectorAll('button');
-                                    for (var b of btns) {
-                                        var text = (b.textContent || '').trim();
-                                        if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                            b.click();
-                                            return 'CLICKED';
-                                        }
-                                    }
-                                    return 'NOT_FOUND';
-                                })();
-                            ''')
-                            if click_result == 'CLICKED':
-                                self.log(f"[v] Clicked Create with Flow, đợi load...")
+                        if is_create_page == 'CREATE_PAGE':
+                            self.log(f"[WARN] Vẫn ở Create page sau 10s, reload project...", "WARN")
+                            if saved_url:
+                                self.driver.get(saved_url)
                                 time.sleep(5)
-                                # Navigate lại project
-                                if saved_url:
-                                    self.log(f"[v] Quay lại project...")
-                                    self.driver.get(saved_url)
-                                    time.sleep(5)
-                                continue
+                            continue
 
                     # Tìm prompt input
                     textarea = self._find_textarea()

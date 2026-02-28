@@ -1,15 +1,15 @@
-1.0.199
+1.0.200
 2026-02-28 (VN)
-Change: Fix bi treo khi doi prompt input
+Change: Fix Create with Flow - check NGAY DAU TIEN + doi "Tao du an moi"
 
 Thay doi:
-- Check neu dang o trang "Create with Flow" thay vi project
-- Neu o Create with Flow → click Create → quay lai project
-- Retry 3 lan neu khong tim thay prompt input
-- Sau 3 retry → clear data + login lai
+- Check Create with Flow page NGAY DAU TIEN truoc khi doi prompt
+- Click "Create with Flow" voi retry 3 lan nhu login
+- Doi "Tao du an moi" xuat hien (max 15s) moi quay lai project
+- Neu sau 10s van o Create page thi reload project
 
-1. v1.0.199: Fix bi treo khi doi prompt input (Create with Flow page)
-2. v1.0.198: Cleanup + Restart sau moi anh thanh cong
-3. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
-4. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
-5. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
+1. v1.0.200: Fix Create with Flow - check ngay + doi "Tao du an moi"
+2. v1.0.199: Fix bi treo khi doi prompt input (Create with Flow page)
+3. v1.0.198: Cleanup + Restart sau moi anh thanh cong
+4. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
+5. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
