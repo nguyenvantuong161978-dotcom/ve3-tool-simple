@@ -1,19 +1,18 @@
-1.0.177
+1.0.178
 2026-02-28 (VN)
-Change: Logic SWITCH MODEL khi 403 (5-2-2)
+Change: Fix "API chua setup" - Setup lai Chrome sau khi kill
 
-Logic moi:
-- Model 0 (Nano Banana Pro): 5 lan 403 → switch model 1
-- Model 1 (Nano Banana 2): 2 lan 403 → switch model 2
-- Model 2 (Imagen 4): 2 lan 403 → xoa data, reset ve model 0
-- Tong: 5 + 2 + 2 = 9 lan 403 truoc khi reset data
-- Switch model bang click tren UI (select_model_by_index)
+Thay doi:
+- Sau khi kill Chrome (do 403), goi setup() lai de mo Chrome moi
+- Truoc do: kill Chrome → driver = None → tat ca scenes fail
+- Bay gio: kill Chrome → setup() → tiep tuc tao anh binh thuong
 
-Thay doi khac:
-- Quay lai dung CMD (bo PowerShell)
-- Kill Chrome TRUOC moi retry
+Logic SWITCH MODEL van giu nguyen (5-2-2):
+- Nano Banana Pro: 5 lan 403 → switch Nano Banana 2
+- Nano Banana 2: 2 lan 403 → switch Imagen 4
+- Imagen 4: 2 lan 403 → xoa data, reset ve Nano Banana Pro
 
-1. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
-2. v1.0.176: Quay lai CMD + Fix Chrome zombie
-3. v1.0.175: Fix Chrome zombie - Kill truoc moi retry
-4. v1.0.173: Auto switch model + Quay lai cach mo Chrome cu
+1. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
+2. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
+3. v1.0.176: Quay lai CMD + Fix Chrome zombie
+4. v1.0.175: Fix Chrome zombie - Kill truoc moi retry

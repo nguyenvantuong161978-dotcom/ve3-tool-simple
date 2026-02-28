@@ -4483,11 +4483,13 @@ class DrissionFlowAPI:
                     self.log(f"[403] Model {model_names[current_model]}: {self._consecutive_403}/{model_threshold}", "WARN")
 
                     if self._consecutive_403 < model_threshold:
-                        # Chưa đủ threshold → chỉ restart Chrome
+                        # Chưa đủ threshold → restart Chrome và setup lại
                         self.log(f"[403] Restart Chrome...", "WARN")
                         self._kill_chrome()
                         self.close()
                         time.sleep(2)
+                        # v1.0.178: Setup lại Chrome sau khi kill
+                        self.setup()
 
                     elif current_model < 2:
                         # Đủ threshold nhưng chưa hết model → SWITCH MODEL
@@ -4504,6 +4506,8 @@ class DrissionFlowAPI:
                             self._kill_chrome()
                             self.close()
                             time.sleep(2)
+                            # v1.0.178: Setup lại Chrome sau khi kill
+                            self.setup()
 
                     elif not cleared_flag:
                         # Hết 3 models (9 lần 403) → XÓA DATA + reset về model 0
