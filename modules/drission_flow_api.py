@@ -3225,6 +3225,13 @@ class DrissionFlowAPI:
             self.log("[WIN] Đảm bảo window size đồng nhất...")
             self._setup_window_layout()
 
+        # v1.0.188: Reset 403 counter khi setup thành công
+        # Tránh trường hợp counter từ session trước gây restart không cần thiết
+        if self._consecutive_403 > 0:
+            self.log(f"[RESET] 403 counter reset (was {self._consecutive_403})")
+            self._consecutive_403 = 0
+            self._cleared_data_for_403 = False
+
         self._ready = True
         return True
 

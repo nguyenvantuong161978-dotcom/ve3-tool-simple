@@ -1,13 +1,13 @@
-1.0.187
+1.0.188
 2026-02-28 (VN)
-Change: Auto login khi bi logout trong luc doi prompt input
+Change: Reset 403 counter khi setup thanh cong
 
 Thay doi:
-- Sau 10s khong tim thay prompt input → check logout
-- Neu bi logout → tu dong dang nhap lai Google
-- Sau khi login → quay lai project va tiep tuc
+- Reset _consecutive_403 = 0 khi setup() hoan tat
+- Fix: Chrome vua mo da bi restart do counter cu con tu session truoc
+- Tranh restart khong can thiet
 
-1. v1.0.187: Auto login khi bi logout (prompt input timeout)
-2. v1.0.186: Bo UI check quota - chi dua vao interceptor
-3. v1.0.185: Fix quota switch + Dynamic wait (reverted UI check)
+1. v1.0.188: Reset 403 counter khi setup thanh cong
+2. v1.0.187: Auto login khi bi logout (prompt input timeout)
+3. v1.0.186: Bo UI check quota - chi dua vao interceptor
 4. v1.0.184: Quota switch F5 refresh + Dynamic wait
