@@ -4649,6 +4649,10 @@ class DrissionFlowAPI:
 
                     self.log(f"[403] Model {model_names[current_model]}: {self._consecutive_403}/{model_threshold}", "WARN")
 
+                    # v1.0.197: Cleanup NGAY SAU 403 (trước khi restart)
+                    # Xóa localStorage/IndexedDB để lượt sau không bị flag
+                    self.cleanup_browser_data()
+
                     if self._consecutive_403 < model_threshold:
                         # Chưa đủ threshold → restart Chrome và setup lại
                         self.log(f"[403] Restart Chrome...", "WARN")
@@ -4657,8 +4661,6 @@ class DrissionFlowAPI:
                         time.sleep(2)
                         # v1.0.183: Setup với project_url đã lưu (không làm warm up)
                         # v1.0.195: skip_403_reset=True để giữ counter
-                        # v1.0.196: Set flag để cleanup browser data
-                        self._need_browser_cleanup = True
                         saved_url = getattr(self, '_current_project_url', None)
                         self.setup(project_url=saved_url, skip_403_reset=True)
 
@@ -4674,13 +4676,12 @@ class DrissionFlowAPI:
                             self.log(f"[403] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
                         else:
                             self.log(f"[403] Không switch được model, restart Chrome", "WARN")
+                            # v1.0.197: Cleanup đã chạy ở trên rồi, không cần flag
                             self._kill_chrome()
                             self.close()
                             time.sleep(2)
                             # v1.0.183: Setup với project_url đã lưu (không làm warm up)
                             # v1.0.195: skip_403_reset=True để giữ counter
-                            # v1.0.196: Set flag để cleanup browser data
-                            self._need_browser_cleanup = True
                             saved_url = getattr(self, '_current_project_url', None)
                             self.setup(project_url=saved_url, skip_403_reset=True)
 

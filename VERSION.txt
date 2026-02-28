@@ -1,15 +1,14 @@
-1.0.196
+1.0.197
 2026-02-28 (VN)
-Change: Cleanup localStorage/IndexedDB khi 403
+Change: Cleanup NGAY SAU 403 (truoc khi restart Chrome)
 
 Thay doi:
-- Google dung localStorage/IndexedDB de track va flag browser
-- Du doi IP van 403 vi browser van gui data cu bi flag
-- Them JS_CLEANUP de xoa localStorage/IndexedDB/cookies/cache
-- Tu dong chay cleanup khi restart Chrome sau 403
+- Cleanup chay NGAY SAU khi gap 403, TRUOC khi restart Chrome
+- Xoa localStorage/IndexedDB/cookies ngay de luot sau khong bi flag
+- Khong can doi den setup() moi cleanup
 
-1. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
-2. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
-3. v1.0.194: Bo restart Chrome sau moi anh
-4. v1.0.193: Fix double restart khi gap 403
-5. v1.0.192: Kill Chrome theo thu muc Chrome Portable
+1. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
+2. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
+3. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
+4. v1.0.194: Bo restart Chrome sau moi anh
+5. v1.0.193: Fix double restart khi gap 403
