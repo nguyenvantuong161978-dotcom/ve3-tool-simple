@@ -3227,49 +3227,126 @@ class DrissionFlowAPI:
 
         # v1.0.184: Đợi prompt input có thể click được (thay vì wait cố định)
         # v1.0.187: Thêm check logout nếu không tìm thấy prompt input sau 10s
+        # v1.0.199: Thêm retry logic + check "Create with Flow" page
         max_wait = 30 if getattr(self, '_ipv6_activated', False) else 20
-        self.log(f"Đợi prompt input sẵn sàng (max {max_wait}s)...")
+        max_retries = 3
+        saved_url = getattr(self, '_current_project_url', None)
 
-        prompt_ready = False
-        for i in range(max_wait):
-            try:
-                # Tìm prompt input
-                textarea = self._find_textarea()
-                if textarea:
-                    # Thử click để kiểm tra có thể focus được không
-                    textarea.click()
-                    time.sleep(0.3)
+        for retry in range(max_retries):
+            self.log(f"Đợi prompt input sẵn sàng (max {max_wait}s)..." + (f" [retry {retry+1}/{max_retries}]" if retry > 0 else ""))
 
-                    # Kiểm tra đã focus chưa (activeElement)
-                    is_focused = self.driver.run_js("""
-                        var active = document.activeElement;
-                        return active && (active.contentEditable === 'true' || active.tagName === 'TEXTAREA');
-                    """)
+            prompt_ready = False
+            for i in range(max_wait):
+                try:
+                    # v1.0.199: Check nếu đang ở trang "Create with Flow" thay vì project
+                    if i == 5 or i == 15:
+                        is_create_page = self.driver.run_js('''
+                            (function() {
+                                // Check URL hoặc button "Create with Flow" có hiện không
+                                var url = window.location.href;
+                                if (url.includes('/tools/flow') && !url.includes('/project/')) {
+                                    return 'CREATE_PAGE';
+                                }
+                                // Check có button "Create with Flow" không
+                                var btns = document.querySelectorAll('button');
+                                for (var b of btns) {
+                                    var text = (b.textContent || '').trim();
+                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                        return 'HAS_CREATE_BUTTON';
+                                    }
+                                }
+                                return 'IN_PROJECT';
+                            })();
+                        ''')
+                        if is_create_page in ['CREATE_PAGE', 'HAS_CREATE_BUTTON']:
+                            self.log(f"[WARN] Đang ở trang Create with Flow! Click Create...", "WARN")
+                            # Click "Create with Flow"
+                            click_result = self.driver.run_js('''
+                                (function() {
+                                    var btns = document.querySelectorAll('button');
+                                    for (var b of btns) {
+                                        var text = (b.textContent || '').trim();
+                                        if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                            b.click();
+                                            return 'CLICKED';
+                                        }
+                                    }
+                                    return 'NOT_FOUND';
+                                })();
+                            ''')
+                            if click_result == 'CLICKED':
+                                self.log(f"[v] Clicked Create with Flow, đợi load...")
+                                time.sleep(5)
+                                # Navigate lại project
+                                if saved_url:
+                                    self.log(f"[v] Quay lại project...")
+                                    self.driver.get(saved_url)
+                                    time.sleep(5)
+                                continue
 
-                    if is_focused:
-                        prompt_ready = True
-                        self.log(f"[v] Prompt input sẵn sàng sau {i+1}s!")
-                        break
-            except Exception as e:
-                pass
+                    # Tìm prompt input
+                    textarea = self._find_textarea()
+                    if textarea:
+                        # Thử click để kiểm tra có thể focus được không
+                        textarea.click()
+                        time.sleep(0.3)
 
-            # v1.0.187: Sau 10s mà chưa có prompt input → check logout
-            if i == 10:
-                self.log("[WARN] 10s chưa có prompt input, check logout...", "WARN")
-                if self._is_logged_out():
-                    self.log("[WARN] Phát hiện bị LOGOUT! Đăng nhập lại...", "WARN")
-                    if self._auto_login_google():
-                        self.log("[v] Đăng nhập lại thành công, quay lại project...")
-                        # Navigate lại project
-                        saved_url = getattr(self, '_current_project_url', None)
-                        if saved_url:
-                            self.driver.get(saved_url)
-                            time.sleep(5)
-                    else:
-                        self.log("[x] Không đăng nhập được!", "ERROR")
-                        return False
+                        # Kiểm tra đã focus chưa (activeElement)
+                        is_focused = self.driver.run_js("""
+                            var active = document.activeElement;
+                            return active && (active.contentEditable === 'true' || active.tagName === 'TEXTAREA');
+                        """)
 
-            time.sleep(1)
+                        if is_focused:
+                            prompt_ready = True
+                            self.log(f"[v] Prompt input sẵn sàng sau {i+1}s!")
+                            break
+                except Exception as e:
+                    pass
+
+                # v1.0.187: Sau 10s mà chưa có prompt input → check logout
+                if i == 10:
+                    self.log("[WARN] 10s chưa có prompt input, check logout...", "WARN")
+                    if self._is_logged_out():
+                        self.log("[WARN] Phát hiện bị LOGOUT! Đăng nhập lại...", "WARN")
+                        if self._auto_login_google():
+                            self.log("[v] Đăng nhập lại thành công, quay lại project...")
+                            if saved_url:
+                                self.driver.get(saved_url)
+                                time.sleep(5)
+                        else:
+                            self.log("[x] Không đăng nhập được!", "ERROR")
+                            return False
+
+                time.sleep(1)
+
+            if prompt_ready:
+                break  # Thành công, thoát retry loop
+
+            # v1.0.199: Không tìm thấy prompt input → reload và retry
+            if retry < max_retries - 1:
+                self.log(f"[WARN] Timeout! Reload page và retry...", "WARN")
+                if saved_url:
+                    self.driver.get(saved_url)
+                    time.sleep(5)
+            else:
+                # Hết retry → clear data + login lại
+                self.log(f"[WARN] Hết {max_retries} retry! Clear data + login lại...", "WARN")
+                self.cleanup_browser_data()
+                self.reset_chrome_profile()
+                time.sleep(2)
+                if self._auto_login_google():
+                    self.log("[v] Login lại thành công!")
+                    if saved_url:
+                        self.driver.get(saved_url)
+                        time.sleep(5)
+                        # Check lại prompt input
+                        textarea = self._find_textarea()
+                        if textarea:
+                            prompt_ready = True
+                else:
+                    self.log("[x] Login lại thất bại!", "ERROR")
+                    return False
 
         if not prompt_ready:
             self.log("[WARN] Timeout đợi prompt input, tiếp tục...", "WARN")

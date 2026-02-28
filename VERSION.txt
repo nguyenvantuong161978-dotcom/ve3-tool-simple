@@ -1,15 +1,15 @@
-1.0.198
+1.0.199
 2026-02-28 (VN)
-Change: Cleanup + Restart Chrome sau moi anh thanh cong
+Change: Fix bi treo khi doi prompt input
 
 Thay doi:
-- Them lai reset Chrome sau moi anh thanh cong
-- Ly do: Gui prompt lien tiep bang API se bi 403
-- Flow: Anh thanh cong → Cleanup (xoa localStorage/IndexedDB) → Restart Chrome
-- Cleanup truoc restart giup Chrome sach, giam 403
+- Check neu dang o trang "Create with Flow" thay vi project
+- Neu o Create with Flow → click Create → quay lai project
+- Retry 3 lan neu khong tim thay prompt input
+- Sau 3 retry → clear data + login lai
 
-1. v1.0.198: Cleanup + Restart sau moi anh thanh cong
-2. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
-3. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
-4. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
-5. v1.0.194: Bo restart Chrome sau moi anh
+1. v1.0.199: Fix bi treo khi doi prompt input (Create with Flow page)
+2. v1.0.198: Cleanup + Restart sau moi anh thanh cong
+3. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
+4. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
+5. v1.0.195: Fix 403 counter bi reset - khong switch model duoc
