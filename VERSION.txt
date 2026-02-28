@@ -1,13 +1,14 @@
-1.0.182
+1.0.183
 2026-02-28 (VN)
-Change: Check UI quota moi 3s (don gian)
+Change: Bo warm up khi restart Chrome (da co project URL)
 
 Thay doi:
-- Check UI moi 3s (khong phai moi 0.5s - qua nhieu)
-- Detect text: "het han muc", "dung het", "Khong thanh cong"
-- Khi detect: return error → switch model
+- Khi restart Chrome sau 403, truyen project_url da luu vao setup()
+- Khong lam warm up (vao /project/test) neu da co project URL
+- Truoc: setup() → warm up → vao project (mat thoi gian)
+- Bay gio: setup(project_url=saved_url) → vao thang project
 
-1. v1.0.182: Check UI quota moi 3s (don gian)
-2. v1.0.181: Check UI lien tuc (qua nhieu)
+1. v1.0.183: Bo warm up khi restart (da co project URL)
+2. v1.0.182: Check UI quota moi 3s
 3. v1.0.179: QUOTA - Switch model ngay khi het han muc
 4. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
