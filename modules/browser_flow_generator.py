@@ -4062,8 +4062,10 @@ class BrowserFlowGenerator:
                         except Exception as e:
                             self._log(f"   [x] Retry exception: {e}", "error")
 
-                    # Check for 403 - restart Chrome với proxy mới
-                    if error and "403" in str(error):
+                    # v1.0.195: KHÔNG restart Chrome ở đây vì drission_flow_api đã xử lý 403 rồi
+                    # generate_image() đã restart Chrome + switch model khi gặp 403
+                    # Restart lại ở đây sẽ gây double restart và reset 403 counter
+                    if error and "403" in str(error) and False:  # DISABLED - drission_flow_api đã xử lý
                         self._log(f"[WARN] Lỗi 403 - Restart Chrome với proxy mới...", "warn")
                         try:
                             # Restart Chrome (clear blocked IPs + restart với proxy)

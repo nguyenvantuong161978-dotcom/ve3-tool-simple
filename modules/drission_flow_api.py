@@ -2381,7 +2381,8 @@ class DrissionFlowAPI:
         timeout: int = 120,
         warm_up: bool = False,
         project_url: str = None,
-        skip_mode_selection: bool = False  # True = không click chọn mode (cho Chrome 2 video)
+        skip_mode_selection: bool = False,  # True = không click chọn mode (cho Chrome 2 video)
+        skip_403_reset: bool = False  # v1.0.195: True = không reset 403 counter (khi đang 403 recovery)
     ) -> bool:
         """
         Setup Chrome và inject interceptor.
@@ -2393,6 +2394,7 @@ class DrissionFlowAPI:
             warm_up: Tạo 1 ảnh trong Chrome trước (default False - không cần)
             project_url: URL project cố định (nếu có, sẽ vào thẳng project này)
             skip_mode_selection: Bỏ qua việc click chọn "Tạo hình ảnh" (cho video mode)
+            skip_403_reset: Không reset 403 counter (dùng khi restart trong 403 recovery)
 
         Returns:
             True nếu thành công
@@ -3241,8 +3243,9 @@ class DrissionFlowAPI:
             self._setup_window_layout()
 
         # v1.0.188: Reset 403 counter khi setup thành công
+        # v1.0.195: KHÔNG reset nếu đang trong 403 recovery (skip_403_reset=True)
         # Tránh trường hợp counter từ session trước gây restart không cần thiết
-        if self._consecutive_403 > 0:
+        if self._consecutive_403 > 0 and not skip_403_reset:
             self.log(f"[RESET] 403 counter reset (was {self._consecutive_403})")
             self._consecutive_403 = 0
             self._cleared_data_for_403 = False
@@ -4580,8 +4583,9 @@ class DrissionFlowAPI:
                         self.close()
                         time.sleep(2)
                         # v1.0.183: Setup với project_url đã lưu (không làm warm up)
+                        # v1.0.195: skip_403_reset=True để giữ counter
                         saved_url = getattr(self, '_current_project_url', None)
-                        self.setup(project_url=saved_url)
+                        self.setup(project_url=saved_url, skip_403_reset=True)
 
                     elif current_model < 2:
                         # Đủ threshold nhưng chưa hết model → SWITCH MODEL
@@ -4599,8 +4603,9 @@ class DrissionFlowAPI:
                             self.close()
                             time.sleep(2)
                             # v1.0.183: Setup với project_url đã lưu (không làm warm up)
+                            # v1.0.195: skip_403_reset=True để giữ counter
                             saved_url = getattr(self, '_current_project_url', None)
-                            self.setup(project_url=saved_url)
+                            self.setup(project_url=saved_url, skip_403_reset=True)
 
                     elif not cleared_flag:
                         # Hết 3 models (9 lần 403) → XÓA DATA + reset về model 0
