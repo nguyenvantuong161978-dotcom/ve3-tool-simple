@@ -3277,21 +3277,17 @@ class SmartEngine:
             self._close_browser()
             time.sleep(3)
 
-            # 2. Kill tất cả Chrome processes (giống tắt tool)
-            self.log("   → Kill Chrome processes...")
+            # 2. Kill CHỈ Chrome của worker này (theo port)
+            # v1.0.191: Không kill all Chrome - chỉ kill Chrome theo port để không ảnh hưởng worker khác
+            self.log("   → Kill Chrome của worker này...")
             try:
-                import subprocess
-                import platform
-                if platform.system() == 'Windows':
-                    # Kill Chrome có remote-debugging-port (Chrome của tool)
-                    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
-                                 capture_output=True, timeout=10)
-                else:
-                    subprocess.run(['pkill', '-f', 'chrome'],
-                                 capture_output=True, timeout=10)
-            except:
-                pass
-            time.sleep(5)
+                if hasattr(self, 'api') and self.api:
+                    # Dùng hàm có sẵn trong DrissionFlowAPI
+                    self.api._kill_chrome()
+                    self.log("   → [v] Đã kill Chrome của worker")
+            except Exception as e:
+                self.log(f"   → [WARN] Kill Chrome error: {e}")
+            time.sleep(3)
 
             # 3. Chạy lại từ đầu (chỉ tạo ảnh, không tạo lại prompts)
             self.log("   → Chạy lại tool từ đầu...")

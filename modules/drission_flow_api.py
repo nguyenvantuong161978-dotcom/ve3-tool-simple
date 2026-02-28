@@ -1871,16 +1871,19 @@ class DrissionFlowAPI:
     def _kill_chrome(self):
         """
         Close Chrome của tool này (không kill tất cả Chrome).
-        Chỉ đóng driver và proxy bridge.
+        v1.0.191: Kill theo profile directory để chỉ kill Chrome của worker này.
         """
         try:
-            # Chỉ close driver của tool này
+            # 1. Thử close driver trước
             if self.driver:
                 try:
                     self.driver.quit()
                 except:
                     pass
                 self.driver = None
+
+            # 2. v1.0.191: Kill Chrome theo profile directory (đảm bảo kill đúng Chrome)
+            self._kill_chrome_using_profile()
 
             # Stop proxy bridge
             if hasattr(self, '_proxy_bridge') and self._proxy_bridge:

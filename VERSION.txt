@@ -1,13 +1,14 @@
-1.0.190
+1.0.191
 2026-02-28 (VN)
-Change: Interceptor xu ly 429/253 quota error
+Change: Kill Chrome theo profile + Handle connection disconnected
 
 Thay doi:
-- Them xu ly 429 va 253 (Google quota error) vao JS interceptor
-- Interceptor bat duoc quota error giong nhu bat 403
-- Bo UI check - interceptor da du
+- Kill Chrome theo profile directory (khong kill all Chrome)
+- Fix: Chrome 1 restart khong lam mat Chrome 2
+- Handle "connection disconnected" error - tu dong restart Chrome va retry
+- Giu nguyen worker khac hoat dong binh thuong
 
-1. v1.0.190: Interceptor xu ly 429/253 quota error
-2. v1.0.188: Reset 403 counter khi setup thanh cong
-3. v1.0.187: Auto login khi bi logout (prompt input timeout)
-4. v1.0.186: Bo UI check quota - chi dua vao interceptor
+1. v1.0.191: Kill Chrome theo profile + Handle disconnect
+2. v1.0.190: Interceptor xu ly 429/253 quota error
+3. v1.0.188: Reset 403 counter khi setup thanh cong
+4. v1.0.187: Auto login khi bi logout (prompt input timeout)

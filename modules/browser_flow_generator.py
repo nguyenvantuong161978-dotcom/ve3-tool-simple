@@ -4149,7 +4149,25 @@ class BrowserFlowGenerator:
                                     self._log(f"   [EXCEL] Lỗi update Excel: {e2}", "warn")
 
             except Exception as e:
-                self._log(f"   [x] Exception: {e}", "error")
+                error_str = str(e)
+                self._log(f"   [x] Exception:\n{error_str}", "error")
+
+                # v1.0.191: Xử lý "connection disconnected" - restart Chrome và retry
+                if "disconnected" in error_str.lower() or "connection" in error_str.lower():
+                    self._log("   [RECOVER] Chrome bị disconnect, restart và retry...", "warn")
+                    try:
+                        # Restart Chrome
+                        if self.api:
+                            self.api._kill_chrome()
+                            time.sleep(2)
+                            saved_url = getattr(self.api, '_current_project_url', None)
+                            if self.api.setup(project_url=saved_url):
+                                self._log("   [RECOVER] [v] Chrome restarted!", "info")
+                                # Không tăng failed count, sẽ retry ở phase sau
+                                continue
+                    except Exception as recover_err:
+                        self._log(f"   [RECOVER] Restart failed: {recover_err}", "error")
+
                 self.stats["failed"] += 1
 
             # Rate limit
