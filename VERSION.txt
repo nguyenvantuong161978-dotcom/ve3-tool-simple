@@ -1,18 +1,17 @@
-1.0.178
+1.0.179
 2026-02-28 (VN)
-Change: Fix "API chua setup" - Setup lai Chrome sau khi kill
+Change: QUOTA EXHAUSTED - Switch model NGAY khi het han muc
 
 Thay doi:
-- Sau khi kill Chrome (do 403), goi setup() lai de mo Chrome moi
-- Truoc do: kill Chrome → driver = None → tat ca scenes fail
-- Bay gio: kill Chrome → setup() → tiep tuc tao anh binh thuong
+- Detect loi 429/quota/"het han muc" tu UI
+- Khi het han muc: SWITCH MODEL NGAY (khong doi 5 lan nhu 403)
+- Model 0 → Model 1 → Model 2 → Reset ve Model 0 (skip scene)
 
-Logic SWITCH MODEL van giu nguyen (5-2-2):
-- Nano Banana Pro: 5 lan 403 → switch Nano Banana 2
-- Nano Banana 2: 2 lan 403 → switch Imagen 4
-- Imagen 4: 2 lan 403 → xoa data, reset ve Nano Banana Pro
+Logic:
+- 403 reCAPTCHA: 5-2-2 (doi 5/2/2 lan moi switch)
+- 429 QUOTA: Switch NGAY khi gap (khong doi)
 
-1. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
-2. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
-3. v1.0.176: Quay lai CMD + Fix Chrome zombie
-4. v1.0.175: Fix Chrome zombie - Kill truoc moi retry
+1. v1.0.179: QUOTA - Switch model ngay khi het han muc
+2. v1.0.178: Fix "API chua setup" - Setup lai Chrome sau khi kill
+3. v1.0.177: Logic SWITCH MODEL khi 403 (5-2-2)
+4. v1.0.176: Quay lai CMD + Fix Chrome zombie

@@ -4395,32 +4395,49 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === ERROR 253/429: Quota exceeded ===
-                # Chuyển sang nano banana và tiếp tục (quota sẽ hết sau 1 lúc)
-                if "253" in error or "429" in error or "quota" in error.lower() or "exceeds" in error.lower():
+                # === ERROR 253/429/QUOTA: Hết hạn mức → SWITCH MODEL NGAY ===
+                # v1.0.179: Detect "hết hạn mức" và switch model ngay lập tức
+                quota_keywords = ["253", "429", "quota", "exceeds", "hết hạn mức", "dùng hết", "hạn mức"]
+                is_quota_error = any(kw in error.lower() for kw in quota_keywords)
 
-                    # Luôn chuyển sang nano banana khi gặp quota (nếu chưa)
-                    if not self._use_fallback_model:
-                        self.switch_to_fallback_model()
-                        force_model = "GEM_PIX"  # Override cho các lần retry sau
+                if is_quota_error:
+                    current_model = getattr(self, '_current_model_index', 0)
+                    model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
 
-                    # Retry với nano banana: đợi 5s → F5 refresh → retry
+                    if current_model < 2:
+                        # Còn model khác → SWITCH NGAY (không đợi như 403)
+                        next_model = current_model + 1
+                        self.log(f"[QUOTA] Hết hạn mức {model_names[current_model]} → SWITCH: {model_names[next_model]}", "WARN")
+
+                        if self.select_model_by_index(next_model):
+                            self._current_model_index = next_model
+                            self.log(f"[QUOTA] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
+                            # Retry ngay với model mới
+                            time.sleep(2)
+                            attempt += 1
+                            continue
+                        else:
+                            self.log(f"[QUOTA] Không switch được model", "WARN")
+                    else:
+                        # Đã hết 3 models → reset về model 0 và skip scene này
+                        self.log(f"[QUOTA] Hết cả 3 models, skip scene này", "WARN")
+                        self._current_model_index = 0
+                        # Thử switch về model 0 cho scene tiếp
+                        self.select_model_by_index(0)
+                        return False, [], f"Quota exhausted all models"
+
+                    # Fallback: refresh và retry
                     if attempt < effective_max_retries - 1:
-                        self.log(f"[WARN] 429 Quota - Đợi 5s, F5 refresh rồi retry...", "WARN")
+                        self.log(f"[QUOTA] Đợi 5s, F5 refresh rồi retry...", "WARN")
                         time.sleep(5)
-                        # F5 refresh page
                         try:
                             self.driver.refresh()
-                            time.sleep(3)  # Đợi page load
-                            self.log(f"  → F5 refreshed, retry...")
-                        except Exception as e:
-                            self.log(f"  → Refresh failed: {e}", "WARN")
+                            time.sleep(3)
+                        except:
+                            pass
                         attempt += 1
                         continue
 
-                    # Hết retry trong hàm này, nhưng KHÔNG return False
-                    # Để caller có thể retry tiếp với scene tiếp theo
-                    self.log(f"[WARN] 429 sau {max_retries} lần, tiếp tục scene tiếp...", "WARN")
                     return False, [], f"429 quota - tiếp tục với scene tiếp theo"
 
                 # Nếu lỗi 500 (Internal Error), retry với delay
