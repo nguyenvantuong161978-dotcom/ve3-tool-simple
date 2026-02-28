@@ -4891,6 +4891,11 @@ class DrissionFlowAPI:
                 if "timeout" in error.lower():
                     self.log(f"[WARN] Timeout (attempt {attempt+1}/{effective_max_retries}) - RESTART CHROME!", "WARN")
 
+                    # v1.0.202: Cleanup TRƯỚC khi restart (đồng bộ với 403 handling)
+                    # Timeout có thể do 403 không được detect, cần cleanup
+                    self.log("[CLEANUP] Cleanup trước khi restart (timeout)...")
+                    self.cleanup_browser_data()
+
                     # Đổi proxy nếu có
                     if self._use_webshare and self._webshare_proxy:
                         success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "Timeout")
@@ -5501,6 +5506,11 @@ class DrissionFlowAPI:
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
                     self.log(f"[I2V-Chrome] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+
+                    # v1.0.202: Cleanup TRƯỚC khi restart (đồng bộ với 403 handling)
+                    self.log("[I2V-Chrome] [CLEANUP] Cleanup trước khi restart...")
+                    self.cleanup_browser_data()
+
                     self._kill_chrome()
                     self.close()
                     time.sleep(2)
@@ -6017,6 +6027,10 @@ class DrissionFlowAPI:
                 # === TIMEOUT ERROR: Reset Chrome ===
                 if "timeout" in str(error).lower():
                     self.log(f"[I2V-FORCE] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+
+                    # v1.0.202: Cleanup TRƯỚC khi restart (đồng bộ với 403 handling)
+                    self.log("[I2V-FORCE] [CLEANUP] Cleanup trước khi restart...")
+                    self.cleanup_browser_data()
 
                     self._kill_chrome()
                     self.close()
@@ -6860,6 +6874,11 @@ class DrissionFlowAPI:
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
                     self.log(f"[T2V-PURE] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+
+                    # v1.0.202: Cleanup TRƯỚC khi restart (đồng bộ với 403 handling)
+                    self.log("[T2V-PURE] [CLEANUP] Cleanup trước khi restart...")
+                    self.cleanup_browser_data()
+
                     self._kill_chrome()
                     self.close()
                     time.sleep(2)
@@ -7083,6 +7102,11 @@ class DrissionFlowAPI:
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
                     self.log(f"[I2V-MODIFY] [WARN] Timeout error (attempt {attempt+1}/{max_retries}) - Reset Chrome...", "WARN")
+
+                    # v1.0.202: Cleanup TRƯỚC khi restart (đồng bộ với 403 handling)
+                    self.log("[I2V-MODIFY] [CLEANUP] Cleanup trước khi restart...")
+                    self.cleanup_browser_data()
+
                     self._kill_chrome()
                     self.close()
                     time.sleep(2)

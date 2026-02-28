@@ -1,14 +1,15 @@
-1.0.201
+1.0.202
 2026-02-28 (VN)
-Change: Fix Create with Flow logic - 20 retries + quay lai project sau warmup
+Change: Dong bo cleanup cho timeout - Chrome 1 va Chrome 2 giong nhau
 
 Thay doi:
-- Create with Flow: 20 lan retry, reload moi 5 lan (nhu warmup)
-- Sau warmup: Navigate ve project URL thay vi o Flow page
-- Fix loi "Khong tim thay textarea" sau khi reset Chrome
+- Timeout handling: Cleanup truoc khi restart (dong bo voi 403 handling)
+- Tat ca functions: generate_image, I2V-Chrome, I2V-FORCE, T2V-PURE, I2V-MODIFY
+- Fix Chrome 2 khong cleanup khi timeout
 
-1. v1.0.201: Fix Create with Flow logic + quay lai project sau warmup
-2. v1.0.200: Fix Create with Flow - check ngay + doi "Tao du an moi"
+1. v1.0.202: Dong bo cleanup cho timeout - Chrome 1 va 2 giong nhau
+2. v1.0.201: Fix Create with Flow logic + quay lai project sau warmup
+3. v1.0.200: Fix Create with Flow - check ngay + doi "Tao du an moi"
 2. v1.0.199: Fix bi treo khi doi prompt input (Create with Flow page)
 3. v1.0.198: Cleanup + Restart sau moi anh thanh cong
 4. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
