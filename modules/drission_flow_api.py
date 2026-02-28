@@ -7233,25 +7233,33 @@ class DrissionFlowAPI:
 
     def _kill_chrome_using_profile(self):
         """
-        Tắt Chrome theo thư mục Chrome Portable (không phải profile).
-        v1.0.192: Dùng chrome_portable path thay vì profile_dir.
+        Tắt Chrome theo thư mục Chrome Portable.
+        v1.0.192: Kill Chrome theo thư mục GoogleChromePortable/ hoặc GoogleChromePortable - Copy/
         """
         import subprocess
         import platform
 
-        # v1.0.192: Ưu tiên dùng thư mục Chrome Portable
+        # v1.0.192: Lấy thư mục Chrome Portable từ chrome_portable path
+        # VD: GoogleChromePortable/App/Chrome-bin/chrome.exe → GoogleChromePortable
+        # VD: GoogleChromePortable - Copy/App/Chrome-bin/chrome.exe → GoogleChromePortable - Copy
+        search_path = None
         if self._chrome_portable:
-            # Lấy thư mục cha của chrome.exe (vd: GoogleChromePortable/App/Chrome-bin/)
-            chrome_dir = str(Path(self._chrome_portable).parent.parent.parent.absolute())
-        else:
-            chrome_dir = str(self.profile_dir.absolute())
+            chrome_path = Path(self._chrome_portable)
+            # Tìm thư mục gốc chứa "GoogleChromePortable" trong path
+            for parent in chrome_path.parents:
+                if parent.name.startswith("GoogleChromePortable"):
+                    search_path = parent.name  # "GoogleChromePortable" hoặc "GoogleChromePortable - Copy"
+                    break
 
-        profile_path = chrome_dir
-        self.log(f"[KILL] Tìm Chrome theo: {profile_path[:50]}...")
+        if not search_path:
+            self.log("[KILL] Không tìm thấy thư mục Chrome Portable")
+            return
+
+        self.log(f"[KILL] Tìm Chrome theo thư mục: {search_path}")
 
         try:
             if platform.system() == 'Windows':
-                # Windows: tìm và kill Chrome process dùng profile này
+                # Windows: tìm và kill Chrome process theo thư mục Chrome Portable
                 result = subprocess.run(
                     ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
                     capture_output=True, text=True, timeout=10
@@ -7260,7 +7268,8 @@ class DrissionFlowAPI:
                 if result.returncode == 0:
                     lines = result.stdout.strip().split('\n')
                     for line in lines:
-                        if profile_path.replace('/', '\\') in line or profile_path in line:
+                        # Tìm Chrome chạy từ thư mục này (VD: GoogleChromePortable hoặc GoogleChromePortable - Copy)
+                        if search_path in line:
                             # Tìm PID ở cuối dòng
                             parts = line.strip().split()
                             if parts:
@@ -7278,7 +7287,7 @@ class DrissionFlowAPI:
             else:
                 # Linux/Mac: dùng SIGTERM trước (graceful), sau đó mới SIGKILL
                 result = subprocess.run(
-                    ['pgrep', '-f', profile_path],
+                    ['pgrep', '-f', search_path],
                     capture_output=True, text=True, timeout=10
                 )
                 if result.returncode == 0:
