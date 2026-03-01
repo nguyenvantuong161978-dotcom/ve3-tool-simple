@@ -1,14 +1,15 @@
-1.0.216
+1.0.217
 2026-03-01 (VN)
-Change: Hardcode force_model = "" - khong doc tu config
+Change: Fix model selection sau 403 recovery
 
 Thay doi:
-- Hardcode force_model = "" trong browser_flow_generator.py
-- Khong doc tu settings.yaml de VM cu van hoat dong dung
-- Giu nguyen model Chrome chon, khong can thiep
+- Them reset _model_selected = False trong reset_chrome_profile()
+- Sau 403 recovery, model selection se hoat dong lai
+- Truoc day: 403 -> reset profile -> khong chon model
 
-1. v1.0.216: Hardcode force_model = "" (khong doc config)
-2. v1.0.215: Fix config force_model: always -> ''
+1. v1.0.217: Fix model selection sau 403 recovery
+2. v1.0.216: Hardcode force_model = "" (khong doc config)
+3. v1.0.215: Fix config force_model: always -> ''
 2. v1.0.214: Bo force model - giu nguyen model Chrome chon
 2. v1.0.213: Reset model flag trong setup() de luon chon model
 3. v1.0.212: Generate truot -> reload page va gui lai prompt

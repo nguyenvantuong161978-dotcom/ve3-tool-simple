@@ -2383,6 +2383,7 @@ class DrissionFlowAPI:
             self._ready = False
             self._t2v_mode_selected = False
             self._image_mode_selected = False
+            self._model_selected = False  # v1.0.217: Reset model flag để chọn lại sau recovery
             self._consecutive_403 = 0
             self._cleared_data_for_403 = False
             self.driver = None
