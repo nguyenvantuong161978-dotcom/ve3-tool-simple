@@ -1,13 +1,15 @@
-1.0.214
+1.0.215
 2026-03-01 (VN)
 Change: Bo force model - giu nguyen model Chrome chon
 
 Thay doi:
 - Doi force_model default tu "auto" sang ""
+- Doi force_model trong settings.yaml tu "always" sang ""
 - Khong can thiep vao model selection
 - Giu nguyen model Chrome chon de tranh bi detect
 
-1. v1.0.214: Bo force model - giu nguyen model Chrome chon
+1. v1.0.215: Fix config force_model: always -> ''
+2. v1.0.214: Bo force model - giu nguyen model Chrome chon
 2. v1.0.213: Reset model flag trong setup() de luon chon model
 3. v1.0.212: Generate truot -> reload page va gui lai prompt
 4. v1.0.211: Fix bi treo o "Create with Flow" khi vao project URL
