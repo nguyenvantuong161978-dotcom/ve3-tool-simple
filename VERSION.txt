@@ -1,14 +1,14 @@
-1.0.207
+1.0.208
 2026-03-01 (VN)
-Change: LUON warm up truoc khi vao project URL
+Change: Co project_url thi vao thang - chi warm up khi co van de
 
 Thay doi:
-- LUON warm up (check login) truoc - du co project_url hay khong
-- Xoa duplicate navigation code
+- Co project_url -> vao thang project URL
+- Khong tim thay textarea -> check login va retry
+- Khong co project_url -> warm up nhu truoc
 - Xu ly "page is refreshed" - doi 3s roi retry
-- Fix retry qua nhanh (3 lan trong 1 giay)
 
-1. v1.0.207: LUON warm up truoc khi vao project URL
+1. v1.0.208: Co project_url thi vao thang - chi warm up khi co van de
 2. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready
 3. v1.0.205: Fix syntax error - xoa JS orphan code
 2. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
