@@ -18,7 +18,7 @@ flow_delay: 3.0
 flow_image_count: 1
 flow_project_id: ''
 flow_timeout: 120
-force_model: always
+force_model: ''
 gemini_api_keys:
 - ''
 gemini_models:
