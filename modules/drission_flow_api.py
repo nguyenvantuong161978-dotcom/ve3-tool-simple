@@ -2927,35 +2927,11 @@ class DrissionFlowAPI:
                     # Có project_url → logic navigation như cũ (giữ nguyên)
                     pass
 
-                # ===== GIỮ NGUYÊN LOGIC NAVIGATION CŨ CHO PROJECT_URL =====
-                # Nếu KHÔNG có project_url, block if dưới đây sẽ tạo project mới
+                # ===== LOGIC NAVIGATION =====
                 if not project_url:
-                                                var text = (a.textContent || '').trim();
-                                                if (text.includes('Quay lại dự án') || text.includes('Back to project') || text.includes('arrow_back')) {
-                                                    a.click();
-                                                    return 'CLICKED_BACK';
-                                                }
-                                            }
-                                            return 'NOT_FOUND';
-                                        })();
-                                    ''')
-                                    if back_result and 'CLICKED' in str(back_result):
-                                        self.log(f"[v] {back_result}")
-                                        time.sleep(3)
-                                        break
-                                    time.sleep(2)
-
-                            time.sleep(5)
-                            self.log(f"[v] Warm up lại done!")
-                        else:
-                            self.log("[x] Auto-login thất bại", "ERROR")
-                            return False
-                    else:
-                        self.log(f"[v] Đang đăng nhập!")
-
-                    # Bước 2: SAU ĐÓ vào trang chủ Flow để click "Dự án mới"
-                    self.log(f"Vào trang chủ Flow...")
+                    # Không có project_url → vào trang Flow để tạo dự án mới
                     target_url = self.FLOW_URL
+                    self.log(f"Vào trang Flow...")
                 else:
                     # Có project_url → vào thẳng dự án thật
                     target_url = project_url

@@ -1,13 +1,13 @@
-1.0.204
+1.0.205
 2026-03-01 (VN)
-Change: Don gian hoa warm up - chi doi "Tao du an moi"
+Change: Fix syntax error - xoa JS orphan code
 
 Thay doi:
-- Fix loi FLOW_URL_FALLBACK khong ton tai
-- Don gian hoa logic moi: chi doi button "Tao du an moi" xuat hien
-- Bo het Click "Create with Flow" + "Quay lai du an" phuc tap
+- Fix syntax error line 2933 (JS code bi bo sot trong Python file)
+- Clean up logic navigation
 
-1. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
+1. v1.0.205: Fix syntax error - xoa JS orphan code
+2. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
 2. v1.0.203: Bo /project/test - vao thang Flow page
 2. v1.0.202: Dong bo cleanup cho timeout - Chrome 1 va 2 giong nhau
 2. v1.0.201: Fix Create with Flow logic + quay lai project sau warmup
