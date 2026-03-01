@@ -3621,9 +3621,9 @@ class BrowserFlowGenerator:
         # Track failed prompts để retry sau
         failed_prompts = []  # List[Tuple[prompt_data, index, error]]
 
-        # v1.0.173: Đọc model index từ file và chọn trên giao diện Chrome
-        # vm_manager ghi model index khi chuyển model do 403
-        force_model = self.config.get('force_model', 'auto')
+        # v1.0.214: Bỏ force model - giữ nguyên model Chrome chọn
+        # Không can thiệp vào model selection để tránh bị detect
+        force_model = self.config.get('force_model', '')
         try:
             worker_id = f"chrome_{self.worker_id + 1}"  # chrome_1 hoặc chrome_2
             model_file = Path(__file__).parent.parent / ".agent" / "status" / f"{worker_id}_model.txt"
