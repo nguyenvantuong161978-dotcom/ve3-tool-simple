@@ -2845,184 +2845,91 @@ class DrissionFlowAPI:
 
         for nav_attempt in range(max_nav_retries):
             try:
-                # Nếu KHÔNG có project_url → setup mới → thao tác "mồi" trước
+                # Nếu KHÔNG có project_url → setup mới → warm up đơn giản
                 if not project_url:
-                    # Bước 1: Vào /project/test (thao tác mồi)
-                    self.log(f"[MỒI] Vào Flow page (warm up)...")
-                    self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
+                    # v1.0.204: Đơn giản hóa warm up - chỉ cần đợi "Tạo dự án mới" xuất hiện
+                    self.log(f"[MỒI] Vào Flow page...")
+                    self.driver.get(self.FLOW_URL)
+                    time.sleep(2)
 
-                    # Đợi trang load xong (QUAN TRỌNG - không chỉ sleep!)
-                    wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
-                    time.sleep(wait_time)
+                    # Đợi "Tạo dự án mới" button xuất hiện (20 lần retry, reload mỗi 5)
+                    for attempt in range(20):
+                        # Check logout
+                        if self._is_logged_out():
+                            self.log("[WARN] Phát hiện bị LOGOUT!", "WARN")
+                            if self._auto_login_google():
+                                self.log("[v] Đã login thành công!")
+                                self.driver.get(self.FLOW_URL)
+                                time.sleep(2)
+                            else:
+                                self.log("[x] Auto-login thất bại", "ERROR")
+                                return False
 
-                    # Đợi page ready
-                    self.log(f"[MỒI] Đợi page load xong...")
-                    if self._wait_for_page_ready(timeout=30):
-                        self.log(f"[v] Page ready!")
-                    else:
-                        self.log(f"[WARN] Warm up page chưa ready (timeout)", "WARN")
+                        # Tìm button "Tạo dự án mới" (add_2)
+                        try:
+                            btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
+                            if btn:
+                                self.log(f"[v] 'Tạo dự án mới' đã sẵn sàng! (attempt {attempt+1})")
+                                break
+                        except:
+                            pass
 
-                    # v1.0.129: CHECK LOGOUT NGAY từ đầu (trước khi làm gì khác)
-                    self.log(f"[MỒI] Check logout ngay từ đầu...")
-                    if self._is_logged_out():
-                        self.log("[WARN] Phát hiện bị LOGOUT ngay từ đầu!", "WARN")
-                        if self._auto_login_google():
-                            self.log("[v] Đã login thành công!")
-                            # Sau login, vào lại /project/test
-                            self.log("[MỒI] Vào lại Flow page sau login...")
-                            self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
-                            time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
-                            if self._wait_for_page_ready(timeout=30):
-                                self.log(f"[v] Page ready!")
-                        else:
-                            self.log("[x] Auto-login thất bại", "ERROR")
-                            return False
-                    else:
-                        self.log(f"[v] Đang đăng nhập!")
-
-                    # v1.0.133: Click "Create with Flow" button (giao diện mới 2026-02)
-                    # Retry 3 lần với delay tăng dần: 2s, 4s, 6s
-                    self.log(f"[MỒI] Click 'Create with Flow'...")
-                    click_delays = [2, 4, 6]  # Delay tăng dần giữa các lần retry
-                    click_success = False
-                    for click_attempt in range(3):
-                        click_result = self.driver.run_js('''
-                            (function() {
-                                // Tìm button "Create with Flow"
-                                var btns = document.querySelectorAll('button');
-                                for (var b of btns) {
-                                    var text = (b.textContent || '').trim();
-                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                        b.click();
-                                        return 'CLICKED_CREATE_WITH_FLOW';
-                                    }
-                                }
-
-                                // Fallback: tìm span chứa text
-                                var spans = document.querySelectorAll('span');
-                                for (var s of spans) {
-                                    var text = (s.textContent || '').trim();
-                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                        var btn = s.closest('button');
-                                        if (btn) {
-                                            btn.click();
-                                            return 'CLICKED_VIA_SPAN';
-                                        }
-                                    }
-                                }
-
-                                return 'NOT_FOUND';
-                            })();
-                        ''')
-                        if click_result and 'CLICKED' in str(click_result):
-                            self.log(f"[v] {click_result}")
-                            click_success = True
-                            time.sleep(3)  # Đợi trang chuyển
-                            break
-                        else:
-                            delay = click_delays[click_attempt]
-                            self.log(f"[MỒI] Retry click ({click_attempt+1}/3) sau {delay}s...")
-                            time.sleep(delay)
-
-                    # v1.0.133: Sau khi click Create with Flow → sang trang mới
-                    # Cần click "Quay lại dự án" để về trang chủ Flow
-                    if click_success:
-                        self.log(f"[MỒI] Đợi trang mới load...")
-                        time.sleep(5)
-
-                        self.log(f"[MỒI] Click 'Quay lại dự án' để về trang chủ...")
-                        for back_attempt in range(3):
-                            back_result = self.driver.run_js('''
+                        # Thử click "Create with Flow" nếu có
+                        try:
+                            click_result = self.driver.run_js('''
                                 (function() {
-                                    // Tìm link "Quay lại dự án" hoặc "Back to project"
-                                    var links = document.querySelectorAll('a');
-                                    for (var a of links) {
-                                        var text = (a.textContent || '').trim();
-                                        if (text.includes('Quay lại dự án') || text.includes('Back to project') || text.includes('arrow_back')) {
-                                            a.click();
-                                            return 'CLICKED_BACK';
+                                    var btns = document.querySelectorAll('button');
+                                    for (var b of btns) {
+                                        var text = (b.textContent || '').trim();
+                                        if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                            b.click();
+                                            return 'CLICKED';
                                         }
-                                    }
-                                    // Fallback: tìm theo href
-                                    var backLink = document.querySelector('a[href*="/tools/flow"]');
-                                    if (backLink && backLink.textContent.includes('arrow_back')) {
-                                        backLink.click();
-                                        return 'CLICKED_BACK_VIA_HREF';
                                     }
                                     return 'NOT_FOUND';
                                 })();
                             ''')
-                            if back_result and 'CLICKED' in str(back_result):
-                                self.log(f"[v] {back_result}")
-                                time.sleep(3)
-                                break
-                            else:
-                                self.log(f"[MỒI] Retry back ({back_attempt+1}/3)...")
-                                time.sleep(2)
+                            if click_result and 'CLICKED' in str(click_result):
+                                self.log(f"[MỒI] Clicked 'Create with Flow' ({attempt+1}/20)")
+                                time.sleep(1)
+                                continue
+                        except:
+                            pass
 
-                    # Đợi thêm cho trang chủ Flow load
-                    self.log(f"[MỒI] Đợi trang chủ Flow load...")
-                    time.sleep(5)
+                        # Reload mỗi 5 lần
+                        if attempt > 0 and attempt % 5 == 0:
+                            self.log(f"[MỒI] Reload Flow page ({attempt}/20)...")
+                            self.driver.get(self.FLOW_URL)
+                            time.sleep(2)
+
+                        time.sleep(0.5)
+
                     self.log(f"[v] Warm up done!")
 
-                    # CHECK LOGOUT sau warm up
-                    self.log(f"[MỒI] Check logout...")
-                    if self._is_logged_out():
-                        self.log("[WARN] Phát hiện bị LOGOUT sau warm up!", "WARN")
-                        if self._auto_login_google():
-                            self.log("[v] Đã login lại thành công!")
-                            # Login xong, vào lại Flow page để warm up lại
-                            self.log("[MỒI] Vào lại Flow page sau login...")
-                            self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
-                            time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
-                            if self._wait_for_page_ready(timeout=30):
-                                self.log(f"[v] Page ready!")
+                    # Bước 2: SAU ĐÓ vào trang chủ Flow để click "Dự án mới"
+                    self.log(f"Vào trang chủ Flow...")
+                    target_url = self.FLOW_URL
+                else:
+                    # Có project_url → vào thẳng dự án thật
+                    target_url = project_url
+                    self.log(f"Vào project: {target_url[:60]}...")
 
-                            # v1.0.133: Click "Create with Flow" sau login lại
-                            # Retry 3 lần với delay tăng dần
-                            self.log(f"[MỒI] Click 'Create with Flow' sau login...")
-                            click_delays2 = [2, 4, 6]
-                            click_success2 = False
-                            for click_attempt in range(3):
-                                click_result = self.driver.run_js('''
-                                    (function() {
-                                        var btns = document.querySelectorAll('button');
-                                        for (var b of btns) {
-                                            var text = (b.textContent || '').trim();
-                                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                                b.click();
-                                                return 'CLICKED';
-                                            }
-                                        }
-                                        var spans = document.querySelectorAll('span');
-                                        for (var s of spans) {
-                                            var text = (s.textContent || '').trim();
-                                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                                var btn = s.closest('button');
-                                                if (btn) { btn.click(); return 'CLICKED'; }
-                                            }
-                                        }
-                                        return 'NOT_FOUND';
-                                    })();
-                                ''')
-                                if click_result and 'CLICKED' in str(click_result):
-                                    self.log(f"[v] Clicked Create with Flow")
-                                    click_success2 = True
-                                    time.sleep(3)
-                                    break
-                                delay2 = click_delays2[click_attempt]
-                                self.log(f"[MỒI] Retry ({click_attempt+1}/3) sau {delay2}s...")
-                                time.sleep(delay2)
+                # NAVIGATE
+                self.driver.run_js(f"window.location.href = '{target_url}';", timeout=2)
+                wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
+                time.sleep(wait_time)
 
-                            # Click "Quay lại dự án" nếu click thành công
-                            if click_success2:
-                                time.sleep(5)
-                                self.log(f"[MỒI] Click 'Quay lại dự án'...")
-                                for back_attempt in range(3):
-                                    back_result = self.driver.run_js('''
-                                        (function() {
-                                            var links = document.querySelectorAll('a');
-                                            for (var a of links) {
+                # Bỏ qua phần check phức tạp bên dưới - chuyển thẳng đến nav_success
+                if not project_url:
+                    # Không có project_url → skip phần navigation logic cũ
+                    pass
+                else:
+                    # Có project_url → logic navigation như cũ (giữ nguyên)
+                    pass
+
+                # ===== GIỮ NGUYÊN LOGIC NAVIGATION CŨ CHO PROJECT_URL =====
+                # Nếu KHÔNG có project_url, block if dưới đây sẽ tạo project mới
+                if not project_url:
                                                 var text = (a.textContent || '').trim();
                                                 if (text.includes('Quay lại dự án') || text.includes('Back to project') || text.includes('arrow_back')) {
                                                     a.click();
@@ -3048,7 +2955,7 @@ class DrissionFlowAPI:
 
                     # Bước 2: SAU ĐÓ vào trang chủ Flow để click "Dự án mới"
                     self.log(f"Vào trang chủ Flow...")
-                    target_url = self.FLOW_URL_FALLBACK
+                    target_url = self.FLOW_URL
                 else:
                     # Có project_url → vào thẳng dự án thật
                     target_url = project_url
