@@ -1,13 +1,15 @@
-1.0.210
+1.0.211
 2026-03-01 (VN)
-Change: Reference co media_id thi status=done
+Change: Fix bi treo o "Create with Flow" khi vao project URL
 
 Thay doi:
-- Khi tao reference thanh cong (co media_id) -> status="done"
-- Logic: co media_id = da xong, khong co = can retry
-- Khi chay lai tool, chi tao lai cac reference khong co media_id
+- Khi vao project URL nhung khong thay textarea
+- Check xem co dang o trang "Create with Flow" khong
+- Neu co -> click vao -> doi "Du an moi" -> vao lai project URL
+- Fix loi Chrome 2 bi treo sau khi login
 
-1. v1.0.210: Reference co media_id thi status=done
+1. v1.0.211: Fix bi treo o "Create with Flow" khi vao project URL
+2. v1.0.210: Reference co media_id thi status=done
 2. v1.0.209: Reference retry 2 vong + Chrome 2 bo validator
 2. v1.0.208: Co project_url thi vao thang - chi warm up khi co van de
 2. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready

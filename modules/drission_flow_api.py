@@ -2879,8 +2879,46 @@ class DrissionFlowAPI:
                                 self.log("[x] Auto-login thất bại", "ERROR")
                                 return False
                         else:
-                            # Đã login nhưng không có textarea → retry
-                            self.log("[WARN] Đã login nhưng page chưa sẵn sàng - retry...", "WARN")
+                            # v1.0.211: Đã login nhưng không có textarea
+                            # Có thể đang ở trang "Create with Flow" → cần click để tiếp tục
+                            self.log("[WARN] Đã login nhưng page chưa sẵn sàng - check Create with Flow...", "WARN")
+
+                            # Thử click "Create with Flow" nếu có
+                            try:
+                                click_result = self.driver.run_js('''
+                                    (function() {
+                                        var btns = document.querySelectorAll('button');
+                                        for (var b of btns) {
+                                            var text = (b.textContent || '').trim();
+                                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                                b.click();
+                                                return 'CLICKED_CREATE_WITH_FLOW';
+                                            }
+                                        }
+                                        return 'NOT_FOUND';
+                                    })();
+                                ''')
+                                if click_result and 'CLICKED' in str(click_result):
+                                    self.log(f"[v] Clicked 'Create with Flow' - đợi page sẵn sàng...")
+                                    time.sleep(3)
+
+                                    # Đợi nút "Dự án mới" xuất hiện (giống warm up)
+                                    for i in range(10):
+                                        try:
+                                            btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
+                                            if btn:
+                                                self.log(f"[v] 'Dự án mới' đã sẵn sàng!")
+                                                break
+                                        except:
+                                            pass
+                                        time.sleep(1)
+
+                                    # Giờ vào lại project URL
+                                    self.log(f"[v] Vào lại project URL...")
+                                    # Tiếp tục retry (continue sẽ quay lại đầu loop)
+                            except Exception as e:
+                                self.log(f"[WARN] Click Create with Flow error: {e}", "WARN")
+
                             time.sleep(2)
                             continue
                 else:
