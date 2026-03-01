@@ -1,12 +1,14 @@
-1.0.205
+1.0.206
 2026-03-01 (VN)
-Change: Fix syntax error - xoa JS orphan code
+Change: Fix _auto_setup_project - bo _wait_for_page_ready
 
 Thay doi:
-- Fix syntax error line 2933 (JS code bi bo sot trong Python file)
-- Clean up logic navigation
+- Bo _wait_for_page_ready() trong _auto_setup_project()
+- Trang chu Flow khong co textarea nen _wait_for_page_ready() bi timeout
+- Loop F5 retry da co san trong function
 
-1. v1.0.205: Fix syntax error - xoa JS orphan code
+1. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready
+2. v1.0.205: Fix syntax error - xoa JS orphan code
 2. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
 2. v1.0.203: Bo /project/test - vao thang Flow page
 2. v1.0.202: Dong bo cleanup cho timeout - Chrome 1 va 2 giong nhau

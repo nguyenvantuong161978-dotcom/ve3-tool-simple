@@ -1468,10 +1468,9 @@ class DrissionFlowAPI:
         """
         self.log("→ Đang tự động tạo dự án mới...")
 
-        # 0. Đợi page load xong trước (tránh ContextLostError)
-        self.log("   Đợi page load...")
-        if not self._wait_for_page_ready(timeout=30):
-            self.log("[WARN] Page chưa sẵn sàng", "WARN")
+        # v1.0.206: Bỏ _wait_for_page_ready() vì nó đợi textarea (không có ở trang chủ Flow)
+        # Loop bên dưới đã có logic F5 retry nếu không tìm thấy button
+        time.sleep(2)  # Đợi page ổn định
 
         # 1. Đợi trang load và tìm button "Dự án mới"
         # Nếu không tìm thấy → F5 refresh và thử lại (mỗi 10s)
