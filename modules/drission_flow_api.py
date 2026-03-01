@@ -3375,6 +3375,9 @@ class DrissionFlowAPI:
             self._consecutive_403 = 0
             self._cleared_data_for_403 = False
 
+        # v1.0.213: Reset model flag để chọn lại model khi generate đầu tiên
+        self._model_selected = False
+
         self._ready = True
         return True
 
@@ -4448,18 +4451,66 @@ class DrissionFlowAPI:
             if not request_detected and elapsed > 10:
                 if not result.get('pending') and not result.get('response') and not result.get('error'):
                     self.log("[WARN] Không thấy request sau 10s - generate có thể bị trượt!", "WARN")
-                    self.log("[RETRY] Thử gửi generate lại...")
+                    self.log("[RETRY] Reload page và gửi lại prompt...")
 
-                    # RETRY: v1.0.127 - Enter key (hoạt động cho cả giao diện mới và cũ)
+                    # v1.0.212: Reload page và gửi lại prompt (thay vì chỉ Enter)
                     try:
-                        from DrissionPage.common import Keys
-                        self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
-                        self.log("→ Retry Enter sent")
+                        # 1. Reload project page
+                        saved_url = getattr(self, '_current_project_url', None)
+                        if saved_url:
+                            self.driver.get(saved_url)
+                        else:
+                            self.driver.refresh()
+                        time.sleep(3)
+
+                        # 2. Đợi textarea sẵn sàng
+                        textarea = None
+                        for wait_i in range(10):
+                            textarea = self._find_textarea()
+                            if textarea:
+                                break
+                            time.sleep(1)
+
+                        if textarea:
+                            # 3. Reset interceptor state
+                            self.driver.run_js("""
+                                window._response = null;
+                                window._responseError = null;
+                                window._requestPending = false;
+                            """)
+
+                            # 4. Re-setup modify config nếu có image_inputs
+                            if image_inputs and len(image_inputs) > 0:
+                                modify_cfg = {"imageCount": num_images if num_images else 1, "imageInputs": image_inputs}
+                                self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {num_images}; window._modifyConfig = {json.dumps(modify_cfg)};")
+
+                            # 5. Paste prompt lại
+                            textarea.clear()
+                            time.sleep(0.2)
+                            textarea.input(prompt)
+                            time.sleep(0.5)
+                            self.log("→ Prompt re-entered")
+
+                            # 6. Đợi và gửi lại
+                            time.sleep(2)
+                            from DrissionPage.common import Keys
+                            self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+                            self.log("→ Retry Enter sent after reload")
+
+                            # Reset timer để đợi response mới
+                            start_time = time.time()
+                        else:
+                            self.log("[WARN] Không tìm thấy textarea sau reload", "WARN")
+
                     except Exception as e:
-                        self.log(f"[WARN] Retry Enter failed: {e}", "WARN")
-                        # Fallback: Click button
-                        if self._click_generate_button():
-                            self.log("→ Retry button clicked")
+                        self.log(f"[WARN] Reload retry failed: {e}", "WARN")
+                        # Fallback: Chỉ thử Enter
+                        try:
+                            from DrissionPage.common import Keys
+                            self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+                            self.log("→ Fallback Enter sent")
+                        except:
+                            pass
 
                     # Đánh dấu đã detect để không retry nhiều lần
                     request_detected = True
