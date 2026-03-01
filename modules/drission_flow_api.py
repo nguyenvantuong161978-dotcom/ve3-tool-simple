@@ -1200,8 +1200,8 @@ class DrissionFlowAPI:
     """
 
     BASE_URL = "https://aisandbox-pa.googleapis.com"
-    FLOW_URL = "https://labs.google/fx/vi/tools/flow/project/test"
-    FLOW_URL_FALLBACK = "https://labs.google/fx/vi/tools/flow"  # Fallback nếu project/test fail
+    # v1.0.203: Bỏ /project/test - vào thẳng Flow page
+    FLOW_URL = "https://labs.google/fx/vi/tools/flow"
 
     def __init__(
         self,
@@ -2848,7 +2848,7 @@ class DrissionFlowAPI:
                 # Nếu KHÔNG có project_url → setup mới → thao tác "mồi" trước
                 if not project_url:
                     # Bước 1: Vào /project/test (thao tác mồi)
-                    self.log(f"[MỒI] Vào project/test trước (warm up)...")
+                    self.log(f"[MỒI] Vào Flow page (warm up)...")
                     self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
 
                     # Đợi trang load xong (QUAN TRỌNG - không chỉ sleep!)
@@ -2869,7 +2869,7 @@ class DrissionFlowAPI:
                         if self._auto_login_google():
                             self.log("[v] Đã login thành công!")
                             # Sau login, vào lại /project/test
-                            self.log("[MỒI] Vào lại project/test sau login...")
+                            self.log("[MỒI] Vào lại Flow page sau login...")
                             self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
                             time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
                             if self._wait_for_page_ready(timeout=30):
@@ -2971,8 +2971,8 @@ class DrissionFlowAPI:
                         self.log("[WARN] Phát hiện bị LOGOUT sau warm up!", "WARN")
                         if self._auto_login_google():
                             self.log("[v] Đã login lại thành công!")
-                            # Login xong, vào lại /test để warm up lại
-                            self.log("[MỒI] Vào lại project/test sau login...")
+                            # Login xong, vào lại Flow page để warm up lại
+                            self.log("[MỒI] Vào lại Flow page sau login...")
                             self.driver.run_js(f"window.location.href = '{self.FLOW_URL}';", timeout=2)
                             time.sleep(6 if getattr(self, '_ipv6_activated', False) else 3)
                             if self._wait_for_page_ready(timeout=30):
