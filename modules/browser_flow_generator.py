@@ -3930,10 +3930,11 @@ class BrowserFlowGenerator:
                         media_id_saved = False
                         if workbook:
                             try:
+                                # v1.0.210: Thêm status="done" khi có media_id
                                 # Tất cả tham chiếu (nv* + loc*) đều trong characters sheet
-                                if workbook.update_character(pid, media_id=images[0].media_name):
+                                if workbook.update_character(pid, media_id=images[0].media_name, status="done"):
                                     workbook.save()
-                                    self._log(f"   [EXCEL] Saved media_id for {pid}: {images[0].media_name[:40]}...")
+                                    self._log(f"   [EXCEL] Saved media_id + status=done for {pid}: {images[0].media_name[:40]}...")
                                     excel_media_ids[pid] = images[0].media_name
                                     media_id_saved = True
                                 else:
@@ -4109,9 +4110,10 @@ class BrowserFlowGenerator:
                                         media_id_saved = False
                                         if workbook:
                                             try:
-                                                if workbook.update_character(pid, media_id=images2[0].media_name):
+                                                # v1.0.210: Thêm status="done" khi có media_id
+                                                if workbook.update_character(pid, media_id=images2[0].media_name, status="done"):
                                                     workbook.save()
-                                                    self._log(f"   [EXCEL] Saved media_id for {pid}")
+                                                    self._log(f"   [EXCEL] Saved media_id + status=done for {pid}")
                                                     excel_media_ids[pid] = images2[0].media_name
                                                     media_id_saved = True
                                             except:
@@ -4372,9 +4374,10 @@ class BrowserFlowGenerator:
                                             self.stats["failed"] -= 1
 
                                             # Save media_id nếu có
+                                            # v1.0.210: Thêm status="done" khi có media_id
                                             if images[0].media_name and is_reference:
                                                 try:
-                                                    if workbook and workbook.update_character(pid, media_id=images[0].media_name):
+                                                    if workbook and workbook.update_character(pid, media_id=images[0].media_name, status="done"):
                                                         workbook.save()
                                                         excel_media_ids[pid] = images[0].media_name
                                                 except:
