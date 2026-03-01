@@ -1718,16 +1718,23 @@ class BrowserFlowGenerator:
             if i < len(prompts) - 1:
                 time.sleep(2)
 
-        # === RETRY FAILED PROMPTS ===
-        if failed_prompts:
+        # === RETRY FAILED PROMPTS (2 VÒNG) ===
+        # v1.0.209: Tăng retry lên 2 vòng để tăng tỉ lệ thành công reference images
+        max_retry_rounds = 2
+        for retry_round in range(max_retry_rounds):
+            if not failed_prompts:
+                break
+
             self._log("\n" + "=" * 60)
-            self._log(f"RETRY {len(failed_prompts)} ANH THAT BAI")
+            self._log(f"RETRY VÒNG {retry_round + 1}/{max_retry_rounds}: {len(failed_prompts)} ảnh thất bại")
             self._log("=" * 60)
 
+            still_failed = []
             retry_success = 0
+
             for prompt_data, original_index in failed_prompts:
                 pid = str(prompt_data.get('id', original_index + 1))
-                self._log(f"\nRetry ID: {pid}")
+                self._log(f"\nRetry ID: {pid} (vòng {retry_round + 1})")
 
                 success, img_file, score, prompt_json = self._process_single_prompt(
                     prompt_data, original_index, len(prompts)
@@ -1759,11 +1766,17 @@ class BrowserFlowGenerator:
                                 self._log(f"[Excel] Updated scene {scene_id}: prompt_json saved (retry)")
                         except Exception as e:
                             self._log(f"[Excel] Warning: {e}", "warn")
+                else:
+                    # Vẫn thất bại - thêm vào list cho vòng retry tiếp theo
+                    still_failed.append((prompt_data, original_index))
 
                 # Delay
                 time.sleep(2)
 
-            self._log(f"\nRetry: {retry_success}/{len(failed_prompts)} thanh cong")
+            self._log(f"\nRetry vòng {retry_round + 1}: {retry_success}/{len(failed_prompts)} thành công")
+
+            # Cập nhật failed_prompts cho vòng retry tiếp theo
+            failed_prompts = still_failed
 
         # Luu media_names tu JS vao cache (cho cac lan chay sau)
         js_media_names = self._get_media_names_from_js()

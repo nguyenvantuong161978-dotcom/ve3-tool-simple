@@ -461,156 +461,54 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             refs_to_validate.append(char.id)
 
         if not refs_to_validate:
-            log(f"  [v] All references already validated, skip validator mode")
+            log(f"  [v] All references already created, skip wait mode")
         else:
+            # v1.0.209: Bỏ validator, chỉ đợi Chrome 1 tạo đủ file ảnh
             nv_count = len([r for r in refs_to_validate if r.lower().startswith('nv')])
             loc_count = len([r for r in refs_to_validate if r.lower().startswith('loc')])
-            log(f"  [PLAN] Cần validate {len(refs_to_validate)} references: {nv_count} NV + {loc_count} LOC")
-            log(f"  {refs_to_validate}")
+            log(f"  [WAIT] Đợi Chrome 1 tạo {len(refs_to_validate)} references: {nv_count} NV + {loc_count} LOC")
 
-            # Lấy project URL từ Excel (config sheet)
-            project_url = None
-            try:
-                import openpyxl
-                wb_openpyxl = openpyxl.load_workbook(str(excel_path), read_only=True)
-                if 'config' in wb_openpyxl.sheetnames:
-                    config_sheet = wb_openpyxl['config']
-                    for row in config_sheet.iter_rows(min_row=2):  # Skip header
-                        if row[0].value == 'flow_project_url':
-                            project_url = row[1].value
-                            break
-                wb_openpyxl.close()
-
-                if project_url:
-                    log(f"  [v] Project URL from Excel: {project_url[:60]}...")
-                else:
-                    log(f"  [!] No project URL in Excel - will create new project")
-            except Exception as e:
-                log(f"  [WARN] Could not read project URL from Excel: {e}")
-
-            # Track validated NVs
-            validated_refs = set()
-
-            # Setup Chrome API cho validator (tạo 1 lần, dùng chung)
-            validator_api = None
-            validator = None
-
-            try:
-                from modules.reference_validator import ReferenceValidator
-                from modules.drission_flow_api import DrissionFlowAPI
-                import yaml
-
-                # Load config
-                config_file = Path("config/settings.yaml")
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-
-                # Setup Chrome 2 API
-                chrome_path = chrome2_path
-                validator_api = DrissionFlowAPI(
-                    chrome_portable=chrome_path,
-                    worker_id=2,
-                    total_workers=2,
-                    headless=False,
-                    webshare_enabled=False
-                )
-
-                # VÀO ĐÚNG PROJECT (dùng URL từ Excel)
-                if project_url:
-                    log(f"  [VALIDATOR] Starting Chrome with project URL...")
-                    if not validator_api.setup(project_url=project_url):
-                        log(f"  [ERROR] Failed to start Chrome!", "error")
-                        raise Exception("Chrome setup failed")
-                else:
-                    log(f"  [ERROR] No project URL - cannot validate!", "error")
-                    raise Exception("No project URL")
-
-                # Create validator
-                validator = ReferenceValidator(
-                    drission_api=validator_api,
-                    workbook=workbook,
-                    config=config,
-                    project_code=code
-                )
-
-                log(f"  [v] Validator ready!")
-
-            except Exception as e:
-                log(f"  [ERROR] Failed to setup validator: {e}", "error")
-                import traceback
-                traceback.print_exc()
-                # Skip validation
-                validated_refs = set(refs_to_validate)
-
-            # BƯỚC 2: CHỜ + VALIDATE TỪNG NV CÓ MEDIA_ID
-            log(f"  [VALIDATOR] Waiting for Chrome 1 to create references...")
-            log(f"  [VALIDATOR] Will validate each NV as soon as it has media_id...")
+            # Track created refs
+            created_refs = set()
+            nv_dir = local_dir / "nv"
+            loc_dir = local_dir / "loc"
 
             wait_interval = 10
             waited = 0
+            max_wait = 600  # 10 phút tối đa
 
-            while len(validated_refs) < len(refs_to_validate) and validator:
-                # Re-load Excel để check media_id mới
-                workbook = PromptWorkbook(str(excel_path))
-                all_chars = workbook.get_characters()
-
-                # Tìm NV nào có media_id mà chưa validate
-                for char in all_chars:
-                    if char.id not in refs_to_validate:
-                        continue
-                    if char.id in validated_refs:
+            while len(created_refs) < len(refs_to_validate) and waited < max_wait:
+                # Check từng reference có file chưa
+                for ref_id in refs_to_validate:
+                    if ref_id in created_refs:
                         continue
 
-                    # Check status
-                    status = getattr(char, 'status', '')
-                    if status in ['verified', 'verified_fixed']:
-                        # Đã validate rồi
-                        validated_refs.add(char.id)
-                        log(f"  [v] {char.id} already validated (status={status})")
-                        continue
+                    # Check file exists
+                    if ref_id.lower().startswith('nv'):
+                        ref_file = nv_dir / f"{ref_id}.png"
+                    else:
+                        ref_file = loc_dir / f"{ref_id}.png"
 
-                    # Check media_id
-                    if not char.media_id:
-                        continue  # Chưa có media_id, chờ tiếp
-
-                    # CÓ MEDIA_ID → VALIDATE NGAY!
-                    log(f"  ")
-                    log(f"  [VALIDATOR] Found {char.id} with media_id!")
-                    log(f"  [VALIDATOR] Validating {char.id}... ({len(validated_refs)+1}/{len(refs_to_validate)})")
-
-                    # Validate
-                    try:
-                        result = validator.validate_and_fix(char.id)
-                        log(f"  [VALIDATOR] {char.id} result: {result}")
-                    except Exception as e:
-                        log(f"  [ERROR] Validation failed for {char.id}: {e}", "error")
-                        import traceback
-                        traceback.print_exc()
-
-                    # Mark validated
-                    validated_refs.add(char.id)
+                    if ref_file.exists():
+                        created_refs.add(ref_id)
+                        log(f"  [v] {ref_id} created!")
 
                 # Check progress
-                if len(validated_refs) >= len(refs_to_validate):
+                if len(created_refs) >= len(refs_to_validate):
                     log(f"  ")
-                    log(f"  [v] VALIDATOR COMPLETED!")
-                    log(f"  [v] Validated {len(validated_refs)}/{len(refs_to_validate)} references")
+                    log(f"  [v] ALL REFERENCES CREATED!")
+                    log(f"  [v] {len(created_refs)}/{len(refs_to_validate)} references ready")
                     break
 
                 # Log progress
                 if waited % 30 == 0:
-                    log(f"  [WAIT] Validated: {len(validated_refs)}/{len(refs_to_validate)} - Waiting... ({waited}s)")
+                    log(f"  [WAIT] Created: {len(created_refs)}/{len(refs_to_validate)} - Waiting... ({waited}s)")
 
                 time.sleep(wait_interval)
                 waited += wait_interval
 
-            # Close validator API
-            if validator_api:
-                try:
-                    validator_api.close()
-                    log(f"  [v] Validator Chrome closed")
-                except:
-                    pass
+            if waited >= max_wait:
+                log(f"  [WARN] Timeout waiting for references! Proceeding with {len(created_refs)}/{len(refs_to_validate)}")
 
     except Exception as e:
         log(f"  [ERROR] Validator error: {e}", "error")

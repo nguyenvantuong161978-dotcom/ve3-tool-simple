@@ -1,14 +1,15 @@
-1.0.208
+1.0.209
 2026-03-01 (VN)
-Change: Co project_url thi vao thang - chi warm up khi co van de
+Change: Reference retry 2 vong + Chrome 2 bo validator
 
 Thay doi:
-- Co project_url -> vao thang project URL
-- Khong tim thay textarea -> check login va retry
-- Khong co project_url -> warm up nhu truoc
-- Xu ly "page is refreshed" - doi 3s roi retry
+- Reference images: Retry 2 vong thay vi 1
+- Chrome 2: Bo validator, chi doi Chrome 1 tao du file
+- Reference validator: Neu co media_id + test error -> giu "verified"
+- Toi uu hoa toc do Chrome 2 (khong can mo Chrome de validate)
 
-1. v1.0.208: Co project_url thi vao thang - chi warm up khi co van de
+1. v1.0.209: Reference retry 2 vong + Chrome 2 bo validator
+2. v1.0.208: Co project_url thi vao thang - chi warm up khi co van de
 2. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready
 3. v1.0.205: Fix syntax error - xoa JS orphan code
 2. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
