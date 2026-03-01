@@ -2844,104 +2844,88 @@ class DrissionFlowAPI:
 
         for nav_attempt in range(max_nav_retries):
             try:
-                # Nếu KHÔNG có project_url → setup mới → warm up đơn giản
-                if not project_url:
-                    # v1.0.204: Đơn giản hóa warm up - chỉ cần đợi "Tạo dự án mới" xuất hiện
-                    self.log(f"[MỒI] Vào Flow page...")
-                    self.driver.get(self.FLOW_URL)
-                    time.sleep(2)
+                # v1.0.207: LUÔN warm up trước (check login) - dù có project_url hay không
+                self.log(f"[MỒI] Vào Flow page... (attempt {nav_attempt+1}/{max_nav_retries})")
+                self.driver.get(self.FLOW_URL)
+                time.sleep(2)
 
-                    # Đợi "Tạo dự án mới" button xuất hiện (20 lần retry, reload mỗi 5)
-                    for attempt in range(20):
-                        # Check logout
-                        if self._is_logged_out():
-                            self.log("[WARN] Phát hiện bị LOGOUT!", "WARN")
-                            if self._auto_login_google():
-                                self.log("[v] Đã login thành công!")
-                                self.driver.get(self.FLOW_URL)
-                                time.sleep(2)
-                            else:
-                                self.log("[x] Auto-login thất bại", "ERROR")
-                                return False
-
-                        # Tìm button "Tạo dự án mới" (add_2)
-                        try:
-                            btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
-                            if btn:
-                                self.log(f"[v] 'Tạo dự án mới' đã sẵn sàng! (attempt {attempt+1})")
-                                break
-                        except:
-                            pass
-
-                        # Thử click "Create with Flow" nếu có
-                        try:
-                            click_result = self.driver.run_js('''
-                                (function() {
-                                    var btns = document.querySelectorAll('button');
-                                    for (var b of btns) {
-                                        var text = (b.textContent || '').trim();
-                                        if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                            b.click();
-                                            return 'CLICKED';
-                                        }
-                                    }
-                                    return 'NOT_FOUND';
-                                })();
-                            ''')
-                            if click_result and 'CLICKED' in str(click_result):
-                                self.log(f"[MỒI] Clicked 'Create with Flow' ({attempt+1}/20)")
-                                time.sleep(1)
-                                continue
-                        except:
-                            pass
-
-                        # Reload mỗi 5 lần
-                        if attempt > 0 and attempt % 5 == 0:
-                            self.log(f"[MỒI] Reload Flow page ({attempt}/20)...")
+                # Đợi "Tạo dự án mới" button xuất hiện (20 lần retry, reload mỗi 5)
+                warm_up_ok = False
+                for attempt in range(20):
+                    # Check logout
+                    if self._is_logged_out():
+                        self.log("[WARN] Phát hiện bị LOGOUT!", "WARN")
+                        if self._auto_login_google():
+                            self.log("[v] Đã login thành công!")
                             self.driver.get(self.FLOW_URL)
                             time.sleep(2)
+                        else:
+                            self.log("[x] Auto-login thất bại", "ERROR")
+                            return False
 
-                        time.sleep(0.5)
+                    # Tìm button "Tạo dự án mới" (add_2)
+                    try:
+                        btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
+                        if btn:
+                            self.log(f"[v] 'Tạo dự án mới' đã sẵn sàng! (attempt {attempt+1})")
+                            warm_up_ok = True
+                            break
+                    except:
+                        pass
 
-                    self.log(f"[v] Warm up done!")
+                    # Thử click "Create with Flow" nếu có
+                    try:
+                        click_result = self.driver.run_js('''
+                            (function() {
+                                var btns = document.querySelectorAll('button');
+                                for (var b of btns) {
+                                    var text = (b.textContent || '').trim();
+                                    if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                        b.click();
+                                        return 'CLICKED';
+                                    }
+                                }
+                                return 'NOT_FOUND';
+                            })();
+                        ''')
+                        if click_result and 'CLICKED' in str(click_result):
+                            self.log(f"[MỒI] Clicked 'Create with Flow' ({attempt+1}/20)")
+                            time.sleep(1)
+                            continue
+                    except:
+                        pass
 
-                    # Bước 2: SAU ĐÓ vào trang chủ Flow để click "Dự án mới"
-                    self.log(f"Vào trang chủ Flow...")
-                    target_url = self.FLOW_URL
-                else:
-                    # Có project_url → vào thẳng dự án thật
+                    # Reload mỗi 5 lần
+                    if attempt > 0 and attempt % 5 == 0:
+                        self.log(f"[MỒI] Reload Flow page ({attempt}/20)...")
+                        self.driver.get(self.FLOW_URL)
+                        time.sleep(2)
+
+                    time.sleep(0.5)
+
+                if not warm_up_ok:
+                    self.log("[WARN] Warm up timeout - retry...", "WARN")
+                    time.sleep(2)
+                    continue
+
+                self.log(f"[v] Warm up done!")
+
+                # SAU warm up: Vào target URL
+                if project_url:
+                    # Có project_url → vào dự án
                     target_url = project_url
                     self.log(f"Vào project: {target_url[:60]}...")
-
-                # NAVIGATE
-                self.driver.run_js(f"window.location.href = '{target_url}';", timeout=2)
-                wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
-                time.sleep(wait_time)
-
-                # Bỏ qua phần check phức tạp bên dưới - chuyển thẳng đến nav_success
-                if not project_url:
-                    # Không có project_url → skip phần navigation logic cũ
-                    pass
                 else:
-                    # Có project_url → logic navigation như cũ (giữ nguyên)
-                    pass
-
-                # ===== LOGIC NAVIGATION =====
-                if not project_url:
-                    # Không có project_url → vào trang Flow để tạo dự án mới
+                    # Không có project_url → ở lại trang Flow để tạo dự án mới
                     target_url = self.FLOW_URL
                     self.log(f"Vào trang Flow...")
-                else:
-                    # Có project_url → vào thẳng dự án thật
-                    target_url = project_url
-                    self.log(f"Vào project: {target_url[:60]}...")
 
-                # DÙNG JAVASCRIPT NAVIGATE - KHÔNG BLOCK!
-                self.driver.run_js(f"window.location.href = '{target_url}';", timeout=2)
-
-                # Đợi 3-6s để page bắt đầu load
-                wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
-                time.sleep(wait_time)
+                # NAVIGATE (nếu khác URL hiện tại)
+                current = self._get_current_url() or ""
+                if target_url not in current:
+                    self.driver.run_js(f"window.location.href = '{target_url}';", timeout=2)
+                    wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
+                    time.sleep(wait_time)
 
                 # XONG! Không kiểm tra gì thêm
                 # Logic textarea (_wait_for_textarea_visible) sẽ tự F5 nếu page chưa load xong
@@ -2957,6 +2941,12 @@ class DrissionFlowAPI:
             except Exception as e:
                 error_msg = str(e)
                 self.log(f"[x] Navigation error (attempt {nav_attempt+1}/{max_nav_retries}): {error_msg}", "WARN")
+
+                # v1.0.207: Xử lý "page is refreshed" - đợi và retry
+                if "refreshed" in error_msg.lower() or "page is refreshed" in error_msg.lower():
+                    self.log(f"  → Page đang refresh, đợi 3s rồi retry...", "WARN")
+                    time.sleep(3)
+                    continue
 
                 # Kiểm tra lỗi proxy/connection
                 is_proxy_error = any(x in error_msg.lower() for x in [

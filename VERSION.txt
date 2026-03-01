@@ -1,14 +1,16 @@
-1.0.206
+1.0.207
 2026-03-01 (VN)
-Change: Fix _auto_setup_project - bo _wait_for_page_ready
+Change: LUON warm up truoc khi vao project URL
 
 Thay doi:
-- Bo _wait_for_page_ready() trong _auto_setup_project()
-- Trang chu Flow khong co textarea nen _wait_for_page_ready() bi timeout
-- Loop F5 retry da co san trong function
+- LUON warm up (check login) truoc - du co project_url hay khong
+- Xoa duplicate navigation code
+- Xu ly "page is refreshed" - doi 3s roi retry
+- Fix retry qua nhanh (3 lan trong 1 giay)
 
-1. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready
-2. v1.0.205: Fix syntax error - xoa JS orphan code
+1. v1.0.207: LUON warm up truoc khi vao project URL
+2. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready
+3. v1.0.205: Fix syntax error - xoa JS orphan code
 2. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
 2. v1.0.203: Bo /project/test - vao thang Flow page
 2. v1.0.202: Dong bo cleanup cho timeout - Chrome 1 va 2 giong nhau
