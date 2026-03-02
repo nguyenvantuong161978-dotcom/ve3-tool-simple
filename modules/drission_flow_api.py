@@ -3644,81 +3644,50 @@ class DrissionFlowAPI:
             import pyperclip
             from DrissionPage.common import Keys
 
-            # v1.0.221: Log URL hiện tại để debug
-            current_url = self.driver.url
-            self.log(f"→ Paste prompt @ URL: {current_url[:80]}...")
+            # v1.0.222: Đơn giản hóa - focus + click trước, không cần return value
+            # Test cho thấy IIFE có return bị None, nhưng focus/click vẫn hoạt động
 
-            # 1. Tìm và focus input element bằng JavaScript
-            # v1.0.218: Fix 403 - driver.ele() trigger bot detection, dùng JS thay thế
-            # v1.0.219: Thêm retry loop để đợi element xuất hiện (thay cho timeout của driver.ele)
+            # 1. Kiểm tra element có tồn tại không
             is_contenteditable = False
-            focus_result = None
+            element_found = False
 
-            # Retry tối đa 5 giây (10 lần x 0.5s)
             for attempt in range(10):
-                focus_result = self.driver.run_js("""
-                (function() {
-                    // Thử contenteditable trước (giao diện mới 2026-02)
-                    var input = document.querySelector('[contenteditable="true"]');
-                    if (input) {
-                        input.focus();
-                        input.click();
-                        return 'contenteditable';
-                    }
-
-                    // Fallback: textarea (giao diện cũ)
-                    input = document.querySelector('textarea:not([class*="recaptcha"]):not([name*="recaptcha"])');
-                    if (input) {
-                        input.focus();
-                        input.click();
-                        return 'textarea';
-                    }
-
+                # Check element tồn tại (query đơn giản, có return)
+                check = self.driver.run_js("""
+                    var ce = document.querySelector('[contenteditable="true"]');
+                    var ta = document.querySelector('textarea:not([class*="recaptcha"])');
+                    if (ce) return 'contenteditable';
+                    if (ta) return 'textarea';
                     return 'not_found';
-                })();
                 """)
 
-                if focus_result and focus_result != 'not_found':
-                    self.log(f"→ JS: Found element after {attempt + 1} attempts")
-                    break
-
-                # v1.0.220: Log debug lần đầu để xem page có gì
-                if attempt == 0:
-                    debug_info = self.driver.run_js("""
-                    (function() {
-                        var ce = document.querySelectorAll('[contenteditable]').length;
-                        var ceTrue = document.querySelectorAll('[contenteditable="true"]').length;
-                        var ta = document.querySelectorAll('textarea').length;
-                        var url = window.location.href;
-                        return 'contenteditable=' + ce + '(true=' + ceTrue + '), textarea=' + ta + ', url=' + url.substring(0,60);
-                    })();
+                if check == 'contenteditable':
+                    is_contenteditable = True
+                    element_found = True
+                    # Focus + click (không cần return value)
+                    self.driver.run_js("""
+                        var input = document.querySelector('[contenteditable="true"]');
+                        if (input) { input.focus(); input.click(); }
                     """)
-                    self.log(f"[DEBUG] Page: {debug_info}")
+                    self.log(f"→ JS: contenteditable found, focused (attempt {attempt + 1})")
+                    break
+                elif check == 'textarea':
+                    element_found = True
+                    self.driver.run_js("""
+                        var input = document.querySelector('textarea:not([class*="recaptcha"])');
+                        if (input) { input.focus(); input.click(); }
+                    """)
+                    self.log(f"→ JS: textarea found, focused (attempt {attempt + 1})")
+                    break
+                else:
+                    if attempt == 0:
+                        self.log(f"[DEBUG] Page URL: {self.driver.url[:60]}...")
+                    time.sleep(0.5)
 
-                time.sleep(0.5)
-
-            if focus_result == 'contenteditable':
-                is_contenteditable = True
-                self.log("→ JS: Found contenteditable div (new interface)")
-            elif focus_result == 'textarea':
-                self.log("→ JS: Found textarea (old interface)")
-            else:
-                # Debug: xem page có gì
-                final_debug = self.driver.run_js("""
-                (function() {
-                    var all = document.querySelectorAll('*');
-                    var inputs = [];
-                    for (var i = 0; i < all.length; i++) {
-                        var el = all[i];
-                        var tag = el.tagName.toLowerCase();
-                        if (tag === 'textarea' || tag === 'input' || el.contentEditable === 'true') {
-                            inputs.push(tag + (el.className ? '.' + el.className.split(' ')[0] : ''));
-                        }
-                    }
-                    return inputs.slice(0, 10).join(', ') || 'NO_INPUTS_FOUND';
-                })();
-                """)
-                self.log(f"[WARN] JS: Không tìm thấy input element. Found: {final_debug}", "WARN")
+            # v1.0.222: Kiểm tra kết quả
+            if not element_found:
+                self.log(f"[WARN] JS: Không tìm thấy input element sau 10 attempts", "WARN")
+                self.log(f"[DEBUG] URL: {self.driver.url}")
                 return False
 
             time.sleep(0.3)
