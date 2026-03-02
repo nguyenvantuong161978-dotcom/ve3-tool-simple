@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TEST FLOW CORRECT - Dung flow dung cua tool
-1. JS interceptor -> Tao anh
-2. NUCLEAR CLEANUP (JS)
-3. Restart Chrome
-4. JS interceptor -> Tao anh voi reference
+TEST FLOW CORRECT v1.0.227 - Dung flow moi:
+1. Chon x1 (1 anh) trong UI thay vi JS cut
+2. Tao reference image (nhan vat chinh)
+3. Tao nhieu scene voi reference
 """
 import sys
 import time
@@ -18,7 +17,7 @@ from DrissionPage.common import Keys
 import pyperclip
 
 print("=" * 60)
-print("TEST FLOW CORRECT - Reference + Scenes")
+print("TEST FLOW v1.0.227 - Chon x1 + Reference + Scenes")
 print("=" * 60)
 
 chrome_path = Path("GoogleChromePortable/GoogleChromePortable.exe")
@@ -31,7 +30,6 @@ profile_path = Path("GoogleChromePortable/Data/profile_flow_test")
 def create_chrome(clean_profile=False):
     """Tao Chrome - GIU profile de khong can dang nhap lai"""
     if clean_profile and profile_path.exists():
-        # Chi xoa khi lan dau hoac yeu cau
         shutil.rmtree(profile_path, ignore_errors=True)
         time.sleep(1)
 
@@ -47,18 +45,103 @@ def create_chrome(clean_profile=False):
     return ChromiumPage(co)
 
 
-def inject_interceptor(page, image_count=1, image_inputs=None):
-    """Inject JS interceptor"""
-    config = {"imageCount": image_count}
+def select_x1_and_model(page, model_index=0):
+    """Chon x1 (1 anh) va model - JS moi khong gay 403"""
+    page.run_js(f"""
+(function() {{
+    window._modelSelectResult = 'PENDING';
+
+    // Buoc 1: Mo menu chinh
+    var btn1 = document.querySelector('button.sc-46973129-1');
+    if (!btn1) {{
+        window._modelSelectResult = 'NO_MENU_BUTTON';
+        return;
+    }}
+    btn1.dispatchEvent(new PointerEvent('pointerdown', {{bubbles: true}}));
+    btn1.dispatchEvent(new PointerEvent('pointerup', {{bubbles: true}}));
+    console.log('[MODEL] Step 1: Menu opened');
+
+    // Buoc 2: Click x1 (chon 1 anh) - FIX 403
+    setTimeout(function() {{
+        var allBtns = document.querySelectorAll('button');
+        var clickedX1 = false;
+        for (var i = 0; i < allBtns.length; i++) {{
+            var b = allBtns[i];
+            if (b.textContent.trim() === 'x1') {{
+                b.dispatchEvent(new MouseEvent('mousedown', {{bubbles: true}}));
+                b.dispatchEvent(new MouseEvent('mouseup', {{bubbles: true}}));
+                b.dispatchEvent(new MouseEvent('click', {{bubbles: true}}));
+                console.log('[MODEL] Step 2: Clicked x1 (1 anh)');
+                clickedX1 = true;
+                break;
+            }}
+        }}
+        if (!clickedX1) {{
+            console.log('[MODEL] Step 2: x1 button not found, continuing...');
+        }}
+
+        // Buoc 3: Click dropdown model
+        setTimeout(function() {{
+            var btn2 = document.querySelector('button.sc-a0dcecfb-1');
+            if (!btn2) {{
+                window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
+                return;
+            }}
+            btn2.dispatchEvent(new PointerEvent('pointerdown', {{bubbles: true}}));
+            btn2.dispatchEvent(new PointerEvent('pointerup', {{bubbles: true}}));
+            console.log('[MODEL] Step 3: Model dropdown opened');
+
+            // Buoc 4: Chon model theo index
+            setTimeout(function() {{
+                var menuItems = document.querySelectorAll('[role="menuitem"]');
+                if (menuItems.length > {model_index}) {{
+                    var item = menuItems[{model_index}];
+                    var modelName = item.textContent || 'Unknown';
+                    item.dispatchEvent(new PointerEvent('pointerdown', {{bubbles: true}}));
+                    item.dispatchEvent(new PointerEvent('pointerup', {{bubbles: true}}));
+                    item.click();
+                    console.log('[MODEL] Step 4: Selected ' + modelName);
+
+                    // Buoc 5: Dong menu
+                    setTimeout(function() {{
+                        document.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Escape', bubbles: true}}));
+                        setTimeout(function() {{
+                            document.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Escape', bubbles: true}}));
+                            console.log('[MODEL] Step 5: Menu closed');
+                            window._modelSelectResult = 'OK';
+                        }}, 300);
+                    }}, 300);
+                }} else {{
+                    window._modelSelectResult = 'INVALID_INDEX';
+                }}
+            }}, 800);
+        }}, 500);
+    }}, 800);
+}})();
+    """)
+
+    # Doi ket qua
+    for _ in range(10):
+        time.sleep(0.5)
+        result = page.run_js("return window._modelSelectResult;")
+        if result == 'OK':
+            return True
+        elif result != 'PENDING':
+            print(f"  [WARN] Model select: {result}")
+            return False
+    return False
+
+
+def inject_interceptor(page, image_inputs=None):
+    """Inject JS interceptor - CHI CAPTURE, KHONG CUT (da chon x1)"""
+    config = {}
     if image_inputs:
         config["imageInputs"] = image_inputs
 
     page.run_js(f"""
 window._response = null;
 window.__got403 = false;
-window._modifyConfig = {json.dumps(config)};
-window._imageCallCount = 0;
-window._maxImageCalls = {image_count};
+window._modifyConfig = {json.dumps(config) if config else 'null'};
 
 if (!window.__interceptorInjected) {{
     window.__interceptorInjected = true;
@@ -67,21 +150,13 @@ if (!window.__interceptorInjected) {{
         var urlStr = typeof url === 'string' ? url : url.url;
 
         if (urlStr.includes('aisandbox') && (urlStr.includes('batchGenerate') || urlStr.includes('flowMedia'))) {{
-            if (window._maxImageCalls > 0 && window._imageCallCount >= window._maxImageCalls) {{
-                return new Response(JSON.stringify({{blocked: true}}), {{status: 200}});
-            }}
-            window._imageCallCount++;
-
-            if (window._modifyConfig && opts && opts.body) {{
+            // CHI THEM imageInputs, KHONG CUT so anh (da chon x1 tren UI)
+            if (window._modifyConfig && window._modifyConfig.imageInputs && opts && opts.body) {{
                 try {{
                     var body = JSON.parse(opts.body);
-                    var cfg = window._modifyConfig;
-                    if (cfg.imageCount && body.requests) {{
-                        body.requests = body.requests.slice(0, cfg.imageCount);
-                    }}
-                    if (cfg.imageInputs && body.requests) {{
-                        body.requests.forEach(r => r.imageInputs = cfg.imageInputs);
-                        console.log('[MODIFY] Added refs');
+                    if (body.requests) {{
+                        body.requests.forEach(r => r.imageInputs = window._modifyConfig.imageInputs);
+                        console.log('[MODIFY] Added imageInputs');
                     }}
                     opts.body = JSON.stringify(body);
                     window._modifyConfig = null;
@@ -93,29 +168,17 @@ if (!window.__interceptorInjected) {{
             try {{
                 var cloned = resp.clone();
                 var data = await cloned.json();
-                console.log('[RESP] Data keys:', Object.keys(data).join(','));
-
-                // Capture RAW response for debug
-                window._rawResponse = data;
-                window._rawStatus = resp.status;
 
                 if (resp.status === 403) {{
                     window.__got403 = true;
                     console.log('[RESP] 403!');
                 }}
-                else if (data.error) {{
-                    console.log('[RESP] Error:', JSON.stringify(data.error));
-                    window._responseError = data.error;
-                }}
                 else if (data.media && data.media.length > 0) {{
                     console.log('[RESP] Media count:', data.media.length);
                     var ready = data.media.filter(m => m.image && m.image.generatedImage && m.image.generatedImage.fifeUrl);
-                    console.log('[RESP] Ready count:', ready.length);
                     if (ready.length > 0) window._response = data;
                 }}
-            }} catch(e) {{
-                console.log('[RESP] Parse error:', e);
-            }}
+            }} catch(e) {{}}
             return resp;
         }}
         return _orig.apply(this, arguments);
@@ -158,13 +221,6 @@ def nuclear_cleanup(page):
 
 def type_and_send(page, prompt, timeout=120):
     """Gui prompt"""
-    # Check input element
-    check = page.run_js("""
-        var ce = document.querySelectorAll('[contenteditable="true"]').length;
-        return 'contenteditable=' + ce;
-    """)
-    print(f"  -> Elements: {check}")
-
     page.run_js("""
         var input = document.querySelector('[contenteditable="true"]');
         if (input) { input.focus(); input.click(); }
@@ -175,16 +231,9 @@ def type_and_send(page, prompt, timeout=120):
     page.actions.key_down(Keys.CONTROL).key_down('v').key_up('v').key_up(Keys.CONTROL)
     time.sleep(0.5)
 
-    # Check content
-    content = page.run_js("""
-        var input = document.querySelector('[contenteditable="true"]');
-        return input ? (input.textContent || '').length : 0;
-    """)
-    print(f"  -> Content: {content} chars")
-
-    page.run_js("window._response = null; window.__got403 = false; window._imageCallCount = 0;")
+    page.run_js("window._response = null; window.__got403 = false;")
     page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
-    print(f"  -> Enter sent")
+    print(f"  -> Sent: {prompt[:40]}...")
 
     start = time.time()
     while time.time() - start < timeout:
@@ -196,22 +245,12 @@ def type_and_send(page, prompt, timeout=120):
         if response and response.get("media"):
             return {"success": True, "time": int(time.time() - start), "response": response}
 
-        # Debug: check call count moi 20s
         elapsed = int(time.time() - start)
         if elapsed > 0 and elapsed % 20 == 0:
-            call_count = page.run_js("return window._imageCallCount;")
-            print(f"  -> Waiting... {elapsed}s, calls={call_count}")
+            print(f"  -> Waiting... {elapsed}s")
 
         time.sleep(2)
 
-    # Final debug
-    call_count = page.run_js("return window._imageCallCount;")
-    raw_status = page.run_js("return window._rawStatus;")
-    raw_error = page.run_js("return window._responseError;")
-    raw_keys = page.run_js("return window._rawResponse ? Object.keys(window._rawResponse).join(',') : 'NO_RAW';")
-    print(f"  -> Timeout! calls={call_count}, status={raw_status}, keys={raw_keys}")
-    if raw_error:
-        print(f"  -> Error: {raw_error}")
     return {"error": "timeout"}
 
 
@@ -229,10 +268,10 @@ def get_media_id(result):
 
 
 # ============================================
-# STEP 1: Tao reference image
+# MAIN TEST
 # ============================================
-print("\n[1] Mo Chrome moi (lan dau - xoa profile cu)...")
-page = create_chrome(clean_profile=True)  # Lan dau xoa profile
+print("\n[1] Mo Chrome moi...")
+page = create_chrome(clean_profile=True)
 
 print("[2] Vao Flow project...")
 page.get("https://labs.google/fx/vi/tools/flow/project/b8a9706e-321e-40d1-bd62-bc731297fadc")
@@ -240,24 +279,35 @@ time.sleep(5)
 
 if "accounts.google" in page.url:
     print("[!] DANG NHAP GOOGLE")
-    try:
-        input(">>> ")
-    except:
-        time.sleep(120)
+    input(">>> ")
 
 print(f"[3] URL: {page.url}")
 time.sleep(10)
 
-print("[4] Inject interceptor...")
-inject_interceptor(page, image_count=1, image_inputs=None)
-
+# ============================================
+# STEP 1: Chon x1 + Model
+# ============================================
 print("\n" + "=" * 60)
-print("STEP 1: Tao reference image")
+print("STEP 1: Chon x1 (1 anh) + Model")
 print("=" * 60)
 
-ref_prompt = "A young woman with long black hair, wearing blue dress, standing, white background"
-print(f"Prompt: {ref_prompt[:50]}...")
+if select_x1_and_model(page, model_index=0):
+    print("  [OK] Da chon x1 + Model")
+else:
+    print("  [WARN] Khong chon duoc x1/model, tiep tuc...")
 
+time.sleep(2)
+
+# ============================================
+# STEP 2: Tao reference (nhan vat chinh)
+# ============================================
+print("\n" + "=" * 60)
+print("STEP 2: Tao reference (nhan vat chinh)")
+print("=" * 60)
+
+inject_interceptor(page, image_inputs=None)
+
+ref_prompt = "A young woman with long black hair, wearing elegant blue dress, beautiful face, standing pose, full body, white background, high quality"
 result1 = type_and_send(page, ref_prompt, 120)
 
 if result1.get("success"):
@@ -273,68 +323,83 @@ if result1.get("success"):
         print("CLEANUP + RESTART CHROME")
         print("=" * 60)
 
-        print("  -> NUCLEAR CLEANUP...")
         nuclear_cleanup(page)
-
-        print("  -> Quit Chrome...")
         page.quit()
         time.sleep(2)
 
-        print("  -> Mo Chrome moi (GIU profile - khong xoa)...")
-        page = create_chrome(clean_profile=False)  # GIU profile de khong can login lai
-
-        print("  -> Vao Flow project...")
+        page = create_chrome(clean_profile=False)
         page.get("https://labs.google/fx/vi/tools/flow/project/b8a9706e-321e-40d1-bd62-bc731297fadc")
         time.sleep(5)
 
         if "accounts.google" in page.url:
-            print("  [!] DANG NHAP LAI GOOGLE")
-            try:
-                input(">>> ")
-            except:
-                time.sleep(60)
+            print("  [!] DANG NHAP LAI")
+            input(">>> ")
 
         time.sleep(10)
 
+        # Chon x1 + model lai
+        print("  -> Chon x1 + Model...")
+        select_x1_and_model(page, model_index=0)
+        time.sleep(2)
+
+        # QUAN TRONG: Inject lai interceptor sau restart Chrome!
+        print("  -> Inject interceptor...")
+        inject_interceptor(page, image_inputs=None)
+
         # ============================================
-        # STEP 2: Tao scene voi reference
+        # STEP 3: Tao nhieu scene voi reference
         # ============================================
         print("\n" + "=" * 60)
-        print("STEP 2: Tao scene voi reference")
+        print("STEP 3: Tao scene voi reference")
         print(f"Reference: {media_id}")
         print("=" * 60)
 
-        print("  -> Inject interceptor voi reference...")
+        scene_prompts = [
+            "The woman walking in a beautiful garden with flowers, golden hour lighting",
+            "The woman sitting in a cozy coffee shop, warm ambient lighting",
+            "The woman standing on a beach at sunset, ocean waves"
+        ]
+
         image_input = {
             "name": media_id,
             "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
         }
-        inject_interceptor(page, image_count=1, image_inputs=[image_input])
 
-        # DEBUG: Check interceptor
-        check = page.run_js("""
-            return {
-                interceptorInjected: !!window.__interceptorInjected,
-                modifyConfig: window._modifyConfig,
-                maxImageCalls: window._maxImageCalls
-            };
-        """)
-        print(f"  DEBUG: {check}")
+        results = []
+        for i, prompt in enumerate(scene_prompts):
+            print(f"\n--- Scene {i+1}/{len(scene_prompts)} ---")
 
-        scene_prompt = "The woman walking in a garden with flowers, golden hour"
-        print(f"Prompt: {scene_prompt[:50]}...")
+            # Update config voi reference
+            page.run_js(f"window._modifyConfig = {{imageInputs: [{json.dumps(image_input)}]}};")
 
-        result2 = type_and_send(page, scene_prompt, 120)
+            result = type_and_send(page, prompt, 120)
 
-        if result2.get("success"):
-            scene_id = get_media_id(result2)
-            print(f"  [OK] Scene in {result2['time']}s")
-            print(f"  Scene ID: {scene_id}")
-            print("\n" + "=" * 60)
-            print("THANH CONG!")
-            print("=" * 60)
-        else:
-            print(f"  [X] Scene FAILED: {result2}")
+            if result.get("success"):
+                scene_id = get_media_id(result)
+                print(f"  [OK] {result['time']}s - ID: {scene_id[:30] if scene_id else 'N/A'}...")
+                results.append({"status": "OK", "time": result['time']})
+            elif result.get("error") == 403:
+                print(f"  [X] 403!")
+                results.append({"status": "403"})
+                break
+            else:
+                print(f"  [X] Timeout")
+                results.append({"status": "timeout"})
+
+            time.sleep(3)
+
+        # Summary
+        print("\n" + "=" * 60)
+        print("KET QUA")
+        print("=" * 60)
+        ok_count = sum(1 for r in results if r["status"] == "OK")
+        print(f"Reference: {media_id[:40]}...")
+        print(f"Scenes: {ok_count}/{len(results)} OK")
+        for i, r in enumerate(results):
+            print(f"  {i+1}. {r['status']}" + (f" ({r.get('time')}s)" if r.get('time') else ""))
+
+        if ok_count == len(results):
+            print("\nTHANH CONG! Flow x1 + Reference hoat dong!")
     else:
         print("  [X] Khong lay duoc media_id")
 else:

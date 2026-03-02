@@ -396,9 +396,10 @@ window._imageCallCount=0;window._maxImageCalls=1;
                     // Lưu model đang dùng để Python có thể đọc
                     window._chromeModel = currentModel;
 
-                    if (cfg.imageCount && chromeBody.requests) {
-                        chromeBody.requests = chromeBody.requests.slice(0, cfg.imageCount);
-                    }
+                    // v1.0.227: BỎ việc cắt số ảnh - đã chọn x1 trong UI
+                    // if (cfg.imageCount && chromeBody.requests) {
+                    //     chromeBody.requests = chromeBody.requests.slice(0, cfg.imageCount);
+                    // }
 
                     if (cfg.imageInputs && chromeBody.requests) {
                         chromeBody.requests.forEach(function(req) {
@@ -4433,10 +4434,11 @@ class DrissionFlowAPI:
             window._modifyConfig = null;
         """)
 
-        # 2. MODIFY MODE: Luôn set imageCount=1, thêm imageInputs nếu có
+        # 2. MODIFY MODE: CHỈ thêm imageInputs nếu có (không cắt số ảnh nữa!)
+        # v1.0.227: Bỏ imageCount vì đã chọn x1 trong UI - tránh 403
         # Chrome sẽ dùng model mới nhất, prompt enhancement, tất cả settings
         modify_config = {
-            "imageCount": num_images if num_images else 1  # Luôn giới hạn số ảnh
+            # Không cần imageCount nữa - đã chọn x1 trong UI
         }
 
         # Force model nếu được chỉ định (đảm bảo dùng Nano Banana Pro = GEM_PIX_2)
@@ -4457,20 +4459,19 @@ class DrissionFlowAPI:
                 modify_config["forceModelName"] = force_model
                 self.log(f"→ FORCE MODEL: {force_model}")
 
+        # v1.0.227: Luôn dùng max 1 image (đã chọn x1 trong UI)
+        max_images = num_images if num_images else 1
+
         if image_inputs and len(image_inputs) > 0:
             modify_config["imageInputs"] = image_inputs
-            # v1.0.165: Reset counter và set max calls
-            num_img = modify_config.get('imageCount', 1)
-            self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {num_img}; window._modifyConfig = {json.dumps(modify_config)};")
-            self.log(f"→ MODIFY MODE: {len(image_inputs)} ref(s), max {num_img} image(s)")
+            self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {max_images}; window._modifyConfig = {json.dumps(modify_config)};")
+            self.log(f"→ MODIFY MODE: {len(image_inputs)} ref(s), x1 selected in UI")
             # Log chi tiết từng reference
             for idx, img_inp in enumerate(image_inputs):
                 self.log(f"   [IMG_INPUT #{idx+1}] name={img_inp.get('name', 'N/A')[:40]}..., type={img_inp.get('imageInputType', 'N/A')}")
         else:
-            # v1.0.165: Reset counter và set max calls
-            num_img = modify_config.get('imageCount', 1)
-            self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {num_img}; window._modifyConfig = {json.dumps(modify_config)};")
-            self.log(f"→ MODIFY MODE: max {num_img} image(s), no reference")
+            self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {max_images}; window._modifyConfig = {json.dumps(modify_config)};")
+            self.log(f"→ MODIFY MODE: x1 selected in UI, no reference")
 
         # 3. Tìm textarea và nhập prompt bằng Ctrl+V (tránh bot detection)
         self.log(f"→ Prompt: {prompt[:50]}...")
@@ -4562,9 +4563,11 @@ class DrissionFlowAPI:
                             """)
 
                             # 4. Re-setup modify config nếu có image_inputs
+                            # v1.0.227: Bỏ imageCount - đã chọn x1 trong UI
                             if image_inputs and len(image_inputs) > 0:
-                                modify_cfg = {"imageCount": num_images if num_images else 1, "imageInputs": image_inputs}
-                                self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {num_images}; window._modifyConfig = {json.dumps(modify_cfg)};")
+                                modify_cfg = {"imageInputs": image_inputs}
+                                max_img = num_images if num_images else 1
+                                self.driver.run_js(f"window._imageCallCount = 0; window._maxImageCalls = {max_img}; window._modifyConfig = {json.dumps(modify_cfg)};")
 
                             # 5. Paste prompt lại
                             textarea.clear()
