@@ -3,7 +3,7 @@
 Change: 1h < 5 anh → switch account + restore Excel backup
 
 Thay doi:
-- v1.0.234: Account issue detection: 1h < 5 anh → rotate account, xoa anh cu, restore Excel backup, restart
+- v1.0.234: Account issue detection: 1h < 5 anh → rotate account, xoa anh cu, restore Excel backup, auto login Chrome, restart
 - v1.0.233: handle_project_timeout() them rotate account cho ma tiep theo
 - v1.0.232: 400 Policy - lan 1 retry khong co reference (xem ref co gay loi khong), lan 2 skip
 - v1.0.231: Thong nhat chon model: select_model_by_index(_current_model_index) - dung model theo 403 rotation

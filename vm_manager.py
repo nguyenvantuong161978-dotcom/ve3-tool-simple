@@ -2825,15 +2825,37 @@ class VMManager:
         # 4. Restore Excel backup (trạng thái sạch)
         self._restore_excel_from_backup(project_code)
 
-        # 5. Clear Chrome data
+        # 5. Clear Chrome data + Kill Chrome
         self._clear_chrome_data_for_new_account()
         self.kill_all_chrome()
-        time.sleep(2)
+        time.sleep(3)
 
-        # 6. Reset account timer (account mới có 1 tiếng)
+        # 6. Login Chrome với account mới (dùng _pre_login.py)
+        self.log("[Account] Đang login Chrome với account mới...", "SYSTEM")
+        try:
+            pre_login_script = TOOL_DIR / "_pre_login.py"
+            if pre_login_script.exists():
+                result = subprocess.run(
+                    [sys.executable, str(pre_login_script)],
+                    capture_output=False,  # Hiện log ra màn hình
+                    timeout=180,           # Tối đa 3 phút để login
+                    cwd=str(TOOL_DIR),
+                )
+                if result.returncode == 0:
+                    self.log("[Account] Login Chrome thành công", "SYSTEM", "SUCCESS")
+                else:
+                    self.log(f"[Account] _pre_login.py exit code {result.returncode}", "SYSTEM", "WARN")
+            else:
+                self.log("[Account] Không tìm thấy _pre_login.py", "SYSTEM", "WARN")
+        except subprocess.TimeoutExpired:
+            self.log("[Account] Login timeout (3 phút) - tiếp tục", "SYSTEM", "WARN")
+        except Exception as e:
+            self.log(f"[Account] Login error: {e}", "SYSTEM", "WARN")
+
+        # 7. Reset account timer (account mới có 1 tiếng)
         self.account_start_time = time.time()
 
-        # 7. Restart workers
+        # 8. Restart workers
         self.log("Restarting workers with new account...", "SYSTEM")
         for wid in list(self.workers.keys()):
             time.sleep(2)
