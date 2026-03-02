@@ -3646,29 +3646,37 @@ class DrissionFlowAPI:
 
             # 1. Tìm và focus input element bằng JavaScript
             # v1.0.218: Fix 403 - driver.ele() trigger bot detection, dùng JS thay thế
+            # v1.0.219: Thêm retry loop để đợi element xuất hiện (thay cho timeout của driver.ele)
             is_contenteditable = False
+            focus_result = None
 
-            focus_result = self.driver.run_js("""
-            (function() {
-                // Thử contenteditable trước (giao diện mới 2026-02)
-                var input = document.querySelector('[contenteditable="true"]');
-                if (input) {
-                    input.focus();
-                    input.click();
-                    return 'contenteditable';
-                }
+            # Retry tối đa 5 giây (10 lần x 0.5s)
+            for attempt in range(10):
+                focus_result = self.driver.run_js("""
+                (function() {
+                    // Thử contenteditable trước (giao diện mới 2026-02)
+                    var input = document.querySelector('[contenteditable="true"]');
+                    if (input) {
+                        input.focus();
+                        input.click();
+                        return 'contenteditable';
+                    }
 
-                // Fallback: textarea (giao diện cũ)
-                input = document.querySelector('textarea:not([class*="recaptcha"]):not([name*="recaptcha"])');
-                if (input) {
-                    input.focus();
-                    input.click();
-                    return 'textarea';
-                }
+                    // Fallback: textarea (giao diện cũ)
+                    input = document.querySelector('textarea:not([class*="recaptcha"]):not([name*="recaptcha"])');
+                    if (input) {
+                        input.focus();
+                        input.click();
+                        return 'textarea';
+                    }
 
-                return 'not_found';
-            })();
-            """)
+                    return 'not_found';
+                })();
+                """)
+
+                if focus_result and focus_result != 'not_found':
+                    break
+                time.sleep(0.5)
 
             if focus_result == 'contenteditable':
                 is_contenteditable = True
