@@ -1966,28 +1966,9 @@ class VMManager:
                 self.project_start_time = None
                 self.current_project_code = None
 
-                # === v1.0.105: XOAY VÒNG TÀI KHOẢN + XÓA CHROME DATA ===
-                self.log("Step 3.5: Rotating account + clearing Chrome data...", "SYSTEM")
-                try:
-                    from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts
-
-                    # Get channel from project code
-                    channel = extract_channel_from_machine_code(project_code)
-                    accounts = get_channel_accounts(channel)
-
-                    if accounts and len(accounts) > 1:
-                        # Rotate to next account
-                        new_idx = rotate_account_index(channel, len(accounts))
-                        self.log(f"  -> Account rotated: {channel} -> index {new_idx + 1}/{len(accounts)}", "SYSTEM")
-                        self.log(f"  -> Next account: {accounts[new_idx]['id']}", "SYSTEM")
-
-                        # Clear Chrome data để login tài khoản mới
-                        self.log("  -> Clearing Chrome data for new account login...", "SYSTEM")
-                        self._clear_chrome_data_for_new_account()
-                    else:
-                        self.log(f"  -> Channel {channel}: Only 1 account, no rotation needed", "SYSTEM")
-                except Exception as e:
-                    self.log(f"  -> Account rotation error (non-critical): {e}", "SYSTEM", "WARN")
+                # === v1.0.233: XOAY VÒNG TÀI KHOẢN + XÓA CHROME DATA + AUTO LOGIN ===
+                self.log("Step 3.5: Rotating account + auto-login to new account...", "SYSTEM")
+                self._rotate_and_login_next_account(project_code)
 
                 # v1.0.94: STEP 4 - RESET (restart all workers) để chạy mã mới
                 self.log("Step 4: Restarting all workers for next project...", "SYSTEM")
@@ -2109,6 +2090,72 @@ class VMManager:
                         self.log(f"  Cannot delete {f.name}: {e}", "SYSTEM", "WARN")
         except Exception as e:
             self.log(f"Error clearing agent status: {e}", "SYSTEM", "WARN")
+
+    def _rotate_and_login_next_account(self, project_code: str):
+        """
+        v1.0.233: Xoay vòng tài khoản và tự động đăng nhập Chrome.
+
+        Flow:
+        1. Detect machine code từ đường dẫn (AR8-T1)
+        2. Lấy danh sách accounts từ Google Sheet
+        3. Xóa Chrome data (logout cũ)
+        4. Rotate sang account tiếp theo (nếu có nhiều)
+        5. Login Chrome 1 + Chrome 2 với account mới
+        """
+        try:
+            from google_login import (
+                extract_channel_from_machine_code,
+                rotate_account_index,
+                get_channel_accounts,
+                detect_machine_code,
+                login_google_chrome,
+            )
+
+            # Detect machine code từ path (AR8-T1), fallback về project code
+            try:
+                machine_code = detect_machine_code()
+                channel = extract_channel_from_machine_code(machine_code)
+            except Exception:
+                channel = extract_channel_from_machine_code(project_code)
+
+            self.log(f"[Account] Channel: {channel}", "SYSTEM")
+
+            # Lấy danh sách accounts
+            accounts = get_channel_accounts(channel)
+            if not accounts:
+                self.log(f"[Account] Không tìm thấy account cho {channel} - bỏ qua login", "SYSTEM", "WARN")
+                return
+
+            # Xóa Chrome data trước (logout account cũ)
+            self.log("[Account] Clearing Chrome data...", "SYSTEM")
+            self._clear_chrome_data_for_new_account()
+
+            # Rotate sang account tiếp theo
+            if len(accounts) > 1:
+                new_idx = rotate_account_index(channel, len(accounts))
+                new_account = accounts[new_idx]
+                self.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {new_account['id']}", "SYSTEM")
+            else:
+                new_account = accounts[0]
+                self.log(f"[Account] 1 account: {new_account['id']} (re-login)", "SYSTEM")
+
+            # Login Chrome 1
+            chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+            chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
+
+            self.log(f"[Account] Login Chrome 1 as {new_account['id']}...", "SYSTEM")
+            r1 = login_google_chrome(new_account, chrome_portable=chrome1_exe, worker_id=0)
+            self.log(f"[Account] Chrome 1: {'OK' if r1 else 'FAILED'}", "SYSTEM", "SUCCESS" if r1 else "ERROR")
+
+            # Login Chrome 2
+            self.log(f"[Account] Login Chrome 2 as {new_account['id']}...", "SYSTEM")
+            r2 = login_google_chrome(new_account, chrome_portable=chrome2_exe, worker_id=1)
+            self.log(f"[Account] Chrome 2: {'OK' if r2 else 'FAILED'}", "SYSTEM", "SUCCESS" if r2 else "ERROR")
+
+        except Exception as e:
+            self.log(f"[Account] Lỗi rotate/login (non-critical): {e}", "SYSTEM", "WARN")
+            import traceback
+            self.log(traceback.format_exc()[:500], "SYSTEM", "WARN")
 
     def _clear_chrome_data_for_new_account(self):
         """
@@ -2786,6 +2833,10 @@ class VMManager:
         self.log("Killing all Chrome processes...", "SYSTEM")
         self.kill_all_chrome()
         time.sleep(2)
+
+        # 4.5. v1.0.233: Xoay vòng tài khoản + Auto login Chrome mới
+        self.log("Rotating account + auto-login for next project...", "SYSTEM")
+        self._rotate_and_login_next_account(project_code)
 
         # 5. Restart Chrome workers
         chrome_workers = [wid for wid in self.workers if wid.startswith("chrome_")]
