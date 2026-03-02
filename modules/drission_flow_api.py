@@ -4426,6 +4426,14 @@ class DrissionFlowAPI:
         if not self._ready:
             return [], "API chưa setup! Gọi setup() trước."
 
+        # v1.0.228: LUÔN chọn x1 + model trước MỖI lần generate
+        # Đảm bảo x1 được chọn ngay cả sau Chrome restart
+        self.log("[Model] Chọn x1 + Model...")
+        if self._select_nano_banana_pro():
+            self.log("[Model] [v] Đã chọn x1 + Nano Banana Pro")
+        else:
+            self.log("[Model] [WARN] Không chọn được model, tiếp tục...", "WARN")
+
         # 1. Reset state
         self.driver.run_js("""
             window._response = null;
@@ -4688,13 +4696,8 @@ class DrissionFlowAPI:
         if not self._ready:
             return False, [], "API chưa setup! Gọi setup() trước."
 
-        # v1.0.227: LUÔN chọn model + x1 trước khi generate (tránh 403)
-        # x1 cần được chọn mỗi lần vì có thể bị reset sau page refresh
-        self.log("[Model] Chọn x1 + Model...")
-        if self._select_nano_banana_pro():
-            self.log("[Model] [v] Đã chọn x1 + Nano Banana Pro")
-        else:
-            self.log("[Model] [WARN] Không chọn được model, tiếp tục...", "WARN")
+        # v1.0.228: Model selection đã được chuyển vào generate_image_forward()
+        # để đảm bảo x1 được chọn MỖI LẦN, kể cả sau Chrome restart
 
         # Nếu đang dùng fallback model (do quota), override force_model
         if self._use_fallback_model:

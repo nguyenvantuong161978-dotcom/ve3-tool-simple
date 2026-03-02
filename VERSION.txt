@@ -1,8 +1,9 @@
-1.0.228
+1.0.229
 2026-03-02 (VN)
-Change: LUON chon x1 + model truoc moi lan generate
+Change: FIX - Chon x1 + model trong generate_image_forward() (moi lan retry)
 
 Thay doi:
+- v1.0.229: FIX - Di chuyen model selection vao generate_image_forward() de chon x1 SAU MOI LAN Chrome restart
 - v1.0.228: LUON chon x1 + model truoc moi lan generate_image() - tranh 403 sau page refresh
 - v1.0.227: FIX 403 - Chon x1 (1 anh) trong UI khi chon model, khong can JS cat so anh
 - v1.0.226: Fix imageInputType = IMAGE_INPUT_TYPE_REFERENCE (khong phai SUBJECT_REF)
