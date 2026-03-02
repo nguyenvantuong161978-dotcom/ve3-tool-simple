@@ -1,8 +1,9 @@
-1.0.229
+1.0.230
 2026-03-02 (VN)
-Change: FIX - Chon x1 + model trong generate_image_forward() (moi lan retry)
+Change: CLEANUP - Don gian hoa JS interceptor
 
 Thay doi:
+- v1.0.230: CLEANUP - Bo cac JS khong dung: imageCount, forceModel, customPayload, forceVideoPayload, blockExtraCalls
 - v1.0.229: FIX - Di chuyen model selection vao generate_image_forward() de chon x1 SAU MOI LAN Chrome restart
 - v1.0.228: LUON chon x1 + model truoc moi lan generate_image() - tranh 403 sau page refresh
 - v1.0.227: FIX 403 - Chon x1 (1 anh) trong UI khi chon model, khong can JS cat so anh

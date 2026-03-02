@@ -159,14 +159,12 @@ JS_CLEANUP = '''
 # JS Interceptor - INJECT CUSTOM PAYLOAD với reCAPTCHA token fresh
 # Flow: Python chuẩn bị payload (có media_id) → Chrome trigger reCAPTCHA → Inject token → Gửi ngay
 JS_INTERCEPTOR = '''
-window._tk=null;window._pj=null;window._xbv=null;window._rct=null;window._payload=null;window._sid=null;window._url=null;
+// v1.0.230: Simplified interceptor - chỉ giữ những gì cần thiết
+window._tk=null;window._pj=null;window._xbv=null;window._rct=null;window._sid=null;window._url=null;
 window._response=null;window._responseError=null;window._requestPending=false;
-window._customPayload=null; // Payload đầy đủ từ Python (có media_id) cho IMAGE
+window._modifyConfig=null;  // Chỉ dùng cho imageInputs (references)
 window._videoResponse=null;window._videoError=null;window._videoPending=false;
-window._customVideoPayload=null; // Payload đầy đủ từ Python cho VIDEO (có referenceImages.mediaId)
-window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V (thêm referenceImages, đổi model)
-// v1.0.165: Counter để chặn API calls thừa khi Chrome gửi nhiều calls cho nhiều ảnh
-window._imageCallCount=0;window._maxImageCalls=1;
+window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V
 
 (function(){
     if(window.__interceptReady) return 'ALREADY_READY';
@@ -182,110 +180,6 @@ window._imageCallCount=0;window._maxImageCalls=1;
         if (urlStr.includes('aisandbox') && (urlStr.includes('batchGenerate') || urlStr.includes('flowMedia'))) {
             console.log('[IMG] Request intercepted:', urlStr);
 
-            // v1.0.165: Chặn API calls thừa khi Chrome gửi nhiều calls
-            if (window._maxImageCalls > 0 && window._imageCallCount >= window._maxImageCalls) {
-                console.log('[IMG] BLOCKED - Already have ' + window._imageCallCount + '/' + window._maxImageCalls + ' images');
-                // Return fake success để Chrome không hiển thị lỗi
-                return new Response(JSON.stringify({blocked: true, reason: 'max_images_reached'}), {
-                    status: 200,
-                    headers: {'Content-Type': 'application/json'}
-                });
-            }
-            window._imageCallCount++;
-            console.log('[IMG] Call count: ' + window._imageCallCount + '/' + window._maxImageCalls);
-
-            // ============================================
-            // FORCE VIDEO MODE: Thay đổi URL và payload thành VIDEO request
-            // Ý tưởng: Gửi prompt như tạo ảnh, nhưng Interceptor đổi thành video
-            // ============================================
-            if (window._forceVideoPayload && urlStr.includes('batchGenerateImages')) {
-                console.log('[FORCE-VIDEO] Intercepting image request -> Converting to VIDEO request');
-
-                // Parse Chrome body để lấy fresh reCAPTCHA
-                var chromeBodyForVideo = null;
-                var freshRecaptchaForVideo = null;
-                if (opts && opts.body) {
-                    try {
-                        chromeBodyForVideo = JSON.parse(opts.body);
-                        if (chromeBodyForVideo.clientContext) {
-                            // v1.0.165: Hỗ trợ cả format cũ và mới
-                            if (chromeBodyForVideo.clientContext.recaptchaContext && chromeBodyForVideo.clientContext.recaptchaContext.token) {
-                                freshRecaptchaForVideo = chromeBodyForVideo.clientContext.recaptchaContext.token;
-                            } else if (chromeBodyForVideo.clientContext.recaptchaToken) {
-                                freshRecaptchaForVideo = chromeBodyForVideo.clientContext.recaptchaToken;
-                            }
-                        }
-                    } catch(e) {}
-                }
-
-                if (freshRecaptchaForVideo && window._forceVideoPayload) {
-                    try {
-                        var videoPayload = window._forceVideoPayload;
-
-                        // Inject fresh reCAPTCHA từ Chrome
-                        if (videoPayload.clientContext) {
-                            videoPayload.clientContext.recaptchaToken = freshRecaptchaForVideo;
-                            if (chromeBodyForVideo && chromeBodyForVideo.clientContext) {
-                                videoPayload.clientContext.sessionId = chromeBodyForVideo.clientContext.sessionId;
-                                videoPayload.clientContext.projectId = chromeBodyForVideo.clientContext.projectId;
-                            }
-                        }
-
-                        // ĐỔI URL: /projects/xxx/flowMedia:batchGenerateImages -> /video:batchAsyncGenerateVideoReferenceImages
-                        // I2V endpoint = "Tạo video từ các thành phần" - cần referenceImages với mediaId
-                        // Video endpoint KHÔNG có /projects/xxx/ prefix
-                        var projectsIdx = urlStr.indexOf('/projects/');
-                        var newUrl;
-                        if (projectsIdx !== -1) {
-                            // Lấy base URL trước /projects/
-                            var baseUrl = urlStr.substring(0, projectsIdx);
-                            newUrl = baseUrl + '/video:batchAsyncGenerateVideoReferenceImages';
-                        } else {
-                            // Fallback: simple replace
-                            newUrl = urlStr.replace('flowMedia:batchGenerateImages', 'video:batchAsyncGenerateVideoReferenceImages');
-                        }
-                        console.log('[FORCE-VIDEO] Original URL:', urlStr);
-                        console.log('[FORCE-VIDEO] New URL:', newUrl);
-                        console.log('[FORCE-VIDEO] mediaId:', videoPayload.requests[0].referenceImages[0].mediaId.substring(0, 50) + '...');
-
-                        // Gửi VIDEO request thay vì IMAGE request
-                        opts.body = JSON.stringify(videoPayload);
-                        window._forceVideoPayload = null;
-
-                        // Set video response handlers
-                        window._videoPending = true;
-                        window._videoResponse = null;
-                        window._videoError = null;
-
-                        try {
-                            console.log('[FORCE-VIDEO] Sending video request with fresh reCAPTCHA...');
-                            var videoResponse = await orig.apply(this, [newUrl, opts]);
-                            var videoCloned = videoResponse.clone();
-                            try {
-                                window._videoResponse = await videoCloned.json();
-                                console.log('[FORCE-VIDEO] Response status:', videoResponse.status);
-                                if (window._videoResponse.operations) {
-                                    console.log('[FORCE-VIDEO] Got operations:', window._videoResponse.operations.length);
-                                }
-                            } catch(e) {
-                                window._videoResponse = {status: videoResponse.status, error: 'parse_failed'};
-                            }
-                            window._videoPending = false;
-                            return videoResponse;
-                        } catch(e) {
-                            console.log('[FORCE-VIDEO] Request failed:', e);
-                            window._videoError = e.toString();
-                            window._videoPending = false;
-                            throw e;
-                        }
-                    } catch(e) {
-                        console.log('[FORCE-VIDEO] Failed to convert:', e);
-                        window._forceVideoPayload = null;
-                    }
-                }
-            }
-
-            // Normal image flow continues below...
             // CHỈ reset nếu chưa có response (tránh override response đã có)
             if (!window._response) {
                 window._requestPending = true;
@@ -295,136 +189,37 @@ window._imageCallCount=0;window._maxImageCalls=1;
                 console.log('[IMG] New request, reset state');
             } else {
                 console.log('[IMG] Skip reset - already have response');
-                return orig.apply(this, [url, opts]);  // Forward mà không intercept
+                return orig.apply(this, [url, opts]);
             }
 
-            // Capture headers
-            if (opts && opts.headers) {
-                var h = opts.headers;
-                if (h['Authorization']) {
-                    window._tk = h['Authorization'].replace('Bearer ', '');
-                }
-                if (h['x-browser-validation']) {
-                    window._xbv = h['x-browser-validation'];
-                }
-            }
-
-            // Parse Chrome's original body để lấy reCAPTCHA token FRESH
+            // Parse Chrome's body
             var chromeBody = null;
-            var freshRecaptcha = null;
             if (opts && opts.body) {
                 try {
                     chromeBody = JSON.parse(opts.body);
-                    // v1.0.165: Lấy reCAPTCHA token - hỗ trợ cả format cũ và mới
-                    if (chromeBody.recaptchaToken) {
-                        freshRecaptcha = chromeBody.recaptchaToken;
-                    } else if (chromeBody.clientContext) {
-                        // Format mới: recaptchaContext.token
-                        if (chromeBody.clientContext.recaptchaContext && chromeBody.clientContext.recaptchaContext.token) {
-                            freshRecaptcha = chromeBody.clientContext.recaptchaContext.token;
-                        }
-                        // Format cũ: recaptchaToken
-                        else if (chromeBody.clientContext.recaptchaToken) {
-                            freshRecaptcha = chromeBody.clientContext.recaptchaToken;
-                        }
+                    if (chromeBody.clientContext) {
+                        window._pj = chromeBody.clientContext.projectId;
+                        window._sid = chromeBody.clientContext.sessionId;
                     }
-                    window._rct = freshRecaptcha;
-                    window._pj = chromeBody.clientContext ? chromeBody.clientContext.projectId : null;
-                    window._sid = chromeBody.clientContext ? chromeBody.clientContext.sessionId : null;
-                    console.log('[INTERCEPT] reCAPTCHA found:', freshRecaptcha ? 'YES' : 'NO');
                 } catch(e) {
                     console.log('[ERROR] Parse Chrome body failed:', e);
                 }
             }
 
             // ============================================
-            // CUSTOM PAYLOAD MODE: Thay thế body bằng payload của Python
+            // MODIFY MODE: Chỉ thêm imageInputs (references)
+            // v1.0.230: Bỏ imageCount, forceModel - chỉ giữ imageInputs
             // ============================================
-            if (window._customPayload && freshRecaptcha) {
-                try {
-                    var customBody = window._customPayload;
-
-                    // INJECT fresh reCAPTCHA token vào payload của chúng ta
-                    if (customBody.clientContext) {
-                        customBody.clientContext.recaptchaToken = freshRecaptcha;
-                        // Cũng copy sessionId và projectId
-                        if (chromeBody && chromeBody.clientContext) {
-                            customBody.clientContext.sessionId = chromeBody.clientContext.sessionId;
-                            customBody.clientContext.projectId = chromeBody.clientContext.projectId;
-                        }
-                    }
-
-                    // Thay thế body
-                    opts.body = JSON.stringify(customBody);
-                    console.log('[INJECT] Custom payload với fresh reCAPTCHA, gửi NGAY!');
-                    console.log('[INJECT] imageInputs:', customBody.requests[0].imageInputs ? customBody.requests[0].imageInputs.length : 0);
-
-                    // Clear để không dùng lại
-                    window._customPayload = null;
-                } catch(e) {
-                    console.log('[ERROR] Inject custom payload failed:', e);
-                }
-            }
-            // ============================================
-            // SIMPLE MODIFY MODE: Chỉ sửa imageCount/imageInputs
-            // ============================================
-            else if (window._modifyConfig && chromeBody) {
+            if (window._modifyConfig && chromeBody) {
                 try {
                     var cfg = window._modifyConfig;
 
-                    // LOG: Xem Chrome đang dùng model gì (kiểm tra TẤT CẢ fields liên quan)
-                    var currentModel = 'UNKNOWN';
-                    if (chromeBody.requests && chromeBody.requests[0]) {
-                        var req = chromeBody.requests[0];
-                        console.log('=== CHROME IMAGE REQUEST DEBUG ===');
-                        console.log('[CHROME] generationModelId:', req.generationModelId || 'NOT_SET');
-                        console.log('[CHROME] imageModelName:', req.imageModelName || 'NOT_SET');
-                        console.log('[CHROME] imageGenerationModel:', req.imageGenerationModel || 'NOT_SET');
-                        console.log('[CHROME] model:', req.model || 'NOT_SET');
-                        console.log('[CHROME] aspectRatio:', req.aspectRatio || 'NOT_SET');
-                        console.log('[CHROME] imageAspectRatio:', req.imageAspectRatio || 'NOT_SET');
-                        console.log('[CHROME] outputOptions:', JSON.stringify(req.outputOptions || {}));
-                        console.log('[CHROME] prompt (first 50 chars):', (req.prompt || '').substring(0, 50));
-                        // Log toàn bộ keys để debug
-                        console.log('[CHROME] ALL REQUEST KEYS:', Object.keys(req).join(', '));
-                        console.log('=== END DEBUG ===');
-
-                        // Detect current model
-                        currentModel = req.imageModelName || req.generationModelId || req.imageGenerationModel || req.model || 'NOT_SET';
-                    }
-
-                    // Lưu model đang dùng để Python có thể đọc
-                    window._chromeModel = currentModel;
-
-                    // v1.0.227: BỎ việc cắt số ảnh - đã chọn x1 trong UI
-                    // if (cfg.imageCount && chromeBody.requests) {
-                    //     chromeBody.requests = chromeBody.requests.slice(0, cfg.imageCount);
-                    // }
-
+                    // Thêm imageInputs (reference images) nếu có
                     if (cfg.imageInputs && chromeBody.requests) {
                         chromeBody.requests.forEach(function(req) {
                             req.imageInputs = cfg.imageInputs;
                         });
                         console.log('[MODIFY] Added ' + cfg.imageInputs.length + ' reference images');
-                    }
-
-                    // FORCE MODEL: Đảm bảo dùng model chất lượng cao (Nano Banana Pro = GEM_PIX_2)
-                    if (cfg.forceModel && chromeBody.requests) {
-                        var goodModels = ['GEM_PIX_2', 'GEM_PIX', 'IMAGEN_4', 'IMAGEN_3_5'];
-                        var needForce = !goodModels.includes(currentModel);
-
-                        if (needForce || cfg.forceModel === 'always') {
-                            chromeBody.requests.forEach(function(req) {
-                                // Thử set cả 2 fields để đảm bảo hoạt động
-                                req.imageModelName = cfg.forceModel === 'always' ? cfg.forceModelName : 'GEM_PIX_2';
-                                if (req.generationModelId) {
-                                    req.generationModelId = req.imageModelName;
-                                }
-                            });
-                            console.log('[FORCE MODEL] Changed to:', cfg.forceModelName || 'GEM_PIX_2', '(was:', currentModel, ')');
-                        } else {
-                            console.log('[MODEL OK] Using Chrome model:', currentModel);
-                        }
                     }
 
                     opts.body = JSON.stringify(chromeBody);
