@@ -46,6 +46,7 @@ test_output/
 # Test files
 test*.py
 test*.mp3
+!TEST_FLOW_CORRECT.py
 *.mp3
 
 # Keep config template

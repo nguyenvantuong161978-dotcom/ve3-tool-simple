@@ -1,8 +1,9 @@
-1.0.225
+1.0.226
 2026-03-02 (VN)
-Change: Fix 403 + BLOCK mode
+Change: Fix imageInputType + Cleanup test files
 
 Thay doi:
+- v1.0.226: Fix imageInputType = IMAGE_INPUT_TYPE_REFERENCE (khong phai SUBJECT_REF)
 - v1.0.225: Fix TEST script - BLOCK mode + NUCLEAR CLEANUP
 - v1.0.223: Fix verify - khong dung IIFE
 - v1.0.222: Fix focus - tach check va click
