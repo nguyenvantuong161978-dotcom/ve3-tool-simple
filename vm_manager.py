@@ -2787,6 +2787,23 @@ class VMManager:
         self.kill_all_chrome()
         time.sleep(2)
 
+        # 4.5. v1.0.233: Rotate account cho mã tiếp theo
+        try:
+            from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts, detect_machine_code
+            try:
+                machine_code = detect_machine_code()
+                channel = extract_channel_from_machine_code(machine_code)
+            except Exception:
+                channel = extract_channel_from_machine_code(project_code)
+            accounts = get_channel_accounts(channel)
+            if accounts and len(accounts) > 1:
+                new_idx = rotate_account_index(channel, len(accounts))
+                self.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {accounts[new_idx]['id']}", "SYSTEM")
+            else:
+                self.log(f"[Account] {channel}: 1 account, không cần rotate", "SYSTEM")
+        except Exception as e:
+            self.log(f"[Account] Rotate error (non-critical): {e}", "SYSTEM", "WARN")
+
         # 5. Restart Chrome workers
         chrome_workers = [wid for wid in self.workers if wid.startswith("chrome_")]
         for wid in chrome_workers:
