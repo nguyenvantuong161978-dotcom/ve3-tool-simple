@@ -3675,7 +3675,22 @@ class DrissionFlowAPI:
                 """)
 
                 if focus_result and focus_result != 'not_found':
+                    self.log(f"→ JS: Found element after {attempt + 1} attempts")
                     break
+
+                # v1.0.220: Log debug lần đầu để xem page có gì
+                if attempt == 0:
+                    debug_info = self.driver.run_js("""
+                    (function() {
+                        var ce = document.querySelectorAll('[contenteditable]').length;
+                        var ceTrue = document.querySelectorAll('[contenteditable="true"]').length;
+                        var ta = document.querySelectorAll('textarea').length;
+                        var url = window.location.href;
+                        return 'contenteditable=' + ce + '(true=' + ceTrue + '), textarea=' + ta + ', url=' + url.substring(0,60);
+                    })();
+                    """)
+                    self.log(f"[DEBUG] Page: {debug_info}")
+
                 time.sleep(0.5)
 
             if focus_result == 'contenteditable':
@@ -3684,7 +3699,22 @@ class DrissionFlowAPI:
             elif focus_result == 'textarea':
                 self.log("→ JS: Found textarea (old interface)")
             else:
-                self.log("[WARN] JS: Không tìm thấy input element", "WARN")
+                # Debug: xem page có gì
+                final_debug = self.driver.run_js("""
+                (function() {
+                    var all = document.querySelectorAll('*');
+                    var inputs = [];
+                    for (var i = 0; i < all.length; i++) {
+                        var el = all[i];
+                        var tag = el.tagName.toLowerCase();
+                        if (tag === 'textarea' || tag === 'input' || el.contentEditable === 'true') {
+                            inputs.push(tag + (el.className ? '.' + el.className.split(' ')[0] : ''));
+                        }
+                    }
+                    return inputs.slice(0, 10).join(', ') || 'NO_INPUTS_FOUND';
+                })();
+                """)
+                self.log(f"[WARN] JS: Không tìm thấy input element. Found: {final_debug}", "WARN")
                 return False
 
             time.sleep(0.3)

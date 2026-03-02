@@ -1,14 +1,14 @@
-1.0.219
+1.0.220
 2026-03-02 (VN)
-Change: Fix 403 + them retry loop cho JS element
+Change: Them debug log de tim element
 
 Thay doi:
-- v1.0.218: driver.ele() -> JavaScript document.querySelector()
-- v1.0.219: Them retry loop (10 lan x 0.5s = 5s) de doi element xuat hien
-- Truoc do JS chay 1 lan ngay -> khong tim thay element
-- Gio se retry giong nhu driver.ele(timeout=X)
+- v1.0.220: Them debug log xem page co element gi
+- Neu khong tim thay -> log ra cac element input co tren page
+- De biet selector dung hay sai
 
-1. v1.0.219: Them retry loop cho JS tim element
+1. v1.0.220: Debug log tim element
+2. v1.0.219: Them retry loop cho JS tim element
 2. v1.0.218: Fix 403 - dung JS tim element thay vi driver.ele()
 2. v1.0.217: Fix model selection sau 403 recovery
 2. v1.0.216: Hardcode force_model = "" (khong doc config)
