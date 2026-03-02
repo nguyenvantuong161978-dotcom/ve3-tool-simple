@@ -1073,13 +1073,14 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
 })();
 '''
 
-# v1.0.159: JS để chọn model "Nano Banana Pro" trước khi tạo ảnh
-# Flow: Click menu chính → Click dropdown model → Chọn Nano Banana Pro
+# v1.0.227: JS để chọn model "Nano Banana Pro" + chọn x1 (1 ảnh)
+# Flow: Mở menu → Click x1 → Click dropdown model → Chọn model → Đóng menu
+# FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
 JS_SELECT_NANO_BANANA_PRO = '''
 (function() {
     window._modelSelectResult = 'PENDING';
 
-    // Buoc 1: Mo menu chinh (button co class sc-46973129-1)
+    // Buoc 1: Mo menu chinh
     var btn1 = document.querySelector('button.sc-46973129-1');
     if (!btn1) {
         window._modelSelectResult = 'NO_MENU_BUTTON';
@@ -1089,47 +1090,67 @@ JS_SELECT_NANO_BANANA_PRO = '''
     btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
     console.log('[MODEL] Step 1: Menu opened');
 
-    // Buoc 2: Doi 800ms roi click dropdown model (button co class sc-a0dcecfb-1)
+    // Buoc 2: Click x1 (chon 1 anh) - FIX 403
     setTimeout(function() {
-        var btn2 = document.querySelector('button.sc-a0dcecfb-1');
-        if (!btn2) {
-            window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
-            return;
+        var allBtns = document.querySelectorAll('button');
+        var clickedX1 = false;
+        for (var i = 0; i < allBtns.length; i++) {
+            var b = allBtns[i];
+            if (b.textContent.trim() === 'x1') {
+                b.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                b.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                b.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[MODEL] Step 2: Clicked x1 (1 anh)');
+                clickedX1 = true;
+                break;
+            }
         }
-        btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-        btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-        console.log('[MODEL] Step 2: Model dropdown opened');
+        if (!clickedX1) {
+            console.log('[MODEL] Step 2: x1 button not found, continuing...');
+        }
 
-        // Buoc 3: Doi 800ms roi click menuitem dau tien (Nano Banana Pro)
+        // Buoc 3: Click dropdown model
         setTimeout(function() {
-            var menuItems = document.querySelectorAll('[role="menuitem"]');
-            if (menuItems.length > 0) {
-                // Item dau tien la Nano Banana Pro
-                var item = menuItems[0];
-                item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                item.click();
-                console.log('[MODEL] Step 3: Selected Nano Banana Pro!');
+            var btn2 = document.querySelector('button.sc-a0dcecfb-1');
+            if (!btn2) {
+                window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
+                return;
+            }
+            btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+            btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+            console.log('[MODEL] Step 3: Model dropdown opened');
 
-                // Buoc 4: Dong menu bang cach nhan Escape 2 lan (dong ca dropdown va menu chinh)
-                setTimeout(function() {
-                    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+            // Buoc 4: Chon model dau tien (Nano Banana Pro)
+            setTimeout(function() {
+                var menuItems = document.querySelectorAll('[role="menuitem"]');
+                if (menuItems.length > 0) {
+                    var item = menuItems[0];
+                    item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                    item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                    item.click();
+                    console.log('[MODEL] Step 4: Selected Nano Banana Pro!');
+
+                    // Buoc 5: Dong menu
                     setTimeout(function() {
                         document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                        console.log('[MODEL] Step 4: Menu closed');
-                        window._modelSelectResult = 'SELECTED_PRO';
+                        setTimeout(function() {
+                            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                            console.log('[MODEL] Step 5: Menu closed');
+                            window._modelSelectResult = 'SELECTED_PRO';
+                        }, 300);
                     }, 300);
-                }, 300);
-            } else {
-                window._modelSelectResult = 'NO_MENU_ITEMS';
-            }
-        }, 800);
+                } else {
+                    window._modelSelectResult = 'NO_MENU_ITEMS';
+                }
+            }, 800);
+        }, 500);
     }, 800);
 })();
 '''
 
-# v1.0.173: JS để chọn model theo index
+# v1.0.227: JS để chọn model theo index + chọn x1 (1 ảnh)
 # Index 0: Nano Banana Pro, Index 1: Nano Banana 2 (NARWHAL), Index 2: Imagen 4
+# FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
 JS_SELECT_MODEL_BY_INDEX = '''
 (function(modelIndex) {
     window._modelSelectResult = 'PENDING';
@@ -1142,40 +1163,63 @@ JS_SELECT_MODEL_BY_INDEX = '''
     }
     btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
     btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+    console.log('[MODEL] Step 1: Menu opened');
 
-    // Buoc 2: Click dropdown model
+    // Buoc 2: Click x1 (chon 1 anh) - FIX 403
     setTimeout(function() {
-        var btn2 = document.querySelector('button.sc-a0dcecfb-1');
-        if (!btn2) {
-            window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
-            return;
+        var allBtns = document.querySelectorAll('button');
+        var clickedX1 = false;
+        for (var i = 0; i < allBtns.length; i++) {
+            var b = allBtns[i];
+            if (b.textContent.trim() === 'x1') {
+                b.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                b.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                b.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[MODEL] Step 2: Clicked x1 (1 anh)');
+                clickedX1 = true;
+                break;
+            }
         }
-        btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-        btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+        if (!clickedX1) {
+            console.log('[MODEL] Step 2: x1 button not found, continuing...');
+        }
 
-        // Buoc 3: Chon model theo index
+        // Buoc 3: Click dropdown model
         setTimeout(function() {
-            var menuItems = document.querySelectorAll('[role="menuitem"]');
-            if (menuItems.length > modelIndex) {
-                var item = menuItems[modelIndex];
-                var modelName = item.textContent || 'Unknown';
-                item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                item.click();
-                console.log('[MODEL] Selected: ' + modelName);
+            var btn2 = document.querySelector('button.sc-a0dcecfb-1');
+            if (!btn2) {
+                window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
+                return;
+            }
+            btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+            btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+            console.log('[MODEL] Step 3: Model dropdown opened');
 
-                // Buoc 4: Dong menu
-                setTimeout(function() {
-                    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+            // Buoc 4: Chon model theo index
+            setTimeout(function() {
+                var menuItems = document.querySelectorAll('[role="menuitem"]');
+                if (menuItems.length > modelIndex) {
+                    var item = menuItems[modelIndex];
+                    var modelName = item.textContent || 'Unknown';
+                    item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                    item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                    item.click();
+                    console.log('[MODEL] Step 4: Selected ' + modelName);
+
+                    // Buoc 5: Dong menu
                     setTimeout(function() {
                         document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                        window._modelSelectResult = 'SELECTED_' + modelIndex;
+                        setTimeout(function() {
+                            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                            console.log('[MODEL] Step 5: Menu closed');
+                            window._modelSelectResult = 'SELECTED_' + modelIndex;
+                        }, 300);
                     }, 300);
-                }, 300);
-            } else {
-                window._modelSelectResult = 'INVALID_INDEX';
-            }
-        }, 800);
+                } else {
+                    window._modelSelectResult = 'INVALID_INDEX';
+                }
+            }, 800);
+        }, 500);
     }, 800);
 })(%d);
 '''
