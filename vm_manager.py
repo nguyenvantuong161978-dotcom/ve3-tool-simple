@@ -2838,7 +2838,6 @@ class VMManager:
                 result = subprocess.run(
                     [sys.executable, str(pre_login_script)],
                     capture_output=False,  # Hiện log ra màn hình
-                    timeout=180,           # Tối đa 3 phút để login
                     cwd=str(TOOL_DIR),
                 )
                 if result.returncode == 0:
@@ -2847,8 +2846,6 @@ class VMManager:
                     self.log(f"[Account] _pre_login.py exit code {result.returncode}", "SYSTEM", "WARN")
             else:
                 self.log("[Account] Không tìm thấy _pre_login.py", "SYSTEM", "WARN")
-        except subprocess.TimeoutExpired:
-            self.log("[Account] Login timeout (3 phút) - tiếp tục", "SYSTEM", "WARN")
         except Exception as e:
             self.log(f"[Account] Login error: {e}", "SYSTEM", "WARN")
 
