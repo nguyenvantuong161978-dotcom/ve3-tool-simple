@@ -3473,31 +3473,41 @@ class DrissionFlowAPI:
             start_time = time.time()
             while time.time() - start_time < timeout:
                 try:
-                    # v1.0.126: Dùng _find_textarea() để hỗ trợ cả contenteditable
-                    textarea = self._find_textarea()
-                    if textarea:
-                        # === VERIFY: Textarea phải THẬT SỰ visible và có thể tương tác ===
-                        try:
-                            # Check 1: Element phải displayed
-                            is_displayed = textarea.states.is_displayed
-                            if not is_displayed:
-                                time.sleep(0.5)
-                                continue
+                    # v1.0.218: Dùng JavaScript thay vì driver.ele() để tránh 403
+                    check_result = self.driver.run_js("""
+                    (function() {
+                        var input = document.querySelector('[contenteditable="true"]');
+                        if (!input) input = document.querySelector('[role="textbox"]');
+                        if (!input) input = document.querySelector('[aria-multiline="true"]');
+                        if (!input) input = document.querySelector('textarea:not([class*="recaptcha"])');
 
-                            # Check 2: Thử click vào textarea để verify có thể tương tác
-                            textarea.click()
-                            time.sleep(0.3)
+                        if (!input) return 'not_found';
 
-                            # Check 3: Verify input vẫn còn sau khi click (page không bị redirect)
-                            # v1.0.133: Dùng _find_textarea() để hỗ trợ cả contenteditable
-                            verify = self._find_textarea()
-                            if verify:
-                                self.log(f"[TEXTAREA] [v] Input visible và interactive!")
-                                return True
-                        except Exception as verify_err:
-                            self.log(f"[TEXTAREA] Element found but not ready: {verify_err}")
-                            time.sleep(0.5)
-                            continue
+                        // Check visible
+                        var style = window.getComputedStyle(input);
+                        if (style.display === 'none' || style.visibility === 'hidden') {
+                            return 'hidden';
+                        }
+
+                        // Focus và click
+                        input.focus();
+                        input.click();
+
+                        // Verify vẫn còn sau click
+                        var verify = document.querySelector('[contenteditable="true"]') ||
+                                     document.querySelector('[role="textbox"]') ||
+                                     document.querySelector('textarea:not([class*="recaptcha"])');
+                        if (verify) return 'ok';
+                        return 'lost';
+                    })();
+                    """)
+
+                    if check_result == 'ok':
+                        self.log(f"[TEXTAREA] [v] Input visible và interactive!")
+                        return True
+                    elif check_result == 'hidden':
+                        time.sleep(0.5)
+                        continue
                 except Exception as e:
                     pass
                 time.sleep(0.5)
@@ -3634,38 +3644,42 @@ class DrissionFlowAPI:
             import pyperclip
             from DrissionPage.common import Keys
 
-            # 1. Tìm input element (textarea HOẶC contenteditable)
-            input_elem = None
+            # 1. Tìm và focus input element bằng JavaScript
+            # v1.0.218: Fix 403 - driver.ele() trigger bot detection, dùng JS thay thế
             is_contenteditable = False
 
-            # Thử contenteditable trước (giao diện mới 2026-02)
-            try:
-                input_elem = self.driver.ele('css:[contenteditable="true"]', timeout=3)
-                if input_elem:
-                    is_contenteditable = True
-                    self.log("→ Found contenteditable div (new interface)")
-            except:
-                pass
+            focus_result = self.driver.run_js("""
+            (function() {
+                // Thử contenteditable trước (giao diện mới 2026-02)
+                var input = document.querySelector('[contenteditable="true"]');
+                if (input) {
+                    input.focus();
+                    input.click();
+                    return 'contenteditable';
+                }
 
-            # Fallback: textarea (giao diện cũ)
-            if not input_elem:
-                try:
-                    input_elem = self.driver.ele('tag:textarea', timeout=5)
-                    if input_elem:
-                        self.log("→ Found textarea (old interface)")
-                except:
-                    pass
+                // Fallback: textarea (giao diện cũ)
+                input = document.querySelector('textarea:not([class*="recaptcha"]):not([name*="recaptcha"])');
+                if (input) {
+                    input.focus();
+                    input.click();
+                    return 'textarea';
+                }
 
-            if not input_elem:
-                self.log("[WARN] Không tìm thấy input element", "WARN")
+                return 'not_found';
+            })();
+            """)
+
+            if focus_result == 'contenteditable':
+                is_contenteditable = True
+                self.log("→ JS: Found contenteditable div (new interface)")
+            elif focus_result == 'textarea':
+                self.log("→ JS: Found textarea (old interface)")
+            else:
+                self.log("[WARN] JS: Không tìm thấy input element", "WARN")
                 return False
 
-            # 2. Click để focus
-            try:
-                input_elem.click()
-                time.sleep(0.3)
-            except Exception as e:
-                self.log(f"[WARN] Click failed: {e}", "WARN")
+            time.sleep(0.3)
 
             # v1.0.137: Bỏ clear bằng JS - Flow detect và block
             # Thay bằng Ctrl+A để select all, Ctrl+V sẽ replace (như người thật)
@@ -3687,36 +3701,48 @@ class DrissionFlowAPI:
                 self.log(f"→ Ctrl+V sent")
             except Exception as e:
                 self.log(f"[WARN] Ctrl+V failed: {e}", "WARN")
-                # Fallback: try .input()
+                # v1.0.218: Fallback bằng JS execCommand thay vì input_elem.input()
                 try:
-                    input_elem.input(prompt)
-                    self.log(f"→ Fallback: used .input()")
+                    js_result = self.driver.run_js(f"""
+                    (function() {{
+                        var input = document.querySelector('[contenteditable="true"]') ||
+                                    document.querySelector('textarea:not([class*="recaptcha"])');
+                        if (!input) return 'no_input';
+                        input.focus();
+                        document.execCommand('insertText', false, {repr(prompt)});
+                        return 'ok';
+                    }})();
+                    """)
+                    if js_result == 'ok':
+                        self.log(f"→ Fallback: used JS execCommand")
+                    else:
+                        return False
                 except:
                     return False
 
-            # 5. VERIFY: Input có prompt chưa?
+            # 5. VERIFY: Input có prompt chưa? (v1.0.218: Dùng JS thay vì driver.ele)
             try:
-                if is_contenteditable:
-                    verify_result = self.driver.run_js("""
-                        var ed = document.querySelector('[contenteditable="true"]');
-                        if (!ed) return 'not_found';
-                        var text = ed.textContent || ed.innerText || '';
+                verify_result = self.driver.run_js(f"""
+                (function() {{
+                    var input = document.querySelector('[contenteditable="true"]');
+                    if (input) {{
+                        var text = input.textContent || input.innerText || '';
                         return text.length;
-                    """)
-                    if verify_result and int(verify_result) >= len(prompt) * 0.8:
-                        verify_result = 'ok'
-                    else:
-                        verify_result = f'failed:{verify_result}'
+                    }}
+                    input = document.querySelector('textarea:not([class*="recaptcha"])');
+                    if (input) {{
+                        return (input.value || '').length;
+                    }}
+                    return -1;
+                }})();
+                """)
+
+                if verify_result == -1:
+                    verify_result = 'not_found'
+                elif verify_result and int(verify_result) >= len(prompt) * 0.8:
+                    verify_result = 'ok'
                 else:
-                    textarea_elem = self.driver.ele('tag:textarea', timeout=5)
-                    if not textarea_elem:
-                        verify_result = 'not_found'
-                    else:
-                        textarea_value = textarea_elem.property('value') or ''
-                        if len(textarea_value) >= len(prompt) * 0.8:
-                            verify_result = 'ok'
-                        else:
-                            verify_result = f'failed:{len(textarea_value)}'
+                    verify_result = f'failed:{verify_result}'
             except Exception as e:
                 self.log(f"[WARN] Verify exception: {e}", "WARN")
                 verify_result = None

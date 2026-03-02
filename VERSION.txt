@@ -1,13 +1,15 @@
-1.0.217
-2026-03-01 (VN)
-Change: Fix model selection sau 403 recovery
+1.0.218
+2026-03-02 (VN)
+Change: Fix 403 - thay driver.ele() bang JavaScript
 
 Thay doi:
-- Them reset _model_selected = False trong reset_chrome_profile()
-- Sau 403 recovery, model selection se hoat dong lai
-- Truoc day: 403 -> reset profile -> khong chon model
+- driver.ele() trigger Google bot detection -> 403
+- Thay bang JavaScript document.querySelector()
+- Fix trong _paste_prompt_ctrlv() va _wait_for_textarea_visible()
+- DrissionPage keyboard (Ctrl+V, Enter) van OK
 
-1. v1.0.217: Fix model selection sau 403 recovery
+1. v1.0.218: Fix 403 - dung JS tim element thay vi driver.ele()
+2. v1.0.217: Fix model selection sau 403 recovery
 2. v1.0.216: Hardcode force_model = "" (khong doc config)
 3. v1.0.215: Fix config force_model: always -> ''
 2. v1.0.214: Bo force model - giu nguyen model Chrome chon
