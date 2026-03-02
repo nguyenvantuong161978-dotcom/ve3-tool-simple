@@ -3731,29 +3731,29 @@ class DrissionFlowAPI:
                 except:
                     return False
 
-            # 5. VERIFY: Input có prompt chưa? (v1.0.218: Dùng JS thay vì driver.ele)
+            # 5. VERIFY: Input có prompt chưa?
+            # v1.0.223: Đơn giản hóa - không dùng IIFE (bị return None)
             try:
-                verify_result = self.driver.run_js(f"""
-                (function() {{
+                # Thử contenteditable trước
+                content_len = self.driver.run_js("""
                     var input = document.querySelector('[contenteditable="true"]');
-                    if (input) {{
-                        var text = input.textContent || input.innerText || '';
-                        return text.length;
-                    }}
-                    input = document.querySelector('textarea:not([class*="recaptcha"])');
-                    if (input) {{
-                        return (input.value || '').length;
-                    }}
-                    return -1;
-                }})();
+                    return input ? (input.textContent || input.innerText || '').length : -1;
                 """)
 
-                if verify_result == -1:
+                # Nếu không tìm thấy, thử textarea
+                if content_len == -1 or content_len is None:
+                    content_len = self.driver.run_js("""
+                        var input = document.querySelector('textarea:not([class*="recaptcha"])');
+                        return input ? (input.value || '').length : -1;
+                    """)
+
+                # Kiểm tra kết quả
+                if content_len is None or content_len == -1:
                     verify_result = 'not_found'
-                elif verify_result and int(verify_result) >= len(prompt) * 0.8:
+                elif content_len >= len(prompt) * 0.8:
                     verify_result = 'ok'
                 else:
-                    verify_result = f'failed:{verify_result}'
+                    verify_result = f'failed:{content_len}'
             except Exception as e:
                 self.log(f"[WARN] Verify exception: {e}", "WARN")
                 verify_result = None

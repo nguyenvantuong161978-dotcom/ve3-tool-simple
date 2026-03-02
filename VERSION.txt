@@ -1,16 +1,17 @@
-1.0.222
+1.0.223
 2026-03-02 (VN)
-Change: Fix focus/click - tach rieng check va focus
+Change: Fix VERIFY - khong dung IIFE
 
 Thay doi:
-- v1.0.222: Don gian hoa focus logic
-- Tach rieng: check element (co return) va focus/click (khong can return)
-- Test thanh cong: tao anh + lay media_id OK
-- IIFE co return bi None nhung focus/click van hoat dong
+- v1.0.223: Fix verify content sau Ctrl+V
+- IIFE trong verify cung bi return None
+- Don gian hoa: query rieng contenteditable va textarea
+- Khong dung IIFE - chi dung JS don gian
 
-1. v1.0.222: Fix focus - tach check va click
-2. v1.0.221: Log URL de debug
-3. v1.0.220: Debug log tim element
+1. v1.0.223: Fix verify - khong dung IIFE
+2. v1.0.222: Fix focus - tach check va click
+3. v1.0.221: Log URL de debug
+4. v1.0.220: Debug log tim element
 2. v1.0.219: Them retry loop cho JS tim element
 2. v1.0.218: Fix 403 - dung JS tim element thay vi driver.ele()
 2. v1.0.217: Fix model selection sau 403 recovery
