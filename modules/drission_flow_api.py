@@ -872,79 +872,7 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
 # v1.0.227: JS để chọn model "Nano Banana Pro" + chọn x1 (1 ảnh)
 # Flow: Mở menu → Click x1 → Click dropdown model → Chọn model → Đóng menu
 # FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
-JS_SELECT_NANO_BANANA_PRO = '''
-(function() {
-    window._modelSelectResult = 'PENDING';
-
-    // Buoc 1: Mo menu chinh
-    var btn1 = document.querySelector('button.sc-46973129-1');
-    if (!btn1) {
-        window._modelSelectResult = 'NO_MENU_BUTTON';
-        return;
-    }
-    btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-    btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-    console.log('[MODEL] Step 1: Menu opened');
-
-    // Buoc 2: Click x1 (chon 1 anh) - FIX 403
-    setTimeout(function() {
-        var allBtns = document.querySelectorAll('button');
-        var clickedX1 = false;
-        for (var i = 0; i < allBtns.length; i++) {
-            var b = allBtns[i];
-            if (b.textContent.trim() === 'x1') {
-                b.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                b.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                b.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-                console.log('[MODEL] Step 2: Clicked x1 (1 anh)');
-                clickedX1 = true;
-                break;
-            }
-        }
-        if (!clickedX1) {
-            console.log('[MODEL] Step 2: x1 button not found, continuing...');
-        }
-
-        // Buoc 3: Click dropdown model
-        setTimeout(function() {
-            var btn2 = document.querySelector('button.sc-a0dcecfb-1');
-            if (!btn2) {
-                window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
-                return;
-            }
-            btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-            btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-            console.log('[MODEL] Step 3: Model dropdown opened');
-
-            // Buoc 4: Chon model dau tien (Nano Banana Pro)
-            setTimeout(function() {
-                var menuItems = document.querySelectorAll('[role="menuitem"]');
-                if (menuItems.length > 0) {
-                    var item = menuItems[0];
-                    item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                    item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                    item.click();
-                    console.log('[MODEL] Step 4: Selected Nano Banana Pro!');
-
-                    // Buoc 5: Dong menu
-                    setTimeout(function() {
-                        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                        setTimeout(function() {
-                            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                            console.log('[MODEL] Step 5: Menu closed');
-                            window._modelSelectResult = 'SELECTED_PRO';
-                        }, 300);
-                    }, 300);
-                } else {
-                    window._modelSelectResult = 'NO_MENU_ITEMS';
-                }
-            }, 800);
-        }, 500);
-    }, 800);
-})();
-'''
-
-# v1.0.227: JS để chọn model theo index + chọn x1 (1 ảnh)
+# v1.0.231: JS để chọn model theo index + chọn x1 (1 ảnh)
 # Index 0: Nano Banana Pro, Index 1: Nano Banana 2 (NARWHAL), Index 2: Imagen 4
 # FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
 JS_SELECT_MODEL_BY_INDEX = '''
@@ -4221,11 +4149,15 @@ class DrissionFlowAPI:
         if not self._ready:
             return [], "API chưa setup! Gọi setup() trước."
 
-        # v1.0.228: LUÔN chọn x1 + model trước MỖI lần generate
-        # Đảm bảo x1 được chọn ngay cả sau Chrome restart
-        self.log("[Model] Chọn x1 + Model...")
-        if self._select_nano_banana_pro():
-            self.log("[Model] [v] Đã chọn x1 + Nano Banana Pro")
+        # v1.0.231: LUÔN chọn x1 + model trước MỖI lần generate
+        # Dùng _current_model_index để đúng model (0=Pro, 1=NB2, 2=Imagen4)
+        # x1 được chọn trong select_model_by_index()
+        model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+        current_model_idx = getattr(self, '_current_model_index', 0)
+        current_model_name = model_names[current_model_idx] if current_model_idx < len(model_names) else f"Model {current_model_idx}"
+        self.log(f"[Model] Chọn x1 + {current_model_name} (index {current_model_idx})...")
+        if self.select_model_by_index(current_model_idx):
+            self.log(f"[Model] [v] Đã chọn x1 + {current_model_name}")
         else:
             self.log("[Model] [WARN] Không chọn được model, tiếp tục...", "WARN")
 
@@ -5601,43 +5533,6 @@ class DrissionFlowAPI:
             self._consecutive_403 = 0
 
         return True, result_path, None
-
-    def _select_nano_banana_pro(self) -> bool:
-        """
-        v1.0.160: Chọn model "Nano Banana Pro" trước khi tạo ảnh.
-        Flow: Click menu chính → Click dropdown model → Chọn Nano Banana Pro → Đóng menu (Escape x2)
-        """
-        if not self._ready or not self.driver:
-            return False
-
-        try:
-            self.log("[Model] Đang chọn Nano Banana Pro...")
-
-            # Chạy JS chọn model
-            self.driver.run_js("window._modelSelectResult = 'PENDING';")
-            self.driver.run_js(JS_SELECT_NANO_BANANA_PRO)
-
-            # Đợi JS async hoàn thành (800ms + 800ms + 300ms + 300ms + buffer)
-            time.sleep(3.0)
-
-            # Kiểm tra kết quả
-            result = self.driver.run_js("return window._modelSelectResult;")
-
-            if result == 'SELECTED_PRO':
-                self.log("[Model] [v] Đã chọn Nano Banana Pro!")
-                return True
-            elif result == 'NO_MENU_BUTTON':
-                self.log("[Model] [WARN] Không tìm thấy menu button", "WARN")
-            elif result == 'NO_DROPDOWN_BUTTON':
-                self.log("[Model] [WARN] Không tìm thấy dropdown button", "WARN")
-            else:
-                self.log(f"[Model] [WARN] Kết quả: {result}", "WARN")
-
-            return False
-
-        except Exception as e:
-            self.log(f"[Model] Error: {e}", "ERROR")
-            return False
 
     def select_model_by_index(self, model_index: int) -> bool:
         """
