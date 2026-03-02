@@ -4688,15 +4688,13 @@ class DrissionFlowAPI:
         if not self._ready:
             return False, [], "API chưa setup! Gọi setup() trước."
 
-        # v1.0.163: Bỏ switch_to_image_mode() - giao diện mới không cần
-        # Chỉ cần chọn model "Nano Banana Pro"
-        if not getattr(self, '_model_selected', False):
-            self.log("[Model] Chọn Nano Banana Pro...")
-            if self._select_nano_banana_pro():
-                self._model_selected = True
-                self.log("[Model] [v] Đã chọn Nano Banana Pro")
-            else:
-                self.log("[Model] [WARN] Không chọn được model, dùng mặc định", "WARN")
+        # v1.0.227: LUÔN chọn model + x1 trước khi generate (tránh 403)
+        # x1 cần được chọn mỗi lần vì có thể bị reset sau page refresh
+        self.log("[Model] Chọn x1 + Model...")
+        if self._select_nano_banana_pro():
+            self.log("[Model] [v] Đã chọn x1 + Nano Banana Pro")
+        else:
+            self.log("[Model] [WARN] Không chọn được model, tiếp tục...", "WARN")
 
         # Nếu đang dùng fallback model (do quota), override force_model
         if self._use_fallback_model:
