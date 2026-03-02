@@ -1,9 +1,8 @@
-1.0.233
+1.0.232
 2026-03-02 (VN)
-Change: Tu dong doi tai khoan + login Chrome sau moi project
+Change: 400 Policy Violation - retry khong co reference
 
 Thay doi:
-- v1.0.233: Auto rotate account + auto login Chrome khi project xong hoac timeout 6h
 - v1.0.232: 400 Policy - lan 1 retry khong co reference (xem ref co gay loi khong), lan 2 skip
 - v1.0.231: Thong nhat chon model: select_model_by_index(_current_model_index) - dung model theo 403 rotation
 - v1.0.230: CLEANUP - Bo cac JS khong dung: imageCount, forceModel, customPayload, forceVideoPayload, blockExtraCalls
