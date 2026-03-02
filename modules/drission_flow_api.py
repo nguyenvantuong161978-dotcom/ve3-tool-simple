@@ -4440,6 +4440,9 @@ class DrissionFlowAPI:
         if image_inputs:
             self.log(f"→ Using {len(image_inputs)} reference image(s)")
 
+        # current_image_inputs có thể bị set None khi retry 400 không có refs
+        current_image_inputs = image_inputs
+
         attempt = 0
         while attempt < effective_max_retries:
             # SỬ DỤNG FORWARD MODE - không cancel request
@@ -4447,7 +4450,7 @@ class DrissionFlowAPI:
             images, error = self.generate_image_forward(
                 prompt=prompt,
                 num_images=1,
-                image_inputs=image_inputs,
+                image_inputs=current_image_inputs,
                 timeout=90,
                 force_model=force_model
             )
@@ -4518,24 +4521,30 @@ class DrissionFlowAPI:
                         return False, [], error
 
                 # === 400 ERROR: Policy violation (prompt bị cấm) ===
-                # Retry 1 lần, nếu vẫn 400 thì skip prompt này
+                # Lần 1: Nếu có reference → retry KHÔNG có reference (có thể ref gây lỗi)
+                # Lần 2: Nếu vẫn 400 (không có ref) → skip prompt này
                 # TRỪ KHI skip_400_retry=True (validator mode) → return ngay
                 if "400" in error:
                     if skip_400_retry:
-                        # Validator mode: return ngay để validator xử lý
                         self.log(f"[WARN] 400 Policy Violation - Return to validator for handling", "WARN")
                         return False, [], error
 
                     policy_retry_count = getattr(self, '_policy_retry_count', 0)
                     if policy_retry_count < 1:
                         self._policy_retry_count = policy_retry_count + 1
-                        self.log(f"[WARN] 400 Policy Violation - Prompt vi phạm! Retry lần {policy_retry_count + 1}...", "WARN")
+                        if current_image_inputs:
+                            # Retry không có reference - xem ref có gây lỗi không
+                            self.log(f"[WARN] 400 Policy Violation - Retry không có reference...", "WARN")
+                            current_image_inputs = None
+                        else:
+                            self.log(f"[WARN] 400 Policy Violation - Retry lần 1...", "WARN")
                         time.sleep(2)
                         attempt += 1
                         continue
                     else:
-                        # Reset counter và skip prompt này
+                        # Reset và skip
                         self._policy_retry_count = 0
+                        current_image_inputs = image_inputs  # Restore cho prompt tiếp theo
                         self.log(f"[WARN] 400 Policy Violation - SKIP prompt này!", "WARN")
                         return False, [], "POLICY_VIOLATION: Prompt bị cấm, skip"
 
