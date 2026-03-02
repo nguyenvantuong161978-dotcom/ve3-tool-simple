@@ -2786,16 +2786,10 @@ class VMManager:
         6. Restart workers với account mới
         """
         self.log("=" * 60, "SYSTEM")
-        self.log(f"ACCOUNT ISSUE: {project_code} - 1h < 5 ảnh → Switch account", "SYSTEM", "WARN")
+        self.log(f"ACCOUNT ISSUE: {project_code} - 1h < 5 ảnh → Reset + retry", "SYSTEM", "WARN")
         self.log("=" * 60, "SYSTEM")
 
-        # 1. Stop tất cả workers
-        for wid in list(self.workers.keys()):
-            self.stop_worker(wid)
-        self._clear_agent_status()
-        time.sleep(3)
-
-        # 2. Rotate sang account tiếp theo
+        # 1. Rotate account (index cho project tiếp theo / pre_login lần sau)
         try:
             from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts, detect_machine_code
             try:
@@ -2808,11 +2802,14 @@ class VMManager:
                 new_idx = rotate_account_index(channel, len(accounts))
                 self.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {accounts[new_idx]['id']}", "SYSTEM")
             else:
-                self.log(f"[Account] {channel}: 1 account - retry cùng account", "SYSTEM", "WARN")
+                self.log(f"[Account] {channel}: 1 account - retry", "SYSTEM")
         except Exception as e:
             self.log(f"[Account] Rotate error: {e}", "SYSTEM", "WARN")
 
-        # 3. Xóa ảnh đã tạo (< 5, từ account xấu)
+        # 2. Restore Excel backup (về trạng thái sạch, giữ nguyên prompts)
+        self._restore_excel_from_backup(project_code)
+
+        # 3. Xóa ảnh đã tạo (< 5 ảnh)
         img_dir = TOOL_DIR / "PROJECTS" / project_code / "img"
         if img_dir.exists():
             for f in list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg")):
@@ -2820,45 +2817,24 @@ class VMManager:
                     f.unlink()
                 except Exception:
                     pass
-            self.log(f"[Account] Cleared img/ folder", "SYSTEM")
+            self.log("[Account] Cleared img/", "SYSTEM")
 
-        # 4. Restore Excel backup (trạng thái sạch)
-        self._restore_excel_from_backup(project_code)
-
-        # 5. Clear Chrome data + Kill Chrome
-        self._clear_chrome_data_for_new_account()
+        # 4. Reset workers - giống nút Reset trong GUI
+        # (stop all → kill chrome → restart all, KHÔNG xóa Chrome data)
+        self.stop_all()
+        time.sleep(2)
         self.kill_all_chrome()
-        time.sleep(3)
-
-        # 6. Login Chrome với account mới (dùng _pre_login.py)
-        self.log("[Account] Đang login Chrome với account mới...", "SYSTEM")
-        try:
-            pre_login_script = TOOL_DIR / "_pre_login.py"
-            if pre_login_script.exists():
-                result = subprocess.run(
-                    [sys.executable, str(pre_login_script)],
-                    capture_output=False,  # Hiện log ra màn hình
-                    cwd=str(TOOL_DIR),
-                )
-                if result.returncode == 0:
-                    self.log("[Account] Login Chrome thành công", "SYSTEM", "SUCCESS")
-                else:
-                    self.log(f"[Account] _pre_login.py exit code {result.returncode}", "SYSTEM", "WARN")
-            else:
-                self.log("[Account] Không tìm thấy _pre_login.py", "SYSTEM", "WARN")
-        except Exception as e:
-            self.log(f"[Account] Login error: {e}", "SYSTEM", "WARN")
-
-        # 7. Reset account timer (account mới có 1 tiếng)
-        self.account_start_time = time.time()
-
-        # 8. Restart workers
-        self.log("Restarting workers with new account...", "SYSTEM")
+        self._clear_agent_status()
+        time.sleep(2)
+        self._stop_flag = False  # Cho phép orchestrate tiếp tục
         for wid in list(self.workers.keys()):
             time.sleep(2)
             self.start_worker(wid, gui_mode=self.gui_mode)
 
-        self.log("Ready with new account for same project", "SYSTEM", "SUCCESS")
+        # 5. Reset account timer (account mới có 1 tiếng)
+        self.account_start_time = time.time()
+
+        self.log("Reset xong - cùng project, tài khoản mới", "SYSTEM", "SUCCESS")
 
     def handle_project_timeout(self, project_code: str):
         """Xử lý khi project quá 6 tiếng: Copy kết quả về máy chủ và chuyển project tiếp theo."""
