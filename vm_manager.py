@@ -892,6 +892,11 @@ class VMManager:
         self.project_start_time = None
         self.current_project_code = None
 
+        # v1.0.234: Account issue detection (1h < 5 ảnh → switch account)
+        self.account_issue_timeout = 1 * 3600  # 1 tiếng = 3600 giây
+        self.account_issue_min_images = 5       # < 5 ảnh trong 1h = có vấn đề
+        self.account_start_time = None          # Timer cho account hiện tại
+
         # Auto-detect
         self.auto_path = self._detect_auto_path()
         self.channel = self._get_channel_from_folder()
@@ -1911,6 +1916,7 @@ class VMManager:
         if self.current_project_code != project_code:
             self.current_project_code = project_code
             self.project_start_time = time.time()
+            self.account_start_time = time.time()  # v1.0.234: Reset account timer
             self.log(f"Started tracking project {project_code} (6h timeout)", "MANAGER")
 
         # Check if project is completed
@@ -2011,6 +2017,8 @@ class VMManager:
         if status.current_step == "excel":
             self.create_task(TaskType.EXCEL, project_code)
         elif status.current_step == "image" and status.images_missing:
+            # v1.0.234: Tạo backup Excel khi bắt đầu bước image (nếu chưa có)
+            self._create_excel_backup_if_needed(project_code)
             self._distribute_tasks(TaskType.IMAGE, project_code, status.images_missing)
         elif status.current_step == "video" and status.videos_needed:
             # Use videos_needed which is filtered by video_mode (basic = Segment 1 only)
@@ -2739,6 +2747,100 @@ class VMManager:
 
         self.log("Chrome workers restarted successfully", "SYSTEM", "SUCCESS")
 
+    def _create_excel_backup_if_needed(self, project_code: str):
+        """v1.0.234: Tạo backup Excel khi bắt đầu bước image (chỉ tạo 1 lần)."""
+        excel_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts.xlsx"
+        backup_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts_backup.xlsx"
+        if excel_path.exists() and not backup_path.exists():
+            try:
+                shutil.copy2(str(excel_path), str(backup_path))
+                self.log(f"[Backup] Created Excel backup: {backup_path.name}", "SYSTEM")
+            except Exception as e:
+                self.log(f"[Backup] Error creating backup: {e}", "SYSTEM", "WARN")
+
+    def _restore_excel_from_backup(self, project_code: str):
+        """v1.0.234: Restore Excel từ backup (xóa bản đang làm, dùng lại bản gốc sạch)."""
+        excel_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts.xlsx"
+        backup_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts_backup.xlsx"
+        if backup_path.exists():
+            try:
+                if excel_path.exists():
+                    excel_path.unlink()
+                shutil.copy2(str(backup_path), str(excel_path))
+                self.log(f"[Backup] Restored Excel from backup - clean slate", "SYSTEM", "SUCCESS")
+            except Exception as e:
+                self.log(f"[Backup] Error restoring backup: {e}", "SYSTEM", "ERROR")
+        else:
+            self.log(f"[Backup] No backup found for {project_code}", "SYSTEM", "WARN")
+
+    def handle_account_issue(self, project_code: str):
+        """
+        v1.0.234: Xử lý khi account có vấn đề (1 tiếng < 5 ảnh).
+
+        Flow:
+        1. Stop workers
+        2. Rotate sang account tiếp theo
+        3. Xóa ảnh đã tạo (< 5, từ account xấu)
+        4. Restore Excel backup (trạng thái sạch, giữ nguyên prompts)
+        5. Clear Chrome data
+        6. Restart workers với account mới
+        """
+        self.log("=" * 60, "SYSTEM")
+        self.log(f"ACCOUNT ISSUE: {project_code} - 1h < 5 ảnh → Switch account", "SYSTEM", "WARN")
+        self.log("=" * 60, "SYSTEM")
+
+        # 1. Stop tất cả workers
+        for wid in list(self.workers.keys()):
+            self.stop_worker(wid)
+        self._clear_agent_status()
+        time.sleep(3)
+
+        # 2. Rotate sang account tiếp theo
+        try:
+            from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts, detect_machine_code
+            try:
+                machine_code = detect_machine_code()
+                channel = extract_channel_from_machine_code(machine_code)
+            except Exception:
+                channel = extract_channel_from_machine_code(project_code)
+            accounts = get_channel_accounts(channel)
+            if accounts and len(accounts) > 1:
+                new_idx = rotate_account_index(channel, len(accounts))
+                self.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {accounts[new_idx]['id']}", "SYSTEM")
+            else:
+                self.log(f"[Account] {channel}: 1 account - retry cùng account", "SYSTEM", "WARN")
+        except Exception as e:
+            self.log(f"[Account] Rotate error: {e}", "SYSTEM", "WARN")
+
+        # 3. Xóa ảnh đã tạo (< 5, từ account xấu)
+        img_dir = TOOL_DIR / "PROJECTS" / project_code / "img"
+        if img_dir.exists():
+            for f in list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg")):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+            self.log(f"[Account] Cleared img/ folder", "SYSTEM")
+
+        # 4. Restore Excel backup (trạng thái sạch)
+        self._restore_excel_from_backup(project_code)
+
+        # 5. Clear Chrome data
+        self._clear_chrome_data_for_new_account()
+        self.kill_all_chrome()
+        time.sleep(2)
+
+        # 6. Reset account timer (account mới có 1 tiếng)
+        self.account_start_time = time.time()
+
+        # 7. Restart workers
+        self.log("Restarting workers with new account...", "SYSTEM")
+        for wid in list(self.workers.keys()):
+            time.sleep(2)
+            self.start_worker(wid, gui_mode=self.gui_mode)
+
+        self.log("Ready with new account for same project", "SYSTEM", "SUCCESS")
+
     def handle_project_timeout(self, project_code: str):
         """Xử lý khi project quá 6 tiếng: Copy kết quả về máy chủ và chuyển project tiếp theo."""
         self.log("=" * 60, "SYSTEM")
@@ -2940,6 +3042,20 @@ class VMManager:
                     if elapsed >= self.project_timeout:
                         self.log(f"Project {self.current_project_code} timeout (6 tiếng) - Moving to next", "MANAGER")
                         self.handle_project_timeout(self.current_project_code)
+
+                # 0c. v1.0.234: Check account issue (1 tiếng mà < 5 ảnh → switch account)
+                if self.account_start_time and self.current_project_code:
+                    elapsed_acc = time.time() - self.account_start_time
+                    if elapsed_acc >= self.account_issue_timeout:
+                        project_dir = TOOL_DIR / "PROJECTS" / self.current_project_code
+                        img_dir = project_dir / "img"
+                        img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg"))) if img_dir.exists() else 0
+                        if img_count < self.account_issue_min_images:
+                            self.log(f"Account issue: {img_count} ảnh sau 1 tiếng → Switch account", "MANAGER", "WARN")
+                            self.handle_account_issue(self.current_project_code)
+                        else:
+                            # Đủ ảnh → tắt timer (không check lại)
+                            self.account_start_time = None
 
                 # 1. Sync worker status từ Agent Protocol
                 self.sync_worker_status()
