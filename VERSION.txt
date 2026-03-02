@@ -1,8 +1,9 @@
-1.0.234
+1.0.235
 2026-03-02 (VN)
-Change: 1h < 5 anh → switch account + restore Excel backup
+Change: Khoi phuc Reference Validator cho Chrome 2
 
 Thay doi:
+- v1.0.235: Chrome 2 - Khoi phuc validator: kiem tra tung reference khi co media_id
 - v1.0.234: Account issue detection: 1h < 5 anh → rotate account, xoa anh cu, restore Excel backup, auto login Chrome, restart
 - v1.0.233: handle_project_timeout() them rotate account cho ma tiep theo
 - v1.0.232: 400 Policy - lan 1 retry khong co reference (xem ref co gay loi khong), lan 2 skip
