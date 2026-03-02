@@ -3644,6 +3644,10 @@ class DrissionFlowAPI:
             import pyperclip
             from DrissionPage.common import Keys
 
+            # v1.0.221: Log URL hiện tại để debug
+            current_url = self.driver.url
+            self.log(f"→ Paste prompt @ URL: {current_url[:80]}...")
+
             # 1. Tìm và focus input element bằng JavaScript
             # v1.0.218: Fix 403 - driver.ele() trigger bot detection, dùng JS thay thế
             # v1.0.219: Thêm retry loop để đợi element xuất hiện (thay cho timeout của driver.ele)
