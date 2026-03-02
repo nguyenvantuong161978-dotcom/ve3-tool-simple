@@ -1,12 +1,12 @@
-1.0.223
+1.0.225
 2026-03-02 (VN)
-Change: Fix VERIFY - khong dung IIFE
+Change: Fix 403 + BLOCK mode
 
 Thay doi:
-- v1.0.223: Fix verify content sau Ctrl+V
-- IIFE trong verify cung bi return None
-- Don gian hoa: query rieng contenteditable va textarea
-- Khong dung IIFE - chi dung JS don gian
+- v1.0.225: Fix TEST script - BLOCK mode + NUCLEAR CLEANUP
+- v1.0.223: Fix verify - khong dung IIFE
+- v1.0.222: Fix focus - tach check va click
+- v1.0.218: Fix 403 - dung JS tim element thay vi driver.ele()
 
 1. v1.0.223: Fix verify - khong dung IIFE
 2. v1.0.222: Fix focus - tach check va click
