@@ -357,7 +357,12 @@ if result1.get("success"):
         scene_prompts = [
             "The woman walking in a beautiful garden with flowers, golden hour lighting",
             "The woman sitting in a cozy coffee shop, warm ambient lighting",
-            "The woman standing on a beach at sunset, ocean waves"
+            "The woman standing on a beach at sunset, ocean waves",
+            "The woman reading a book in a library, soft natural light",
+            "The woman dancing in the rain, city street at night",
+            "The woman painting on canvas in an art studio",
+            "The woman cooking in a modern kitchen, bright lighting",
+            "The woman meditating in a zen garden, morning mist"
         ]
 
         image_input = {
