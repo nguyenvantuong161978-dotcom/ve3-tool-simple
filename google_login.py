@@ -371,6 +371,11 @@ def get_account_from_excel(excel_path: str) -> dict:
 
         ws = wb['config']
 
+        # max_row có thể là None nếu sheet trống (read_only mode)
+        if not ws.max_row:
+            wb.close()
+            return None
+
         result = {}
         for row in range(2, ws.max_row + 1):
             cell_key = ws.cell(row=row, column=1).value

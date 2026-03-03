@@ -1,8 +1,9 @@
-1.0.249
+1.0.250
 2026-03-03 (VN)
-Change: Account logic: Excel co TK -> dung do; Excel chua co -> rotate sang TK tiep theo
+Change: Fix get_account_from_excel crash khi config sheet trong (ws.max_row=None)
 
 Thay doi:
+- v1.0.250: Fix bug ws.max_row=None trong get_account_from_excel() → gây crash → tool rotate sai du Excel da co TK
 - v1.0.249: PRE-LOGIN kiem tra Excel: co account -> dung account do (khong rotate); chua co -> rotate sang TK tiep theo roi login + luu Excel
 - v1.0.248: Bo tat ca rotate_account_index() tu dong (create_tasks, handle_account_issue, handle_project_timeout, force_complete); 1 ma chi dung 1 tai khoan co dinh trong Excel
 - v1.0.247: Auto-arrange Layout A (Tool+CMDs trai, Chrome phai) khi BAT DAU; bo log section; bo nut AN CHROME; them SAP LAI; tool tu dat vi tri goc trai khi mo
