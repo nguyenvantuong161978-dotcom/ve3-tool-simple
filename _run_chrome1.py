@@ -887,7 +887,7 @@ def _do_pre_login_if_needed():
             detect_machine_code, extract_channel_from_machine_code,
             get_current_account_for_channel, get_account_from_excel,
             get_channel_accounts, rotate_account_index,
-            set_account_index_for_resume, save_account_to_excel,
+            save_account_index, save_account_to_excel,
             login_google_chrome
         )
 
@@ -895,23 +895,32 @@ def _do_pre_login_if_needed():
         channel = extract_channel_from_machine_code(machine_code)
         print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
+        # Lấy danh sách accounts 1 lần
+        all_accounts = get_channel_accounts(channel) or []
+
         # Kiểm tra Excel của project đã có account chưa
-        # - Có account → dùng account đó (không rotate)
+        # - Có account → tìm theo EMAIL trong danh sách → xoay index đến đúng vị trí
         # - Chưa có account → rotate sang account tiếp theo
         need_rotate = True
         if excel_path.exists():
             account_info = get_account_from_excel(str(excel_path))
             if account_info and account_info.get('email'):
-                print(f"[PRE-LOGIN] Excel co account: {account_info.get('email')} → dung account nay (khong rotate)")
-                set_account_index_for_resume(str(excel_path), channel)
-                need_rotate = False
+                saved_email = account_info['email'].lower().strip()
+                # Tìm đúng vị trí theo email (tránh lỗi index sai trong Excel)
+                for i, acc in enumerate(all_accounts):
+                    if acc.get('id', '').lower().strip() == saved_email:
+                        save_account_index(channel, i)  # Xoay đến đúng TK
+                        print(f"[PRE-LOGIN] Excel co account: {account_info['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
+                        need_rotate = False
+                        break
+                if need_rotate:
+                    print(f"[PRE-LOGIN] Email {account_info['email']} khong tim thay trong GSheet → rotate")
 
         if need_rotate:
-            # Excel CHUA CO account → rotate sang account tiep theo
-            accounts = get_channel_accounts(channel)
-            if accounts and len(accounts) > 1:
-                new_idx = rotate_account_index(channel, len(accounts))
-                print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(accounts)}")
+            # Excel CHUA CO account → rotate sang account tiếp theo
+            if all_accounts and len(all_accounts) > 1:
+                new_idx = rotate_account_index(channel, len(all_accounts))
+                print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
             else:
                 print(f"[PRE-LOGIN] Chi co 1 account, khong can rotate")
 
