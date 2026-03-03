@@ -1,8 +1,9 @@
-1.0.238
+1.0.239
 2026-03-03 (VN)
-Change: Orchestrate loop khong bao gio thoat - 6h timeout luon hoat dong
+Change: Fix duplicate orchestrate thread + nut XONG rotate account
 
 Thay doi:
+- v1.0.239: Ngan duplicate orchestrate thread (Start sau Stop) + nut XONG rotate account
 - v1.0.238: orchestrate() dung while True thay vi while not _stop_flag - thread khong chet khi reset
 - v1.0.236: Fix bug stop_all() trong handle_account_issue() kill orchestrate thread → 6h timeout khong chay
 - v1.0.235: Chrome 2 - Khoi phuc validator: kiem tra tung reference khi co media_id

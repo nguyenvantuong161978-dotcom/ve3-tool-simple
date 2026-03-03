@@ -862,6 +862,7 @@ class VMManager:
         self._stop_flag = False
         self._lock = threading.Lock()
         self.gui_mode = False  # Track if workers run in GUI mode (minimized CMD)
+        self._orch_thread = None  # Tránh tạo nhiều orchestrate threads
 
         # IPv6 Manager for rotation
         if IPV6_MANAGER_ENABLED:
@@ -3128,8 +3129,10 @@ class VMManager:
 
         self.start_all()
 
-        orch_thread = threading.Thread(target=self.orchestrate, daemon=True)
-        orch_thread.start()
+        self._stop_flag = False
+        if self._orch_thread is None or not self._orch_thread.is_alive():
+            self._orch_thread = threading.Thread(target=self.orchestrate, daemon=True)
+            self._orch_thread.start()
 
         try:
             while not self._stop_flag:
