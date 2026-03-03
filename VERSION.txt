@@ -1,9 +1,10 @@
-1.0.253
+1.0.254
 2026-03-03 (VN)
-Change: Auto sap xep Chrome khi Chrome moi mo (HWND moi xuat hien)
+Change: Chrome mo dung vi tri Layout A ngay tu dau (--window-position)
 
 Thay doi:
-- v1.0.253: _update_loop theo doi Chrome HWNDs, khi Chrome moi mo → tu dong goi arrange_all_windows() sau 2s; Chrome luon o dung vi tri Layout A
+- v1.0.254: Them --window-position + --window-size vao Chrome launch args; sua _setup_window_layout() dung cong thuc Layout A (tool 700px trai, Chrome phai); Chrome mo dung vi tri ngay, khong bi nhay
+- v1.0.253: _update_loop theo doi Chrome HWNDs, khi Chrome moi mo → tu dong goi arrange_all_windows() sau 2s
 - v1.0.252: PRE-LOGIN tim account theo email trong GSheet → save dung index 0-based
 - v1.0.251: Root cause fix: doi sang data_only=True + ws.iter_rows(min_row=2) thay vi range(max_row)
 - v1.0.250: Fix bug ws.max_row=None trong get_account_from_excel()

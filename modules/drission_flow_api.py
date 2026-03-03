@@ -2395,7 +2395,21 @@ class DrissionFlowAPI:
                 options.set_argument('--ignore-certificate-errors')
                 self.log("[MUTE] Headless mode: ON (Chrome chạy ẩn)")
             else:
-                self.log("[EYE] Headless mode: OFF (Chrome hiển thị)")
+                # Layout A: Tool 700px trai, Chrome phai man hinh
+                try:
+                    import ctypes as _ctypes
+                    _scr_w = _ctypes.windll.user32.GetSystemMetrics(0)
+                    _scr_h = _ctypes.windll.user32.GetSystemMetrics(1)
+                except Exception:
+                    _scr_w, _scr_h = 1920, 1080
+                _tool_w = 700
+                _chr_x = _tool_w
+                _chr_w = _scr_w - _tool_w
+                _chr_h = _scr_h // 2
+                _chr_y = 0 if self.worker_id == 0 else _chr_h
+                options.set_argument(f'--window-position={_chr_x},{_chr_y}')
+                options.set_argument(f'--window-size={_chr_w},{_chr_h}')
+                self.log(f"[EYE] Headless mode: OFF | Window: {_chr_w}x{_chr_h} at ({_chr_x},{_chr_y})")
 
             # === IPv6 MODE - BẬT NGAY KHI MỞ CHROME ===
             # Dùng IPv6 ngay từ đầu, nếu 403 thì đổi IPv6 khác
@@ -3680,47 +3694,28 @@ class DrissionFlowAPI:
             screen_left = screen_info.get('left', 0)
             screen_top = screen_info.get('top', 0)
 
-            total = self._total_workers
             worker = self.worker_id
 
             # Helper để set window position (tương thích nhiều version DrissionPage)
             def set_window_rect(x, y, w, h):
                 try:
-                    # Thử cách mới: set.window.rect()
                     self.driver.set.window.rect(x, y, w, h)
                 except AttributeError:
                     try:
-                        # Thử cách cũ: size + position riêng
                         self.driver.set.window.size(w, h)
                         self.driver.set.window.position(x, y)
                     except AttributeError:
-                        # Fallback: dùng JavaScript
                         self.driver.run_js(f"window.moveTo({x}, {y}); window.resizeTo({w}, {h});")
 
-            # Chrome window size - match vm_manager.show_chrome_windows() layout
-            # Each Chrome takes ~1/2 screen height, stacked vertically on right side
-            gap = 20  # Gap between windows and screen edges
-            chrome_width = max(int(screen_w * 0.55), 1200)  # 55% screen width, min 1200
-            chrome_height = (screen_h - gap * 3) // 2  # Half screen height
-            chrome_height = max(chrome_height, 600)  # Min 600px
+            # Layout A: Tool 700px trai, Chrome phai man hinh
+            tool_w = 700
+            chrome_x = tool_w
+            chrome_w = screen_w - tool_w
+            chrome_h = screen_h // 2
+            chrome_y = 0 if worker == 0 else chrome_h
 
-            # Position on right side of screen
-            x_pos = screen_w - chrome_width - 10  # 10px from right edge
-
-            # Stack vertically: Chrome 1 top, Chrome 2 bottom
-            if worker == 0:
-                # Chrome 1 - Top half
-                y_pos = gap
-            else:
-                # Chrome 2 - Bottom half
-                y_pos = gap + chrome_height + gap
-
-            # Set window position and size
-            win_x = x_pos
-            win_y = y_pos
-
-            set_window_rect(win_x, win_y, chrome_width, chrome_height)
-            self.log(f"[WIN] Window: Chrome {worker + 1} ({chrome_width}x{chrome_height} at {win_x},{win_y})")
+            set_window_rect(chrome_x, chrome_y, chrome_w, chrome_h)
+            self.log(f"[WIN] Window: Chrome {worker + 1} ({chrome_w}x{chrome_h} at {chrome_x},{chrome_y})")
 
         except Exception as e:
             self.log(f"[WARN] Window layout error: {e}", "WARN")
