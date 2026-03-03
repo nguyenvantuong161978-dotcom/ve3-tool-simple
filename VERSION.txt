@@ -1,8 +1,9 @@
-1.0.240
+1.0.241
 2026-03-03 (VN)
-Change: force_complete_by_code them rotate account + reset project timer
+Change: Fix Chrome 2 khong tim thay nut Du an moi
 
 Thay doi:
+- v1.0.241: Fix _auto_setup_project() - thu DrissionPage selector add_2 truoc JS (Chrome 2 button text co the chi la icon)
 - v1.0.240: _force_complete_by_code() thieu rotate account va reset timer - da bo sung
 - v1.0.239: Ngan duplicate orchestrate thread (Start sau Stop) + nut XONG rotate account
 - v1.0.238: orchestrate() dung while True thay vi while not _stop_flag - thread khong chet khi reset

@@ -1256,6 +1256,26 @@ class DrissionFlowAPI:
                 except:
                     pass
 
+                # v1.0.241: Thử DrissionPage selector trước (giống warmup loop)
+                # Chrome 2 button có thể chỉ có text "add_2" (icon-only), JS check text fails
+                try:
+                    btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
+                    if btn:
+                        btn.click()
+                        self.log("[v] Clicked 'Dự án mới' (add_2 selector)")
+                        clicked_success = True
+                        time.sleep(2)
+                        try:
+                            check_url = self._get_current_url()
+                            if "/project/" in check_url:
+                                self.log("[v] Đã vào project!")
+                                return True
+                        except:
+                            pass
+                        break
+                except:
+                    pass
+
                 try:
                     result = self.driver.run_js(JS_CLICK_NEW_PROJECT)
                     if result == 'CLICKED':
