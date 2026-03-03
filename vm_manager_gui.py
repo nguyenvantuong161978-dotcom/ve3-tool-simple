@@ -1138,6 +1138,7 @@ class SimpleGUI(tk.Tk):
         self.selected_project = None  # Project dang xem chi tiet
         self.scene_photo_refs = []  # Keep references for thumbnails
         self.windows_visible = True  # Mac dinh: hien Chrome
+        self._known_chrome_hwnds = set()  # Track Chrome HWNDs de auto-arrange khi Chrome moi mo
 
         self._build()
         self._load_mode_from_yaml()  # Load mode sau khi build
@@ -3116,7 +3117,24 @@ class SimpleGUI(tk.Tk):
     def _update_loop(self):
         self._update_workers()
         self._update_projects()
+        self._auto_arrange_on_new_chrome()
         self.after(1000, self._update_loop)
+
+    def _auto_arrange_on_new_chrome(self):
+        """Tu dong sap xep khi phat hien Chrome moi mo (HWND moi)."""
+        if not self.manager or not self.running:
+            return
+        try:
+            current_hwnds = set(self.manager.get_chrome_windows())
+            new_hwnds = current_hwnds - self._known_chrome_hwnds
+            if new_hwnds:
+                # Chrome moi xuat hien → sap xep lai
+                self._known_chrome_hwnds = current_hwnds
+                self.after(2000, self._arrange_windows)  # Cho 2s de Chrome load xong
+            else:
+                self._known_chrome_hwnds = current_hwnds
+        except Exception:
+            pass
 
     def _update_workers(self):
         if not self.manager:

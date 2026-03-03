@@ -1,9 +1,10 @@
-1.0.252
+1.0.253
 2026-03-03 (VN)
-Change: PRE-LOGIN tim account theo EMAIL (khong theo index co the sai)
+Change: Auto sap xep Chrome khi Chrome moi mo (HWND moi xuat hien)
 
 Thay doi:
-- v1.0.252: PRE-LOGIN tim account theo email trong GSheet → save dung index 0-based; tranh loi account_index trong Excel bi sai (1-based vs 0-based)
+- v1.0.253: _update_loop theo doi Chrome HWNDs, khi Chrome moi mo → tu dong goi arrange_all_windows() sau 2s; Chrome luon o dung vi tri Layout A
+- v1.0.252: PRE-LOGIN tim account theo email trong GSheet → save dung index 0-based
 - v1.0.251: Root cause fix: doi sang data_only=True + ws.iter_rows(min_row=2) thay vi range(max_row)
 - v1.0.250: Fix bug ws.max_row=None trong get_account_from_excel()
 - v1.0.249: PRE-LOGIN kiem tra Excel: co account -> dung account do (khong rotate); chua co -> rotate sang TK tiep theo roi login + luu Excel
