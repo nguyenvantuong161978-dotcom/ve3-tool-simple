@@ -1537,6 +1537,28 @@ class SimpleGUI(tk.Tk):
                 self.manager._completed_projects = set()
             self.manager._completed_projects.add(project_code)
 
+            # Reset project timer
+            if self.manager.current_project_code == project_code:
+                self.manager.project_start_time = None
+                self.manager.current_project_code = None
+
+            # Rotate account cho mã tiếp theo
+            try:
+                from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts, detect_machine_code
+                try:
+                    machine_code = detect_machine_code()
+                    channel = extract_channel_from_machine_code(machine_code)
+                except Exception:
+                    channel = extract_channel_from_machine_code(project_code)
+                accounts = get_channel_accounts(channel)
+                if accounts and len(accounts) > 1:
+                    new_idx = rotate_account_index(channel, len(accounts))
+                    self.manager.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {accounts[new_idx]['id']}", "SYSTEM")
+                else:
+                    self.manager.log(f"[Account] {channel}: 1 account, khong can rotate", "SYSTEM")
+            except Exception as e:
+                self.manager.log(f"[Account] Rotate error (non-critical): {e}", "SYSTEM", "WARN")
+
             # Update button to show completed
             if project_code in self.project_rows:
                 btn = self.project_rows[project_code]['labels'].get('xong_btn')

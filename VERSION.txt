@@ -1,8 +1,9 @@
-1.0.239
+1.0.240
 2026-03-03 (VN)
-Change: Fix duplicate orchestrate thread + nut XONG rotate account
+Change: force_complete_by_code them rotate account + reset project timer
 
 Thay doi:
+- v1.0.240: _force_complete_by_code() thieu rotate account va reset timer - da bo sung
 - v1.0.239: Ngan duplicate orchestrate thread (Start sau Stop) + nut XONG rotate account
 - v1.0.238: orchestrate() dung while True thay vi while not _stop_flag - thread khong chet khi reset
 - v1.0.236: Fix bug stop_all() trong handle_account_issue() kill orchestrate thread → 6h timeout khong chay
