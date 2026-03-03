@@ -1302,6 +1302,30 @@ class SimpleGUI(tk.Tk):
             self.worker_rows[wid] = row
             self.worker_progress[wid] = pb_canvas
 
+        # === LOG (bottom) - pack truoc project list de giu chieu cao co dinh ===
+        log_hdr = tk.Frame(self, bg='#16213e', height=24)
+        log_hdr.pack(side="bottom", fill="x", padx=5, pady=(0, 2))
+        log_hdr.pack_propagate(False)
+
+        tk.Label(log_hdr, text="LOG", bg='#16213e', fg='#00d9ff',
+                 font=("Arial", 9, "bold")).pack(side="left", padx=8, pady=2)
+        tk.Button(log_hdr, text="Xoa log", command=self._clear_log,
+                  bg='#16213e', fg='#888', font=("Consolas", 8),
+                  relief="flat", padx=5).pack(side="right", padx=8)
+
+        log_outer = tk.Frame(self, bg='#0a0a0a')
+        log_outer.pack(side="bottom", fill="x", padx=5, pady=(0, 0))
+
+        log_sb = tk.Scrollbar(log_outer)
+        log_sb.pack(side="right", fill="y")
+
+        self.log_text = tk.Text(log_outer, bg='#0a0a0a', fg='#00ff88',
+                               font=("Consolas", 8), wrap="none",
+                               yscrollcommand=log_sb.set, height=7,
+                               state="disabled")
+        self.log_text.pack(fill="both", expand=True)
+        log_sb.config(command=self.log_text.yview)
+
         # === PROJECT LIST HEADER ===
         proj_hdr = tk.Frame(self, bg='#0d1b2a', height=28)
         proj_hdr.pack(fill="x", padx=5, pady=(8, 0))
@@ -1339,30 +1363,6 @@ class SimpleGUI(tk.Tk):
             lambda e: proj_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 
         self.project_rows: Dict[str, dict] = {}
-
-        # === LOG (bottom) ===
-        log_hdr = tk.Frame(self, bg='#16213e', height=24)
-        log_hdr.pack(fill="x", padx=5, pady=(5, 0))
-        log_hdr.pack_propagate(False)
-
-        tk.Label(log_hdr, text="LOG", bg='#16213e', fg='#00d9ff',
-                 font=("Arial", 9, "bold")).pack(side="left", padx=8, pady=2)
-        tk.Button(log_hdr, text="Xoa log", command=self._clear_log,
-                  bg='#16213e', fg='#888', font=("Consolas", 8),
-                  relief="flat", padx=5).pack(side="right", padx=8)
-
-        log_outer = tk.Frame(self, bg='#0a0a0a')
-        log_outer.pack(fill="x", padx=5, pady=(0, 5))
-
-        log_sb = tk.Scrollbar(log_outer)
-        log_sb.pack(side="right", fill="y")
-
-        self.log_text = tk.Text(log_outer, bg='#0a0a0a', fg='#00ff88',
-                               font=("Consolas", 8), wrap="none",
-                               yscrollcommand=log_sb.set, height=7,
-                               state="disabled")
-        self.log_text.pack(fill="x")
-        log_sb.config(command=self.log_text.yview)
 
         # Dummy vars for compat (old code may reference these)
         self.current_action_var = tk.StringVar(value="")
