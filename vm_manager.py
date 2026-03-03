@@ -2819,14 +2819,14 @@ class VMManager:
                     pass
             self.log("[Account] Cleared img/", "SYSTEM")
 
-        # 4. Reset workers - giống nút Reset trong GUI
-        # (stop all → kill chrome → restart all, KHÔNG xóa Chrome data)
-        self.stop_all()
+        # 4. Reset workers - KHÔNG dùng stop_all() vì sẽ kill orchestrate thread!
+        # Chỉ stop từng worker riêng lẻ, giữ _stop_flag = False
+        for wid in list(self.workers.keys()):
+            self.stop_worker(wid)
         time.sleep(2)
         self.kill_all_chrome()
         self._clear_agent_status()
         time.sleep(2)
-        self._stop_flag = False  # Cho phép orchestrate tiếp tục
         for wid in list(self.workers.keys()):
             time.sleep(2)
             self.start_worker(wid, gui_mode=self.gui_mode)
