@@ -862,6 +862,7 @@ class VMManager:
         self._stop_flag = False
         self._lock = threading.Lock()
         self.gui_mode = False  # Track if workers run in GUI mode (minimized CMD)
+        self._orch_thread = None  # Track orchestrate thread để restart nếu chết
 
         # IPv6 Manager for rotation
         if IPV6_MANAGER_ENABLED:
@@ -2834,6 +2835,9 @@ class VMManager:
         # 5. Reset account timer (account mới có 1 tiếng)
         self.account_start_time = time.time()
 
+        # 6. Đảm bảo orchestrate thread vẫn sống (check 6h timeout)
+        self.ensure_orchestrate_running()
+
         self.log("Reset xong - cùng project, tài khoản mới", "SYSTEM", "SUCCESS")
 
     def handle_project_timeout(self, project_code: str):
@@ -3019,6 +3023,21 @@ class VMManager:
     # ORCHESTRATION
     # ================================================================================
 
+    def start_orchestrate(self):
+        """Khởi động orchestrate thread và lưu reference."""
+        self._stop_flag = False
+        self._orch_thread = threading.Thread(target=self.orchestrate, daemon=True)
+        self._orch_thread.start()
+        self.log("Orchestrate thread started", "MANAGER")
+
+    def ensure_orchestrate_running(self):
+        """Đảm bảo orchestrate thread đang sống. Nếu chết thì khởi động lại.
+        Gọi sau mọi thao tác reset/restart để đảm bảo 6h timeout vẫn hoạt động.
+        """
+        if self._orch_thread is None or not self._orch_thread.is_alive():
+            self.log("Orchestrate thread is dead - restarting...", "MANAGER", "WARN")
+            self.start_orchestrate()
+
     def orchestrate(self):
         self.log("Orchestration started", "MANAGER")
         health_check_counter = 0
@@ -3124,9 +3143,7 @@ class VMManager:
         print(self.dashboard.render())
 
         self.start_all()
-
-        orch_thread = threading.Thread(target=self.orchestrate, daemon=True)
-        orch_thread.start()
+        self.start_orchestrate()
 
         try:
             while not self._stop_flag:

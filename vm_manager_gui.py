@@ -2432,7 +2432,7 @@ class SimpleGUI(tk.Tk):
                 time.sleep(2)
 
             # 4. Start orchestration
-            threading.Thread(target=self.manager.orchestrate, daemon=True).start()
+            self.manager.start_orchestrate()
 
             # Auto-hide CMD windows after workers start
             time.sleep(5)  # Wait for workers to fully start
@@ -2503,6 +2503,9 @@ class SimpleGUI(tk.Tk):
                 for wid in self.manager.workers:
                     self.manager.start_worker(wid)
                     time.sleep(2)
+
+                # 4. Đảm bảo orchestrate thread vẫn sống
+                self.manager.ensure_orchestrate_running()
 
                 # Update status
                 self.status_var.set("Reset xong!")
