@@ -1137,7 +1137,7 @@ class SimpleGUI(tk.Tk):
         self.mode_var = tk.StringVar(value="small")  # loaded from settings.yaml
         self.selected_project = None  # Project dang xem chi tiet
         self.scene_photo_refs = []  # Keep references for thumbnails
-        self.windows_visible = False  # Track CMD/Chrome visibility
+        self.windows_visible = True  # Mac dinh: hien Chrome
 
         self._build()
         self._load_mode_from_yaml()  # Load mode sau khi build
@@ -1224,7 +1224,14 @@ class SimpleGUI(tk.Tk):
 
         self.mode_display_lbl = tk.Label(btns, text="[small]", bg='#0f3460', fg='#ffcc00',
                                          font=("Consolas", 9))
-        self.mode_display_lbl.pack(side="left", padx=15)
+        self.mode_display_lbl.pack(side="left", padx=10)
+
+        # Mac dinh: hien Chrome (windows_visible = True)
+        self.windows_visible = True
+        self.toggle_btn = tk.Button(btns, text="AN CHROME", command=self._toggle_windows,
+                                    bg='#00b894', fg='white', font=("Arial", 9, "bold"),
+                                    relief="flat", padx=10)
+        self.toggle_btn.pack(side="left", padx=5, pady=10)
 
         self.status_var = tk.StringVar(value="San sang")
         tk.Label(btns, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
@@ -1244,12 +1251,6 @@ class SimpleGUI(tk.Tk):
                                       bg='#ff9f43', fg='white', font=("Arial", 9, "bold"),
                                       relief="flat", padx=10)
         self.settings_btn.pack(side="right", padx=5, pady=12)
-
-        self.windows_visible = False
-        self.toggle_btn = tk.Button(btns, text="HIEN CHROME", command=self._toggle_windows,
-                                    bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"),
-                                    relief="flat", padx=10)
-        self.toggle_btn.pack(side="right", padx=5, pady=12)
 
         # === WORKERS (3 rows) ===
         wf = tk.Frame(self, bg='#16213e', padx=8, pady=5)
@@ -2411,14 +2412,6 @@ class SimpleGUI(tk.Tk):
             if self.manager._orch_thread is None or not self.manager._orch_thread.is_alive():
                 self.manager._orch_thread = threading.Thread(target=self.manager.orchestrate, daemon=True)
                 self.manager._orch_thread.start()
-
-            # Auto-hide CMD windows after workers start
-            time.sleep(5)  # Wait for workers to fully start
-            self.after(0, lambda: self._auto_hide_windows())
-
-            # Retry after another 3 seconds to make sure
-            time.sleep(3)
-            self.after(0, lambda: self._auto_hide_windows())
 
         threading.Thread(target=run, daemon=True).start()
 
