@@ -1142,6 +1142,7 @@ class SimpleGUI(tk.Tk):
         self._build()
         self._load_mode_from_yaml()  # Load mode sau khi build
         self._load_projects_on_startup()  # Load projects ngay khi mo
+        self.after(300, self._position_tool_window)  # Dat tool vao vi tri trai man hinh
         self._update_loop()
 
     def _load_mode_from_yaml(self):
@@ -1226,13 +1227,6 @@ class SimpleGUI(tk.Tk):
                                    relief="flat", padx=12, pady=3)
         self.reset_btn.pack(side="left", padx=4, pady=6)
 
-        # Mac dinh: hien Chrome (windows_visible = True)
-        self.windows_visible = True
-        self.toggle_btn = tk.Button(btns1, text="AN CHROME", command=self._toggle_windows,
-                                    bg='#00b894', fg='white', font=("Arial", 9, "bold"),
-                                    relief="flat", padx=8, pady=3)
-        self.toggle_btn.pack(side="left", padx=4, pady=6)
-
         self.mode_display_lbl = tk.Label(btns1, text="[small]", bg='#0f3460', fg='#ffcc00',
                                          font=("Consolas", 9))
         self.mode_display_lbl.pack(side="left", padx=8)
@@ -1241,7 +1235,7 @@ class SimpleGUI(tk.Tk):
         tk.Label(btns1, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
                  font=("Consolas", 9, "bold")).pack(side="right", padx=10)
 
-        # -- Dong 2: SETTINGS | UPDATE | SETUP VM --
+        # -- Dong 2: SETTINGS | UPDATE | SETUP VM | SAP LAI --
         btns2 = tk.Frame(btns_outer, bg='#0d2a4a', height=32)
         btns2.pack(fill="x")
         btns2.pack_propagate(False)
@@ -1260,6 +1254,10 @@ class SimpleGUI(tk.Tk):
                                       bg='#a29bfe', fg='white', font=("Arial", 8, "bold"),
                                       relief="flat", padx=8)
         self.setup_vm_btn.pack(side="left", padx=4, pady=4)
+
+        tk.Button(btns2, text="SAP LAI", command=self._arrange_windows,
+                  bg='#00cec9', fg='white', font=("Arial", 8, "bold"),
+                  relief="flat", padx=8).pack(side="left", padx=4, pady=4)
 
         # === WORKERS (3 rows) ===
         wf = tk.Frame(self, bg='#16213e', padx=8, pady=5)
@@ -1311,30 +1309,6 @@ class SimpleGUI(tk.Tk):
             }
             self.worker_rows[wid] = row
             self.worker_progress[wid] = pb_canvas
-
-        # === LOG (bottom) - pack truoc project list de giu chieu cao co dinh ===
-        log_hdr = tk.Frame(self, bg='#16213e', height=24)
-        log_hdr.pack(side="bottom", fill="x", padx=5, pady=(0, 2))
-        log_hdr.pack_propagate(False)
-
-        tk.Label(log_hdr, text="LOG", bg='#16213e', fg='#00d9ff',
-                 font=("Arial", 9, "bold")).pack(side="left", padx=8, pady=2)
-        tk.Button(log_hdr, text="Xoa log", command=self._clear_log,
-                  bg='#16213e', fg='#888', font=("Consolas", 8),
-                  relief="flat", padx=5).pack(side="right", padx=8)
-
-        log_outer = tk.Frame(self, bg='#0a0a0a')
-        log_outer.pack(side="bottom", fill="x", padx=5, pady=(0, 0))
-
-        log_sb = tk.Scrollbar(log_outer)
-        log_sb.pack(side="right", fill="y")
-
-        self.log_text = tk.Text(log_outer, bg='#0a0a0a', fg='#00ff88',
-                               font=("Consolas", 8), wrap="none",
-                               yscrollcommand=log_sb.set, height=7,
-                               state="disabled")
-        self.log_text.pack(fill="both", expand=True)
-        log_sb.config(command=self.log_text.yview)
 
         # === PROJECT LIST HEADER ===
         proj_hdr = tk.Frame(self, bg='#0d1b2a', height=28)
@@ -2422,6 +2396,10 @@ class SimpleGUI(tk.Tk):
                 self.manager._orch_thread = threading.Thread(target=self.manager.orchestrate, daemon=True)
                 self.manager._orch_thread.start()
 
+            # 5. Auto-arrange tat ca cua so sau khi workers da mo (doi ~8s)
+            time.sleep(8)
+            self.after(0, self._arrange_windows)
+
         threading.Thread(target=run, daemon=True).start()
 
     def _pre_login_chrome(self):
@@ -3095,6 +3073,34 @@ class SimpleGUI(tk.Tk):
                  bg='#e94560', fg='white', font=("Arial", 9, "bold"),
                  relief="flat", padx=15, pady=3).pack(side="left", padx=5)
 
+    def _position_tool_window(self):
+        """Dat cua so VE3 tool vao goc trai tren man hinh."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            screen_h = user32.GetSystemMetrics(1)
+            # Tool chiem ~42% chieu cao (phan con lai cho CMDs)
+            tool_h = int(screen_h * 0.42)
+            self._tool_h = tool_h
+            self.geometry(f"700x{tool_h}+0+0")
+        except Exception as e:
+            print(f"[GUI] _position_tool_window error: {e}")
+
+    def _arrange_windows(self):
+        """Sap xep tat ca cua so theo Layout A: Tool+CMDs trai, Chrome phai."""
+        if not self.manager:
+            return
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            screen_h = user32.GetSystemMetrics(1)
+            tool_h = getattr(self, '_tool_h', int(screen_h * 0.42))
+            self.manager.arrange_all_windows(
+                tool_x=0, tool_y=0, tool_w=700, tool_h=tool_h
+            )
+        except Exception as e:
+            print(f"[GUI] _arrange_windows error: {e}")
+
     def _draw_progress(self, canvas: tk.Canvas, pct: float):
         """Ve thanh progress tren Canvas (pct = 0.0 den 1.0)."""
         try:
@@ -3144,7 +3150,6 @@ class SimpleGUI(tk.Tk):
     def _update_loop(self):
         self._update_workers()
         self._update_projects()
-        self._update_log()
         self.after(1000, self._update_loop)
 
     def _update_workers(self):

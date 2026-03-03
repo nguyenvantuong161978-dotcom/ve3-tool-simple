@@ -2491,6 +2491,56 @@ class VMManager:
             self.log(f"Error showing CMD windows: {e}", "CHROME", "ERROR")
             return False
 
+    def arrange_all_windows(self, tool_x=0, tool_y=0, tool_w=700, tool_h=450):
+        """
+        Layout A: Tool + CMDs cot trai, Chrome 1+2 cot phai.
+
+        [VE3 Tool  ] [Chrome 1 - nua tren]
+        [CMD Excel ] [                   ]
+        [CMD Chr1  ] [Chrome 2 - nua duoi]
+        [CMD Chr2  ] [                   ]
+        """
+        if sys.platform != "win32":
+            return False
+
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+
+            screen_w = user32.GetSystemMetrics(0)
+            screen_h = user32.GetSystemMetrics(1)
+
+            right_x = tool_x + tool_w
+            right_w = screen_w - right_x
+
+            # Chrome 1 (nua tren phai), Chrome 2 (nua duoi phai)
+            chrome_h = screen_h // 2
+            chrome_windows = self.get_chrome_windows()
+            for i, hwnd in enumerate(chrome_windows[:2]):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.MoveWindow(hwnd, right_x, i * chrome_h, right_w, chrome_h, True)
+
+            # CMDs xep doc duoi tool (trai)
+            cmd_windows = self.get_cmd_windows()
+            n = len(cmd_windows)
+            if n > 0:
+                cmd_area_h = screen_h - (tool_y + tool_h)
+                cmd_h = max(cmd_area_h // n, 120)
+                for i, hwnd in enumerate(cmd_windows):
+                    user32.ShowWindow(hwnd, 9)
+                    y = tool_y + tool_h + i * cmd_h
+                    user32.MoveWindow(hwnd, tool_x, y, tool_w, cmd_h, True)
+
+            self.log(
+                f"Arranged: tool({tool_w}x{tool_h}) | "
+                f"{n} CMDs | {len(chrome_windows)} Chrome",
+                "CHROME", "SUCCESS"
+            )
+            return True
+        except Exception as e:
+            self.log(f"arrange_all_windows error: {e}", "CHROME", "ERROR")
+            return False
+
     def show_chrome_with_cmd(self):
         """
         Show TẤT CẢ windows (CMD, Chrome browsers).

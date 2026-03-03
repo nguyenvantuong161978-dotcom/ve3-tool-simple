@@ -1,8 +1,9 @@
-1.0.246
+1.0.247
 2026-03-03 (VN)
-Change: Button bar 2 dong, window nho hon (700px)
+Change: Auto-sap xep cua so khi bat dau, bo log section
 
 Thay doi:
+- v1.0.247: Auto-arrange Layout A (Tool+CMDs trai, Chrome phai) khi BAT DAU; bo log section; bo nut AN CHROME; them SAP LAI; tool tu dat vi tri goc trai khi mo
 - v1.0.246: Button bar 2 dong (dong 1: BAT DAU/DUNG/RESET/AN CHROME/mode; dong 2: SETTINGS/UPDATE/SETUP VM); geometry 700x780, minsize 600x600
 - v1.0.245: Mac dinh hien Chrome (windows_visible=True); chuyen nut AN CHROME sang trai button bar; bo auto-hide khi start
 - v1.0.243: GUI moi hoan chinh - _update_workers() cap nhat badge/worker_dots/progress; them _draw_progress(), _clear_log(), _update_log(); bo auto-select popup khi startup
