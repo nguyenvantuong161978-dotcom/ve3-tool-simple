@@ -2602,6 +2602,50 @@ class DrissionFlowAPI:
             except:
                 pass
 
+            # Ghi vi tri cua so vao Preferences TRUOC khi Chrome mo
+            # → Chrome doc file nay khi khoi dong → mo dung vi tri ngay, khong bi nhay
+            if not self._headless and user_data:
+                try:
+                    import json as _json
+                    import ctypes as _ct
+                    _scr_w = _ct.windll.user32.GetSystemMetrics(0)
+                    _scr_h = _ct.windll.user32.GetSystemMetrics(1)
+                    _tool_w = 700
+                    _chr_x = _tool_w
+                    _chr_w = _scr_w - _tool_w
+                    _chr_h = _scr_h // 2
+                    _chr_y = 0 if self.worker_id == 0 else _chr_h
+
+                    _default_dir = Path(user_data) / "Default"
+                    _default_dir.mkdir(parents=True, exist_ok=True)
+                    _prefs_file = _default_dir / "Preferences"
+
+                    _prefs = {}
+                    if _prefs_file.exists():
+                        try:
+                            _prefs = _json.loads(_prefs_file.read_text(encoding="utf-8"))
+                        except Exception:
+                            _prefs = {}
+
+                    if "browser" not in _prefs:
+                        _prefs["browser"] = {}
+                    _prefs["browser"]["window_placement"] = {
+                        "bottom": _chr_y + _chr_h,
+                        "left": _chr_x,
+                        "maximized": False,
+                        "right": _chr_x + _chr_w,
+                        "top": _chr_y,
+                        "work_area_bottom": _scr_h,
+                        "work_area_left": 0,
+                        "work_area_right": _scr_w,
+                        "work_area_top": 0
+                    }
+
+                    _prefs_file.write_text(_json.dumps(_prefs), encoding="utf-8")
+                    self.log(f"[WIN] Preferences: Chrome {self.worker_id + 1} → ({_chr_x},{_chr_y}) {_chr_w}x{_chr_h}")
+                except Exception as _e:
+                    self.log(f"[WIN] Preferences write skip: {_e}", "WARN")
+
             # Thử khởi tạo Chrome với retry
             # v1.0.174: Kill Chrome của worker này trước MỖI retry (tránh mở nhiều Chrome)
             max_retries = 3

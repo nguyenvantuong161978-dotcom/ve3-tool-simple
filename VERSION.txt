@@ -1,9 +1,10 @@
-1.0.254
+1.0.255
 2026-03-03 (VN)
-Change: Chrome mo dung vi tri Layout A ngay tu dau (--window-position)
+Change: Ghi vi tri vao Chrome Preferences TRUOC khi Chrome mo
 
 Thay doi:
-- v1.0.254: Them --window-position + --window-size vao Chrome launch args; sua _setup_window_layout() dung cong thuc Layout A (tool 700px trai, Chrome phai); Chrome mo dung vi tri ngay, khong bi nhay
+- v1.0.255: Ghi window_placement vao Default/Preferences truoc ChromiumPage() → Chrome doc file nay khi khoi dong → mo dung vi tri ngay, khong bi nhay lan nao
+- v1.0.254: Them --window-position + --window-size vao Chrome launch args
 - v1.0.253: _update_loop theo doi Chrome HWNDs, khi Chrome moi mo → tu dong goi arrange_all_windows() sau 2s
 - v1.0.252: PRE-LOGIN tim account theo email trong GSheet → save dung index 0-based
 - v1.0.251: Root cause fix: doi sang data_only=True + ws.iter_rows(min_row=2) thay vi range(max_row)
