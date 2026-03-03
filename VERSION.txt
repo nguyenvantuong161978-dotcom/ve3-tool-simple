@@ -1,8 +1,9 @@
-1.0.241
+1.0.242
 2026-03-03 (VN)
-Change: Fix Chrome 2 khong tim thay nut Du an moi
+Change: GUI moi - Bo mode radio tren top bar, cot project list moi
 
 Thay doi:
+- v1.0.242: GUI moi - Bo mode radio (Basic/Small/Full) khoi top bar, chuyen vao Settings; cot project moi (Ma|Excel|Tham chieu|Scene anh|Con lai|XONG); mode display label tren top bar
 - v1.0.241: Fix _auto_setup_project() - thu DrissionPage selector add_2 truoc JS (Chrome 2 button text co the chi la icon)
 - v1.0.240: _force_complete_by_code() thieu rotate account va reset timer - da bo sung
 - v1.0.239: Ngan duplicate orchestrate thread (Start sau Stop) + nut XONG rotate account

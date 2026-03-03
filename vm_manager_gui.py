@@ -116,6 +116,25 @@ class SettingsWindow(tk.Toplevel):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # === CHE DO TAO ANH ===
+        mode_lf = tk.LabelFrame(main_frame, text=" CHE DO TAO ANH (Mode) ", bg='#16213e', fg='#a29bfe',
+                                font=("Arial", 10, "bold"), padx=10, pady=8)
+        mode_lf.pack(fill="x", pady=5)
+
+        self.mode_var = tk.StringVar(value="small")
+
+        mode_row = tk.Frame(mode_lf, bg='#16213e')
+        mode_row.pack(fill="x", pady=4)
+        tk.Radiobutton(mode_row, text="Basic (it anh, nhanh hon)", variable=self.mode_var, value="basic",
+                       bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        tk.Radiobutton(mode_row, text="Small (mac dinh)", variable=self.mode_var, value="small",
+                       bg='#16213e', fg='#ffcc00', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        tk.Radiobutton(mode_row, text="Full (nhieu anh nhat)", variable=self.mode_var, value="full",
+                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+
+        tk.Label(mode_lf, text="(Ap dung cho lan chay tiep theo - luu khi bam LUU CAU HINH)",
+                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
+
         # === KIEM TRA TAI NGUYEN ===
         check_frame = tk.LabelFrame(main_frame, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
                                     font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -272,6 +291,7 @@ class SettingsWindow(tk.Toplevel):
                 with open(settings_path, "r", encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
 
+                self.mode_var.set(config.get('excel_mode', 'small'))
                 self.deepseek_var.set(config.get('deepseek_api_key', ''))
                 gemini_keys = config.get('gemini_api_keys', [''])
                 self.gemini_var.set(gemini_keys[0] if gemini_keys else '')
@@ -294,6 +314,8 @@ class SettingsWindow(tk.Toplevel):
                     config = yaml.safe_load(f) or {}
 
             # Update
+            config['excel_mode'] = self.mode_var.get()
+            config['video_mode'] = self.mode_var.get()
             config['deepseek_api_key'] = self.deepseek_var.get().strip()
             gemini_key = self.gemini_var.get().strip()
             config['gemini_api_keys'] = [gemini_key] if gemini_key else ['']
@@ -309,6 +331,12 @@ class SettingsWindow(tk.Toplevel):
             from tkinter import messagebox
             messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
             self._check_resources()
+
+            # Dong bo mode_var voi parent GUI
+            if hasattr(self.master, 'mode_var'):
+                self.master.mode_var.set(self.mode_var.get())
+            if hasattr(self.master, 'mode_display_lbl'):
+                self.master.mode_display_lbl.config(text=f"[{self.mode_var.get()}]")
 
         except Exception as e:
             from tkinter import messagebox
@@ -1106,13 +1134,30 @@ class SimpleGUI(tk.Tk):
         # Khoi tao manager ngay de hien projects
         self.manager = VMManager(num_chrome_workers=2)
         self.running = False
+        self.mode_var = tk.StringVar(value="small")  # loaded from settings.yaml
         self.selected_project = None  # Project dang xem chi tiet
         self.scene_photo_refs = []  # Keep references for thumbnails
         self.windows_visible = False  # Track CMD/Chrome visibility
 
         self._build()
+        self._load_mode_from_yaml()  # Load mode sau khi build
         self._load_projects_on_startup()  # Load projects ngay khi mo
         self._update_loop()
+
+    def _load_mode_from_yaml(self):
+        """Load excel_mode tu settings.yaml va cap nhat mode_var + display label."""
+        try:
+            import yaml
+            p = TOOL_DIR / "config" / "settings.yaml"
+            if p.exists():
+                with open(p, 'r', encoding='utf-8') as f:
+                    c = yaml.safe_load(f) or {}
+                mode = c.get('excel_mode', 'small')
+                self.mode_var.set(mode)
+                if hasattr(self, 'mode_display_lbl'):
+                    self.mode_display_lbl.config(text=f"[{mode}]")
+        except Exception as e:
+            print(f"[GUI] Load mode error: {e}")
 
     def _hide_current_cmd_window(self):
         """Hide the CMD window that launched this GUI."""
@@ -1161,17 +1206,10 @@ class SimpleGUI(tk.Tk):
         )
         self.reset_btn.pack(side="left", padx=5, pady=12)
 
-        # Mode - v1.0.72: Thêm Small mode (100-150 scenes)
-        mode_frame = tk.Frame(top, bg='#0f3460')
-        mode_frame.pack(side="left", padx=30)
-        tk.Label(mode_frame, text="Mode:", bg='#0f3460', fg='white', font=("Arial", 10)).pack(side="left")
-        self.mode_var = tk.StringVar(value="small")  # v1.0.73: Default Small mode
-        tk.Radiobutton(mode_frame, text="Basic", variable=self.mode_var, value="basic",
-                       bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
-        tk.Radiobutton(mode_frame, text="Small", variable=self.mode_var, value="small",
-                       bg='#0f3460', fg='#ffcc00', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
-        tk.Radiobutton(mode_frame, text="Full", variable=self.mode_var, value="full",
-                       bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
+        # Mode label (read-only display, changed via Settings)
+        self.mode_display_lbl = tk.Label(top, text="[small]", bg='#0f3460', fg='#ffcc00',
+                                         font=("Consolas", 9))
+        self.mode_display_lbl.pack(side="left", padx=10)
 
         # Show/Hide Chrome button (CMD already hidden, shown in log viewer)
         self.windows_visible = False  # Start hidden
@@ -1293,10 +1331,10 @@ class SimpleGUI(tk.Tk):
                                  font=("Arial", 10, "bold"), padx=5, pady=5)
         projects.pack(fill="both", expand=True, padx=5, pady=(0, 5))
 
-        # Header - v1.0.77: Thêm cột XONG cho mỗi project
+        # Header - layout moi
         header = tk.Frame(projects, bg='#0f3460')
         header.pack(fill="x")
-        for txt, w in [("Code", 10), ("Excel", 6), ("NV", 5), ("Anh", 7), ("Video", 7), ("Status", 6), ("", 5)]:
+        for txt, w in [("Ma", 10), ("Excel", 5), ("Tham chieu", 10), ("Scene anh", 9), ("Con lai", 10), ("", 5)]:
             tk.Label(header, text=txt, width=w, bg='#0f3460', fg='white',
                      font=("Arial", 9, "bold")).pack(side="left", padx=2, pady=5)
 
@@ -2398,35 +2436,25 @@ class SimpleGUI(tk.Tk):
                     else:
                         labels['excel'].config(text="--", fg='#666')
 
-                    # NV status - reference images (characters with ref)
+                    # Tham chieu (Reference images)
                     nv_done = getattr(status, 'characters_with_ref', 0)
                     nv_total = getattr(status, 'characters_count', 0)
                     if nv_total > 0:
-                        if nv_done >= nv_total:
-                            labels['nv'].config(text="OK", fg='#00ff88')
-                        else:
-                            labels['nv'].config(text=f"{nv_done}/{nv_total}", fg='#ff6b6b')
+                        color = '#00ff88' if nv_done >= nv_total else '#ff6b6b'
+                        labels['thamchieu'].config(text=f"{nv_done}/{nv_total}", fg=color)
                     else:
-                        labels['nv'].config(text="--", fg='#666')
+                        labels['thamchieu'].config(text="--", fg='#666')
 
-                    # Images
+                    # Scene anh
                     img_done = getattr(status, 'images_done', 0)
                     img_total = getattr(status, 'total_scenes', 0)
                     if img_total > 0:
-                        pct = int(img_done * 100 / img_total)
-                        labels['images'].config(text=f"{img_done}/{img_total}", fg='#00d9ff' if pct > 0 else '#666')
+                        color = '#00ff88' if img_done >= img_total else '#00d9ff'
+                        labels['images'].config(text=f"{img_done}/{img_total}", fg=color)
                     else:
                         labels['images'].config(text="--", fg='#666')
 
-                    # Videos
-                    vid_done = getattr(status, 'videos_done', 0)
-                    vid_total = getattr(status, 'total_scenes', 0)
-                    if vid_total > 0:
-                        labels['videos'].config(text=f"{vid_done}/{vid_total}", fg='#00d9ff' if vid_done > 0 else '#666')
-                    else:
-                        labels['videos'].config(text="--", fg='#666')
-
-                    labels['status'].config(text="Ready", fg='#aaa')
+                    labels['conlai'].config(text="--", fg='#888')
 
             # Auto-select first project
             if projects and not self.selected_project:
@@ -3276,52 +3304,50 @@ class SimpleGUI(tk.Tk):
                     else:
                         labels['excel'].config(text="--", fg='#666')
 
-                    # NV status - reference images (characters with ref)
+                    # Tham chieu (Reference images)
                     nv_done = getattr(status, 'characters_with_ref', 0)
                     nv_total = getattr(status, 'characters_count', 0)
                     if nv_total > 0:
-                        if nv_done >= nv_total:
-                            labels['nv'].config(text="OK", fg='#00ff88')
-                        else:
-                            labels['nv'].config(text=f"{nv_done}/{nv_total}", fg='#ff6b6b')
+                        color = '#00ff88' if nv_done >= nv_total else '#ff6b6b'
+                        labels['thamchieu'].config(text=f"{nv_done}/{nv_total}", fg=color)
                     else:
-                        labels['nv'].config(text="--", fg='#666')
+                        labels['thamchieu'].config(text="--", fg='#666')
 
-                    # Images
+                    # Scene anh
                     img_done = getattr(status, 'images_done', 0)
                     img_total = getattr(status, 'total_scenes', 0)
                     if img_total > 0:
-                        if img_done >= img_total:
-                            labels['images'].config(text=f"{img_done}/{img_total}", fg='#00ff88')
-                        else:
-                            labels['images'].config(text=f"{img_done}/{img_total}", fg='#00d9ff')
+                        color = '#00ff88' if img_done >= img_total else '#00d9ff'
+                        labels['images'].config(text=f"{img_done}/{img_total}", fg=color)
                     else:
                         labels['images'].config(text="--", fg='#666')
 
-                    # Videos
-                    vid_done = getattr(status, 'videos_done', 0)
-                    videos_needed = getattr(status, 'videos_needed', [])
-                    vid_total = len(videos_needed) if videos_needed else 0
-                    if vid_total > 0:
-                        if vid_done >= vid_total:
-                            labels['videos'].config(text=f"{vid_done}/{vid_total}", fg='#00ff88')
-                        else:
-                            labels['videos'].config(text=f"{vid_done}/{vid_total}", fg='#00d9ff')
-                    else:
-                        labels['videos'].config(text="--", fg='#666')
-
-                    # Status
-                    next_action = getattr(status, 'next_action', '')
-                    if next_action == 'create_excel':
-                        labels['status'].config(text="Excel")
-                    elif next_action == 'create_images':
-                        labels['status'].config(text="Anh")
-                    elif next_action == 'create_videos':
-                        labels['status'].config(text="Video")
-                    elif next_action == 'copy_to_visual':
-                        labels['status'].config(text="XONG")
-                    else:
-                        labels['status'].config(text="--")
+                    # Con lai (Remaining time for active project)
+                    PROJECT_TIMEOUT = 6 * 3600
+                    remaining_txt = "--"
+                    remaining_fg = '#888'
+                    for wid in ["chrome_1", "chrome_2"]:
+                        try:
+                            ws = self.manager.get_worker_status(wid)
+                            if ws and ws.get('current_project') == code:
+                                elapsed = ws.get('project_elapsed_seconds', 0)
+                                if elapsed > 0:
+                                    remaining = max(0, PROJECT_TIMEOUT - elapsed)
+                                    rh = int(remaining // 3600)
+                                    rm = int((remaining % 3600) // 60)
+                                    if remaining <= 0:
+                                        remaining_txt = "TIMEOUT!"
+                                        remaining_fg = '#e94560'
+                                    elif rh > 0:
+                                        remaining_txt = f"{rh}h{rm:02d}m"
+                                        remaining_fg = '#ffd93d'
+                                    else:
+                                        remaining_txt = f"{rm}m"
+                                        remaining_fg = '#ffd93d'
+                                break
+                        except:
+                            pass
+                    labels['conlai'].config(text=remaining_txt, fg=remaining_fg)
         except Exception as e:
             pass
 
@@ -3338,24 +3364,21 @@ class SimpleGUI(tk.Tk):
         labels['code'].pack(side="left", padx=2)
         labels['code'].bind("<Button-1>", lambda e, c=code: self._select_project(c))
 
-        labels['excel'] = tk.Label(row, text="--", width=6, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
+        labels['excel'] = tk.Label(row, text="--", width=5, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
         labels['excel'].pack(side="left", padx=2)
         labels['excel'].bind("<Button-1>", lambda e, c=code: self._show_excel_detail(c))
 
-        labels['nv'] = tk.Label(row, text="--", width=5, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
-        labels['nv'].pack(side="left", padx=2)
-        labels['nv'].bind("<Button-1>", lambda e, c=code: self._show_nv_detail(c))
+        labels['thamchieu'] = tk.Label(row, text="--", width=10, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
+        labels['thamchieu'].pack(side="left", padx=2)
+        labels['thamchieu'].bind("<Button-1>", lambda e, c=code: self._show_nv_detail(c))
 
-        labels['images'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
+        labels['images'] = tk.Label(row, text="--", width=9, bg=bg, fg='#666', font=("Consolas", 10))
         labels['images'].pack(side="left", padx=2)
 
-        labels['videos'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
-        labels['videos'].pack(side="left", padx=2)
+        labels['conlai'] = tk.Label(row, text="--", width=10, bg=bg, fg='#888', font=("Consolas", 9))
+        labels['conlai'].pack(side="left", padx=2)
 
-        labels['status'] = tk.Label(row, text="--", width=6, bg=bg, fg='#aaa', font=("Consolas", 10))
-        labels['status'].pack(side="left", padx=2)
-
-        # v1.0.77: Nút XONG cho mỗi project
+        # Nut XONG cho moi project
         xong_btn = tk.Button(row, text="XONG", width=4,
                             command=lambda c=code: self._force_complete_by_code(c),
                             bg='#ff6600', fg='white',
