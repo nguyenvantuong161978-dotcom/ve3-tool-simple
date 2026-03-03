@@ -3719,28 +3719,18 @@ class DrissionFlowAPI:
         - 3+ workers: Chia theo grid
         """
         try:
-            # Lấy kích thước màn hình từ JavaScript
-            screen_info = self.driver.run_js("""
-                return {
-                    width: window.screen.availWidth,
-                    height: window.screen.availHeight,
-                    left: window.screen.availLeft || 0,
-                    top: window.screen.availTop || 0
-                };
-            """)
-
-            if not screen_info:
-                # Fallback: assume 1920x1080
-                screen_info = {'width': 1920, 'height': 1080, 'left': 0, 'top': 0}
-
-            screen_w = screen_info.get('width', 1920)
-            screen_h = screen_info.get('height', 1080)
-            screen_left = screen_info.get('left', 0)
-            screen_top = screen_info.get('top', 0)
+            # Dùng Win32 GetSystemMetrics để lấy physical pixels (tránh DPI scaling issue từ JS)
+            # JS window.screen.availWidth trả về CSS pixels, không khớp với DevTools physical pixels
+            try:
+                import ctypes as _c
+                screen_w = _c.windll.user32.GetSystemMetrics(0)
+                screen_h = _c.windll.user32.GetSystemMetrics(1)
+            except Exception:
+                screen_w, screen_h = 1920, 1080
 
             worker = self.worker_id
 
-            # Helper để set window position (tương thích nhiều version DrissionPage)
+            # Helper để set window position (DrissionPage DevTools dùng physical pixels)
             def set_window_rect(x, y, w, h):
                 try:
                     self.driver.set.window.rect(x, y, w, h)
@@ -3749,7 +3739,7 @@ class DrissionFlowAPI:
                         self.driver.set.window.size(w, h)
                         self.driver.set.window.position(x, y)
                     except AttributeError:
-                        self.driver.run_js(f"window.moveTo({x}, {y}); window.resizeTo({w}, {h});")
+                        pass
 
             # Layout A: Tool 700px trai, Chrome phai man hinh
             tool_w = 700
