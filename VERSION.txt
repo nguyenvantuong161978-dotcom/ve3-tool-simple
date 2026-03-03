@@ -1,8 +1,9 @@
-1.0.242
+1.0.243
 2026-03-03 (VN)
-Change: GUI moi - Bo mode radio tren top bar, cot project list moi
+Change: GUI moi hoan chinh - Layout don cot, worker rows voi progress bar, log o cuoi
 
 Thay doi:
+- v1.0.243: GUI moi hoan chinh - _update_workers() cap nhat badge/worker_dots/progress; them _draw_progress(), _clear_log(), _update_log(); bo auto-select popup khi startup
 - v1.0.242: GUI moi - Bo mode radio (Basic/Small/Full) khoi top bar, chuyen vao Settings; cot project moi (Ma|Excel|Tham chieu|Scene anh|Con lai|XONG); mode display label tren top bar
 - v1.0.241: Fix _auto_setup_project() - thu DrissionPage selector add_2 truoc JS (Chrome 2 button text co the chi la icon)
 - v1.0.240: _force_complete_by_code() thieu rotate account va reset timer - da bo sung

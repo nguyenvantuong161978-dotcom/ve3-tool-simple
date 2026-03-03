@@ -116,25 +116,6 @@ class SettingsWindow(tk.Toplevel):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # === CHE DO TAO ANH ===
-        mode_lf = tk.LabelFrame(main_frame, text=" CHE DO TAO ANH (Mode) ", bg='#16213e', fg='#a29bfe',
-                                font=("Arial", 10, "bold"), padx=10, pady=8)
-        mode_lf.pack(fill="x", pady=5)
-
-        self.mode_var = tk.StringVar(value="small")
-
-        mode_row = tk.Frame(mode_lf, bg='#16213e')
-        mode_row.pack(fill="x", pady=4)
-        tk.Radiobutton(mode_row, text="Basic (it anh, nhanh hon)", variable=self.mode_var, value="basic",
-                       bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(mode_row, text="Small (mac dinh)", variable=self.mode_var, value="small",
-                       bg='#16213e', fg='#ffcc00', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(mode_row, text="Full (nhieu anh nhat)", variable=self.mode_var, value="full",
-                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-
-        tk.Label(mode_lf, text="(Ap dung cho lan chay tiep theo - luu khi bam LUU CAU HINH)",
-                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
-
         # === KIEM TRA TAI NGUYEN ===
         check_frame = tk.LabelFrame(main_frame, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
                                     font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -291,7 +272,6 @@ class SettingsWindow(tk.Toplevel):
                 with open(settings_path, "r", encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
 
-                self.mode_var.set(config.get('excel_mode', 'small'))
                 self.deepseek_var.set(config.get('deepseek_api_key', ''))
                 gemini_keys = config.get('gemini_api_keys', [''])
                 self.gemini_var.set(gemini_keys[0] if gemini_keys else '')
@@ -314,8 +294,6 @@ class SettingsWindow(tk.Toplevel):
                     config = yaml.safe_load(f) or {}
 
             # Update
-            config['excel_mode'] = self.mode_var.get()
-            config['video_mode'] = self.mode_var.get()
             config['deepseek_api_key'] = self.deepseek_var.get().strip()
             gemini_key = self.gemini_var.get().strip()
             config['gemini_api_keys'] = [gemini_key] if gemini_key else ['']
@@ -331,12 +309,6 @@ class SettingsWindow(tk.Toplevel):
             from tkinter import messagebox
             messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
             self._check_resources()
-
-            # Dong bo mode_var voi parent GUI
-            if hasattr(self.master, 'mode_var'):
-                self.master.mode_var.set(self.mode_var.get())
-            if hasattr(self.master, 'mode_display_lbl'):
-                self.master.mode_display_lbl.config(text=f"[{self.mode_var.get()}]")
 
         except Exception as e:
             from tkinter import messagebox
@@ -1124,9 +1096,9 @@ class SimpleGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("VE3 Dashboard")
-        self.geometry("1100x760")
+        self.geometry("1600x900")
         self.configure(bg='#1a1a2e')
-        self.minsize(900, 600)
+        self.minsize(1400, 800)
 
         # Hide current CMD window if running from CMD
         self._hide_current_cmd_window()
@@ -1134,30 +1106,13 @@ class SimpleGUI(tk.Tk):
         # Khoi tao manager ngay de hien projects
         self.manager = VMManager(num_chrome_workers=2)
         self.running = False
-        self.mode_var = tk.StringVar(value="small")  # loaded from settings.yaml
         self.selected_project = None  # Project dang xem chi tiet
         self.scene_photo_refs = []  # Keep references for thumbnails
         self.windows_visible = False  # Track CMD/Chrome visibility
 
         self._build()
-        self._load_mode_from_yaml()  # Load mode sau khi build
         self._load_projects_on_startup()  # Load projects ngay khi mo
         self._update_loop()
-
-    def _load_mode_from_yaml(self):
-        """Load excel_mode tu settings.yaml va cap nhat mode_var + display label."""
-        try:
-            import yaml
-            p = TOOL_DIR / "config" / "settings.yaml"
-            if p.exists():
-                with open(p, 'r', encoding='utf-8') as f:
-                    c = yaml.safe_load(f) or {}
-                mode = c.get('excel_mode', 'small')
-                self.mode_var.set(mode)
-                if hasattr(self, 'mode_display_lbl'):
-                    self.mode_display_lbl.config(text=f"[{mode}]")
-        except Exception as e:
-            print(f"[GUI] Load mode error: {e}")
 
     def _hide_current_cmd_window(self):
         """Hide the CMD window that launched this GUI."""
@@ -1178,199 +1133,294 @@ class SimpleGUI(tk.Tk):
             print(f"[GUI] Could not hide CMD window: {e}")
 
     def _build(self):
-        # === TITLE BAR (compact, 28px) ===
-        title = tk.Frame(self, bg='#080818', height=28)
-        title.pack(fill="x")
-        title.pack_propagate(False)
+        # === TOP: Controls ===
+        top = tk.Frame(self, bg='#0f3460', height=60)
+        top.pack(fill="x")
+        top.pack_propagate(False)
 
+        # Start/Stop
+        self.start_btn = tk.Button(
+            top, text="BAT DAU", command=self._start,
+            bg='#00ff88', fg='#1a1a2e', font=("Arial", 12, "bold"),
+            relief="flat", padx=20, pady=5
+        )
+        self.start_btn.pack(side="left", padx=20, pady=12)
+
+        self.stop_btn = tk.Button(
+            top, text="DUNG", command=self._stop,
+            bg='#e94560', fg='white', font=("Arial", 12, "bold"),
+            relief="flat", padx=20, pady=5
+        )
+        self.stop_btn.pack(side="left", padx=5, pady=12)
+
+        # Reset Workers button
+        self.reset_btn = tk.Button(
+            top, text="RESET", command=self._reset_workers,
+            bg='#ff6348', fg='white', font=("Arial", 12, "bold"),
+            relief="flat", padx=15, pady=5
+        )
+        self.reset_btn.pack(side="left", padx=5, pady=12)
+
+        # Mode - v1.0.72: Thêm Small mode (100-150 scenes)
+        mode_frame = tk.Frame(top, bg='#0f3460')
+        mode_frame.pack(side="left", padx=30)
+        tk.Label(mode_frame, text="Mode:", bg='#0f3460', fg='white', font=("Arial", 10)).pack(side="left")
+        self.mode_var = tk.StringVar(value="small")  # v1.0.73: Default Small mode
+        tk.Radiobutton(mode_frame, text="Basic", variable=self.mode_var, value="basic",
+                       bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
+        tk.Radiobutton(mode_frame, text="Small", variable=self.mode_var, value="small",
+                       bg='#0f3460', fg='#ffcc00', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
+        tk.Radiobutton(mode_frame, text="Full", variable=self.mode_var, value="full",
+                       bg='#0f3460', fg='white', selectcolor='#1a1a2e', font=("Arial", 10)).pack(side="left")
+
+        # Show/Hide Chrome button (CMD already hidden, shown in log viewer)
+        self.windows_visible = False  # Start hidden
+        self.toggle_btn = tk.Button(top, text="HIEN CHROME", command=self._toggle_windows,
+                  bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
+        self.toggle_btn.pack(side="left", padx=10)
+
+        # Settings button - cau hinh
+        self.settings_btn = tk.Button(top, text="SETTINGS", command=self._open_settings,
+                  bg='#ff9f43', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
+        self.settings_btn.pack(side="left", padx=5)
+
+        # Update button - cap nhat tu GitHub
+        self.update_btn = tk.Button(top, text="UPDATE", command=self._run_update,
+                  bg='#0984e3', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
+        self.update_btn.pack(side="left", padx=5)
+
+        # Setup VM button - cai dat SMB share cho may ao
+        self.setup_vm_btn = tk.Button(top, text="SETUP VM", command=self._setup_vm,
+                  bg='#a29bfe', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10)
+        self.setup_vm_btn.pack(side="left", padx=5)
+
+        # Git version info
         git_info = self._get_git_version()
-        tk.Label(title, text=f"VE3 Tool  {git_info}", bg='#080818', fg='#555',
-                 font=("Consolas", 9)).pack(side="left", padx=10, pady=4)
+        tk.Label(top, text=git_info, bg='#0f3460', fg='#888',
+                 font=("Consolas", 8)).pack(side="right", padx=10)
 
-        # Worker status dots (center)
-        self.worker_dots = {}
-        dots_frame = tk.Frame(title, bg='#080818')
-        dots_frame.pack(side="left", padx=20)
-        for wid, dname in [("excel", "EXCEL"), ("chrome_1", "CHR1"), ("chrome_2", "CHR2")]:
-            dot = tk.Label(dots_frame, text=f"■ {dname}", bg='#080818', fg='#555',
-                          font=("Consolas", 9, "bold"))
-            dot.pack(side="left", padx=8)
-            self.worker_dots[wid] = dot
-
-        # Current project (right)
-        self.title_project_var = tk.StringVar(value="")
-        tk.Label(title, textvariable=self.title_project_var, bg='#080818', fg='#00d9ff',
-                 font=("Consolas", 9, "bold")).pack(side="right", padx=10)
-
-        # === BUTTON BAR ===
-        btns = tk.Frame(self, bg='#0f3460', height=50)
-        btns.pack(fill="x")
-        btns.pack_propagate(False)
-
-        self.start_btn = tk.Button(btns, text="BAT DAU", command=self._start,
-                                   bg='#00ff88', fg='#1a1a2e', font=("Arial", 12, "bold"),
-                                   relief="flat", padx=20, pady=5)
-        self.start_btn.pack(side="left", padx=(15, 5), pady=8)
-
-        self.stop_btn = tk.Button(btns, text="DUNG", command=self._stop,
-                                  bg='#e94560', fg='white', font=("Arial", 12, "bold"),
-                                  relief="flat", padx=20, pady=5)
-        self.stop_btn.pack(side="left", padx=5, pady=8)
-
-        self.reset_btn = tk.Button(btns, text="RESET", command=self._reset_workers,
-                                   bg='#ff6348', fg='white', font=("Arial", 12, "bold"),
-                                   relief="flat", padx=15, pady=5)
-        self.reset_btn.pack(side="left", padx=5, pady=8)
-
-        self.mode_display_lbl = tk.Label(btns, text="[small]", bg='#0f3460', fg='#ffcc00',
-                                         font=("Consolas", 9))
-        self.mode_display_lbl.pack(side="left", padx=15)
-
+        # Status
         self.status_var = tk.StringVar(value="San sang")
-        tk.Label(btns, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
-                 font=("Consolas", 10, "bold")).pack(side="right", padx=20)
+        tk.Label(top, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
+                 font=("Consolas", 11, "bold")).pack(side="right", padx=20)
 
-        self.setup_vm_btn = tk.Button(btns, text="SETUP VM", command=self._setup_vm,
-                                      bg='#a29bfe', fg='white', font=("Arial", 9, "bold"),
-                                      relief="flat", padx=10)
-        self.setup_vm_btn.pack(side="right", padx=(5, 15), pady=12)
+        # === MAIN CONTENT: Left (Workers + Projects) | Right (LOG) ===
+        main = tk.PanedWindow(self, orient=tk.HORIZONTAL, bg='#1a1a2e', sashwidth=5)
+        main.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.update_btn = tk.Button(btns, text="UPDATE", command=self._run_update,
-                                    bg='#0984e3', fg='white', font=("Arial", 9, "bold"),
-                                    relief="flat", padx=10)
-        self.update_btn.pack(side="right", padx=5, pady=12)
+        # Left panel
+        left = tk.Frame(main, bg='#1a1a2e')
+        main.add(left, width=450)
 
-        self.settings_btn = tk.Button(btns, text="SETTINGS", command=self._open_settings,
-                                      bg='#ff9f43', fg='white', font=("Arial", 9, "bold"),
-                                      relief="flat", padx=10)
-        self.settings_btn.pack(side="right", padx=5, pady=12)
-
-        self.windows_visible = False
-        self.toggle_btn = tk.Button(btns, text="HIEN CHROME", command=self._toggle_windows,
-                                    bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"),
-                                    relief="flat", padx=10)
-        self.toggle_btn.pack(side="right", padx=5, pady=12)
-
-        # === WORKERS (3 rows) ===
-        wf = tk.Frame(self, bg='#16213e', padx=8, pady=5)
-        wf.pack(fill="x", padx=5, pady=(5, 0))
+        # === WORKERS - Compact inline ===
+        workers = tk.Frame(left, bg='#16213e', padx=5, pady=5)
+        workers.pack(fill="x", padx=5, pady=5)
 
         self.worker_vars = {}
         self.worker_labels = {}
-        self.worker_rows = {}
-        self.worker_progress = {}
+        self.worker_rows = {}  # Store row frames
 
-        for wid, dname in [("excel", "EXCEL"), ("chrome_1", "CHR 1"), ("chrome_2", "CHR 2")]:
-            row = tk.Frame(wf, bg='#16213e')
-            row.pack(fill="x", pady=1)
-
-            name_lbl = tk.Label(row, text=dname, width=7, bg='#16213e', fg='#555',
-                               font=("Consolas", 10, "bold"), anchor="w")
-            name_lbl.pack(side="left", padx=(0, 4))
-
-            badge = tk.Label(row, text="■ IDLE", width=11, bg='#1a1a2e', fg='#555',
-                            font=("Consolas", 9, "bold"))
-            badge.pack(side="left", padx=4)
+        # Tao 3 workers tren 1 dong
+        for wid, name in [("excel", "EXCEL"), ("chrome_1", "CHR1"), ("chrome_2", "CHR2")]:
+            frame = tk.Frame(workers, bg='#0f3460', padx=8, pady=4)
+            frame.pack(side="left", padx=3, pady=2)
 
             self.worker_vars[f"{wid}_project"] = tk.StringVar(value="")
-            proj_lbl = tk.Label(row, textvariable=self.worker_vars[f"{wid}_project"],
-                               bg='#16213e', fg='#00d9ff',
-                               font=("Consolas", 10, "bold"), width=12, anchor="w")
-            proj_lbl.pack(side="left", padx=4)
-
-            tk.Label(row, text="•", bg='#16213e', fg='#444',
-                    font=("Consolas", 10)).pack(side="left", padx=2)
-
             self.worker_vars[f"{wid}_status"] = tk.StringVar(value="")
-            detail_lbl = tk.Label(row, textvariable=self.worker_vars[f"{wid}_status"],
-                                 bg='#16213e', fg='#ffd93d',
-                                 font=("Consolas", 9), anchor="w", width=40)
-            detail_lbl.pack(side="left", padx=4)
 
-            pb_canvas = tk.Canvas(row, bg='#16213e', width=110, height=10,
-                                 highlightthickness=0, bd=0)
-            pb_canvas.pack(side="left", padx=5)
+            # Name label
+            name_lbl = tk.Label(frame, text=name, bg='#0f3460', fg='#888',
+                     font=("Consolas", 9, "bold"))
+            name_lbl.pack(side="left")
 
-            pct_lbl = tk.Label(row, text="", width=5, bg='#16213e', fg='#888',
-                              font=("Consolas", 8))
-            pct_lbl.pack(side="left")
+            # Project label - chi hien khi co project
+            proj_lbl = tk.Label(frame, textvariable=self.worker_vars[f"{wid}_project"], bg='#0f3460', fg='#00d9ff',
+                     font=("Consolas", 10, "bold"))
+            proj_lbl.pack(side="left", padx=3)
 
-            self.worker_labels[wid] = {
-                'name': name_lbl, 'badge': badge,
-                'project': proj_lbl, 'detail': detail_lbl, 'pct': pct_lbl
-            }
-            self.worker_rows[wid] = row
-            self.worker_progress[wid] = pb_canvas
+            # Status label - chi hien khi dang chay
+            status_lbl = tk.Label(frame, textvariable=self.worker_vars[f"{wid}_status"], bg='#0f3460', fg='#ffd93d',
+                     font=("Consolas", 9))
+            status_lbl.pack(side="left", padx=2)
 
-        # === PROJECT LIST HEADER ===
-        proj_hdr = tk.Frame(self, bg='#0d1b2a', height=28)
-        proj_hdr.pack(fill="x", padx=5, pady=(8, 0))
-        proj_hdr.pack_propagate(False)
+            self.worker_labels[wid] = {'name': name_lbl, 'project': proj_lbl, 'status': status_lbl}
+            self.worker_rows[wid] = frame
 
-        tk.Label(proj_hdr, text="DANH SACH DU AN", bg='#0d1b2a', fg='#00d9ff',
-                 font=("Arial", 10, "bold")).pack(side="left", padx=10, pady=4)
+        # === WORKER LOGS VIEWER ===
+        logs_frame = tk.LabelFrame(left, text=" WORKER LOGS ", bg='#16213e', fg='#00d9ff',
+                                   font=("Arial", 10, "bold"), padx=5, pady=5)
+        logs_frame.pack(fill="both", expand=True, padx=5, pady=(0, 5))
 
-        self.total_projects_var = tk.StringVar(value="")
-        tk.Label(proj_hdr, textvariable=self.total_projects_var, bg='#0d1b2a', fg='#888',
-                 font=("Consolas", 9)).pack(side="right", padx=10)
+        # Tab selector
+        tab_frame = tk.Frame(logs_frame, bg='#0f3460')
+        tab_frame.pack(fill="x", pady=(0, 5))
 
-        # Column headers
-        col_hdr = tk.Frame(self, bg='#0f3460')
-        col_hdr.pack(fill="x", padx=5)
-        for txt, w in [("Ma", 12), ("Excel", 6), ("Tham chieu", 12), ("Scene anh", 10), ("Con lai", 11), ("", 6)]:
-            tk.Label(col_hdr, text=txt, width=w, bg='#0f3460', fg='white',
-                     font=("Arial", 9, "bold")).pack(side="left", padx=2, pady=4)
+        self.log_tab_var = tk.StringVar(value="excel")
+        self.log_tab_buttons = {}
 
-        # Scrollable project list
-        proj_list = tk.Frame(self, bg='#16213e')
-        proj_list.pack(fill="both", expand=True, padx=5)
+        for wid, label in [("excel", "EXCEL"), ("chrome_1", "CHROME 1"), ("chrome_2", "CHROME 2")]:
+            btn = tk.Radiobutton(tab_frame, text=label, variable=self.log_tab_var, value=wid,
+                                command=lambda w=wid: self._switch_log_tab(w),
+                                bg='#0f3460', fg='white', selectcolor='#1a1a2e',
+                                font=("Arial", 9, "bold"), indicatoron=False,
+                                padx=10, pady=3)
+            btn.pack(side="left", padx=2)
+            self.log_tab_buttons[wid] = btn
 
-        proj_canvas = tk.Canvas(proj_list, bg='#16213e', highlightthickness=0)
-        proj_sb = ttk.Scrollbar(proj_list, orient="vertical", command=proj_canvas.yview)
-        self.projects_frame = tk.Frame(proj_canvas, bg='#16213e')
+        # v1.0.77: Removed XONG MA button - now per-project in project list
 
-        proj_canvas.configure(yscrollcommand=proj_sb.set)
-        proj_sb.pack(side="right", fill="y")
-        proj_canvas.pack(side="left", fill="both", expand=True)
-        proj_canvas.create_window((0, 0), window=self.projects_frame, anchor="nw")
-        self.projects_frame.bind("<Configure>",
-            lambda e: proj_canvas.configure(scrollregion=proj_canvas.bbox("all")))
-        proj_canvas.bind_all("<MouseWheel>",
-            lambda e: proj_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+        # Log text area
+        log_text_frame = tk.Frame(logs_frame, bg='#1a1a2e')
+        log_text_frame.pack(fill="both", expand=True)
+
+        log_scrollbar = tk.Scrollbar(log_text_frame)
+        log_scrollbar.pack(side="right", fill="y")
+
+        self.log_text = tk.Text(log_text_frame, bg='#0a0a0a', fg='#00ff88',
+                               font=("Consolas", 8), wrap="none",
+                               yscrollcommand=log_scrollbar.set,
+                               height=15)
+        self.log_text.pack(fill="both", expand=True)
+        log_scrollbar.config(command=self.log_text.yview)
+
+        # Horizontal scrollbar
+        log_scrollbar_x = tk.Scrollbar(logs_frame, orient="horizontal", command=self.log_text.xview)
+        log_scrollbar_x.pack(fill="x")
+        self.log_text.config(xscrollcommand=log_scrollbar_x.set)
+
+        # === PROJECTS ===
+        projects = tk.LabelFrame(left, text=" PROJECTS (click de xem) ", bg='#16213e', fg='white',
+                                 font=("Arial", 10, "bold"), padx=5, pady=5)
+        projects.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        # Header - v1.0.77: Thêm cột XONG cho mỗi project
+        header = tk.Frame(projects, bg='#0f3460')
+        header.pack(fill="x")
+        for txt, w in [("Code", 10), ("Excel", 6), ("NV", 5), ("Anh", 7), ("Video", 7), ("Status", 6), ("", 5)]:
+            tk.Label(header, text=txt, width=w, bg='#0f3460', fg='white',
+                     font=("Arial", 9, "bold")).pack(side="left", padx=2, pady=5)
+
+        # List
+        canvas = tk.Canvas(projects, bg='#16213e', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(projects, orient="vertical", command=canvas.yview)
+        self.projects_frame = tk.Frame(canvas, bg='#16213e')
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.create_window((0, 0), window=self.projects_frame, anchor="nw")
+        self.projects_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
         self.project_rows: Dict[str, dict] = {}
 
-        # === LOG (bottom) ===
-        log_hdr = tk.Frame(self, bg='#16213e', height=24)
-        log_hdr.pack(fill="x", padx=5, pady=(5, 0))
-        log_hdr.pack_propagate(False)
+        # Right panel - CHI TIET PROJECT (hien khi click project) - width lon hon de hien prompt
+        right = tk.Frame(main, bg='#1a1a2e')
+        main.add(right, width=750)
 
-        tk.Label(log_hdr, text="LOG", bg='#16213e', fg='#00d9ff',
-                 font=("Arial", 9, "bold")).pack(side="left", padx=8, pady=2)
-        tk.Button(log_hdr, text="Xoa log", command=self._clear_log,
-                  bg='#16213e', fg='#888', font=("Consolas", 8),
-                  relief="flat", padx=5).pack(side="right", padx=8)
+        # Header - ten project dang xem
+        self.detail_header = tk.Frame(right, bg='#0f3460', height=40)
+        self.detail_header.pack(fill="x")
+        self.detail_header.pack_propagate(False)
 
-        log_outer = tk.Frame(self, bg='#0a0a0a')
-        log_outer.pack(fill="x", padx=5, pady=(0, 5))
+        self.detail_title_var = tk.StringVar(value="Click vao project de xem chi tiet")
+        tk.Label(self.detail_header, textvariable=self.detail_title_var, bg='#0f3460', fg='#00ff88',
+                 font=("Arial", 12, "bold")).pack(side="left", padx=15, pady=8)
 
-        log_sb = tk.Scrollbar(log_outer)
-        log_sb.pack(side="right", fill="y")
+        # === EXCEL STEPS ===
+        self.excel_frame = tk.LabelFrame(right, text=" EXCEL (7 STEPS) ", bg='#16213e', fg='#00ff88',
+                                    font=("Arial", 10, "bold"), padx=10, pady=5)
+        self.excel_frame.pack(fill="x", padx=5, pady=5)
 
-        self.log_text = tk.Text(log_outer, bg='#0a0a0a', fg='#00ff88',
-                               font=("Consolas", 8), wrap="none",
-                               yscrollcommand=log_sb.set, height=7,
-                               state="disabled")
-        self.log_text.pack(fill="x")
-        log_sb.config(command=self.log_text.yview)
+        self.excel_step_labels = []
+        step_names = ["1.Story", "2.Segments", "3.Characters", "4.Locations", "5.Director", "6.Plans", "7.Prompts"]
+        for name in step_names:
+            lbl = tk.Label(self.excel_frame, text=name, bg='#16213e', fg='#666',
+                          font=("Consolas", 9), padx=8)
+            lbl.pack(side="left")
+            self.excel_step_labels.append(lbl)
 
-        # Dummy vars for compat (old code may reference these)
-        self.current_action_var = tk.StringVar(value="")
+        # === CHARACTERS - dang danh sach tu Excel ===
+        ref_frame = tk.LabelFrame(right, text=" CHARACTERS (tu Excel) ", bg='#16213e', fg='#ff6b6b',
+                                  font=("Arial", 9, "bold"), padx=5, pady=3)
+        ref_frame.pack(fill="x", padx=5, pady=3, ipady=2)
+
+        # Header
+        ref_header = tk.Frame(ref_frame, bg='#0f3460')
+        ref_header.pack(fill="x")
+        tk.Label(ref_header, text="ID", width=6, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
+        tk.Label(ref_header, text="Thumb", width=6, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
+        tk.Label(ref_header, text="Character Description", width=50, bg='#0f3460', fg='white', font=("Consolas", 9, "bold")).pack(side="left", padx=2)
+
+        # Scrollable list
+        self.ref_canvas = tk.Canvas(ref_frame, bg='#1a1a2e', highlightthickness=0, height=150)
+        ref_scrollbar = ttk.Scrollbar(ref_frame, orient="vertical", command=self.ref_canvas.yview)
+        self.ref_images_frame = tk.Frame(self.ref_canvas, bg='#1a1a2e')
+
+        self.ref_images_frame.bind("<Configure>",
+            lambda e: self.ref_canvas.configure(scrollregion=self.ref_canvas.bbox("all")))
+        self.ref_canvas.create_window((0, 0), window=self.ref_images_frame, anchor="nw")
+        self.ref_canvas.configure(yscrollcommand=ref_scrollbar.set)
+
+        ref_scrollbar.pack(side="right", fill="y")
+        self.ref_canvas.pack(fill="both", expand=True)
+
+        self.ref_photo_refs = []
+
+        # === SCENES LIST ===
+        scenes_frame = tk.LabelFrame(right, text=" SCENES ", bg='#16213e', fg='#ffd93d',
+                                     font=("Arial", 10, "bold"), padx=5, pady=5)
+        scenes_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Header row - font to hon
+        header_row = tk.Frame(scenes_frame, bg='#0f3460')
+        header_row.pack(fill="x")
+        tk.Label(header_row, text="ID", width=4, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+        tk.Label(header_row, text="Thumb", width=6, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+        tk.Label(header_row, text="SRT Time", width=18, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+        tk.Label(header_row, text="Prompt", width=45, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+        tk.Label(header_row, text="Img", width=5, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+        tk.Label(header_row, text="Vid", width=5, bg='#0f3460', fg='white', font=("Consolas", 10, "bold")).pack(side="left", padx=2)
+
+        # Scrollable scene list - them horizontal scrollbar
+        scene_scroll_frame = tk.Frame(scenes_frame, bg='#1a1a2e')
+        scene_scroll_frame.pack(fill="both", expand=True)
+
+        self.scene_canvas = tk.Canvas(scene_scroll_frame, bg='#1a1a2e', highlightthickness=0)
+        scene_scrollbar_y = ttk.Scrollbar(scene_scroll_frame, orient="vertical", command=self.scene_canvas.yview)
+        scene_scrollbar_x = ttk.Scrollbar(scenes_frame, orient="horizontal", command=self.scene_canvas.xview)
+        self.scenes_list_frame = tk.Frame(self.scene_canvas, bg='#1a1a2e')
+
+        self.scenes_list_frame.bind("<Configure>",
+            lambda e: self.scene_canvas.configure(scrollregion=self.scene_canvas.bbox("all")))
+        self.scene_canvas.create_window((0, 0), window=self.scenes_list_frame, anchor="nw")
+        self.scene_canvas.configure(yscrollcommand=scene_scrollbar_y.set, xscrollcommand=scene_scrollbar_x.set)
+
+        scene_scrollbar_y.pack(side="right", fill="y")
+        self.scene_canvas.pack(fill="both", expand=True)
+        scene_scrollbar_x.pack(fill="x")
+
+        # Enable mouse wheel scrolling
+        def _on_mousewheel(event):
+            self.scene_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.scene_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # === STATUS BAR - Hien thi dang lam gi ===
+        status_bar = tk.Frame(self, bg='#0f3460', height=35)
+        status_bar.pack(fill="x", side="bottom")
+        status_bar.pack_propagate(False)
+
+        tk.Label(status_bar, text="DANG LAM:", bg='#0f3460', fg='#888',
+                 font=("Consolas", 10)).pack(side="left", padx=10)
+
+        self.current_action_var = tk.StringVar(value="Cho bat dau...")
+        tk.Label(status_bar, textvariable=self.current_action_var, bg='#0f3460', fg='#ffd93d',
+                 font=("Consolas", 11, "bold")).pack(side="left", padx=5)
 
     def _select_project(self, code: str):
-        """Click project - mo popup Excel detail."""
+        """Chon project de hien chi tiet."""
         self.selected_project = code
-        self._show_excel_detail(code)
+        self.detail_title_var.set(f"Project: {code}")
+        self._load_project_detail(code)
 
     def _switch_log_tab(self, worker_id: str):
         """Switch log tab to show different worker."""
@@ -2348,25 +2398,39 @@ class SimpleGUI(tk.Tk):
                     else:
                         labels['excel'].config(text="--", fg='#666')
 
-                    # Tham chieu (Reference images)
+                    # NV status - reference images (characters with ref)
                     nv_done = getattr(status, 'characters_with_ref', 0)
                     nv_total = getattr(status, 'characters_count', 0)
                     if nv_total > 0:
-                        color = '#00ff88' if nv_done >= nv_total else '#ff6b6b'
-                        labels['thamchieu'].config(text=f"{nv_done}/{nv_total}", fg=color)
+                        if nv_done >= nv_total:
+                            labels['nv'].config(text="OK", fg='#00ff88')
+                        else:
+                            labels['nv'].config(text=f"{nv_done}/{nv_total}", fg='#ff6b6b')
                     else:
-                        labels['thamchieu'].config(text="--", fg='#666')
+                        labels['nv'].config(text="--", fg='#666')
 
-                    # Scene anh
+                    # Images
                     img_done = getattr(status, 'images_done', 0)
                     img_total = getattr(status, 'total_scenes', 0)
                     if img_total > 0:
-                        color = '#00ff88' if img_done >= img_total else '#00d9ff'
-                        labels['images'].config(text=f"{img_done}/{img_total}", fg=color)
+                        pct = int(img_done * 100 / img_total)
+                        labels['images'].config(text=f"{img_done}/{img_total}", fg='#00d9ff' if pct > 0 else '#666')
                     else:
                         labels['images'].config(text="--", fg='#666')
 
-                    labels['conlai'].config(text="--", fg='#888')
+                    # Videos
+                    vid_done = getattr(status, 'videos_done', 0)
+                    vid_total = getattr(status, 'total_scenes', 0)
+                    if vid_total > 0:
+                        labels['videos'].config(text=f"{vid_done}/{vid_total}", fg='#00d9ff' if vid_done > 0 else '#666')
+                    else:
+                        labels['videos'].config(text="--", fg='#666')
+
+                    labels['status'].config(text="Ready", fg='#aaa')
+
+            # Auto-select first project
+            if projects and not self.selected_project:
+                self._select_project(projects[0])
 
         except Exception as e:
             print(f"Error loading projects: {e}")
@@ -3093,63 +3157,18 @@ class SimpleGUI(tk.Tk):
                  bg='#e94560', fg='white', font=("Arial", 9, "bold"),
                  relief="flat", padx=15, pady=3).pack(side="left", padx=5)
 
-    def _draw_progress(self, canvas: tk.Canvas, pct: float):
-        """Ve thanh progress tren Canvas (pct = 0.0 den 1.0)."""
-        try:
-            canvas.delete("all")
-            w = canvas.winfo_width() or 110
-            h = canvas.winfo_height() or 10
-            # Background
-            canvas.create_rectangle(0, 0, w, h, fill='#2a2a4e', outline='')
-            # Progress fill
-            if pct > 0:
-                fill_w = max(1, int(w * min(1.0, pct)))
-                color = '#00ff88' if pct >= 1.0 else '#00d9ff'
-                canvas.create_rectangle(0, 0, fill_w, h, fill=color, outline='')
-        except:
-            pass
-
-    def _clear_log(self):
-        """Xoa noi dung log."""
-        try:
-            self.log_text.config(state="normal")
-            self.log_text.delete('1.0', tk.END)
-            self.log_text.config(state="disabled")
-        except:
-            pass
-
-    def _update_log(self):
-        """Cap nhat log area tu central logger."""
-        if not LOGGER_AVAILABLE:
-            return
-        try:
-            lines = tail_log(20)
-            if not lines:
-                return
-            content = '\n'.join(lines)
-            self.log_text.config(state="normal")
-            self.log_text.delete('1.0', tk.END)
-            self.log_text.insert('1.0', content)
-            self.log_text.config(state="disabled")
-            self.log_text.see(tk.END)
-        except:
-            pass
-
-    def _on_new_log(self, line: str):
-        """Callback khi co log moi - xu ly trong _update_log theo lich."""
-        pass
-
     def _update_loop(self):
         self._update_workers()
         self._update_projects()
-        self._update_log()
+        self._update_detail_panel()
+        self._update_worker_logs()  # Auto-update logs
         self.after(1000, self._update_loop)
 
     def _update_workers(self):
         if not self.manager:
             return
 
-        active_project = ""
+        actions = []  # Thu thap cac hanh dong dang lam
 
         for wid in ["excel", "chrome_1", "chrome_2"]:
             try:
@@ -3159,65 +3178,58 @@ class SimpleGUI(tk.Tk):
                     state = status.get('state', 'idle')
                     step = status.get('current_step', 0)
                     step_name = status.get('step_name', '')
-                    is_active = proj and state.lower() in ['working', 'busy']
+                    task = status.get('current_task', '')
 
-                    if is_active:
-                        # ACTIVE state
+                    # Chi hien project khi dang lam viec
+                    if proj and state.lower() in ['working', 'busy']:
                         self.worker_vars[f"{wid}_project"].set(proj)
                         self.worker_labels[wid]['project'].config(fg='#00d9ff')
-                        self.worker_labels[wid]['name'].config(fg='#00ff88')
-                        self.worker_labels[wid]['badge'].config(text="▶ RUNNING", fg='#00ff88', bg='#16213e')
-                        if wid in self.worker_dots:
-                            self.worker_dots[wid].config(fg='#00ff88')
-                        if proj:
-                            active_project = proj
+                        self.worker_labels[wid]['name'].config(fg='#00ff88')  # Green khi active
 
-                        # Status text & progress
+                        # Status text
                         if wid == "excel" and step > 0:
-                            short_name = step_name[:22] if step_name else ""
-                            self.worker_vars[f"{wid}_status"].set(f"Step {step}/7 {short_name}")
-                            pct = step / 7.0
+                            self.worker_vars[f"{wid}_status"].set(f"S{step}/7")
+                            actions.append(f"EXCEL {proj}: Step {step}/7 - {step_name}")
                         else:
+                            # Chrome worker - hiển thị scene đang làm
                             current_scene = status.get('current_scene', 0)
                             total_scenes = status.get('total_scenes', 0)
                             completed = status.get('completed_count', 0)
-                            if current_scene and current_scene > 0 and total_scenes > 0:
-                                self.worker_vars[f"{wid}_status"].set(f"S{current_scene} ({completed}/{total_scenes})")
-                                pct = completed / total_scenes
+
+                            if current_scene and current_scene > 0:
+                                # Hiển thị scene/total: "S72 (50/651)"
+                                if total_scenes > 0:
+                                    self.worker_vars[f"{wid}_status"].set(f"S{current_scene} ({completed}/{total_scenes})")
+                                else:
+                                    self.worker_vars[f"{wid}_status"].set(f"S{current_scene}")
+                                actions.append(f"{wid.upper()} {proj}: S{current_scene}")
                             elif completed > 0:
                                 self.worker_vars[f"{wid}_status"].set(f"{completed} done")
-                                pct = 0.0
+                                actions.append(f"{wid.upper()} {proj}: {completed} anh")
                             else:
-                                self.worker_vars[f"{wid}_status"].set("Dang khoi dong...")
-                                pct = 0.0
-
-                        # Draw progress bar
-                        self._draw_progress(self.worker_progress[wid], pct)
-                        self.worker_labels[wid]['pct'].config(text=f"{int(pct*100)}%")
-
+                                self.worker_vars[f"{wid}_status"].set("")
+                                if 'image' in task.lower():
+                                    actions.append(f"{wid.upper()}: {proj} tao anh")
+                                elif 'video' in task.lower():
+                                    actions.append(f"{wid.upper()}: {proj} tao video")
+                                else:
+                                    actions.append(f"{wid.upper()}: {proj}")
                     else:
-                        # IDLE state
+                        # Idle - chi hien ten, bo project va status
                         self.worker_vars[f"{wid}_project"].set("")
                         self.worker_vars[f"{wid}_status"].set("")
-                        self.worker_labels[wid]['name'].config(fg='#555')
-                        self.worker_labels[wid]['badge'].config(text="■ IDLE", fg='#444', bg='#1a1a2e')
-                        if wid in self.worker_dots:
-                            self.worker_dots[wid].config(fg='#555')
-                        self._draw_progress(self.worker_progress[wid], 0.0)
-                        self.worker_labels[wid]['pct'].config(text="")
-                else:
-                    # No status yet
-                    self.worker_labels[wid]['badge'].config(text="■ IDLE", fg='#444', bg='#1a1a2e')
-                    if wid in self.worker_dots:
-                        self.worker_dots[wid].config(fg='#555')
+                        self.worker_labels[wid]['name'].config(fg='#666')  # Gray khi idle
             except:
                 pass
 
-        # Update title bar with active project
-        if active_project:
-            self.title_project_var.set(f"▶ {active_project}")
+        # Update status bar
+        if actions:
+            self.current_action_var.set(" | ".join(actions[:3]))  # Max 3 actions
         else:
-            self.title_project_var.set("")
+            if self.running:
+                self.current_action_var.set("Dang tim project...")
+            else:
+                self.current_action_var.set("Cho bat dau...")
 
     def _update_projects(self):
         if not self.manager:
@@ -3264,50 +3276,52 @@ class SimpleGUI(tk.Tk):
                     else:
                         labels['excel'].config(text="--", fg='#666')
 
-                    # Tham chieu (Reference images)
+                    # NV status - reference images (characters with ref)
                     nv_done = getattr(status, 'characters_with_ref', 0)
                     nv_total = getattr(status, 'characters_count', 0)
                     if nv_total > 0:
-                        color = '#00ff88' if nv_done >= nv_total else '#ff6b6b'
-                        labels['thamchieu'].config(text=f"{nv_done}/{nv_total}", fg=color)
+                        if nv_done >= nv_total:
+                            labels['nv'].config(text="OK", fg='#00ff88')
+                        else:
+                            labels['nv'].config(text=f"{nv_done}/{nv_total}", fg='#ff6b6b')
                     else:
-                        labels['thamchieu'].config(text="--", fg='#666')
+                        labels['nv'].config(text="--", fg='#666')
 
-                    # Scene anh
+                    # Images
                     img_done = getattr(status, 'images_done', 0)
                     img_total = getattr(status, 'total_scenes', 0)
                     if img_total > 0:
-                        color = '#00ff88' if img_done >= img_total else '#00d9ff'
-                        labels['images'].config(text=f"{img_done}/{img_total}", fg=color)
+                        if img_done >= img_total:
+                            labels['images'].config(text=f"{img_done}/{img_total}", fg='#00ff88')
+                        else:
+                            labels['images'].config(text=f"{img_done}/{img_total}", fg='#00d9ff')
                     else:
                         labels['images'].config(text="--", fg='#666')
 
-                    # Con lai (Remaining time for active project)
-                    PROJECT_TIMEOUT = 6 * 3600
-                    remaining_txt = "--"
-                    remaining_fg = '#888'
-                    for wid in ["chrome_1", "chrome_2"]:
-                        try:
-                            ws = self.manager.get_worker_status(wid)
-                            if ws and ws.get('current_project') == code:
-                                elapsed = ws.get('project_elapsed_seconds', 0)
-                                if elapsed > 0:
-                                    remaining = max(0, PROJECT_TIMEOUT - elapsed)
-                                    rh = int(remaining // 3600)
-                                    rm = int((remaining % 3600) // 60)
-                                    if remaining <= 0:
-                                        remaining_txt = "TIMEOUT!"
-                                        remaining_fg = '#e94560'
-                                    elif rh > 0:
-                                        remaining_txt = f"{rh}h{rm:02d}m"
-                                        remaining_fg = '#ffd93d'
-                                    else:
-                                        remaining_txt = f"{rm}m"
-                                        remaining_fg = '#ffd93d'
-                                break
-                        except:
-                            pass
-                    labels['conlai'].config(text=remaining_txt, fg=remaining_fg)
+                    # Videos
+                    vid_done = getattr(status, 'videos_done', 0)
+                    videos_needed = getattr(status, 'videos_needed', [])
+                    vid_total = len(videos_needed) if videos_needed else 0
+                    if vid_total > 0:
+                        if vid_done >= vid_total:
+                            labels['videos'].config(text=f"{vid_done}/{vid_total}", fg='#00ff88')
+                        else:
+                            labels['videos'].config(text=f"{vid_done}/{vid_total}", fg='#00d9ff')
+                    else:
+                        labels['videos'].config(text="--", fg='#666')
+
+                    # Status
+                    next_action = getattr(status, 'next_action', '')
+                    if next_action == 'create_excel':
+                        labels['status'].config(text="Excel")
+                    elif next_action == 'create_images':
+                        labels['status'].config(text="Anh")
+                    elif next_action == 'create_videos':
+                        labels['status'].config(text="Video")
+                    elif next_action == 'copy_to_visual':
+                        labels['status'].config(text="XONG")
+                    else:
+                        labels['status'].config(text="--")
         except Exception as e:
             pass
 
@@ -3324,21 +3338,24 @@ class SimpleGUI(tk.Tk):
         labels['code'].pack(side="left", padx=2)
         labels['code'].bind("<Button-1>", lambda e, c=code: self._select_project(c))
 
-        labels['excel'] = tk.Label(row, text="--", width=5, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
+        labels['excel'] = tk.Label(row, text="--", width=6, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
         labels['excel'].pack(side="left", padx=2)
         labels['excel'].bind("<Button-1>", lambda e, c=code: self._show_excel_detail(c))
 
-        labels['thamchieu'] = tk.Label(row, text="--", width=10, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
-        labels['thamchieu'].pack(side="left", padx=2)
-        labels['thamchieu'].bind("<Button-1>", lambda e, c=code: self._show_nv_detail(c))
+        labels['nv'] = tk.Label(row, text="--", width=5, bg=bg, fg='#666', font=("Consolas", 10), cursor="hand2")
+        labels['nv'].pack(side="left", padx=2)
+        labels['nv'].bind("<Button-1>", lambda e, c=code: self._show_nv_detail(c))
 
-        labels['images'] = tk.Label(row, text="--", width=9, bg=bg, fg='#666', font=("Consolas", 10))
+        labels['images'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
         labels['images'].pack(side="left", padx=2)
 
-        labels['conlai'] = tk.Label(row, text="--", width=10, bg=bg, fg='#888', font=("Consolas", 9))
-        labels['conlai'].pack(side="left", padx=2)
+        labels['videos'] = tk.Label(row, text="--", width=7, bg=bg, fg='#666', font=("Consolas", 10))
+        labels['videos'].pack(side="left", padx=2)
 
-        # Nut XONG cho moi project
+        labels['status'] = tk.Label(row, text="--", width=6, bg=bg, fg='#aaa', font=("Consolas", 10))
+        labels['status'].pack(side="left", padx=2)
+
+        # v1.0.77: Nút XONG cho mỗi project
         xong_btn = tk.Button(row, text="XONG", width=4,
                             command=lambda c=code: self._force_complete_by_code(c),
                             bg='#ff6600', fg='white',
