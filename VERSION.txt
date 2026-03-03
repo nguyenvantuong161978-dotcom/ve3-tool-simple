@@ -1,8 +1,9 @@
-1.0.245
+1.0.246
 2026-03-03 (VN)
-Change: Chrome hien mac dinh, nut AN/HIEN Chrome sang trai
+Change: Button bar 2 dong, window nho hon (700px)
 
 Thay doi:
+- v1.0.246: Button bar 2 dong (dong 1: BAT DAU/DUNG/RESET/AN CHROME/mode; dong 2: SETTINGS/UPDATE/SETUP VM); geometry 700x780, minsize 600x600
 - v1.0.245: Mac dinh hien Chrome (windows_visible=True); chuyen nut AN CHROME sang trai button bar; bo auto-hide khi start
 - v1.0.243: GUI moi hoan chinh - _update_workers() cap nhat badge/worker_dots/progress; them _draw_progress(), _clear_log(), _update_log(); bo auto-select popup khi startup
 - v1.0.242: GUI moi - Bo mode radio (Basic/Small/Full) khoi top bar, chuyen vao Settings; cot project moi (Ma|Excel|Tham chieu|Scene anh|Con lai|XONG); mode display label tren top bar

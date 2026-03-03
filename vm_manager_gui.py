@@ -1124,9 +1124,9 @@ class SimpleGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("VE3 Dashboard")
-        self.geometry("1100x760")
+        self.geometry("700x780")
         self.configure(bg='#1a1a2e')
-        self.minsize(900, 600)
+        self.minsize(600, 600)
 
         # Hide current CMD window if running from CMD
         self._hide_current_cmd_window()
@@ -1202,55 +1202,64 @@ class SimpleGUI(tk.Tk):
         tk.Label(title, textvariable=self.title_project_var, bg='#080818', fg='#00d9ff',
                  font=("Consolas", 9, "bold")).pack(side="right", padx=10)
 
-        # === BUTTON BAR ===
-        btns = tk.Frame(self, bg='#0f3460', height=50)
-        btns.pack(fill="x")
-        btns.pack_propagate(False)
+        # === BUTTON BAR (2 dong) ===
+        btns_outer = tk.Frame(self, bg='#0f3460')
+        btns_outer.pack(fill="x")
 
-        self.start_btn = tk.Button(btns, text="BAT DAU", command=self._start,
-                                   bg='#00ff88', fg='#1a1a2e', font=("Arial", 12, "bold"),
-                                   relief="flat", padx=20, pady=5)
-        self.start_btn.pack(side="left", padx=(15, 5), pady=8)
+        # -- Dong 1: BAT DAU | DUNG | RESET | AN CHROME | [mode] --
+        btns1 = tk.Frame(btns_outer, bg='#0f3460', height=42)
+        btns1.pack(fill="x")
+        btns1.pack_propagate(False)
 
-        self.stop_btn = tk.Button(btns, text="DUNG", command=self._stop,
-                                  bg='#e94560', fg='white', font=("Arial", 12, "bold"),
-                                  relief="flat", padx=20, pady=5)
-        self.stop_btn.pack(side="left", padx=5, pady=8)
+        self.start_btn = tk.Button(btns1, text="BAT DAU", command=self._start,
+                                   bg='#00ff88', fg='#1a1a2e', font=("Arial", 11, "bold"),
+                                   relief="flat", padx=15, pady=3)
+        self.start_btn.pack(side="left", padx=(10, 4), pady=6)
 
-        self.reset_btn = tk.Button(btns, text="RESET", command=self._reset_workers,
-                                   bg='#ff6348', fg='white', font=("Arial", 12, "bold"),
-                                   relief="flat", padx=15, pady=5)
-        self.reset_btn.pack(side="left", padx=5, pady=8)
+        self.stop_btn = tk.Button(btns1, text="DUNG", command=self._stop,
+                                  bg='#e94560', fg='white', font=("Arial", 11, "bold"),
+                                  relief="flat", padx=15, pady=3)
+        self.stop_btn.pack(side="left", padx=4, pady=6)
 
-        self.mode_display_lbl = tk.Label(btns, text="[small]", bg='#0f3460', fg='#ffcc00',
-                                         font=("Consolas", 9))
-        self.mode_display_lbl.pack(side="left", padx=10)
+        self.reset_btn = tk.Button(btns1, text="RESET", command=self._reset_workers,
+                                   bg='#ff6348', fg='white', font=("Arial", 11, "bold"),
+                                   relief="flat", padx=12, pady=3)
+        self.reset_btn.pack(side="left", padx=4, pady=6)
 
         # Mac dinh: hien Chrome (windows_visible = True)
         self.windows_visible = True
-        self.toggle_btn = tk.Button(btns, text="AN CHROME", command=self._toggle_windows,
+        self.toggle_btn = tk.Button(btns1, text="AN CHROME", command=self._toggle_windows,
                                     bg='#00b894', fg='white', font=("Arial", 9, "bold"),
-                                    relief="flat", padx=10)
-        self.toggle_btn.pack(side="left", padx=5, pady=10)
+                                    relief="flat", padx=8, pady=3)
+        self.toggle_btn.pack(side="left", padx=4, pady=6)
+
+        self.mode_display_lbl = tk.Label(btns1, text="[small]", bg='#0f3460', fg='#ffcc00',
+                                         font=("Consolas", 9))
+        self.mode_display_lbl.pack(side="left", padx=8)
 
         self.status_var = tk.StringVar(value="San sang")
-        tk.Label(btns, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
-                 font=("Consolas", 10, "bold")).pack(side="right", padx=20)
+        tk.Label(btns1, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
+                 font=("Consolas", 9, "bold")).pack(side="right", padx=10)
 
-        self.setup_vm_btn = tk.Button(btns, text="SETUP VM", command=self._setup_vm,
-                                      bg='#a29bfe', fg='white', font=("Arial", 9, "bold"),
-                                      relief="flat", padx=10)
-        self.setup_vm_btn.pack(side="right", padx=(5, 15), pady=12)
+        # -- Dong 2: SETTINGS | UPDATE | SETUP VM --
+        btns2 = tk.Frame(btns_outer, bg='#0d2a4a', height=32)
+        btns2.pack(fill="x")
+        btns2.pack_propagate(False)
 
-        self.update_btn = tk.Button(btns, text="UPDATE", command=self._run_update,
-                                    bg='#0984e3', fg='white', font=("Arial", 9, "bold"),
-                                    relief="flat", padx=10)
-        self.update_btn.pack(side="right", padx=5, pady=12)
+        self.settings_btn = tk.Button(btns2, text="SETTINGS", command=self._open_settings,
+                                      bg='#ff9f43', fg='white', font=("Arial", 8, "bold"),
+                                      relief="flat", padx=8)
+        self.settings_btn.pack(side="left", padx=(10, 4), pady=4)
 
-        self.settings_btn = tk.Button(btns, text="SETTINGS", command=self._open_settings,
-                                      bg='#ff9f43', fg='white', font=("Arial", 9, "bold"),
-                                      relief="flat", padx=10)
-        self.settings_btn.pack(side="right", padx=5, pady=12)
+        self.update_btn = tk.Button(btns2, text="UPDATE", command=self._run_update,
+                                    bg='#0984e3', fg='white', font=("Arial", 8, "bold"),
+                                    relief="flat", padx=8)
+        self.update_btn.pack(side="left", padx=4, pady=4)
+
+        self.setup_vm_btn = tk.Button(btns2, text="SETUP VM", command=self._setup_vm,
+                                      bg='#a29bfe', fg='white', font=("Arial", 8, "bold"),
+                                      relief="flat", padx=8)
+        self.setup_vm_btn.pack(side="left", padx=4, pady=4)
 
         # === WORKERS (3 rows) ===
         wf = tk.Frame(self, bg='#16213e', padx=8, pady=5)
