@@ -885,16 +885,37 @@ def _do_pre_login_if_needed():
     try:
         from google_login import (
             detect_machine_code, extract_channel_from_machine_code,
-            get_current_account_for_channel, save_account_to_excel,
+            get_current_account_for_channel, get_account_from_excel,
+            get_channel_accounts, rotate_account_index,
+            set_account_index_for_resume, save_account_to_excel,
             login_google_chrome
         )
 
-        # Lấy machine_code từ folder path
         machine_code = detect_machine_code()
         channel = extract_channel_from_machine_code(machine_code)
         print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
-        # Lấy account từ Google Sheet
+        # Kiểm tra Excel của project đã có account chưa
+        # - Có account → dùng account đó (không rotate)
+        # - Chưa có account → rotate sang account tiếp theo
+        need_rotate = True
+        if excel_path.exists():
+            account_info = get_account_from_excel(str(excel_path))
+            if account_info and account_info.get('email'):
+                print(f"[PRE-LOGIN] Excel co account: {account_info.get('email')} → dung account nay (khong rotate)")
+                set_account_index_for_resume(str(excel_path), channel)
+                need_rotate = False
+
+        if need_rotate:
+            # Excel CHUA CO account → rotate sang account tiep theo
+            accounts = get_channel_accounts(channel)
+            if accounts and len(accounts) > 1:
+                new_idx = rotate_account_index(channel, len(accounts))
+                print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(accounts)}")
+            else:
+                print(f"[PRE-LOGIN] Chi co 1 account, khong can rotate")
+
+        # Lấy account hiện tại (sau rotate hoặc restore)
         current_account = get_current_account_for_channel(channel, machine_code=machine_code)
         if not current_account:
             print("[PRE-LOGIN] No account found - skip login")
@@ -906,27 +927,28 @@ def _do_pre_login_if_needed():
         print("[PRE-LOGIN] Clearing Chrome data...")
         clear_chrome_data_for_new_account()
 
-        # v1.0.123: Login CẢ 2 Chrome TUẦN TỰ (không song song)
-        # Chrome 1 login trước
+        # Login CẢ 2 Chrome TUẦN TỰ (không song song)
         chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 1...")
         login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
         print("[PRE-LOGIN] Chrome 1 login done!")
 
-        # Chrome 2 login SAU khi Chrome 1 xong
         chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 2...")
         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
-        # Lưu account vào Excel (để cycle loop không cần login lại)
-        save_account_to_excel(
-            str(excel_path),
-            channel,
-            current_account['index'],
-            current_account['id']
-        )
-        print("[PRE-LOGIN] Account saved to Excel")
+        # Lưu account vào Excel (chỉ khi mã mới chưa có account)
+        if need_rotate and excel_path.exists():
+            save_account_to_excel(
+                str(excel_path),
+                channel,
+                current_account['index'],
+                current_account['id']
+            )
+            print("[PRE-LOGIN] Account saved to Excel")
+        elif not need_rotate:
+            print("[PRE-LOGIN] Account da co trong Excel, khong can luu lai")
 
     except Exception as e:
         print(f"[PRE-LOGIN] Error (non-critical): {e}")

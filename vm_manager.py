@@ -1973,29 +1973,6 @@ class VMManager:
                 self.project_start_time = None
                 self.current_project_code = None
 
-                # === v1.0.105: XOAY VÒNG TÀI KHOẢN + XÓA CHROME DATA ===
-                self.log("Step 3.5: Rotating account + clearing Chrome data...", "SYSTEM")
-                try:
-                    from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts
-
-                    # Get channel from project code
-                    channel = extract_channel_from_machine_code(project_code)
-                    accounts = get_channel_accounts(channel)
-
-                    if accounts and len(accounts) > 1:
-                        # Rotate to next account
-                        new_idx = rotate_account_index(channel, len(accounts))
-                        self.log(f"  -> Account rotated: {channel} -> index {new_idx + 1}/{len(accounts)}", "SYSTEM")
-                        self.log(f"  -> Next account: {accounts[new_idx]['id']}", "SYSTEM")
-
-                        # Clear Chrome data để login tài khoản mới
-                        self.log("  -> Clearing Chrome data for new account login...", "SYSTEM")
-                        self._clear_chrome_data_for_new_account()
-                    else:
-                        self.log(f"  -> Channel {channel}: Only 1 account, no rotation needed", "SYSTEM")
-                except Exception as e:
-                    self.log(f"  -> Account rotation error (non-critical): {e}", "SYSTEM", "WARN")
-
                 # v1.0.94: STEP 4 - RESET (restart all workers) để chạy mã mới
                 self.log("Step 4: Restarting all workers for next project...", "SYSTEM")
                 for wid in list(self.workers.keys()):
@@ -2840,24 +2817,7 @@ class VMManager:
         self.log(f"ACCOUNT ISSUE: {project_code} - 1h < 5 ảnh → Reset + retry", "SYSTEM", "WARN")
         self.log("=" * 60, "SYSTEM")
 
-        # 1. Rotate account (index cho project tiếp theo / pre_login lần sau)
-        try:
-            from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts, detect_machine_code
-            try:
-                machine_code = detect_machine_code()
-                channel = extract_channel_from_machine_code(machine_code)
-            except Exception:
-                channel = extract_channel_from_machine_code(project_code)
-            accounts = get_channel_accounts(channel)
-            if accounts and len(accounts) > 1:
-                new_idx = rotate_account_index(channel, len(accounts))
-                self.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {accounts[new_idx]['id']}", "SYSTEM")
-            else:
-                self.log(f"[Account] {channel}: 1 account - retry", "SYSTEM")
-        except Exception as e:
-            self.log(f"[Account] Rotate error: {e}", "SYSTEM", "WARN")
-
-        # 2. Restore Excel backup (về trạng thái sạch, giữ nguyên prompts)
+        # 1. Restore Excel backup (về trạng thái sạch, giữ nguyên prompts)
         self._restore_excel_from_backup(project_code)
 
         # 3. Xóa ảnh đã tạo (< 5 ảnh)
@@ -2934,23 +2894,6 @@ class VMManager:
         self.log("Killing all Chrome processes...", "SYSTEM")
         self.kill_all_chrome()
         time.sleep(2)
-
-        # 4.5. v1.0.233: Rotate account cho mã tiếp theo
-        try:
-            from google_login import extract_channel_from_machine_code, rotate_account_index, get_channel_accounts, detect_machine_code
-            try:
-                machine_code = detect_machine_code()
-                channel = extract_channel_from_machine_code(machine_code)
-            except Exception:
-                channel = extract_channel_from_machine_code(project_code)
-            accounts = get_channel_accounts(channel)
-            if accounts and len(accounts) > 1:
-                new_idx = rotate_account_index(channel, len(accounts))
-                self.log(f"[Account] Rotated: {channel} -> account {new_idx + 1}/{len(accounts)}: {accounts[new_idx]['id']}", "SYSTEM")
-            else:
-                self.log(f"[Account] {channel}: 1 account, không cần rotate", "SYSTEM")
-        except Exception as e:
-            self.log(f"[Account] Rotate error (non-critical): {e}", "SYSTEM", "WARN")
 
         # 5. Restart Chrome workers
         chrome_workers = [wid for wid in self.workers if wid.startswith("chrome_")]

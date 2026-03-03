@@ -1,8 +1,10 @@
-1.0.247
+1.0.249
 2026-03-03 (VN)
-Change: Auto-sap xep cua so khi bat dau, bo log section
+Change: Account logic: Excel co TK -> dung do; Excel chua co -> rotate sang TK tiep theo
 
 Thay doi:
+- v1.0.249: PRE-LOGIN kiem tra Excel: co account -> dung account do (khong rotate); chua co -> rotate sang TK tiep theo roi login + luu Excel
+- v1.0.248: Bo tat ca rotate_account_index() tu dong (create_tasks, handle_account_issue, handle_project_timeout, force_complete); 1 ma chi dung 1 tai khoan co dinh trong Excel
 - v1.0.247: Auto-arrange Layout A (Tool+CMDs trai, Chrome phai) khi BAT DAU; bo log section; bo nut AN CHROME; them SAP LAI; tool tu dat vi tri goc trai khi mo
 - v1.0.246: Button bar 2 dong (dong 1: BAT DAU/DUNG/RESET/AN CHROME/mode; dong 2: SETTINGS/UPDATE/SETUP VM); geometry 700x780, minsize 600x600
 - v1.0.245: Mac dinh hien Chrome (windows_visible=True); chuyen nut AN CHROME sang trai button bar; bo auto-hide khi start
