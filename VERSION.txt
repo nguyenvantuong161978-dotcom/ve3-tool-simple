@@ -1,9 +1,10 @@
-1.0.255
+1.0.256
 2026-03-03 (VN)
-Change: Ghi vi tri vao Chrome Preferences TRUOC khi Chrome mo
+Change: Auto-sap xep ca CMD lan Chrome khi cua so moi xuat hien
 
 Thay doi:
-- v1.0.255: Ghi window_placement vao Default/Preferences truoc ChromiumPage() → Chrome doc file nay khi khoi dong → mo dung vi tri ngay, khong bi nhay lan nao
+- v1.0.256: _auto_arrange_on_new_window() theo doi ca Chrome lẫn CMD HWNDs; khi bat ky cua so moi nao mo → tu dong sap xep Layout A sau 2s
+- v1.0.255: Ghi window_placement vao Default/Preferences truoc ChromiumPage() → Chrome mo dung vi tri ngay
 - v1.0.254: Them --window-position + --window-size vao Chrome launch args
 - v1.0.253: _update_loop theo doi Chrome HWNDs, khi Chrome moi mo → tu dong goi arrange_all_windows() sau 2s
 - v1.0.252: PRE-LOGIN tim account theo email trong GSheet → save dung index 0-based

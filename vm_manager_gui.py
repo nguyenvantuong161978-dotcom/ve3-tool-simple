@@ -1139,6 +1139,7 @@ class SimpleGUI(tk.Tk):
         self.scene_photo_refs = []  # Keep references for thumbnails
         self.windows_visible = True  # Mac dinh: hien Chrome
         self._known_chrome_hwnds = set()  # Track Chrome HWNDs de auto-arrange khi Chrome moi mo
+        self._known_cmd_hwnds = set()    # Track CMD HWNDs de auto-arrange khi CMD moi mo
 
         self._build()
         self._load_mode_from_yaml()  # Load mode sau khi build
@@ -3117,22 +3118,26 @@ class SimpleGUI(tk.Tk):
     def _update_loop(self):
         self._update_workers()
         self._update_projects()
-        self._auto_arrange_on_new_chrome()
+        self._auto_arrange_on_new_window()
         self.after(1000, self._update_loop)
 
-    def _auto_arrange_on_new_chrome(self):
-        """Tu dong sap xep khi phat hien Chrome moi mo (HWND moi)."""
+    def _auto_arrange_on_new_window(self):
+        """Tu dong sap xep khi phat hien Chrome hoac CMD moi mo (HWND moi)."""
         if not self.manager or not self.running:
             return
         try:
-            current_hwnds = set(self.manager.get_chrome_windows())
-            new_hwnds = current_hwnds - self._known_chrome_hwnds
-            if new_hwnds:
-                # Chrome moi xuat hien → sap xep lai
-                self._known_chrome_hwnds = current_hwnds
-                self.after(2000, self._arrange_windows)  # Cho 2s de Chrome load xong
-            else:
-                self._known_chrome_hwnds = current_hwnds
+            current_chrome = set(self.manager.get_chrome_windows())
+            current_cmd = set(self.manager.get_cmd_windows())
+
+            new_chrome = current_chrome - self._known_chrome_hwnds
+            new_cmd = current_cmd - self._known_cmd_hwnds
+
+            self._known_chrome_hwnds = current_chrome
+            self._known_cmd_hwnds = current_cmd
+
+            if new_chrome or new_cmd:
+                # Co cua so moi → sap xep sau 2s (cho cua so load xong)
+                self.after(2000, self._arrange_windows)
         except Exception:
             pass
 
