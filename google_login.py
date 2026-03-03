@@ -363,29 +363,26 @@ def get_account_from_excel(excel_path: str) -> dict:
         if not path.exists():
             return None
 
-        wb = load_workbook(str(path), read_only=True)
+        # data_only=True: đọc giá trị thực (không phải công thức)
+        # Không dùng read_only=True vì ws.max_row có thể là None
+        wb = load_workbook(str(path), data_only=True)
 
         if 'config' not in wb.sheetnames:
-            wb.close()
             return None
 
         ws = wb['config']
 
-        # max_row có thể là None nếu sheet trống (read_only mode)
-        if not ws.max_row:
-            wb.close()
-            return None
-
         result = {}
-        for row in range(2, ws.max_row + 1):
-            cell_key = ws.cell(row=row, column=1).value
-            cell_value = ws.cell(row=row, column=2).value
+        # Dùng ws.iter_rows() thay vì range(max_row) để tránh lỗi max_row=None
+        for row_cells in ws.iter_rows(min_row=2, values_only=True):
+            cell_key = row_cells[0] if len(row_cells) > 0 else None
+            cell_value = row_cells[1] if len(row_cells) > 1 else None
 
             if not cell_key:
                 continue
 
             key = str(cell_key).strip().lower()
-            value = str(cell_value) if cell_value else ""
+            value = str(cell_value) if cell_value is not None else ""
 
             if key == 'account_channel':
                 result['channel'] = value
@@ -396,8 +393,6 @@ def get_account_from_excel(excel_path: str) -> dict:
                     result['index'] = 0
             elif key == 'account_email':
                 result['email'] = value
-
-        wb.close()
 
         # Chỉ trả về nếu có đủ thông tin
         if 'channel' in result and 'index' in result and 'email' in result:
