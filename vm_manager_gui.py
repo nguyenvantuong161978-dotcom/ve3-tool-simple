@@ -2500,6 +2500,7 @@ class SimpleGUI(tk.Tk):
                 time.sleep(2)
 
                 # 3. Restart ALL workers (Excel + Chrome)
+                self.manager._stop_flag = False  # Cho phép orchestrate tiếp tục
                 for wid in self.manager.workers:
                     self.manager.start_worker(wid)
                     time.sleep(2)

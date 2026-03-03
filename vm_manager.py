@@ -3023,7 +3023,10 @@ class VMManager:
         self.log("Orchestration started", "MANAGER")
         health_check_counter = 0
 
-        while not self._stop_flag:
+        while True:  # Không bao giờ thoát - _stop_flag chỉ tạm dừng, không kill thread
+            if self._stop_flag:
+                time.sleep(2)
+                continue
             try:
                 # 0. Check auto-restart Chrome workers (mỗi 1 tiếng)
                 if time.time() - self.chrome_last_restart >= self.chrome_restart_interval:

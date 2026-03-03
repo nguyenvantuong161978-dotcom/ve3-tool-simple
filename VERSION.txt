@@ -1,8 +1,9 @@
-1.0.236
+1.0.238
 2026-03-03 (VN)
-Change: Fix orchestrate thread bi chet sau handle_account_issue
+Change: Orchestrate loop khong bao gio thoat - 6h timeout luon hoat dong
 
 Thay doi:
+- v1.0.238: orchestrate() dung while True thay vi while not _stop_flag - thread khong chet khi reset
 - v1.0.236: Fix bug stop_all() trong handle_account_issue() kill orchestrate thread → 6h timeout khong chay
 - v1.0.235: Chrome 2 - Khoi phuc validator: kiem tra tung reference khi co media_id
 - v1.0.234: Account issue detection: 1h < 5 anh → rotate account, xoa anh cu, restore Excel backup, auto login Chrome, restart
