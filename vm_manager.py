@@ -2267,17 +2267,23 @@ class VMManager:
                             except Exception:
                                 pass
 
-                            # Skip windows with "chrome.exe" in title
+                            # Skip non-GoogleChromePortable (VS Code, other Electron apps)
+                            # v1.0.268: dung QueryFullProcessImageNameW (mo tin cay hon)
                             if not skip:
-                                length = user32.GetWindowTextLengthW(hwnd)
-                                if length > 0:
-                                    try:
-                                        title = ctypes.create_unicode_buffer(length + 1)
-                                        user32.GetWindowTextW(hwnd, title, length + 1)
-                                        if "chrome.exe" in title.value.lower():
-                                            skip = True
-                                    except:
-                                        pass
+                                try:
+                                    _pid = ctypes.c_ulong(0)
+                                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(_pid))
+                                    _ph = ctypes.windll.kernel32.OpenProcess(0x1000, False, _pid.value)
+                                    if _ph:
+                                        _buf = ctypes.create_unicode_buffer(1024)
+                                        _sz = ctypes.c_uint32(1024)
+                                        ctypes.windll.kernel32.QueryFullProcessImageNameW(_ph, 0, _buf, ctypes.byref(_sz))
+                                        ctypes.windll.kernel32.CloseHandle(_ph)
+                                        _exe = _buf.value.lower()
+                                        if "googlechromeportable" not in _exe:
+                                            skip = True  # VS Code / other Electron → skip
+                                except Exception:
+                                    pass
 
                             if not skip:
                                 chrome_windows.append(hwnd)
@@ -2514,19 +2520,18 @@ class VMManager:
             # v1.0.268: Sort by exe path: Chrome 1 (no "Copy") → top, Chrome 2 ("Copy") → bottom
             def _chrome_worker_key(hwnd):
                 try:
-                    kernel32 = ctypes.windll.kernel32
-                    psapi = ctypes.windll.psapi
-                    from ctypes import wintypes
-                    pid = ctypes.c_ulong(0)
-                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-                    h = kernel32.OpenProcess(0x0410, False, pid.value)
-                    if h:
+                    _k32 = ctypes.windll.kernel32
+                    _pid = ctypes.c_ulong(0)
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(_pid))
+                    _h = _k32.OpenProcess(0x1000, False, _pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+                    if _h:
                         try:
-                            buf = ctypes.create_unicode_buffer(1024)
-                            psapi.GetModuleFileNameExW(h, None, buf, 1024)
-                            return 1 if ' - copy' in buf.value.lower() else 0
+                            _buf = ctypes.create_unicode_buffer(1024)
+                            _sz = ctypes.c_uint32(1024)
+                            _k32.QueryFullProcessImageNameW(_h, 0, _buf, ctypes.byref(_sz))
+                            return 1 if ' - copy' in _buf.value.lower() else 0
                         finally:
-                            kernel32.CloseHandle(h)
+                            _k32.CloseHandle(_h)
                 except Exception:
                     pass
                 return 0
