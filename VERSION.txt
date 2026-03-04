@@ -1,8 +1,13 @@
-1.0.270
+1.0.271
 2026-03-05 (VN)
-Change: THUMBNAIL FEATURE - Them anh thumbnail (6 anh: 3 ngang + 3 doc) cho moi project
+Change: FIX - Chon PORTRAIT cho tung anh thumbnail (khong chi 1 lan)
 
 Thay doi:
+- v1.0.271: FIX portrait orientation:
+  * smart_engine.py: Di chuyen select_orientation("PORTRAIT") vao trong vong lap Batch B
+  * Ly do: Chrome restart sau moi anh -> mat orientation -> phai chon lai cho moi anh
+  * Ket qua: thumb_004-006 deu la portrait (768x1376) chinh xac
+
 - v1.0.270: Thumbnail feature hoan chinh:
   * excel_manager.py: Them Thumbnail class, THUMBNAIL_COLUMNS, _create_thumbnail_sheet(), get/add/update/clear_thumbnails(); update_step_status() tu dong them row moi neu step_id chua ton tai (backward compat voi Excel cu step_8)
   * progressive_prompts.py: Them step_8_thumbnail_prompts() - goi API tao 3 prompts thumbnail (portrait_main, dramatic_scene, youtube_ctr); run_all_steps() goi step_8 sau step_7; fix loc_ids dung loc.id
