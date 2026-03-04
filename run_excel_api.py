@@ -66,7 +66,8 @@ _agent: Optional['AgentWorker'] = None
 # CONFIGURATION
 # ================================================================================
 
-SCAN_INTERVAL = 60  # Quét mỗi 60 giây
+SCAN_INTERVAL = 60          # Lần đầu: 60 giây
+SCAN_INTERVAL_LONG = 1800   # Từ lần 2 trở đi: 30 phút (ít mở Excel hơn → ít conflict với Chrome)
 
 # Auto-detect network paths
 # Ưu tiên SMB share (Z:) trước vì ổn định hơn tsclient khi copy file lớn
@@ -846,7 +847,7 @@ class ExcelAPIWorker:
         log(f"  EXCEL API WORKER - Continuous Mode")
         log(f"{'='*60}")
         log(f"  Channel: {self.channel or 'ALL'}")
-        log(f"  Scan interval: {SCAN_INTERVAL}s")
+        log(f"  Scan interval: {SCAN_INTERVAL}s (lan 1), {SCAN_INTERVAL_LONG}s/{SCAN_INTERVAL_LONG//60}min (tu lan 2)")
         log(f"  Local: {self.local_projects}")
         log(f"  Master: {self.master_projects or 'Not connected'}")
         log(f"  Agent: {'Enabled' if _agent else 'Disabled'}")
@@ -866,11 +867,14 @@ class ExcelAPIWorker:
                 except Exception as e:
                     log(f"Scan error: {e}", "ERROR")
 
+                # v1.0.265: Lần đầu 60s, từ lần 2 trở đi 30 phút
+                # Giảm tần suất mở Excel → ít conflict với Chrome workers
+                interval = SCAN_INTERVAL if cycle == 1 else SCAN_INTERVAL_LONG
                 log(f"")
-                log(f"Waiting {SCAN_INTERVAL}s... (Ctrl+C to stop)")
+                log(f"Waiting {interval}s ({interval//60}min)... (Ctrl+C to stop)")
 
                 try:
-                    time.sleep(SCAN_INTERVAL)
+                    time.sleep(interval)
                 except KeyboardInterrupt:
                     log("Stopped by user")
                     break

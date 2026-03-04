@@ -1,8 +1,9 @@
-1.0.264
+1.0.265
 2026-03-04 (VN)
-Change: Luu account vao .account.json rieng biet (khong phu thuoc Excel) - giai phap chinh chong xoay TK
+Change: PY Excel scan 30 phut 1 lan (tu lan 2) - giam conflict voi Chrome workers
 
 Thay doi:
+- v1.0.265: run_excel_api.py doi SCAN_INTERVAL_LONG=1800s (30 phut) cho tu cycle 2 tro di. Lan dau van 60s de pick up project nhanh. Giam tan suat mo Excel check status → giam conflict voi Chrome workers dang doc/ghi Excel.
 - v1.0.264: Luu account vao .account.json per-project (doc lap voi Excel). Moi noi doc account uu tien .account.json truoc, fallback sang Excel. google_login.py them save_project_account_json() va get_project_account_json(). _pre_login.py, _run_chrome1.py (_do_pre_login_if_needed + process_project_pic_basic), vm_manager.py (handle_account_issue) da cap nhat.
 - v1.0.263: handle_account_issue() retry 3 lan save_account_to_excel() (delay 2s giua cac lan) - tranh truong hop Excel bi lock ngay sau restore → save fail → account mat → PRE-LOGIN xoay TK sai
 - v1.0.262: _restore_excel_from_backup() dung copy→temp roi os.replace() (atomic) thay vi unlink+copy2 - tranh tinh huong unlink thanh cong nhung copy2 fail → Excel mat han; create_videos_for_project() doi total_workers=2 tranh xoa Excel khi chay song song
