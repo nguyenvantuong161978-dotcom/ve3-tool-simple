@@ -77,7 +77,8 @@ def main():
     try:
         from google_login import (
             extract_channel_from_machine_code, get_current_account_for_channel,
-            save_account_to_excel, login_google_chrome, detect_machine_code
+            save_account_to_excel, login_google_chrome, detect_machine_code,
+            get_account_from_excel, get_channel_accounts, save_account_index
         )
     except ImportError as e:
         print(f"[PRE-LOGIN] Import error: {e}")
@@ -89,8 +90,23 @@ def main():
     channel = extract_channel_from_machine_code(machine_code)
     print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
-    # Lấy account từ Google Sheet
-    print("[PRE-LOGIN] Getting account from Google Sheet...")
+    # Kiểm tra Excel đã có account chưa → nếu có, dùng account đó (không rotate)
+    try:
+        all_accounts = get_channel_accounts(machine_code) or []
+        excel_account = get_account_from_excel(str(excel_path))
+        if excel_account and excel_account.get('email'):
+            saved_email = excel_account['email'].lower().strip()
+            for i, acc in enumerate(all_accounts):
+                if acc.get('id', '').lower().strip() == saved_email:
+                    save_account_index(channel, i)
+                    print(f"[PRE-LOGIN] Excel da co account: {excel_account['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay (khong rotate)")
+                    break
+            else:
+                print(f"[PRE-LOGIN] Email {excel_account['email']} khong tim thay trong GSheet → se rotate")
+    except Exception as e:
+        print(f"[PRE-LOGIN] Check Excel account: {e}")
+
+    # Lấy account hiện tại (sau khi đã set index đúng)
     current_account = get_current_account_for_channel(channel, machine_code=machine_code)
 
     if not current_account:
@@ -136,14 +152,18 @@ def main():
     result2 = login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
     print(f"[PRE-LOGIN] Chrome 2 login: {'SUCCESS' if result2 else 'FAILED'}")
 
-    # Lưu account vào Excel
-    print(f"\n[PRE-LOGIN] Saving account to Excel: {excel_path.name}")
-    save_account_to_excel(
-        str(excel_path),
-        channel,
-        current_account['index'],
-        current_account['id']
-    )
+    # Lưu account vào Excel (chỉ khi Excel CHƯA CÓ account - tránh ghi đè account đúng)
+    existing_account = get_account_from_excel(str(excel_path)) if excel_path.exists() else None
+    if existing_account and existing_account.get('email', '').lower() == current_account['id'].lower():
+        print(f"\n[PRE-LOGIN] Excel da co dung account → khong ghi de")
+    else:
+        print(f"\n[PRE-LOGIN] Saving account to Excel: {excel_path.name}")
+        save_account_to_excel(
+            str(excel_path),
+            channel,
+            current_account['index'],
+            current_account['id']
+        )
 
     # v1.0.152: Account đã lưu vào Excel ở trên, auto-login sẽ đọc từ đó
 

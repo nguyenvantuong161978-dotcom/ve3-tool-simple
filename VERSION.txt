@@ -1,8 +1,9 @@
-1.0.258
-2026-03-03 (VN)
-Change: Fix account rotation bug + fix Chrome window size (CSS vs physical pixels)
+1.0.259
+2026-03-04 (VN)
+Change: Fix _pre_login.py ghi de account Excel sai
 
 Thay doi:
+- v1.0.259: _pre_login.py kiem tra Excel truoc khi login/save: neu da co account → dung account do (khong rotate, khong ghi de)
 - v1.0.258: Fix _setup_window_layout() dung Win32 GetSystemMetrics() thay vi JS availWidth (tranh loi DPI scaling CSS vs physical pixels)
 - v1.0.257: handle_account_issue() doc+ghi lai account sau khi restore Excel backup → tranh PRE-LOGIN rotate sang TK khac
 - v1.0.256: _auto_arrange_on_new_window() theo doi ca Chrome lẫn CMD HWNDs; khi bat ky cua so moi nao mo → tu dong sap xep Layout A sau 2s
