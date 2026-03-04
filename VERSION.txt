@@ -1,8 +1,9 @@
-1.0.267
+1.0.268
 2026-03-04 (VN)
-Change: Chi ghi .account.json khi chua ton tai - khong overwrite khi da co TK
+Change: Auto-arrange Chrome dung vi tri (Chrome 1 tren, Chrome 2 duoi)
 
 Thay doi:
+- v1.0.268: arrange_all_windows() sort Chrome theo exe path (GoogleChromePortable - Copy = worker 2 → duoi); retry arrange 3s+8s thay vi 1 lan 2s → Chrome tu dong vao dung vi tri sau moi lan restart, khong can bam SAP LAI
 - v1.0.267: _do_pre_login_if_needed() chi ghi .account.json khi chua ton tai - neu da co TK thi giu nguyen, khong overwrite
 - v1.0.266: ROOT CAUSE FIX xoay TK: get_account_from_excel() tra ve ket qua du khong co email (Excel cu chi co account_index). _do_pre_login_if_needed() va _pre_login.py xu ly truong hop co index nhung khong co email → lookup bang index tu GSheet, khong rotate. Day la nguyen nhan chinh khien project dang chay bi xoay TK sang tai khoan khac.
 - v1.0.265: run_excel_api.py doi SCAN_INTERVAL_LONG=1800s (30 phut) cho tu cycle 2 tro di. Lan dau van 60s de pick up project nhanh. Giam tan suat mo Excel check status → giam conflict voi Chrome workers dang doc/ghi Excel.

@@ -2493,6 +2493,28 @@ class VMManager:
             # Chrome 1 (nua tren phai), Chrome 2 (nua duoi phai)
             chrome_h = screen_h // 2
             chrome_windows = self.get_chrome_windows()
+
+            # v1.0.268: Sort by exe path: Chrome 1 (no "Copy") → top, Chrome 2 ("Copy") → bottom
+            def _chrome_worker_key(hwnd):
+                try:
+                    kernel32 = ctypes.windll.kernel32
+                    psapi = ctypes.windll.psapi
+                    from ctypes import wintypes
+                    pid = ctypes.c_ulong(0)
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    h = kernel32.OpenProcess(0x0410, False, pid.value)
+                    if h:
+                        try:
+                            buf = ctypes.create_unicode_buffer(1024)
+                            psapi.GetModuleFileNameExW(h, None, buf, 1024)
+                            return 1 if ' - copy' in buf.value.lower() else 0
+                        finally:
+                            kernel32.CloseHandle(h)
+                except Exception:
+                    pass
+                return 0
+            chrome_windows.sort(key=_chrome_worker_key)
+
             for i, hwnd in enumerate(chrome_windows[:2]):
                 user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                 user32.MoveWindow(hwnd, right_x, i * chrome_h, right_w, chrome_h, True)

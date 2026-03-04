@@ -3136,8 +3136,9 @@ class SimpleGUI(tk.Tk):
             self._known_cmd_hwnds = current_cmd
 
             if new_chrome or new_cmd:
-                # Co cua so moi → sap xep sau 2s (cho cua so load xong)
-                self.after(2000, self._arrange_windows)
+                # Co cua so moi → sap xep nhieu lan (Chrome can thoi gian load)
+                self.after(3000, self._arrange_windows)
+                self.after(8000, self._arrange_windows)
         except Exception:
             pass
 
