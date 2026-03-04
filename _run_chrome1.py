@@ -453,6 +453,15 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                 idx = account_info['index']
                 _sai(channel, idx)
                 log(f"  [RESUME] Restoring by index={idx} (no email in Excel) - skipping login")
+
+            # v1.0.277: Save .account.json nếu chưa tồn tại
+            # Dành cho project import mid-cycle (pre-login không chạy cho project này)
+            account_json_path = local_dir / ".account.json"
+            if not account_json_path.exists():
+                current_acc = get_current_account_for_channel(channel)
+                if current_acc and current_acc.get('id'):
+                    save_project_account_json(local_dir, channel, current_acc.get('index', 0), current_acc['id'])
+                    log(f"  [Account] Saved .account.json: {current_acc['id']} (mid-cycle import)")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 
@@ -970,13 +979,14 @@ def _do_pre_login_if_needed():
         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
-        # Lưu account vào .account.json - CHỈ KHI CHƯA TỒN TẠI (v1.0.267)
-        _existing_json = get_project_account_json(project_dir)
-        if not _existing_json.get('email'):
+        # Lưu account vào .account.json - CHỈ KHI CHƯA TỒN TẠI (v1.0.277: check file existence)
+        _account_json_path = project_dir / ".account.json"
+        if not _account_json_path.exists():
             save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
             print("[PRE-LOGIN] Account saved to .account.json (moi)")
         else:
-            print(f"[PRE-LOGIN] .account.json da co ({_existing_json.get('email')}) → giu nguyen")
+            _existing_json = get_project_account_json(project_dir)
+            print(f"[PRE-LOGIN] .account.json da co ({_existing_json.get('email', 'unknown')}) → giu nguyen")
         # Lưu vào Excel (secondary - để tương thích)
         if excel_path.exists():
             save_account_to_excel(str(excel_path), channel, current_account['index'], current_account['id'])

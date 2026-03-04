@@ -1,8 +1,15 @@
-1.0.276
+1.0.277
 2026-03-05 (VN)
-Change: FIX - Xoa local project manh hon, skip neu da copy sang VISUAL
+Change: FIX - Luu .account.json ngay khi bat dau xu ly project (tranh mat account khi import mid-cycle)
 
 Thay doi:
+- v1.0.277: FIX account rotate sai khi project import mid-cycle:
+  * _run_chrome1.py Step 3.5: Neu .account.json chua ton tai → luu account hien tai ngay
+    Bao ve truong hop project duoc import trong vong lap (pre-login da chay xong, khong chay lai)
+  * _run_chrome1.py _do_pre_login_if_needed(): Dung file existence check (khong phai email check)
+    tranh overwrite .account.json neu file da ton tai nhung get_project_account_json tra ve {}
+  * Ket qua: moi project bat dau xu ly deu co .account.json → restart khong bao gio rotate sai
+
 - v1.0.276: FIX delete local khong het sau copy_to_visual:
   * run_worker.py delete_local_project(): Retry 3 lan + force-delete readonly files
     Neu van khong xoa duoc → tao marker _COPIED_TO_VISUAL
