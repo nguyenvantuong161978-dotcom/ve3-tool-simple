@@ -1,8 +1,15 @@
-1.0.275
+1.0.276
 2026-03-05 (VN)
-Change: FIX - Restore .account.json tu MASTER_VISUAL khi re-import project
+Change: FIX - Xoa local project manh hon, skip neu da copy sang VISUAL
 
 Thay doi:
+- v1.0.276: FIX delete local khong het sau copy_to_visual:
+  * run_worker.py delete_local_project(): Retry 3 lan + force-delete readonly files
+    Neu van khong xoa duoc → tao marker _COPIED_TO_VISUAL
+  * _run_chrome1.py scan_incomplete_local_projects(): Skip neu co _COPIED_TO_VISUAL
+  * _run_chrome2.py scan_incomplete_local_projects(): Skip neu co _COPIED_TO_VISUAL
+  * Ket qua: project da copy sang VISUAL se khong bao gio bi lam lai
+
 - v1.0.275: FIX account rotate sai khi re-process:
   * _run_chrome1.py: Neu local khong co .account.json → kiem tra MASTER_VISUAL
   * Khi project chay xong/timeout → copy_to_visual() → local bi xoa → import lai

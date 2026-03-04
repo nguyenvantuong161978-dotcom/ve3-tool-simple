@@ -475,14 +475,47 @@ def delete_master_source(code: str):
 
 
 def delete_local_project(code: str):
-    """Delete local project after copying to VISUAL."""
-    try:
-        local_dir = LOCAL_PROJECTS / code
-        if local_dir.exists():
-            shutil.rmtree(local_dir)
-            print(f"  [DEL] Deleted local project: {code}")
-    except Exception as e:
-        print(f"  [WARN] Cleanup local warning: {e}")
+    """
+    Delete local project after copying to VISUAL.
+    v1.0.276: Retry 3 lan + force-delete readonly files tren Windows.
+    Neu van khong xoa duoc → tao marker _COPIED_TO_VISUAL de scan skip.
+    """
+    import time
+    local_dir = LOCAL_PROJECTS / code
+    if not local_dir.exists():
+        return
+
+    def _force_rmtree(path):
+        """shutil.rmtree voi onerror xu ly readonly files tren Windows."""
+        import os, stat
+        def _onerror(func, fpath, exc_info):
+            try:
+                os.chmod(fpath, stat.S_IWRITE)
+                func(fpath)
+            except Exception:
+                pass
+        shutil.rmtree(path, onerror=_onerror)
+
+    for attempt in range(3):
+        try:
+            _force_rmtree(local_dir)
+            if not local_dir.exists():
+                print(f"  [DEL] Deleted local project: {code}")
+                return
+        except Exception as e:
+            if attempt < 2:
+                print(f"  [WARN] Delete attempt {attempt+1}/3 failed: {e}, retrying...")
+                time.sleep(2)
+            else:
+                print(f"  [WARN] Could not delete {code} after 3 attempts: {e}")
+
+    # Neu van con → tao marker de scan_incomplete_local_projects() skip
+    if local_dir.exists():
+        try:
+            (local_dir / "_COPIED_TO_VISUAL").touch()
+            print(f"  [WARN] Created _COPIED_TO_VISUAL marker for {code} (delete failed)")
+        except Exception as e:
+            print(f"  [WARN] Cleanup local warning: {e}")
 
 
 def copy_from_master(code: str) -> Path:

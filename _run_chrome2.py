@@ -813,6 +813,10 @@ def scan_incomplete_local_projects() -> list:
         if not matches_channel(code):
             continue
 
+        # v1.0.276: Skip neu co marker _COPIED_TO_VISUAL (xoa local that bai nhung da copy xong)
+        if (item / "_COPIED_TO_VISUAL").exists():
+            continue
+
         if is_project_complete_on_master(code):
             continue
 
