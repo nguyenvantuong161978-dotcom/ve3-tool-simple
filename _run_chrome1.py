@@ -910,6 +910,22 @@ def _do_pre_login_if_needed():
         # Chi rotate khi CHUA co .account.json (ma moi hoan toan)
         account_json_path = project_dir / ".account.json"
         has_account_json = account_json_path.exists()
+
+        # v1.0.275: Neu local khong co .account.json → kiem tra MASTER_VISUAL (tu lan chay truoc)
+        # Truong hop: project chay xong / timeout → copy_to_visual() → local bi xoa
+        # → import lai tu MASTER_PROJECTS (khong co .account.json)
+        # → .account.json van con o MASTER_VISUAL → copy ve local truoc khi pre-login
+        if not has_account_json:
+            try:
+                visual_json = MASTER_VISUAL / code / ".account.json"
+                if visual_json.exists():
+                    import shutil as _shutil
+                    _shutil.copy2(visual_json, account_json_path)
+                    has_account_json = True
+                    print(f"[PRE-LOGIN] Restored .account.json from VISUAL for {code}")
+            except Exception as e:
+                print(f"[PRE-LOGIN] WARN: Could not restore from VISUAL: {e}")
+
         need_rotate = not has_account_json  # Chi rotate khi khong co file
 
         if has_account_json:
