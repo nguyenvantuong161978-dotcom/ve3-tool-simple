@@ -1,8 +1,9 @@
-1.0.260
+1.0.261
 2026-03-04 (VN)
-Change: Fix _run_chrome1.py dung machine_code thay vi channel khi lay danh sach accounts
+Change: Bo xoa hang loat nv+img khi khong co media_id - de per-image check xu ly
 
 Thay doi:
+- v1.0.261: smart_engine.py bo bulk delete nv/img khi media_ids trong Excel rong (sau backup restore) - per-image _media_exists() da xu ly tung file nv/loc chinh xac hon, scene images khong bi xoa thua
 - v1.0.260: _do_pre_login_if_needed() dung get_channel_accounts(machine_code) thay vi get_channel_accounts(channel) → tranh "Chi co 1 account, khong can rotate" sai khi GSheet dung machine_code (KA2-T2) khong phai channel (KA2)
 - v1.0.259: _pre_login.py kiem tra Excel truoc khi login/save: neu da co account → dung account do (khong rotate, khong ghi de)
 - v1.0.258: Fix _setup_window_layout() dung Win32 GetSystemMetrics() thay vi JS availWidth (tranh loi DPI scaling CSS vs physical pixels)
