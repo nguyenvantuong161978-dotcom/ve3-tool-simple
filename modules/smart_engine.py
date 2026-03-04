@@ -5452,8 +5452,19 @@ if (btn) {
             chrome_portable=self.chrome_portable,
         )
 
+        # Doc flow_project_url tu Excel (dung project da tao, khong tao moi)
+        project_url = None
+        try:
+            project_url = wb.get_config_value('flow_project_url')
+            if project_url:
+                self.log(f"[THUMB] Dung project URL: {project_url[:60]}...")
+            else:
+                self.log("[THUMB] WARN: Khong co flow_project_url trong Excel - se tao project moi", "WARN")
+        except Exception as e:
+            self.log(f"[THUMB] WARN: Loi doc project_url: {e}", "WARN")
+
         self.log("[THUMB] Setup Chrome...")
-        if not drission.setup():
+        if not drission.setup(project_url=project_url):
             self.log("[THUMB] Setup Chrome FAIL!", "ERROR")
             return False
 
