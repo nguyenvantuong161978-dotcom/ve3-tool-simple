@@ -163,11 +163,14 @@ def main():
     result2 = login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
     print(f"[PRE-LOGIN] Chrome 2 login: {'SUCCESS' if result2 else 'FAILED'}")
 
-    # v1.0.264: Lưu account vào .account.json (primary) và Excel (secondary)
+    # v1.0.267: Lưu .account.json - CHỈ KHI CHƯA TỒN TẠI
     print(f"\n[PRE-LOGIN] Saving account: {current_account['id']}")
-    # Primary: .account.json - không bị ảnh hưởng khi Excel xóa/restore
-    save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
-    print(f"[PRE-LOGIN] Saved to .account.json ✓")
+    _existing_json = get_project_account_json(project_dir)
+    if not _existing_json.get('email'):
+        save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
+        print(f"[PRE-LOGIN] Saved to .account.json (moi) ✓")
+    else:
+        print(f"[PRE-LOGIN] .account.json da co ({_existing_json.get('email')}) → giu nguyen")
     # Secondary: Excel
     if excel_path.exists():
         existing_account = get_account_from_excel(str(excel_path))

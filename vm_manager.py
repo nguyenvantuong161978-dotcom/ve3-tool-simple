@@ -2843,16 +2843,20 @@ class VMManager:
         # 3. Ghi lại account - v1.0.264: lưu .account.json TRƯỚC (không phụ thuộc Excel)
         if saved_account_info and saved_account_info.get('email'):
             try:
-                from google_login import save_project_account_json, save_account_to_excel
+                from google_login import save_project_account_json, save_account_to_excel, get_project_account_json
                 project_dir_acc = TOOL_DIR / "PROJECTS" / project_code
-                # .account.json - file riêng, không bị mất dù Excel xóa/restore
-                save_project_account_json(
-                    project_dir_acc,
-                    saved_account_info.get('channel', ''),
-                    saved_account_info.get('index', 0),
-                    saved_account_info.get('email', '')
-                )
-                self.log(f"[Account] Đã ghi .account.json: {saved_account_info.get('email')}", "SYSTEM")
+                # v1.0.267: Chỉ ghi .account.json khi chưa tồn tại
+                _existing_json = get_project_account_json(project_dir_acc)
+                if not _existing_json.get('email'):
+                    save_project_account_json(
+                        project_dir_acc,
+                        saved_account_info.get('channel', ''),
+                        saved_account_info.get('index', 0),
+                        saved_account_info.get('email', '')
+                    )
+                    self.log(f"[Account] Đã ghi .account.json: {saved_account_info.get('email')}", "SYSTEM")
+                else:
+                    self.log(f"[Account] .account.json da co ({_existing_json.get('email')}) → giu nguyen", "SYSTEM")
                 # Ghi thêm vào Excel (secondary, retry 3 lần)
                 if excel_path.exists():
                     for _attempt in range(3):
