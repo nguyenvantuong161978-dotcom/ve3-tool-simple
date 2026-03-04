@@ -1,8 +1,9 @@
-1.0.259
+1.0.260
 2026-03-04 (VN)
-Change: Fix _pre_login.py ghi de account Excel sai
+Change: Fix _run_chrome1.py dung machine_code thay vi channel khi lay danh sach accounts
 
 Thay doi:
+- v1.0.260: _do_pre_login_if_needed() dung get_channel_accounts(machine_code) thay vi get_channel_accounts(channel) → tranh "Chi co 1 account, khong can rotate" sai khi GSheet dung machine_code (KA2-T2) khong phai channel (KA2)
 - v1.0.259: _pre_login.py kiem tra Excel truoc khi login/save: neu da co account → dung account do (khong rotate, khong ghi de)
 - v1.0.258: Fix _setup_window_layout() dung Win32 GetSystemMetrics() thay vi JS availWidth (tranh loi DPI scaling CSS vs physical pixels)
 - v1.0.257: handle_account_issue() doc+ghi lai account sau khi restore Excel backup → tranh PRE-LOGIN rotate sang TK khac

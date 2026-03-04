@@ -896,7 +896,7 @@ def _do_pre_login_if_needed():
         print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
         # Lấy danh sách accounts 1 lần
-        all_accounts = get_channel_accounts(channel) or []
+        all_accounts = get_channel_accounts(machine_code) or []
 
         # Kiểm tra Excel của project đã có account chưa
         # - Có account → tìm theo EMAIL trong danh sách → xoay index đến đúng vị trí
