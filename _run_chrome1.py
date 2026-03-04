@@ -965,12 +965,16 @@ def _do_pre_login_if_needed():
         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
-        # Lưu account vào .account.json (luôn luôn - nguồn chính)
-        save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
+        # Lưu account vào .account.json - CHỈ KHI CHƯA TỒN TẠI (v1.0.267)
+        _existing_json = get_project_account_json(project_dir)
+        if not _existing_json.get('email'):
+            save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
+            print("[PRE-LOGIN] Account saved to .account.json (moi)")
+        else:
+            print(f"[PRE-LOGIN] .account.json da co ({_existing_json.get('email')}) → giu nguyen")
         # Lưu vào Excel (secondary - để tương thích)
         if excel_path.exists():
             save_account_to_excel(str(excel_path), channel, current_account['index'], current_account['id'])
-        print("[PRE-LOGIN] Account saved")
 
     except Exception as e:
         print(f"[PRE-LOGIN] Error (non-critical): {e}")
