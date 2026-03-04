@@ -872,6 +872,48 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
 # v1.0.227: JS để chọn model "Nano Banana Pro" + chọn x1 (1 ảnh)
 # Flow: Mở menu → Click x1 → Click dropdown model → Chọn model → Đóng menu
 # FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
+# JS chon orientation (LANDSCAPE / PORTRAIT) - thumbnail feature
+JS_SELECT_ORIENTATION = '''
+(function(orientation) {
+    window._orientationResult = 'PENDING';
+
+    // Buoc 1: Mo menu chinh (giong JS_SELECT_MODEL_BY_INDEX)
+    var btn1 = document.querySelector('button.sc-46973129-1');
+    if (!btn1) { window._orientationResult = 'NO_MENU_BUTTON'; return; }
+    btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+    btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+
+    // Buoc 2: Tim va click nut orientation (LANDSCAPE hoac PORTRAIT)
+    setTimeout(function() {
+        var buttons = document.querySelectorAll('.flow_tab_slider_trigger');
+        var target = null;
+        for (var i = 0; i < buttons.length; i++) {
+            var c = buttons[i].getAttribute('aria-controls') || '';
+            if (c.indexOf(orientation) !== -1) { target = buttons[i]; break; }
+        }
+        if (!target) { window._orientationResult = 'NOT_FOUND:' + orientation; return; }
+
+        if (target.getAttribute('data-state') === 'active') {
+            window._orientationResult = 'ALREADY_' + orientation;
+            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+            return;
+        }
+        target.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+        target.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+        target.click();
+
+        // Buoc 3: Dong menu + verify
+        setTimeout(function() {
+            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+            setTimeout(function() {
+                window._orientationResult = (target.getAttribute('data-state') === 'active')
+                    ? 'SELECTED_' + orientation : 'FAIL_' + orientation;
+            }, 300);
+        }, 500);
+    }, 800);
+})('%s');
+'''
+
 # v1.0.231: JS để chọn model theo index + chọn x1 (1 ảnh)
 # Index 0: Nano Banana Pro, Index 1: Nano Banana 2 (NARWHAL), Index 2: Imagen 4
 # FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
@@ -5628,6 +5670,39 @@ class DrissionFlowAPI:
 
         except Exception as e:
             self.log(f"[Model] Error: {e}", "ERROR")
+            return False
+
+    def select_orientation(self, orientation: str = "LANDSCAPE") -> bool:
+        """
+        Chọn orientation (LANDSCAPE=ngang 16:9 / PORTRAIT=doc 9:16) trong Google Flow.
+        Dùng cho thumbnail: landscape batch -> portrait batch -> reset landscape.
+
+        Args:
+            orientation: 'LANDSCAPE' hoac 'PORTRAIT'
+        Returns:
+            True neu thanh cong
+        """
+        if not self._ready or not self.driver:
+            return False
+
+        try:
+            self.log(f"[Orient] Chon {orientation}...")
+            self.driver.run_js("window._orientationResult = 'PENDING';")
+            js_code = JS_SELECT_ORIENTATION % orientation
+            self.driver.run_js(js_code)
+
+            # Cho JS async hoan thanh (800ms + 500ms + 300ms = ~1.6s)
+            time.sleep(2.5)
+
+            result = self.driver.run_js("return window._orientationResult;")
+            if result and ('SELECTED_' in result or 'ALREADY_' in result):
+                self.log(f"[Orient] [v] {result}")
+                return True
+            else:
+                self.log(f"[Orient] [WARN] Ket qua: {result}", "WARN")
+                return False
+        except Exception as e:
+            self.log(f"[Orient] Error: {e}", "ERROR")
             return False
 
     def switch_to_image_mode(self) -> bool:

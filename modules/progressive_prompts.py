@@ -3324,7 +3324,7 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                 self._log(f"\n  [EARLY CHECK] step_7 = COMPLETED ({len(existing_scenes)} scenes)")
 
                 # v1.0.88: Fix all steps to COMPLETED to prevent re-picking
-                all_steps = ["step_1", "step_1.5", "step_2", "step_3", "step_4", "step_4.5", "step_5", "step_6", "step_7"]
+                all_steps = ["step_1", "step_1.5", "step_2", "step_3", "step_4", "step_4.5", "step_5", "step_6", "step_7", "step_8"]
                 fixed_count = 0
                 for step in all_steps:
                     step_status = workbook.get_step_status(step)
@@ -3402,8 +3402,235 @@ Return JSON only with EXACTLY {len(batch)} scenes:
         except Exception as e:
             self._log(f"  [FINAL CHECK] Warning: {e}", "WARN")
 
+        # Step 8: Thumbnail prompts
+        result = self.step_8_thumbnail_prompts(project_dir, code, workbook)
+        if result.status == StepStatus.FAILED:
+            self._log("Step 8 (Thumbnail) FAILED! Continuing anyway...", "WARN")
+            # Không block - thumbnail là optional, scenes vẫn chạy được
+
         self._log("\n" + "="*70)
         self._log("  ALL STEPS COMPLETED!")
         self._log("="*70)
 
         return True
+
+    def step_8_thumbnail_prompts(
+        self,
+        project_dir: Path,
+        code: str,
+        workbook: "PromptWorkbook"
+    ) -> "StepResult":
+        """
+        Step 8: Tạo 3 thumbnail prompts thu hút nhất dựa vào nội dung câu chuyện.
+
+        Output: sheet 'thumbnail' trong Excel
+        - v1 (portrait_main): Nhân vật chính đẹp/thu hút, người xem muốn hướng tới
+        - v2 (dramatic_scene): Cảnh kịch tính/tò mò nhất, nhân vật chính làm trọng tâm
+        - v3 (youtube_ctr): Công thức CTR YouTube - click-worthy nhất
+
+        Mỗi prompt có annotation nhân vật/bối cảnh như scenes: (nv1.png), (loc1.png)
+        """
+        import time
+        import re
+        step_start = time.time()
+
+        self._log("\n" + "="*60)
+        self._log("[STEP 8/8] Tao thumbnail prompts...")
+        self._log("="*60)
+
+        # Check if already done
+        try:
+            step8_status = workbook.get_step_status("step_8")
+            if step8_status.get("status") == "COMPLETED":
+                existing = workbook.get_thumbnails()
+                if existing:
+                    self._log(f"  -> Da co {len(existing)} thumbnails, skip!")
+                    return StepResult("thumbnail_prompts", StepStatus.COMPLETED, "Already done")
+        except Exception:
+            pass
+
+        # Collect context
+        story_analysis = workbook.get_story_analysis() or {}
+        characters = workbook.get_characters()
+        locations = workbook.get_locations()
+
+        # Filter: only non-child characters
+        main_chars = [c for c in characters if not c.is_child]
+        # Find protagonist first
+        protagonist = next((c for c in main_chars if c.role in ("main", "protagonist", "lead")), None)
+        if not protagonist and main_chars:
+            protagonist = main_chars[0]
+
+        if not protagonist:
+            self._log("  WARN: Khong tim thay nhan vat chinh, dung char dau tien", "WARN")
+            if characters:
+                protagonist = characters[0]
+            else:
+                self._log("  ERROR: Khong co nhan vat nao!", "ERROR")
+                workbook.update_step_status("step_8", "ERROR", 0, 3, "No characters found")
+                workbook.save()
+                return StepResult("thumbnail_prompts", StepStatus.FAILED, "No characters")
+
+        # Build character info for API
+        char_info_lines = []
+        for c in main_chars[:5]:  # max 5 chars
+            char_info_lines.append(
+                f"  - {c.id} ({c.name}, role={c.role}): {c.character_lock or c.english_prompt}"
+            )
+        chars_info = "\n".join(char_info_lines)
+
+        loc_info_lines = []
+        for loc in (locations or [])[:5]:
+            loc_info_lines.append(f"  - {loc.id} ({loc.name}): {getattr(loc, 'location_lock', '') or getattr(loc, 'english_prompt', '')}")
+        locs_info = "\n".join(loc_info_lines) if loc_info_lines else "  (No locations defined)"
+
+        context_lock = story_analysis.get("context_lock", "")
+        setting = story_analysis.get("setting", {})
+        themes = story_analysis.get("themes", [])
+        visual_style = story_analysis.get("visual_style", {})
+
+        # Build available ref IDs for API
+        char_ids = [c.id for c in main_chars[:5]]
+        loc_ids = [loc.id for loc in (locations or [])[:5]] if locations else []
+
+        prompt = f"""You are an expert YouTube thumbnail designer and cinematographer.
+Create 3 compelling thumbnail image prompts for a YouTube video based on this story.
+
+STORY CONTEXT:
+- Setting: {setting}
+- Themes: {themes}
+- Visual style: {visual_style}
+- Context lock: {context_lock}
+
+MAIN CHARACTER (protagonist): {protagonist.id} ({protagonist.name})
+Character description: {protagonist.character_lock or protagonist.english_prompt}
+
+ALL CHARACTERS:
+{chars_info}
+
+LOCATIONS:
+{locs_info}
+
+AVAILABLE REFERENCE IDs:
+- Characters: {char_ids}
+- Locations: {loc_ids}
+
+RULES FOR PROMPTS:
+1. Write in English, cinematic style, highly detailed
+2. MUST annotate references EXACTLY like this:
+   - Character: "a beautiful woman (nv1.png)" or "(nv1.png) standing proud"
+   - Location: "in the grand hall (loc1.png)" or "(loc2.png) background"
+3. Choose the most emotionally powerful character + location combination
+4. Each prompt MUST be unique in composition, angle, and emotional tone
+5. THUMBNAIL OPTIMIZED: close-up face or upper body, strong contrast, bold expression
+
+CREATE EXACTLY 3 THUMBNAIL PROMPTS:
+
+VERSION 1 - "portrait_main" (ASPIRATIONAL PORTRAIT):
+Goal: Main character at their most beautiful/powerful/attractive. The ideal version viewers want to see or become.
+Style: Glamorous close-up, perfect lighting, aspirational expression (confident, serene, powerful).
+Emotion: Desire, admiration, aspiration.
+
+VERSION 2 - "dramatic_scene" (CURIOSITY / TENSION):
+Goal: The most dramatic, tense, or emotionally charged moment. Creates "what happened?!" reaction.
+Style: Medium shot or close-up, dynamic composition, intense expression (fear, rage, tears, shock).
+Emotion: Curiosity, tension, suspense.
+
+VERSION 3 - "youtube_ctr" (MAXIMUM CLICK-THROUGH):
+Goal: Maximum CTR using proven YouTube formula: expressive face + implicit context + visual hook.
+Style: Extreme close-up face with BIG EMOTION, simple high-contrast background, one clear focal point.
+Emotion: Surprise, shock, disbelief, intense joy — whatever fits the story best.
+
+Return JSON only:
+{{
+  "thumbnails": [
+    {{
+      "thumb_id": 1,
+      "version_desc": "portrait_main",
+      "img_prompt": "...full prompt with (nvX.png) and (locX.png) annotations...",
+      "characters_used": "nv1",
+      "location_used": "loc1"
+    }},
+    {{
+      "thumb_id": 2,
+      "version_desc": "dramatic_scene",
+      "img_prompt": "...",
+      "characters_used": "nv1",
+      "location_used": "loc1"
+    }},
+    {{
+      "thumb_id": 3,
+      "version_desc": "youtube_ctr",
+      "img_prompt": "...",
+      "characters_used": "nv1",
+      "location_used": ""
+    }}
+  ]
+}}
+"""
+
+        self._log(f"  Calling API for 3 thumbnail prompts...")
+        response = self._call_api(prompt, temperature=0.75, max_tokens=4096)
+        if not response:
+            self._log("  ERROR: API call failed!", "ERROR")
+            workbook.update_step_status("step_8", "ERROR", 0, 3, "API failed")
+            workbook.save()
+            return StepResult("thumbnail_prompts", StepStatus.FAILED, "API failed")
+
+        data = self._extract_json(response)
+        if not data or "thumbnails" not in data:
+            self._log("  ERROR: JSON parse failed!", "ERROR")
+            workbook.update_step_status("step_8", "ERROR", 0, 3, "JSON parse failed")
+            workbook.save()
+            return StepResult("thumbnail_prompts", StepStatus.FAILED, "JSON parse failed")
+
+        thumbnails_data = data["thumbnails"]
+        if not thumbnails_data:
+            self._log("  ERROR: Empty thumbnails!", "ERROR")
+            workbook.update_step_status("step_8", "ERROR", 0, 3, "Empty response")
+            workbook.save()
+            return StepResult("thumbnail_prompts", StepStatus.FAILED, "Empty thumbnails")
+
+        # Clear existing thumbnails and save new ones
+        workbook.clear_thumbnails()
+
+        from modules.excel_manager import Thumbnail
+        saved = 0
+        for item in thumbnails_data[:3]:
+            thumb_id = int(item.get("thumb_id", saved + 1))
+            img_prompt = str(item.get("img_prompt", "")).strip()
+            if not img_prompt:
+                continue
+
+            # Parse reference files from prompt (same logic as scenes)
+            chars_used = str(item.get("characters_used", "")).strip()
+            loc_used = str(item.get("location_used", "")).strip()
+
+            # Build reference_files list
+            ref_files = []
+            char_ids_in_prompt = re.findall(r'\(([nN][vV]_?\d+)\.png\)', img_prompt)
+            loc_ids_in_prompt = re.findall(r'\(([lL][oO][cC]_?\d+)\.png\)', img_prompt)
+            for cid in set(char_ids_in_prompt):
+                ref_files.append(f"nv/{cid}.png")
+            for lid in set(loc_ids_in_prompt):
+                ref_files.append(f"loc/{lid}.png")
+
+            import json
+            thumb = Thumbnail(
+                thumb_id=thumb_id,
+                version_desc=str(item.get("version_desc", Thumbnail.VERSION_DESCS.get(thumb_id, f"v{thumb_id}"))),
+                img_prompt=img_prompt,
+                characters_used=chars_used,
+                location_used=loc_used,
+                reference_files=json.dumps(ref_files) if ref_files else "",
+            )
+            workbook.add_thumbnail(thumb)
+            saved += 1
+            self._log(f"  [v{thumb_id}] {thumb.version_desc}: {img_prompt[:80]}...")
+
+        elapsed = round(time.time() - step_start, 1)
+        workbook.update_step_status("step_8", "COMPLETED", saved, 3, f"{elapsed}s - {saved} thumbnails")
+        workbook.save()
+        self._log(f"  [SAVED] step_8 = COMPLETED ({saved}/3 thumbnails, {elapsed}s)")
+
+        return StepResult("thumbnail_prompts", StepStatus.COMPLETED, f"{saved} thumbnails created")

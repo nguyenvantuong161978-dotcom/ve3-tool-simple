@@ -5378,6 +5378,198 @@ if (btn) {
         return self._video_results.copy()
 
     # =========================================================================
+    # THUMBNAIL GENERATION - Tao 6 thumbnail (3 landscape + 3 portrait)
+    # =========================================================================
+
+    def generate_thumbnails(self, excel_path: Path, proj_dir: Path) -> bool:
+        """
+        Tao 6 thumbnail images tu sheet 'thumbnail' trong Excel.
+        Goi truoc engine.run() trong Chrome 2 workflow.
+
+        Flow:
+          Batch A (landscape, orientation mac dinh):
+            thumb_001.png <- prompt v1 + refs
+            thumb_002.png <- prompt v2 + refs
+            thumb_003.png <- prompt v3 + refs
+          select_orientation(PORTRAIT)
+          Batch B (portrait 9:16):
+            thumb_004.png <- prompt v1 + refs
+            thumb_005.png <- prompt v2 + refs
+            thumb_006.png <- prompt v3 + refs
+          Reset: select_orientation(LANDSCAPE)
+
+        Returns:
+            True neu thanh cong (it nhat 1 thumbnail duoc tao)
+        """
+        import json
+        import shutil
+        from modules.drission_flow_api import DrissionFlowAPI
+        from modules.excel_manager import PromptWorkbook
+
+        self.log("[THUMB] === BAT DAU TAO THUMBNAIL ===")
+
+        # Doc thumbnails tu Excel
+        try:
+            wb = PromptWorkbook(excel_path)
+            wb.load_or_create()
+            thumbnails = wb.get_thumbnails()
+        except Exception as e:
+            self.log(f"[THUMB] Doc Excel loi: {e}", "ERROR")
+            return False
+
+        if not thumbnails:
+            self.log("[THUMB] Khong co thumbnail prompts trong Excel, skip", "WARN")
+            return False
+
+        self.log(f"[THUMB] Tim thay {len(thumbnails)} thumbnail prompts")
+
+        # Thu muc luu thumbnail
+        thumb_dir = proj_dir / "thumbnail"
+        thumb_dir.mkdir(exist_ok=True)
+
+        # Setup DrissionFlowAPI (cung chrome_portable voi Chrome 2)
+        try:
+            import yaml
+            config_path = self.config_dir / "settings.yaml"
+            cfg = {}
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    cfg = yaml.safe_load(f) or {}
+        except Exception:
+            cfg = {}
+
+        headless = cfg.get('browser_headless', False)
+        ws_cfg = cfg.get('webshare_proxy', {})
+        use_webshare = ws_cfg.get('enabled', False)
+        machine_id = ws_cfg.get('machine_id', 1)
+
+        drission = DrissionFlowAPI(
+            headless=headless,
+            verbose=True,
+            log_callback=lambda msg, lvl="INFO": self.log(f"[THUMB] {msg}", lvl),
+            webshare_enabled=use_webshare,
+            worker_id=self.worker_id,
+            total_workers=self.total_workers,
+            machine_id=machine_id,
+            chrome_portable=self.chrome_portable,
+        )
+
+        self.log("[THUMB] Setup Chrome...")
+        if not drission.setup():
+            self.log("[THUMB] Setup Chrome FAIL!", "ERROR")
+            return False
+
+        self.log("[THUMB] Chrome ready!")
+
+        def _build_image_inputs(thumbnail):
+            """Build reference image_inputs list tu reference_files trong Excel."""
+            image_inputs = []
+            ref_files_str = thumbnail.reference_files or ""
+            ref_files = []
+            try:
+                ref_files = json.loads(ref_files_str) if ref_files_str else []
+            except Exception:
+                pass
+
+            for ref in ref_files:
+                ref_path = proj_dir / ref
+                if ref_path.exists():
+                    image_inputs.append({
+                        "name": str(ref_path),
+                        "imageInputType": "SUBJECT_REFERENCE"
+                    })
+                else:
+                    self.log(f"[THUMB] WARN: Ref khong ton tai: {ref}", "WARN")
+            return image_inputs
+
+        success_count = 0
+
+        # ---- BATCH A: Landscape (mac dinh, khong can chon lai) ----
+        self.log("[THUMB] Batch A: Landscape (3 anh)...")
+        for i, thumb in enumerate(thumbnails[:3]):
+            if thumb.status_img == "done" and thumb.img_path and (proj_dir / thumb.img_path).exists():
+                self.log(f"[THUMB] thumb_{i+1:03d} da co, skip")
+                success_count += 1
+                continue
+
+            fname = f"thumb_{i+1:03d}.png"
+            save_path = thumb_dir / fname
+
+            image_inputs = _build_image_inputs(thumb)
+            self.log(f"[THUMB] Tao {fname}: {thumb.img_prompt[:60]}...")
+
+            ok, images, err = drission.generate_image(
+                prompt=thumb.img_prompt,
+                save_dir=thumb_dir,
+                filename=f"thumb_{i+1:03d}",
+                max_retries=3,
+                image_inputs=image_inputs if image_inputs else None,
+            )
+
+            if ok and images:
+                # DrissionFlowAPI luu vao save_dir/filename.png
+                img_rel = f"thumbnail/{fname}"
+                wb.update_thumbnail(thumb.thumb_id, status_img="done", img_path=img_rel)
+                wb.save()
+                success_count += 1
+                self.log(f"[THUMB] [v] {fname} OK")
+            else:
+                wb.update_thumbnail(thumb.thumb_id, status_img="error")
+                wb.save()
+                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
+
+        # ---- BATCH B: Portrait (chon doc 9:16) ----
+        self.log("[THUMB] Batch B: Portrait (3 anh)...")
+        orient_ok = drission.select_orientation("PORTRAIT")
+        if not orient_ok:
+            self.log("[THUMB] WARN: Khong chon duoc PORTRAIT, thu tiep", "WARN")
+
+        for i, thumb in enumerate(thumbnails[:3]):
+            if thumb.status_portrait == "done" and thumb.img_path_portrait and (proj_dir / thumb.img_path_portrait).exists():
+                self.log(f"[THUMB] thumb_{i+4:03d} da co, skip")
+                success_count += 1
+                continue
+
+            fname = f"thumb_{i+4:03d}.png"
+            save_path = thumb_dir / fname
+
+            image_inputs = _build_image_inputs(thumb)
+            self.log(f"[THUMB] Tao {fname} (portrait): {thumb.img_prompt[:60]}...")
+
+            ok, images, err = drission.generate_image(
+                prompt=thumb.img_prompt,
+                save_dir=thumb_dir,
+                filename=f"thumb_{i+4:03d}",
+                max_retries=3,
+                image_inputs=image_inputs if image_inputs else None,
+            )
+
+            if ok and images:
+                img_rel = f"thumbnail/{fname}"
+                wb.update_thumbnail(thumb.thumb_id, status_portrait="done", img_path_portrait=img_rel)
+                wb.save()
+                success_count += 1
+                self.log(f"[THUMB] [v] {fname} OK")
+            else:
+                wb.update_thumbnail(thumb.thumb_id, status_portrait="error")
+                wb.save()
+                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
+
+        # ---- Reset ve Landscape cho scene generation ----
+        self.log("[THUMB] Reset ve Landscape...")
+        drission.select_orientation("LANDSCAPE")
+
+        # Cleanup Chrome sau thumbnail (Chrome 2 se mo lai cho scenes qua engine.run)
+        try:
+            drission.cleanup_browser_data()
+            drission._kill_chrome()
+        except Exception:
+            pass
+
+        self.log(f"[THUMB] === XONG: {success_count}/6 thumbnails ===")
+        return success_count > 0
+
+    # =========================================================================
     # PARALLEL VOICE PROCESSING - Xử lý nhiều voice song song
     # =========================================================================
 

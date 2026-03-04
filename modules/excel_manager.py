@@ -92,6 +92,20 @@ SCENES_COLUMNS = [
     "segment_id",       # Segment ID (1, 2, 3...) - PHẢI Ở CUỐI để backward compatible!
 ]
 
+# Cột cho sheet Thumbnail
+THUMBNAIL_COLUMNS = [
+    "thumb_id",         # ID thumbnail (1, 2, 3)
+    "version_desc",     # Mô tả phiên bản (portrait_main / dramatic_scene / youtube_ctr)
+    "img_prompt",       # Prompt tạo ảnh (có annotation nhân vật/bối cảnh như scenes)
+    "characters_used",  # ID nhân vật (nv1, nv2, ...)
+    "location_used",    # ID bối cảnh (loc1, ...)
+    "reference_files",  # JSON list reference files
+    "img_path",         # Path ảnh landscape (thumb_001.png → thumb_003.png)
+    "img_path_portrait",# Path ảnh portrait (thumb_004.png → thumb_006.png)
+    "status_img",       # pending/done/error
+    "status_portrait",  # pending/done/error
+]
+
 # Cột cho sheet Backup Characters (nhân vật narrator cố định cho fallback)
 BACKUP_CHARACTERS_COLUMNS = [
     "id",               # ID nhân vật (nvc)
@@ -377,6 +391,78 @@ class Scene:
 
 
 # ============================================================================
+# THUMBNAIL DATA CLASS
+# ============================================================================
+
+class Thumbnail:
+    """Đại diện cho một thumbnail prompt (3 phiên bản)."""
+
+    VERSION_DESCS = {
+        1: "portrait_main",    # Nhân vật chính đẹp/thu hút - người xem muốn hướng tới
+        2: "dramatic_scene",   # Cảnh kịch tính nhất - gây tò mò, nhân vật chính làm trọng tâm
+        3: "youtube_ctr",      # Công thức CTR YouTube - click-worthy nhất
+    }
+
+    def __init__(
+        self,
+        thumb_id: int,
+        version_desc: str = "",
+        img_prompt: str = "",
+        characters_used: str = "",
+        location_used: str = "",
+        reference_files: str = "",
+        img_path: str = "",
+        img_path_portrait: str = "",
+        status_img: str = "pending",
+        status_portrait: str = "pending",
+    ):
+        self.thumb_id = thumb_id
+        self.version_desc = version_desc or self.VERSION_DESCS.get(thumb_id, f"v{thumb_id}")
+        self.img_prompt = img_prompt
+        self.characters_used = characters_used
+        self.location_used = location_used
+        self.reference_files = reference_files
+        self.img_path = img_path
+        self.img_path_portrait = img_path_portrait
+        self.status_img = status_img
+        self.status_portrait = status_portrait
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "thumb_id": self.thumb_id,
+            "version_desc": self.version_desc,
+            "img_prompt": self.img_prompt,
+            "characters_used": self.characters_used,
+            "location_used": self.location_used,
+            "reference_files": self.reference_files,
+            "img_path": self.img_path,
+            "img_path_portrait": self.img_path_portrait,
+            "status_img": self.status_img,
+            "status_portrait": self.status_portrait,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Thumbnail":
+        def safe_int(val, default=0):
+            try:
+                return int(val) if val not in (None, "") else default
+            except (ValueError, TypeError):
+                return default
+        return cls(
+            thumb_id=safe_int(data.get("thumb_id", 0)),
+            version_desc=str(data.get("version_desc", "") or ""),
+            img_prompt=str(data.get("img_prompt", "") or ""),
+            characters_used=str(data.get("characters_used", "") or ""),
+            location_used=str(data.get("location_used", "") or ""),
+            reference_files=str(data.get("reference_files", "") or ""),
+            img_path=str(data.get("img_path", "") or ""),
+            img_path_portrait=str(data.get("img_path_portrait", "") or ""),
+            status_img=str(data.get("status_img", "pending") or "pending"),
+            status_portrait=str(data.get("status_portrait", "pending") or "pending"),
+        )
+
+
+# ============================================================================
 # PROMPT WORKBOOK CLASS
 # ============================================================================
 
@@ -402,8 +488,9 @@ class PromptWorkbook:
     BACKUP_LOCATIONS_SHEET = "backup_locations"
     SRT_COVERAGE_SHEET = "srt_coverage"  # Đối chiếu SRT entries với segments/scenes
     PROCESSING_STATUS_SHEET = "processing_status"  # Trạng thái xử lý từng step
+    THUMBNAIL_SHEET = "thumbnail"  # Sheet thumbnail prompts (3 phiên bản)
 
-    # Step definitions for tracking (7 steps)
+    # Step definitions for tracking (8 steps)
     STEPS = [
         ("step_1", "Story Analysis", "Phân tích tổng quan câu chuyện"),
         ("step_2", "Story Segments", "Chia câu chuyện thành segments"),
@@ -412,6 +499,7 @@ class PromptWorkbook:
         ("step_5", "Director Plan", "Tạo kế hoạch đạo diễn"),
         ("step_6", "Scene Planning", "Lên ý đồ nghệ thuật"),
         ("step_7", "Scene Prompts", "Tạo prompts cho từng scene"),
+        ("step_8", "Thumbnail Prompts", "Tạo prompts thumbnail (3 phiên bản)"),
     ]
 
     def __init__(self, path: Union[str, Path]):
@@ -510,6 +598,9 @@ class PromptWorkbook:
         # Tạo sheet Director Plan
         self._create_director_plan_sheet()
 
+        # Tạo sheet Thumbnail
+        self._create_thumbnail_sheet()
+
         # Xóa sheet mặc định
         if default_sheet and default_sheet.title == "Sheet":
             self.workbook.remove(default_sheet)
@@ -578,6 +669,38 @@ class PromptWorkbook:
         }
         
         for col, column_name in enumerate(SCENES_COLUMNS, start=1):
+            ws.column_dimensions[get_column_letter(col)].width = column_widths.get(column_name, 15)
+
+    def _create_thumbnail_sheet(self) -> None:
+        """Tạo sheet Thumbnail với header."""
+        if self.THUMBNAIL_SHEET in self.workbook.sheetnames:
+            return
+        ws = self.workbook.create_sheet(self.THUMBNAIL_SHEET)
+
+        header_font = Font(bold=True, color="FFFFFF")
+        # Màu tím để phân biệt với scenes (xanh lá)
+        header_fill = PatternFill(start_color="7030A0", end_color="7030A0", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+
+        for col, column_name in enumerate(THUMBNAIL_COLUMNS, start=1):
+            cell = ws.cell(row=1, column=col, value=column_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+
+        column_widths = {
+            "thumb_id": 10,
+            "version_desc": 20,
+            "img_prompt": 80,
+            "characters_used": 20,
+            "location_used": 15,
+            "reference_files": 30,
+            "img_path": 25,
+            "img_path_portrait": 25,
+            "status_img": 12,
+            "status_portrait": 12,
+        }
+        for col, column_name in enumerate(THUMBNAIL_COLUMNS, start=1):
             ws.column_dimensions[get_column_letter(col)].width = column_widths.get(column_name, 15)
 
     def _create_director_plan_sheet(self) -> None:
@@ -887,6 +1010,66 @@ class PromptWorkbook:
         """Lấy danh sách scenes chưa tạo video (nhưng đã có ảnh)."""
         scenes = self.get_scenes()
         return [s for s in scenes if s.status_vid != "done" and s.img_path and s.video_prompt]
+
+    # ========================================================================
+    # THUMBNAIL METHODS
+    # ========================================================================
+
+    def _ensure_thumbnail_sheet(self) -> None:
+        """Tạo thumbnail sheet nếu chưa có (backward compatible với Excel cũ)."""
+        if self.workbook is None:
+            self.load_or_create()
+        if self.THUMBNAIL_SHEET not in self.workbook.sheetnames:
+            self._create_thumbnail_sheet()
+
+    def get_thumbnails(self) -> List["Thumbnail"]:
+        """Lấy danh sách thumbnails từ sheet."""
+        self._ensure_thumbnail_sheet()
+        ws = self.workbook[self.THUMBNAIL_SHEET]
+        thumbnails = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[0] is None:
+                continue
+            data = dict(zip(THUMBNAIL_COLUMNS, row))
+            thumbnails.append(Thumbnail.from_dict(data))
+        return thumbnails
+
+    def add_thumbnail(self, thumbnail: "Thumbnail") -> None:
+        """Thêm thumbnail mới vào sheet."""
+        self._ensure_thumbnail_sheet()
+        ws = self.workbook[self.THUMBNAIL_SHEET]
+        next_row = ws.max_row + 1
+        data = thumbnail.to_dict()
+        for col, column_name in enumerate(THUMBNAIL_COLUMNS, start=1):
+            ws.cell(row=next_row, column=col, value=data.get(column_name, ""))
+
+    def update_thumbnail(self, thumb_id: int, **kwargs) -> bool:
+        """Cập nhật thông tin thumbnail theo thumb_id."""
+        self._ensure_thumbnail_sheet()
+        ws = self.workbook[self.THUMBNAIL_SHEET]
+        for row_idx in range(2, ws.max_row + 1):
+            cell_value = ws.cell(row=row_idx, column=1).value
+            if cell_value is not None and int(cell_value) == thumb_id:
+                for key, value in kwargs.items():
+                    if key in THUMBNAIL_COLUMNS:
+                        col_idx = THUMBNAIL_COLUMNS.index(key) + 1
+                        ws.cell(row=row_idx, column=col_idx, value=value)
+                return True
+        return False
+
+    def get_pending_thumbnails(self) -> List["Thumbnail"]:
+        """Lấy thumbnails chưa tạo ảnh landscape."""
+        return [t for t in self.get_thumbnails() if t.status_img != "done" and t.img_prompt]
+
+    def get_pending_portrait_thumbnails(self) -> List["Thumbnail"]:
+        """Lấy thumbnails chưa tạo ảnh portrait."""
+        return [t for t in self.get_thumbnails() if t.status_portrait != "done" and t.img_prompt]
+
+    def clear_thumbnails(self) -> None:
+        """Xóa tất cả thumbnails (giữ lại header)."""
+        self._ensure_thumbnail_sheet()
+        ws = self.workbook[self.THUMBNAIL_SHEET]
+        ws.delete_rows(2, ws.max_row)
 
     # ========================================================================
     # DIRECTOR PLAN METHODS
@@ -2039,30 +2222,47 @@ class PromptWorkbook:
         }
 
         # Find the row for this step
+        found_row = None
         for row in range(2, ws.max_row + 1):
             if ws.cell(row=row, column=1).value == step_id:
-                ws.cell(row=row, column=4, value=status)
-                ws.cell(row=row, column=4).fill = PatternFill(
-                    start_color=status_colors.get(status, "FFFFFF"),
-                    end_color=status_colors.get(status, "FFFFFF"),
-                    fill_type="solid"
-                )
-                ws.cell(row=row, column=5, value=items_total)
-                ws.cell(row=row, column=6, value=items_done)
-
-                # Calculate coverage percentage
-                coverage = (items_done / items_total * 100) if items_total > 0 else 0
-                ws.cell(row=row, column=7, value=round(coverage, 1))
-
-                # Add notes
-                if notes:
-                    existing_notes = ws.cell(row=row, column=8).value or ""
-                    if existing_notes and notes not in existing_notes:
-                        notes = f"{existing_notes}; {notes}"
-                    ws.cell(row=row, column=8, value=notes[:500])  # Limit notes length
-
-                ws.cell(row=row, column=9, value=datetime.now().strftime("%Y-%m-%d %H:%M"))
+                found_row = row
                 break
+
+        # If not found (e.g., step_8 in old Excel) → append new row
+        if found_row is None:
+            found_row = ws.max_row + 1
+            # Look up step info from STEPS list
+            step_name, step_desc = step_id, step_id
+            for sid, sname, sdesc in self.STEPS:
+                if sid == step_id:
+                    step_name, step_desc = sname, sdesc
+                    break
+            ws.cell(row=found_row, column=1, value=step_id)
+            ws.cell(row=found_row, column=2, value=step_name)
+            ws.cell(row=found_row, column=3, value=step_desc)
+
+        row = found_row
+        ws.cell(row=row, column=4, value=status)
+        ws.cell(row=row, column=4).fill = PatternFill(
+            start_color=status_colors.get(status, "FFFFFF"),
+            end_color=status_colors.get(status, "FFFFFF"),
+            fill_type="solid"
+        )
+        ws.cell(row=row, column=5, value=items_total)
+        ws.cell(row=row, column=6, value=items_done)
+
+        # Calculate coverage percentage
+        coverage = (items_done / items_total * 100) if items_total > 0 else 0
+        ws.cell(row=row, column=7, value=round(coverage, 1))
+
+        # Add notes
+        if notes:
+            existing_notes = ws.cell(row=row, column=8).value or ""
+            if existing_notes and notes not in existing_notes:
+                notes = f"{existing_notes}; {notes}"
+            ws.cell(row=row, column=8, value=notes[:500])  # Limit notes length
+
+        ws.cell(row=row, column=9, value=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
         self.save()
 

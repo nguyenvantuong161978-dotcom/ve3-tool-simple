@@ -623,6 +623,71 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             except:
                 pass
 
+    # Step 3.7: Generate thumbnails (sau khi validate references, trước khi tạo scenes)
+    log(f"  ============================================================")
+    log(f"  STEP 3.7: THUMBNAIL GENERATION")
+    log(f"  ============================================================")
+
+    try:
+        from modules.excel_manager import PromptWorkbook
+        from modules.smart_engine import SmartEngine
+
+        # Đợi step_8 (thumbnail prompts) hoàn thành - tối đa 10 phút
+        max_wait_step8 = 600
+        waited_step8 = 0
+        wait_interval_step8 = 15
+        step8_done = False
+
+        while waited_step8 < max_wait_step8:
+            wb_check = PromptWorkbook(str(excel_path))
+            wb_check.load_or_create()
+            step8_status = wb_check.get_step_status("step_8")
+
+            # step_8 không tồn tại trong Excel cũ → skip
+            if not step8_status:
+                log(f"  [INFO] step_8 not in Excel (old format), skip thumbnails")
+                break
+
+            status_val = step8_status.get("status", "")
+
+            if status_val == "COMPLETED":
+                log(f"  [v] step_8 COMPLETED - ready to generate thumbnails")
+                step8_done = True
+                break
+            elif status_val in ("SKIPPED", "ERROR"):
+                log(f"  [WARN] step_8 status={status_val}, skip thumbnail generation", "WARN")
+                break
+
+            log(f"  [WAIT] step_8 status={status_val or 'PENDING'} ({waited_step8}s/{max_wait_step8}s)...")
+            time.sleep(wait_interval_step8)
+            waited_step8 += wait_interval_step8
+
+        if not step8_done:
+            log(f"  [WARN] step_8 not completed after {max_wait_step8}s, skip thumbnails", "WARN")
+        else:
+            # Kiểm tra xem đã có thumbnails chưa (để skip nếu đã chạy rồi)
+            thumb_dir = local_dir / "thumbnail"
+            existing_thumbs = list(thumb_dir.glob("thumb_*.png")) if thumb_dir.exists() else []
+            if len(existing_thumbs) >= 6:
+                log(f"  [v] Thumbnails already exist ({len(existing_thumbs)} files), skip")
+            else:
+                log(f"  [THUMB] Generating 6 thumbnails (3 landscape + 3 portrait)...")
+                engine_thumb = SmartEngine(
+                    worker_id=1,
+                    total_workers=2,
+                    chrome_portable=chrome2_path
+                )
+                thumb_ok = engine_thumb.generate_thumbnails(excel_path, local_dir)
+                if thumb_ok:
+                    log(f"  [v] Thumbnails generated successfully!")
+                else:
+                    log(f"  [WARN] Thumbnail generation failed or incomplete", "WARN")
+
+    except Exception as e:
+        log(f"  [ERROR] Thumbnail generation error: {e}", "ERROR")
+        import traceback
+        traceback.print_exc()
+
     # Step 3.6: Đợi Chrome 1 bắt đầu tạo SCENE images
     # v1.0.86: Đợi không giới hạn - VMManager sẽ restart workers khi project xong
     img_dir = local_dir / "img"

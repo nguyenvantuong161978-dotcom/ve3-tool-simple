@@ -1,78 +1,13 @@
-1.0.269
-2026-03-04 (VN)
-Change: FIX arrange - luon chon dung 1 Chrome1 (tren) + 1 Chrome2 (duoi)
+1.0.270
+2026-03-05 (VN)
+Change: THUMBNAIL FEATURE - Them anh thumbnail (6 anh: 3 ngang + 3 doc) cho moi project
 
 Thay doi:
-- v1.0.268: arrange_all_windows() sort Chrome theo exe path (GoogleChromePortable - Copy = worker 2 → duoi); retry arrange 3s+8s thay vi 1 lan 2s → Chrome tu dong vao dung vi tri sau moi lan restart, khong can bam SAP LAI
-- v1.0.267: _do_pre_login_if_needed() chi ghi .account.json khi chua ton tai - neu da co TK thi giu nguyen, khong overwrite
-- v1.0.266: ROOT CAUSE FIX xoay TK: get_account_from_excel() tra ve ket qua du khong co email (Excel cu chi co account_index). _do_pre_login_if_needed() va _pre_login.py xu ly truong hop co index nhung khong co email → lookup bang index tu GSheet, khong rotate. Day la nguyen nhan chinh khien project dang chay bi xoay TK sang tai khoan khac.
-- v1.0.265: run_excel_api.py doi SCAN_INTERVAL_LONG=1800s (30 phut) cho tu cycle 2 tro di. Lan dau van 60s de pick up project nhanh. Giam tan suat mo Excel check status → giam conflict voi Chrome workers dang doc/ghi Excel.
-- v1.0.264: Luu account vao .account.json per-project (doc lap voi Excel). Moi noi doc account uu tien .account.json truoc, fallback sang Excel. google_login.py them save_project_account_json() va get_project_account_json(). _pre_login.py, _run_chrome1.py (_do_pre_login_if_needed + process_project_pic_basic), vm_manager.py (handle_account_issue) da cap nhat.
-- v1.0.263: handle_account_issue() retry 3 lan save_account_to_excel() (delay 2s giua cac lan) - tranh truong hop Excel bi lock ngay sau restore → save fail → account mat → PRE-LOGIN xoay TK sai
-- v1.0.262: _restore_excel_from_backup() dung copy→temp roi os.replace() (atomic) thay vi unlink+copy2 - tranh tinh huong unlink thanh cong nhung copy2 fail → Excel mat han; create_videos_for_project() doi total_workers=2 tranh xoa Excel khi chay song song
-- v1.0.261: smart_engine.py bo bulk delete nv/img khi media_ids trong Excel rong (sau backup restore) - per-image _media_exists() da xu ly tung file nv/loc chinh xac hon, scene images khong bi xoa thua
-- v1.0.260: _do_pre_login_if_needed() dung get_channel_accounts(machine_code) thay vi get_channel_accounts(channel) → tranh "Chi co 1 account, khong can rotate" sai khi GSheet dung machine_code (KA2-T2) khong phai channel (KA2)
-- v1.0.259: _pre_login.py kiem tra Excel truoc khi login/save: neu da co account → dung account do (khong rotate, khong ghi de)
-- v1.0.258: Fix _setup_window_layout() dung Win32 GetSystemMetrics() thay vi JS availWidth (tranh loi DPI scaling CSS vs physical pixels)
-- v1.0.257: handle_account_issue() doc+ghi lai account sau khi restore Excel backup → tranh PRE-LOGIN rotate sang TK khac
-- v1.0.256: _auto_arrange_on_new_window() theo doi ca Chrome lẫn CMD HWNDs; khi bat ky cua so moi nao mo → tu dong sap xep Layout A sau 2s
-- v1.0.255: Ghi window_placement vao Default/Preferences truoc ChromiumPage() → Chrome mo dung vi tri ngay
-- v1.0.254: Them --window-position + --window-size vao Chrome launch args
-- v1.0.253: _update_loop theo doi Chrome HWNDs, khi Chrome moi mo → tu dong goi arrange_all_windows() sau 2s
-- v1.0.252: PRE-LOGIN tim account theo email trong GSheet → save dung index 0-based
-- v1.0.251: Root cause fix: doi sang data_only=True + ws.iter_rows(min_row=2) thay vi range(max_row)
-- v1.0.250: Fix bug ws.max_row=None trong get_account_from_excel()
-- v1.0.249: PRE-LOGIN kiem tra Excel: co account -> dung account do (khong rotate); chua co -> rotate sang TK tiep theo roi login + luu Excel
-- v1.0.248: Bo tat ca rotate_account_index() tu dong (create_tasks, handle_account_issue, handle_project_timeout, force_complete); 1 ma chi dung 1 tai khoan co dinh trong Excel
-- v1.0.247: Auto-arrange Layout A (Tool+CMDs trai, Chrome phai) khi BAT DAU; bo log section; bo nut AN CHROME; them SAP LAI; tool tu dat vi tri goc trai khi mo
-- v1.0.246: Button bar 2 dong (dong 1: BAT DAU/DUNG/RESET/AN CHROME/mode; dong 2: SETTINGS/UPDATE/SETUP VM); geometry 700x780, minsize 600x600
-- v1.0.245: Mac dinh hien Chrome (windows_visible=True); chuyen nut AN CHROME sang trai button bar; bo auto-hide khi start
-- v1.0.243: GUI moi hoan chinh - _update_workers() cap nhat badge/worker_dots/progress; them _draw_progress(), _clear_log(), _update_log(); bo auto-select popup khi startup
-- v1.0.242: GUI moi - Bo mode radio (Basic/Small/Full) khoi top bar, chuyen vao Settings; cot project moi (Ma|Excel|Tham chieu|Scene anh|Con lai|XONG); mode display label tren top bar
-- v1.0.241: Fix _auto_setup_project() - thu DrissionPage selector add_2 truoc JS (Chrome 2 button text co the chi la icon)
-- v1.0.240: _force_complete_by_code() thieu rotate account va reset timer - da bo sung
-- v1.0.239: Ngan duplicate orchestrate thread (Start sau Stop) + nut XONG rotate account
-- v1.0.238: orchestrate() dung while True thay vi while not _stop_flag - thread khong chet khi reset
-- v1.0.236: Fix bug stop_all() trong handle_account_issue() kill orchestrate thread → 6h timeout khong chay
-- v1.0.235: Chrome 2 - Khoi phuc validator: kiem tra tung reference khi co media_id
-- v1.0.234: Account issue detection: 1h < 5 anh → rotate account, xoa anh cu, restore Excel backup, auto login Chrome, restart
-- v1.0.233: handle_project_timeout() them rotate account cho ma tiep theo
-- v1.0.232: 400 Policy - lan 1 retry khong co reference (xem ref co gay loi khong), lan 2 skip
-- v1.0.231: Thong nhat chon model: select_model_by_index(_current_model_index) - dung model theo 403 rotation
-- v1.0.230: CLEANUP - Bo cac JS khong dung: imageCount, forceModel, customPayload, forceVideoPayload, blockExtraCalls
-- v1.0.229: FIX - Di chuyen model selection vao generate_image_forward() de chon x1 SAU MOI LAN Chrome restart
-- v1.0.228: LUON chon x1 + model truoc moi lan generate_image() - tranh 403 sau page refresh
-- v1.0.227: FIX 403 - Chon x1 (1 anh) trong UI khi chon model, khong can JS cat so anh
-- v1.0.226: Fix imageInputType = IMAGE_INPUT_TYPE_REFERENCE (khong phai SUBJECT_REF)
-- v1.0.225: Fix TEST script - BLOCK mode + NUCLEAR CLEANUP
-- v1.0.223: Fix verify - khong dung IIFE
-- v1.0.222: Fix focus - tach check va click
-- v1.0.218: Fix 403 - dung JS tim element thay vi driver.ele()
+- v1.0.270: Thumbnail feature hoan chinh:
+  * excel_manager.py: Them Thumbnail class, THUMBNAIL_COLUMNS, _create_thumbnail_sheet(), get/add/update/clear_thumbnails(); update_step_status() tu dong them row moi neu step_id chua ton tai (backward compat voi Excel cu step_8)
+  * progressive_prompts.py: Them step_8_thumbnail_prompts() - goi API tao 3 prompts thumbnail (portrait_main, dramatic_scene, youtube_ctr); run_all_steps() goi step_8 sau step_7; fix loc_ids dung loc.id
+  * drission_flow_api.py: Them JS_SELECT_ORIENTATION + select_orientation() - chon ngang/doc (16:9/9:16) trong Google Flow
+  * smart_engine.py: Them generate_thumbnails(excel_path, proj_dir) - tao 3 anh ngang (thumb_001-003) + chon PORTRAIT + tao 3 anh doc (thumb_004-006) + reset LANDSCAPE; luu vao thu muc thumbnail/
+  * _run_chrome2.py: Them Step 3.7 - sau validate references, Chrome 2 doi step_8 COMPLETED (toi da 10 phut) roi generate_thumbnails(); skip neu step_8 khong ton tai trong Excel cu (backward compat)
 
-1. v1.0.223: Fix verify - khong dung IIFE
-2. v1.0.222: Fix focus - tach check va click
-3. v1.0.221: Log URL de debug
-4. v1.0.220: Debug log tim element
-2. v1.0.219: Them retry loop cho JS tim element
-2. v1.0.218: Fix 403 - dung JS tim element thay vi driver.ele()
-2. v1.0.217: Fix model selection sau 403 recovery
-2. v1.0.216: Hardcode force_model = "" (khong doc config)
-3. v1.0.215: Fix config force_model: always -> ''
-2. v1.0.214: Bo force model - giu nguyen model Chrome chon
-2. v1.0.213: Reset model flag trong setup() de luon chon model
-3. v1.0.212: Generate truot -> reload page va gui lai prompt
-4. v1.0.211: Fix bi treo o "Create with Flow" khi vao project URL
-2. v1.0.210: Reference co media_id thi status=done
-2. v1.0.209: Reference retry 2 vong + Chrome 2 bo validator
-2. v1.0.208: Co project_url thi vao thang - chi warm up khi co van de
-2. v1.0.206: Fix _auto_setup_project - bo _wait_for_page_ready
-3. v1.0.205: Fix syntax error - xoa JS orphan code
-2. v1.0.204: Don gian hoa warm up - chi doi "Tao du an moi"
-2. v1.0.203: Bo /project/test - vao thang Flow page
-2. v1.0.202: Dong bo cleanup cho timeout - Chrome 1 va 2 giong nhau
-2. v1.0.201: Fix Create with Flow logic + quay lai project sau warmup
-3. v1.0.200: Fix Create with Flow - check ngay + doi "Tao du an moi"
-2. v1.0.199: Fix bi treo khi doi prompt input (Create with Flow page)
-3. v1.0.198: Cleanup + Restart sau moi anh thanh cong
-4. v1.0.197: Cleanup NGAY SAU 403 (truoc restart Chrome)
-5. v1.0.196: Cleanup browser data khi 403 (localStorage/IndexedDB)
+- v1.0.269: FIX arrange - luon chon dung 1 Chrome1 (tren) + 1 Chrome2 (duoi)
