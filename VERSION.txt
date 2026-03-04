@@ -1,8 +1,13 @@
-1.0.271
+1.0.272
 2026-03-05 (VN)
-Change: FIX - Chon PORTRAIT cho tung anh thumbnail (khong chi 1 lan)
+Change: FIX - generate_thumbnails() dung project URL tu Excel (khong tao project moi)
 
 Thay doi:
+- v1.0.272: FIX thumbnail dung dung project:
+  * smart_engine.py: Doc flow_project_url tu wb.get_config_value(), pass vao drission.setup(project_url=...)
+  * Ly do: setup() khong co project_url -> tao project moi thay vi dung project da co
+  * Backward compat: neu khong co URL -> van tao moi, co log WARN
+
 - v1.0.271: FIX portrait orientation:
   * smart_engine.py: Di chuyen select_orientation("PORTRAIT") vao trong vong lap Batch B
   * Ly do: Chrome restart sau moi anh -> mat orientation -> phai chon lai cho moi anh
