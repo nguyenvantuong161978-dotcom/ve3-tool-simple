@@ -2841,18 +2841,25 @@ class VMManager:
         self._restore_excel_from_backup(project_code)
 
         # 3. Ghi lại account vào Excel sau restore (tránh PRE-LOGIN rotate sang TK khác)
+        # Retry 3 lần nếu Excel bị lock
         if saved_account_info and excel_path.exists():
-            try:
-                from google_login import save_account_to_excel
-                save_account_to_excel(
-                    str(excel_path),
-                    saved_account_info.get('channel', ''),
-                    saved_account_info.get('index', 0),
-                    saved_account_info.get('email', '')
-                )
-                self.log(f"[Account] Đã ghi lại account {saved_account_info.get('email')} vào Excel sau restore", "SYSTEM")
-            except Exception as e:
-                self.log(f"[Account] Không ghi lại được account: {e}", "SYSTEM", "WARN")
+            for _attempt in range(3):
+                try:
+                    from google_login import save_account_to_excel
+                    save_account_to_excel(
+                        str(excel_path),
+                        saved_account_info.get('channel', ''),
+                        saved_account_info.get('index', 0),
+                        saved_account_info.get('email', '')
+                    )
+                    self.log(f"[Account] Đã ghi lại account {saved_account_info.get('email')} vào Excel sau restore", "SYSTEM")
+                    break
+                except Exception as e:
+                    if _attempt < 2:
+                        self.log(f"[Account] Retry ghi account ({_attempt+1}/3): {e}", "SYSTEM", "WARN")
+                        time.sleep(2)
+                    else:
+                        self.log(f"[Account] FAIL ghi account sau 3 lần: {e}", "SYSTEM", "ERROR")
 
         # 3. Xóa ảnh đã tạo (< 5 ảnh)
         img_dir = TOOL_DIR / "PROJECTS" / project_code / "img"
