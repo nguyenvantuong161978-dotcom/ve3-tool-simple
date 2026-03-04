@@ -281,6 +281,43 @@ def get_account_by_index(machine_code: str, index: int) -> dict:
 # Lưu/đọc thông tin tài khoản trong Excel để resume đúng account
 # ============================================================================
 
+def save_project_account_json(project_dir, channel: str, account_index: int, account_email: str) -> bool:
+    """
+    v1.0.264: Lưu account vào .account.json trong thư mục project.
+    File này độc lập với Excel - không bị ảnh hưởng khi Excel bị xóa/restore.
+    """
+    try:
+        import json
+        from pathlib import Path
+        p = Path(project_dir) / ".account.json"
+        data = {"channel": channel, "index": account_index, "email": account_email}
+        p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        log(f"Saved account to .account.json: {account_email}")
+        return True
+    except Exception as e:
+        log(f"Error saving .account.json: {e}", "WARN")
+        return False
+
+
+def get_project_account_json(project_dir) -> dict:
+    """
+    v1.0.264: Đọc account từ .account.json trong thư mục project.
+    Ưu tiên hơn Excel vì không bị mất khi Excel restore/xóa.
+    Returns {} nếu không tìm thấy.
+    """
+    try:
+        import json
+        from pathlib import Path
+        p = Path(project_dir) / ".account.json"
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if data.get("email"):
+                return data
+    except Exception as e:
+        log(f"Error reading .account.json: {e}", "WARN")
+    return {}
+
+
 def save_account_to_excel(excel_path: str, channel: str, account_index: int, account_email: str) -> bool:
     """
     Lưu thông tin tài khoản đang sử dụng vào Excel config sheet.

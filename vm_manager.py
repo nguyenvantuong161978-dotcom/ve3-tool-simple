@@ -2840,26 +2840,35 @@ class VMManager:
         # 2. Restore Excel backup (về trạng thái sạch, giữ nguyên prompts)
         self._restore_excel_from_backup(project_code)
 
-        # 3. Ghi lại account vào Excel sau restore (tránh PRE-LOGIN rotate sang TK khác)
-        # Retry 3 lần nếu Excel bị lock
-        if saved_account_info and excel_path.exists():
-            for _attempt in range(3):
-                try:
-                    from google_login import save_account_to_excel
-                    save_account_to_excel(
-                        str(excel_path),
-                        saved_account_info.get('channel', ''),
-                        saved_account_info.get('index', 0),
-                        saved_account_info.get('email', '')
-                    )
-                    self.log(f"[Account] Đã ghi lại account {saved_account_info.get('email')} vào Excel sau restore", "SYSTEM")
-                    break
-                except Exception as e:
-                    if _attempt < 2:
-                        self.log(f"[Account] Retry ghi account ({_attempt+1}/3): {e}", "SYSTEM", "WARN")
-                        time.sleep(2)
-                    else:
-                        self.log(f"[Account] FAIL ghi account sau 3 lần: {e}", "SYSTEM", "ERROR")
+        # 3. Ghi lại account - v1.0.264: lưu .account.json TRƯỚC (không phụ thuộc Excel)
+        if saved_account_info and saved_account_info.get('email'):
+            try:
+                from google_login import save_project_account_json, save_account_to_excel
+                project_dir_acc = TOOL_DIR / "PROJECTS" / project_code
+                # .account.json - file riêng, không bị mất dù Excel xóa/restore
+                save_project_account_json(
+                    project_dir_acc,
+                    saved_account_info.get('channel', ''),
+                    saved_account_info.get('index', 0),
+                    saved_account_info.get('email', '')
+                )
+                self.log(f"[Account] Đã ghi .account.json: {saved_account_info.get('email')}", "SYSTEM")
+                # Ghi thêm vào Excel (secondary, retry 3 lần)
+                if excel_path.exists():
+                    for _attempt in range(3):
+                        try:
+                            save_account_to_excel(
+                                str(excel_path),
+                                saved_account_info.get('channel', ''),
+                                saved_account_info.get('index', 0),
+                                saved_account_info.get('email', '')
+                            )
+                            break
+                        except Exception:
+                            if _attempt < 2:
+                                time.sleep(2)
+            except Exception as e:
+                self.log(f"[Account] Lỗi ghi account: {e}", "SYSTEM", "ERROR")
 
         # 3. Xóa ảnh đã tạo (< 5 ảnh)
         img_dir = TOOL_DIR / "PROJECTS" / project_code / "img"

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VE3 Tool - PRE-LOGIN Script (v1.0.115) - Visible CMD Window
+VE3 Tool - PRE-LOGIN Script (v1.0.264) - Visible CMD Window
 
 Script riêng để:
 1. Xóa Chrome data
 2. Login Chrome 1
 3. Login Chrome 2
-4. Lưu account vào Excel
+4. Lưu account vào .account.json (primary) và Excel (secondary)
 
 Chạy TRƯỚC khi start các Chrome workers.
 """
@@ -78,7 +78,8 @@ def main():
         from google_login import (
             extract_channel_from_machine_code, get_current_account_for_channel,
             save_account_to_excel, login_google_chrome, detect_machine_code,
-            get_account_from_excel, get_channel_accounts, save_account_index
+            get_account_from_excel, get_channel_accounts, save_account_index,
+            save_project_account_json, get_project_account_json
         )
     except ImportError as e:
         print(f"[PRE-LOGIN] Import error: {e}")
@@ -90,21 +91,25 @@ def main():
     channel = extract_channel_from_machine_code(machine_code)
     print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
-    # Kiểm tra Excel đã có account chưa → nếu có, dùng account đó (không rotate)
+    # v1.0.264: Kiểm tra .account.json trước, fallback sang Excel
     try:
         all_accounts = get_channel_accounts(machine_code) or []
-        excel_account = get_account_from_excel(str(excel_path))
-        if excel_account and excel_account.get('email'):
-            saved_email = excel_account['email'].lower().strip()
+        # Ưu tiên .account.json (độc lập với Excel)
+        saved_account_info = get_project_account_json(project_dir)
+        if not saved_account_info.get('email'):
+            # Fallback: đọc từ Excel
+            saved_account_info = get_account_from_excel(str(excel_path)) or {}
+        if saved_account_info and saved_account_info.get('email'):
+            saved_email = saved_account_info['email'].lower().strip()
             for i, acc in enumerate(all_accounts):
                 if acc.get('id', '').lower().strip() == saved_email:
                     save_account_index(channel, i)
-                    print(f"[PRE-LOGIN] Excel da co account: {excel_account['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay (khong rotate)")
+                    print(f"[PRE-LOGIN] Saved account: {saved_account_info['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay (khong rotate)")
                     break
             else:
-                print(f"[PRE-LOGIN] Email {excel_account['email']} khong tim thay trong GSheet → se rotate")
+                print(f"[PRE-LOGIN] Email {saved_account_info['email']} khong tim thay trong GSheet → se rotate")
     except Exception as e:
-        print(f"[PRE-LOGIN] Check Excel account: {e}")
+        print(f"[PRE-LOGIN] Check saved account: {e}")
 
     # Lấy account hiện tại (sau khi đã set index đúng)
     current_account = get_current_account_for_channel(channel, machine_code=machine_code)
@@ -152,20 +157,19 @@ def main():
     result2 = login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
     print(f"[PRE-LOGIN] Chrome 2 login: {'SUCCESS' if result2 else 'FAILED'}")
 
-    # Lưu account vào Excel (chỉ khi Excel CHƯA CÓ account - tránh ghi đè account đúng)
-    existing_account = get_account_from_excel(str(excel_path)) if excel_path.exists() else None
-    if existing_account and existing_account.get('email', '').lower() == current_account['id'].lower():
-        print(f"\n[PRE-LOGIN] Excel da co dung account → khong ghi de")
-    else:
-        print(f"\n[PRE-LOGIN] Saving account to Excel: {excel_path.name}")
-        save_account_to_excel(
-            str(excel_path),
-            channel,
-            current_account['index'],
-            current_account['id']
-        )
-
-    # v1.0.152: Account đã lưu vào Excel ở trên, auto-login sẽ đọc từ đó
+    # v1.0.264: Lưu account vào .account.json (primary) và Excel (secondary)
+    print(f"\n[PRE-LOGIN] Saving account: {current_account['id']}")
+    # Primary: .account.json - không bị ảnh hưởng khi Excel xóa/restore
+    save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
+    print(f"[PRE-LOGIN] Saved to .account.json ✓")
+    # Secondary: Excel
+    if excel_path.exists():
+        existing_account = get_account_from_excel(str(excel_path))
+        if existing_account and existing_account.get('email', '').lower() == current_account['id'].lower():
+            print(f"[PRE-LOGIN] Excel da co dung account → khong ghi de")
+        else:
+            save_account_to_excel(str(excel_path), channel, current_account['index'], current_account['id'])
+            print(f"[PRE-LOGIN] Saved to Excel ✓")
 
     print("\n" + "="*60)
     print("[PRE-LOGIN] DONE! Both Chrome logged in.")

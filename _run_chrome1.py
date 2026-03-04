@@ -420,26 +420,29 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
         log(f"  Excel exists but no prompts - waiting for Excel Worker to complete")
         return False
 
-    # Step 3.5: Account tracking (v1.0.106)
+    # Step 3.5: Account tracking (v1.0.264)
     # Lưu/đọc thông tin tài khoản để resume đúng account
     try:
         from google_login import (
             get_account_from_excel, save_account_to_excel,
             extract_channel_from_machine_code, get_current_account_for_channel,
-            set_account_index_for_resume, login_google_chrome
+            set_account_index_for_resume, login_google_chrome,
+            get_project_account_json, save_project_account_json
         )
 
         channel = extract_channel_from_machine_code(code)
         if channel:
-            # Kiểm tra Excel có thông tin account chưa
-            account_info = get_account_from_excel(str(excel_path))
+            # v1.0.264: Ưu tiên .account.json (độc lập với Excel), fallback sang Excel
+            account_info = get_project_account_json(local_dir)
+            if not account_info.get('email'):
+                account_info = get_account_from_excel(str(excel_path)) or {}
 
             # v1.0.112: Kiểm tra % hoàn thành để quyết định có cần login không
             percent, current, expected = get_project_completion_percent(local_dir, code)
             is_fresh_start = (current == 0)  # Chưa có ảnh nào = bắt đầu mới
 
             if account_info and account_info.get('email'):
-                # RESUME: Đã có account trong Excel → restore account index
+                # RESUME: Đã có account → restore account index
                 log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {account_info.get('index')})")
                 set_account_index_for_resume(str(excel_path), channel)
 
@@ -888,7 +891,8 @@ def _do_pre_login_if_needed():
             get_current_account_for_channel, get_account_from_excel,
             get_channel_accounts, rotate_account_index,
             save_account_index, save_account_to_excel,
-            login_google_chrome
+            login_google_chrome,
+            get_project_account_json, save_project_account_json
         )
 
         machine_code = detect_machine_code()
@@ -898,26 +902,28 @@ def _do_pre_login_if_needed():
         # Lấy danh sách accounts 1 lần
         all_accounts = get_channel_accounts(machine_code) or []
 
-        # Kiểm tra Excel của project đã có account chưa
-        # - Có account → tìm theo EMAIL trong danh sách → xoay index đến đúng vị trí
-        # - Chưa có account → rotate sang account tiếp theo
+        # v1.0.264: Ưu tiên đọc từ .account.json (độc lập với Excel)
+        # Nếu .account.json có → dùng ngay, KHÔNG rotate
+        # Nếu không có → thử đọc Excel → nếu không có → rotate
         need_rotate = True
-        if excel_path.exists():
-            account_info = get_account_from_excel(str(excel_path))
-            if account_info and account_info.get('email'):
-                saved_email = account_info['email'].lower().strip()
-                # Tìm đúng vị trí theo email (tránh lỗi index sai trong Excel)
-                for i, acc in enumerate(all_accounts):
-                    if acc.get('id', '').lower().strip() == saved_email:
-                        save_account_index(channel, i)  # Xoay đến đúng TK
-                        print(f"[PRE-LOGIN] Excel co account: {account_info['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
-                        need_rotate = False
-                        break
-                if need_rotate:
-                    print(f"[PRE-LOGIN] Email {account_info['email']} khong tim thay trong GSheet → rotate")
+        account_info = get_project_account_json(project_dir)  # .account.json trước
+        if not account_info.get('email'):
+            # Fallback: đọc từ Excel
+            if excel_path.exists():
+                account_info = get_account_from_excel(str(excel_path)) or {}
+
+        if account_info.get('email'):
+            saved_email = account_info['email'].lower().strip()
+            for i, acc in enumerate(all_accounts):
+                if acc.get('id', '').lower().strip() == saved_email:
+                    save_account_index(channel, i)
+                    print(f"[PRE-LOGIN] Account found: {account_info['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
+                    need_rotate = False
+                    break
+            if need_rotate:
+                print(f"[PRE-LOGIN] Email {account_info['email']} khong tim thay trong GSheet → rotate")
 
         if need_rotate:
-            # Excel CHUA CO account → rotate sang account tiếp theo
             if all_accounts and len(all_accounts) > 1:
                 new_idx = rotate_account_index(channel, len(all_accounts))
                 print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
@@ -947,17 +953,12 @@ def _do_pre_login_if_needed():
         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
-        # Lưu account vào Excel (chỉ khi mã mới chưa có account)
-        if need_rotate and excel_path.exists():
-            save_account_to_excel(
-                str(excel_path),
-                channel,
-                current_account['index'],
-                current_account['id']
-            )
-            print("[PRE-LOGIN] Account saved to Excel")
-        elif not need_rotate:
-            print("[PRE-LOGIN] Account da co trong Excel, khong can luu lai")
+        # Lưu account vào .account.json (luôn luôn - nguồn chính)
+        save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
+        # Lưu vào Excel (secondary - để tương thích)
+        if excel_path.exists():
+            save_account_to_excel(str(excel_path), channel, current_account['index'], current_account['id'])
+        print("[PRE-LOGIN] Account saved")
 
     except Exception as e:
         print(f"[PRE-LOGIN] Error (non-critical): {e}")
