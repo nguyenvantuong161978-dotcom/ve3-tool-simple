@@ -5439,18 +5439,16 @@ if (btn) {
             cfg = {}
 
         headless = cfg.get('browser_headless', False)
-        ws_cfg = cfg.get('webshare_proxy', {})
-        use_webshare = ws_cfg.get('enabled', False)
-        machine_id = ws_cfg.get('machine_id', 1)
 
+        # Thumbnail luon dung mang may mac dinh (khong proxy/webshare)
         drission = DrissionFlowAPI(
             headless=headless,
             verbose=True,
             log_callback=lambda msg, lvl="INFO": self.log(f"[THUMB] {msg}", lvl),
-            webshare_enabled=use_webshare,
+            webshare_enabled=False,
+            use_proxy=False,
             worker_id=self.worker_id,
             total_workers=self.total_workers,
-            machine_id=machine_id,
             chrome_portable=self.chrome_portable,
         )
 
@@ -5461,8 +5459,21 @@ if (btn) {
 
         self.log("[THUMB] Chrome ready!")
 
+        # Load media_ids tu characters sheet (nv1 -> media_id_string)
+        excel_media_ids = {}
+        try:
+            excel_media_ids = wb.get_media_ids()
+            if excel_media_ids:
+                self.log(f"[THUMB] Loaded {len(excel_media_ids)} media_ids: {list(excel_media_ids.keys())}")
+            else:
+                self.log("[THUMB] WARN: Khong co media_id trong Excel - se tao anh khong co reference", "WARN")
+        except Exception as e:
+            self.log(f"[THUMB] WARN: Loi load media_ids: {e}", "WARN")
+
+        excel_media_ids_lower = {k.lower(): v for k, v in excel_media_ids.items()}
+
         def _build_image_inputs(thumbnail):
-            """Build reference image_inputs list tu reference_files trong Excel."""
+            """Build reference image_inputs list dung media_id tu characters sheet."""
             image_inputs = []
             ref_files_str = thumbnail.reference_files or ""
             ref_files = []
@@ -5472,14 +5483,20 @@ if (btn) {
                 pass
 
             for ref in ref_files:
-                ref_path = proj_dir / ref
-                if ref_path.exists():
+                # ref = "nv/nv1.png" hoac "loc/loc1.png"
+                ref_id = Path(ref).stem  # "nv1" hoac "loc1"
+                ref_id_lower = ref_id.lower()
+
+                if ref_id_lower in excel_media_ids_lower:
+                    media_id = excel_media_ids_lower[ref_id_lower]
                     image_inputs.append({
-                        "name": str(ref_path),
-                        "imageInputType": "SUBJECT_REFERENCE"
+                        "name": media_id,
+                        "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
                     })
+                    self.log(f"[THUMB] Ref OK: {ref_id} -> {media_id[:30]}...")
                 else:
-                    self.log(f"[THUMB] WARN: Ref khong ton tai: {ref}", "WARN")
+                    self.log(f"[THUMB] WARN: {ref_id} khong co media_id, skip", "WARN")
+
             return image_inputs
 
         success_count = 0
@@ -5520,9 +5537,6 @@ if (btn) {
 
         # ---- BATCH B: Portrait (chon doc 9:16) ----
         self.log("[THUMB] Batch B: Portrait (3 anh)...")
-        orient_ok = drission.select_orientation("PORTRAIT")
-        if not orient_ok:
-            self.log("[THUMB] WARN: Khong chon duoc PORTRAIT, thu tiep", "WARN")
 
         for i, thumb in enumerate(thumbnails[:3]):
             if thumb.status_portrait == "done" and thumb.img_path_portrait and (proj_dir / thumb.img_path_portrait).exists():
@@ -5532,6 +5546,12 @@ if (btn) {
 
             fname = f"thumb_{i+4:03d}.png"
             save_path = thumb_dir / fname
+
+            # Chon PORTRAIT truoc moi anh (vi Chrome restart sau moi anh lam mat orientation)
+            self.log(f"[THUMB] Chon PORTRAIT cho {fname}...")
+            orient_ok = drission.select_orientation("PORTRAIT")
+            if not orient_ok:
+                self.log(f"[THUMB] WARN: Khong chon duoc PORTRAIT cho {fname}, thu tiep", "WARN")
 
             image_inputs = _build_image_inputs(thumb)
             self.log(f"[THUMB] Tao {fname} (portrait): {thumb.img_prompt[:60]}...")
