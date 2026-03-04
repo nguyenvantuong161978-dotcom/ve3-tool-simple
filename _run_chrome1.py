@@ -442,13 +442,16 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             is_fresh_start = (current == 0)  # Chưa có ảnh nào = bắt đầu mới
 
             if account_info and account_info.get('email'):
-                # RESUME: Đã có account → restore account index
+                # RESUME: Đã có email → restore account index
                 log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {account_info.get('index')})")
                 set_account_index_for_resume(str(excel_path), channel)
-
-                # v1.0.132: PRE-LOGIN đã login cho project này → KHÔNG login lại
-                # (PRE-LOGIN dùng cùng logic chọn project với cycle loop)
                 log(f"  [RESUME] Account already set, skipping login (PRE-LOGIN handled)")
+            elif account_info and account_info.get('index') is not None:
+                # v1.0.266: Excel cũ chỉ có index (không có email) - restore bằng index
+                from google_login import save_account_index as _sai
+                idx = account_info['index']
+                _sai(channel, idx)
+                log(f"  [RESUME] Restoring by index={idx} (no email in Excel) - skipping login")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 
@@ -922,6 +925,15 @@ def _do_pre_login_if_needed():
                     break
             if need_rotate:
                 print(f"[PRE-LOGIN] Email {account_info['email']} khong tim thay trong GSheet → rotate")
+        elif account_info.get('index') is not None:
+            # v1.0.266: Excel cu chi co account_index (khong co email) - lookup bang index
+            idx = account_info['index']
+            if 0 <= idx < len(all_accounts):
+                save_account_index(channel, idx)
+                print(f"[PRE-LOGIN] Excel account index={idx} → dung account {all_accounts[idx]['id']} (khong rotate)")
+                need_rotate = False
+            else:
+                print(f"[PRE-LOGIN] Excel index={idx} out of range (total={len(all_accounts)}) → rotate")
 
         if need_rotate:
             if all_accounts and len(all_accounts) > 1:

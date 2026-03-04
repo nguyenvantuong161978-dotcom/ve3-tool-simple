@@ -431,9 +431,11 @@ def get_account_from_excel(excel_path: str) -> dict:
             elif key == 'account_email':
                 result['email'] = value
 
-        # Chỉ trả về nếu có đủ thông tin
-        if 'channel' in result and 'index' in result and 'email' in result:
-            log(f"Read account from Excel: {result['email']} (index {result['index']})")
+        # v1.0.266: Chỉ cần channel + index (email optional - Excel cũ có thể thiếu)
+        if 'channel' in result and 'index' in result:
+            if 'email' not in result:
+                result['email'] = ''  # Excel cũ không có email - caller sẽ lookup từ GSheet
+            log(f"Read account from Excel: {result.get('email') or 'no-email'} (index {result['index']})")
             return result
 
         return None

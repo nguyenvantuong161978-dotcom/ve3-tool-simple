@@ -108,6 +108,12 @@ def main():
                     break
             else:
                 print(f"[PRE-LOGIN] Email {saved_account_info['email']} khong tim thay trong GSheet → se rotate")
+        elif saved_account_info and saved_account_info.get('index') is not None:
+            # v1.0.266: Excel cu chi co account_index (khong co email) - lookup bang index
+            idx = saved_account_info['index']
+            if 0 <= idx < len(all_accounts):
+                save_account_index(channel, idx)
+                print(f"[PRE-LOGIN] Excel account index={idx} → dung account {all_accounts[idx]['id']} (khong rotate)")
     except Exception as e:
         print(f"[PRE-LOGIN] Check saved account: {e}")
 
