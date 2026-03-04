@@ -442,10 +442,11 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             is_fresh_start = (current == 0)  # Chưa có ảnh nào = bắt đầu mới
 
             if account_info and account_info.get('email'):
-                # RESUME: Đã có email → restore account index
-                log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {account_info.get('index')})")
-                set_account_index_for_resume(str(excel_path), channel)
-                log(f"  [RESUME] Account already set, skipping login (PRE-LOGIN handled)")
+                # RESUME: Đã có email trong .account.json → dùng index từ .account.json (không đọc Excel)
+                from google_login import save_account_index as _sai_resume
+                idx = account_info.get('index', 0)
+                _sai_resume(channel, idx)
+                log(f"  [RESUME] Restoring account: {account_info.get('email')} (index {idx}) from .account.json")
             elif account_info and account_info.get('index') is not None:
                 # v1.0.266: Excel cũ chỉ có index (không có email) - restore bằng index
                 from google_login import save_account_index as _sai
