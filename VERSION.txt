@@ -1,8 +1,15 @@
-1.0.278
+1.0.279
 2026-03-05 (VN)
-Change: FIX MANH - Neu .account.json ton tai thi KHONG BAO GIO rotate (du email khong tim thay)
+Change: FIX NGUYEN NHAN GOC - _delete_project_folder() tao marker khi xoa khong het
 
 Thay doi:
+- v1.0.279: FIX NGUYEN NHAN GOC - .account.json bi xoa khi delete fail mot phan:
+  * vm_manager.py _delete_project_folder(): Neu xoa khong het → tao _COPIED_TO_VISUAL marker
+  * Truoc day: xoa duoc .account.json (file nho, xoa truoc) nhung khong xoa duoc file khac bi lock
+    Directory con nhung khong co .account.json → Chrome scan thay → pre-login rotate!
+  * Sau fix: neu directory van con sau khi xoa → tao marker → Chrome scan bo qua project
+  * Ket hop voi v1.0.276 (run_worker.py co marker), bay gio ca 2 duong xoa deu bao ve
+
 - v1.0.278: FIX MANH _do_pre_login_if_needed() - neu file ton tai = khong rotate:
   * Cu: neu email trong .account.json khong tim thay trong GSheet → van rotate (SAI!)
   * Moi: neu FILE ton tai → KHONG BAO GIO rotate, du email khong trong GSheet

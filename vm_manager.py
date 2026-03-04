@@ -1907,6 +1907,14 @@ class VMManager:
         if src_dir.exists():
             remaining = list(src_dir.rglob("*"))
             self.log(f"Could not fully delete folder, {len(remaining)} items remain", "SYSTEM", "ERROR")
+            # v1.0.279: Tạo marker _COPIED_TO_VISUAL để Chrome scan bỏ qua project này
+            # Tránh trường hợp: .account.json bị xóa nhưng directory còn → Chrome pick up lại → rotate account
+            try:
+                marker = src_dir / "_COPIED_TO_VISUAL"
+                marker.touch()
+                self.log(f"Created _COPIED_TO_VISUAL marker (partial delete) → Chrome will skip", "SYSTEM", "WARN")
+            except Exception as me:
+                self.log(f"Could not create marker: {me}", "SYSTEM", "WARN")
         else:
             self.log("Local folder deleted successfully", "SYSTEM", "SUCCESS")
 
