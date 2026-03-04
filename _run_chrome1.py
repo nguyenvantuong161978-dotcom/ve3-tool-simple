@@ -906,35 +906,62 @@ def _do_pre_login_if_needed():
         # Lấy danh sách accounts 1 lần
         all_accounts = get_channel_accounts(machine_code) or []
 
-        # v1.0.264: Ưu tiên đọc từ .account.json (độc lập với Excel)
-        # Nếu .account.json có → dùng ngay, KHÔNG rotate
-        # Nếu không có → thử đọc Excel → nếu không có → rotate
-        need_rotate = True
-        account_info = get_project_account_json(project_dir)  # .account.json trước
-        if not account_info.get('email'):
-            # Fallback: đọc từ Excel
+        # v1.0.274: .account.json ton tai → LUON dung account do, KHONG rotate, KHONG sua file
+        # Chi rotate khi CHUA co .account.json (ma moi hoan toan)
+        account_json_path = project_dir / ".account.json"
+        has_account_json = account_json_path.exists()
+        need_rotate = not has_account_json  # Chi rotate khi khong co file
+
+        if has_account_json:
+            # Doc raw file (khong qua get_project_account_json vi ham do tra {} khi khong co email)
+            try:
+                import json as _json
+                raw_data = _json.loads(account_json_path.read_text(encoding='utf-8'))
+                saved_email = (raw_data.get('email') or '').lower().strip()
+                saved_idx = raw_data.get('index')
+
+                if saved_email:
+                    # Tim theo email
+                    for i, acc in enumerate(all_accounts):
+                        if acc.get('id', '').lower().strip() == saved_email:
+                            save_account_index(channel, i)
+                            print(f"[PRE-LOGIN] RESUME: {saved_email} (vi tri {i+1}/{len(all_accounts)}) → giu account cu")
+                            break
+                    else:
+                        # Email khong tim thay nhung VAN KHONG rotate (giu file, dung index)
+                        if saved_idx is not None and 0 <= saved_idx < len(all_accounts):
+                            save_account_index(channel, saved_idx)
+                            print(f"[PRE-LOGIN] RESUME: email khong trong GSheet, dung index={saved_idx} → {all_accounts[saved_idx]['id']}")
+                        else:
+                            print(f"[PRE-LOGIN] RESUME: .account.json co ({saved_email}) → giu nguyen, khong rotate")
+                elif saved_idx is not None and 0 <= saved_idx < len(all_accounts):
+                    # Chi co index, khong co email
+                    save_account_index(channel, saved_idx)
+                    print(f"[PRE-LOGIN] RESUME: index={saved_idx} → {all_accounts[saved_idx]['id']} (khong rotate)")
+                else:
+                    print(f"[PRE-LOGIN] RESUME: .account.json ton tai → giu nguyen, khong rotate")
+            except Exception as e:
+                print(f"[PRE-LOGIN] RESUME: doc .account.json loi ({e}) → giu nguyen, khong rotate")
+        else:
+            # Khong co .account.json → ma moi, fallback Excel
+            account_info = {}
             if excel_path.exists():
                 account_info = get_account_from_excel(str(excel_path)) or {}
 
-        if account_info.get('email'):
-            saved_email = account_info['email'].lower().strip()
-            for i, acc in enumerate(all_accounts):
-                if acc.get('id', '').lower().strip() == saved_email:
-                    save_account_index(channel, i)
-                    print(f"[PRE-LOGIN] Account found: {account_info['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
+            if account_info.get('email'):
+                saved_email = account_info['email'].lower().strip()
+                for i, acc in enumerate(all_accounts):
+                    if acc.get('id', '').lower().strip() == saved_email:
+                        save_account_index(channel, i)
+                        print(f"[PRE-LOGIN] Excel account: {account_info['email']} (vi tri {i+1}/{len(all_accounts)})")
+                        need_rotate = False
+                        break
+            elif account_info.get('index') is not None:
+                idx = account_info['index']
+                if 0 <= idx < len(all_accounts):
+                    save_account_index(channel, idx)
+                    print(f"[PRE-LOGIN] Excel index={idx} → {all_accounts[idx]['id']}")
                     need_rotate = False
-                    break
-            if need_rotate:
-                print(f"[PRE-LOGIN] Email {account_info['email']} khong tim thay trong GSheet → rotate")
-        elif account_info.get('index') is not None:
-            # v1.0.266: Excel cu chi co account_index (khong co email) - lookup bang index
-            idx = account_info['index']
-            if 0 <= idx < len(all_accounts):
-                save_account_index(channel, idx)
-                print(f"[PRE-LOGIN] Excel account index={idx} → dung account {all_accounts[idx]['id']} (khong rotate)")
-                need_rotate = False
-            else:
-                print(f"[PRE-LOGIN] Excel index={idx} out of range (total={len(all_accounts)}) → rotate")
 
         if need_rotate:
             if all_accounts and len(all_accounts) > 1:
@@ -966,13 +993,13 @@ def _do_pre_login_if_needed():
         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
-        # Lưu account vào .account.json - CHỈ KHI CHƯA TỒN TẠI (v1.0.267)
-        _existing_json = get_project_account_json(project_dir)
-        if not _existing_json.get('email'):
+        # Lưu account vào .account.json - CHỈ KHI FILE CHƯA TỒN TẠI (v1.0.274)
+        # Dùng file existence thay vì email check để tránh overwrite khi file có nhưng email bị corrupt
+        if not has_account_json:
             save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
             print("[PRE-LOGIN] Account saved to .account.json (moi)")
         else:
-            print(f"[PRE-LOGIN] .account.json da co ({_existing_json.get('email')}) → giu nguyen")
+            print(f"[PRE-LOGIN] .account.json da co → giu nguyen (khong sua)")
         # Lưu vào Excel (secondary - để tương thích)
         if excel_path.exists():
             save_account_to_excel(str(excel_path), channel, current_account['index'], current_account['id'])
