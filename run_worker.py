@@ -485,29 +485,6 @@ def delete_local_project(code: str):
         print(f"  [WARN] Cleanup local warning: {e}")
 
 
-def _restore_account_json_from_visual(code: str, local_dir: Path):
-    """
-    v1.0.273: Khôi phục .account.json từ MASTER_VISUAL nếu local không có.
-
-    Kịch bản: project đã xử lý xong → copy_to_visual() đã copy .account.json lên VISUAL
-    → local bị xóa → project cần xử lý lại → copy từ MASTER_PROJECTS (không có .account.json)
-    → .account.json mất → pre-login rotate sang account mới (SAI).
-
-    Fix: Sau khi copy từ master, nếu .account.json không có → lấy từ VISUAL.
-    """
-    account_json_dst = local_dir / ".account.json"
-    if account_json_dst.exists():
-        return  # Đã có, không cần khôi phục
-
-    try:
-        account_json_visual = MASTER_VISUAL / code / ".account.json"
-        if account_json_visual.exists():
-            shutil.copy2(account_json_visual, account_json_dst)
-            print(f"  [COPY] Restored .account.json from VISUAL for {code}")
-    except Exception as e:
-        print(f"  [WARN] Could not restore .account.json: {e}")
-
-
 def copy_from_master(code: str) -> Path:
     """Copy project from master to local (or return local if already exists).
 
@@ -543,9 +520,6 @@ def copy_from_master(code: str) -> Path:
 
             # v1.0.67: KHÔNG XÓA master source - dựa vào VISUAL để check done
             # delete_master_source(code)  # REMOVED
-
-        # Khôi phục .account.json từ VISUAL nếu local không có
-        _restore_account_json_from_visual(code, dst)
         return dst
 
     # Local doesn't exist, need to copy from master
@@ -556,9 +530,6 @@ def copy_from_master(code: str) -> Path:
     print(f"  [COPY] Copying from master: {code}")
     shutil.copytree(src, dst)
     print(f"  [OK] Copied to: {dst}")
-
-    # Khôi phục .account.json từ VISUAL nếu không có trong PROJECTS
-    _restore_account_json_from_visual(code, dst)
 
     # v1.0.67: KHÔNG XÓA master source - dựa vào VISUAL để check done
     # delete_master_source(code)  # REMOVED
