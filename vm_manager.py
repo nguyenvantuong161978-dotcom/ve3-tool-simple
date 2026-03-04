@@ -2517,29 +2517,38 @@ class VMManager:
             chrome_h = screen_h // 2
             chrome_windows = self.get_chrome_windows()
 
-            # v1.0.268: Sort by exe path: Chrome 1 (no "Copy") → top, Chrome 2 ("Copy") → bottom
-            def _chrome_worker_key(hwnd):
+            # v1.0.269: Pick exactly 1 Chrome1 + 1 Chrome2 from potentially many windows
+            # (old chrome.exe processes may linger after restart, causing duplicates)
+            def _get_exe(hwnd):
                 try:
                     _k32 = ctypes.windll.kernel32
                     _pid = ctypes.c_ulong(0)
                     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(_pid))
-                    _h = _k32.OpenProcess(0x1000, False, _pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+                    _h = _k32.OpenProcess(0x1000, False, _pid.value)
                     if _h:
                         try:
                             _buf = ctypes.create_unicode_buffer(1024)
                             _sz = ctypes.c_uint32(1024)
                             _k32.QueryFullProcessImageNameW(_h, 0, _buf, ctypes.byref(_sz))
-                            return 1 if ' - copy' in _buf.value.lower() else 0
+                            return _buf.value.lower()
                         finally:
                             _k32.CloseHandle(_h)
                 except Exception:
                     pass
-                return 0
-            chrome_windows.sort(key=_chrome_worker_key)
+                return ""
 
-            for i, hwnd in enumerate(chrome_windows[:2]):
+            chrome1_wins = [w for w in chrome_windows if ' - copy' not in _get_exe(w)]
+            chrome2_wins = [w for w in chrome_windows if ' - copy' in _get_exe(w)]
+            # EnumWindows returns Z-order (topmost first) → [0] = most recently active window
+            to_arrange = []
+            if chrome1_wins:
+                to_arrange.append((0, chrome1_wins[0]))   # Chrome 1 → top (y=0)
+            if chrome2_wins:
+                to_arrange.append((1, chrome2_wins[0]))   # Chrome 2 → bottom (y=chrome_h)
+
+            for slot, hwnd in to_arrange:
                 user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                user32.MoveWindow(hwnd, right_x, i * chrome_h, right_w, chrome_h, True)
+                user32.MoveWindow(hwnd, right_x, slot * chrome_h, right_w, chrome_h, True)
 
             # CMDs xep doc duoi tool (trai)
             cmd_windows = self.get_cmd_windows()
