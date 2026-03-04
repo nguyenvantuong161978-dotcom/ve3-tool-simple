@@ -2787,17 +2787,26 @@ class VMManager:
                 self.log(f"[Backup] Error creating backup: {e}", "SYSTEM", "WARN")
 
     def _restore_excel_from_backup(self, project_code: str):
-        """v1.0.234: Restore Excel từ backup (xóa bản đang làm, dùng lại bản gốc sạch)."""
+        """v1.0.262: Restore Excel từ backup dùng os.replace() - ATOMIC, tránh mất Excel nếu copy fail."""
         excel_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts.xlsx"
         backup_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts_backup.xlsx"
         if backup_path.exists():
             try:
-                if excel_path.exists():
-                    excel_path.unlink()
-                shutil.copy2(str(backup_path), str(excel_path))
+                # Copy backup → temp trước, KHÔNG xóa Excel gốc
+                temp_path = excel_path.parent / f"{excel_path.stem}_restore_temp.xlsx"
+                shutil.copy2(str(backup_path), str(temp_path))
+                # Atomic replace: swap temp → excel (nếu fail, Excel gốc vẫn còn)
+                import os
+                os.replace(str(temp_path), str(excel_path))
                 self.log(f"[Backup] Restored Excel from backup - clean slate", "SYSTEM", "SUCCESS")
             except Exception as e:
                 self.log(f"[Backup] Error restoring backup: {e}", "SYSTEM", "ERROR")
+                # Dọn temp nếu còn
+                try:
+                    if temp_path.exists():
+                        temp_path.unlink()
+                except Exception:
+                    pass
         else:
             self.log(f"[Backup] No backup found for {project_code}", "SYSTEM", "WARN")
 

@@ -356,7 +356,7 @@ def create_videos_for_project(project_dir: Path, code: str, callback=None) -> bo
             return False
 
         log(f"\n[VIDEO] Creating videos for {code}...")
-        engine = SmartEngine(worker_id=0, total_workers=1)
+        engine = SmartEngine(worker_id=0, total_workers=2)  # total_workers=2 tranh xoa Excel
 
         # Run với skip_video=False để tạo video
         # SmartEngine sẽ tự động skip ảnh đã tồn tại

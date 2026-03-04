@@ -1,8 +1,9 @@
-1.0.261
+1.0.262
 2026-03-04 (VN)
-Change: Bo xoa hang loat nv+img khi khong co media_id - de per-image check xu ly
+Change: Fix _restore_excel_from_backup dung atomic os.replace() tranh mat Excel
 
 Thay doi:
+- v1.0.262: _restore_excel_from_backup() dung copy→temp roi os.replace() (atomic) thay vi unlink+copy2 - tranh tinh huong unlink thanh cong nhung copy2 fail → Excel mat han; create_videos_for_project() doi total_workers=2 tranh xoa Excel khi chay song song
 - v1.0.261: smart_engine.py bo bulk delete nv/img khi media_ids trong Excel rong (sau backup restore) - per-image _media_exists() da xu ly tung file nv/loc chinh xac hon, scene images khong bi xoa thua
 - v1.0.260: _do_pre_login_if_needed() dung get_channel_accounts(machine_code) thay vi get_channel_accounts(channel) → tranh "Chi co 1 account, khong can rotate" sai khi GSheet dung machine_code (KA2-T2) khong phai channel (KA2)
 - v1.0.259: _pre_login.py kiem tra Excel truoc khi login/save: neu da co account → dung account do (khong rotate, khong ghi de)
