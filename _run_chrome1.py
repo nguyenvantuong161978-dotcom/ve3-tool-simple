@@ -919,35 +919,67 @@ def _do_pre_login_if_needed():
         # Lấy danh sách accounts 1 lần
         all_accounts = get_channel_accounts(machine_code) or []
 
-        # v1.0.264: Ưu tiên đọc từ .account.json (độc lập với Excel)
-        # Nếu .account.json có → dùng ngay, KHÔNG rotate
-        # Nếu không có → thử đọc Excel → nếu không có → rotate
+        # v1.0.278: Nếu .account.json TỒN TẠI → KHÔNG BAO GIỜ rotate (dù email không tìm thấy)
+        # Chỉ rotate khi file KHÔNG tồn tại và Excel cũng không có account
+        import json as _json
+        _account_json_path_pre = project_dir / ".account.json"
         need_rotate = True
-        account_info = get_project_account_json(project_dir)  # .account.json trước
-        if not account_info.get('email'):
-            # Fallback: đọc từ Excel
+
+        if _account_json_path_pre.exists():
+            # File tồn tại → đọc raw (không qua get_project_account_json để tránh bị lọc)
+            need_rotate = False  # KHÔNG rotate khi file tồn tại
+            try:
+                _raw = _json.loads(_account_json_path_pre.read_text(encoding="utf-8"))
+                saved_email = _raw.get('email', '').lower().strip()
+                saved_idx = _raw.get('index')
+
+                # Ưu tiên tìm theo email
+                found_by_email = False
+                if saved_email:
+                    for i, acc in enumerate(all_accounts):
+                        if acc.get('id', '').lower().strip() == saved_email:
+                            save_account_index(channel, i)
+                            print(f"[PRE-LOGIN] Account found: {saved_email} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
+                            found_by_email = True
+                            break
+                    if not found_by_email:
+                        # Email không trong GSheet → dùng index từ file
+                        if saved_idx is not None and 0 <= saved_idx < len(all_accounts):
+                            save_account_index(channel, saved_idx)
+                            print(f"[PRE-LOGIN] Email {saved_email} khong trong GSheet, dung index={saved_idx} → KHONG rotate")
+                        else:
+                            print(f"[PRE-LOGIN] Email {saved_email} khong trong GSheet, index={saved_idx} invalid → dung account hien tai")
+                elif saved_idx is not None:
+                    # Chỉ có index (không có email)
+                    if 0 <= saved_idx < len(all_accounts):
+                        save_account_index(channel, saved_idx)
+                        print(f"[PRE-LOGIN] Account by index={saved_idx} → KHONG rotate")
+                    else:
+                        print(f"[PRE-LOGIN] Index={saved_idx} out of range → dung account hien tai")
+            except Exception as e:
+                print(f"[PRE-LOGIN] WARN doc .account.json: {e} → dung account hien tai")
+        else:
+            # Không có file → thử đọc Excel, nếu không có → rotate
+            account_info = {}
             if excel_path.exists():
                 account_info = get_account_from_excel(str(excel_path)) or {}
 
-        if account_info.get('email'):
-            saved_email = account_info['email'].lower().strip()
-            for i, acc in enumerate(all_accounts):
-                if acc.get('id', '').lower().strip() == saved_email:
-                    save_account_index(channel, i)
-                    print(f"[PRE-LOGIN] Account found: {account_info['email']} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
+            if account_info.get('email'):
+                saved_email = account_info['email'].lower().strip()
+                for i, acc in enumerate(all_accounts):
+                    if acc.get('id', '').lower().strip() == saved_email:
+                        save_account_index(channel, i)
+                        print(f"[PRE-LOGIN] Account from Excel: {account_info['email']} (vi tri {i+1}) → khong rotate")
+                        need_rotate = False
+                        break
+            elif account_info.get('index') is not None:
+                idx = account_info['index']
+                if 0 <= idx < len(all_accounts):
+                    save_account_index(channel, idx)
+                    print(f"[PRE-LOGIN] Excel account index={idx} → dung account {all_accounts[idx]['id']} (khong rotate)")
                     need_rotate = False
-                    break
-            if need_rotate:
-                print(f"[PRE-LOGIN] Email {account_info['email']} khong tim thay trong GSheet → rotate")
-        elif account_info.get('index') is not None:
-            # v1.0.266: Excel cu chi co account_index (khong co email) - lookup bang index
-            idx = account_info['index']
-            if 0 <= idx < len(all_accounts):
-                save_account_index(channel, idx)
-                print(f"[PRE-LOGIN] Excel account index={idx} → dung account {all_accounts[idx]['id']} (khong rotate)")
-                need_rotate = False
-            else:
-                print(f"[PRE-LOGIN] Excel index={idx} out of range (total={len(all_accounts)}) → rotate")
+                else:
+                    print(f"[PRE-LOGIN] Excel index={idx} out of range (total={len(all_accounts)}) → rotate")
 
         if need_rotate:
             if all_accounts and len(all_accounts) > 1:
