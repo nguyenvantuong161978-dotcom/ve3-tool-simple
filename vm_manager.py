@@ -2249,18 +2249,35 @@ class VMManager:
 
                         # Chrome browser windows have class "Chrome_WidgetWin_*"
                         if class_name.value.startswith("Chrome_WidgetWin"):
-                            # Get title (safe)
                             skip = False
-                            length = user32.GetWindowTextLengthW(hwnd)
-                            if length > 0:
-                                try:
-                                    title = ctypes.create_unicode_buffer(length + 1)
-                                    user32.GetWindowTextW(hwnd, title, length + 1)
-                                    # Skip Chrome.exe windows (only get browser windows)
-                                    if "chrome.exe" in title.value.lower():
-                                        skip = True
-                                except:
-                                    pass  # If error reading title, still include window
+
+                            # Skip small windows: notifications, popups, dialogs (v1.0.268)
+                            # Main browser window is always large (>= 400x300)
+                            try:
+                                from ctypes import wintypes as _wt
+                                class _RECT(ctypes.Structure):
+                                    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                                                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+                                _rc = _RECT()
+                                user32.GetWindowRect(hwnd, ctypes.byref(_rc))
+                                _w = _rc.right - _rc.left
+                                _h = _rc.bottom - _rc.top
+                                if _w < 400 or _h < 300:
+                                    skip = True  # Notification / popup nhỏ → bỏ qua
+                            except Exception:
+                                pass
+
+                            # Skip windows with "chrome.exe" in title
+                            if not skip:
+                                length = user32.GetWindowTextLengthW(hwnd)
+                                if length > 0:
+                                    try:
+                                        title = ctypes.create_unicode_buffer(length + 1)
+                                        user32.GetWindowTextW(hwnd, title, length + 1)
+                                        if "chrome.exe" in title.value.lower():
+                                            skip = True
+                                    except:
+                                        pass
 
                             if not skip:
                                 chrome_windows.append(hwnd)
