@@ -1,8 +1,13 @@
-1.0.272
+1.0.273
 2026-03-05 (VN)
-Change: FIX - generate_thumbnails() dung project URL tu Excel (khong tao project moi)
+Change: FIX - Khoi phuc .account.json tu VISUAL khi re-process project
 
 Thay doi:
+- v1.0.273: FIX account rotate sai khi re-process:
+  * run_worker.py: Them _restore_account_json_from_visual() - sau khi copy tu MASTER_PROJECTS,
+    neu khong co .account.json -> lay tu MASTER_VISUAL (noi da luu tu lan chay truoc)
+  * Ket qua: project re-process dung dung account cu (khong rotate moi)
+
 - v1.0.272: FIX thumbnail dung dung project:
   * smart_engine.py: Doc flow_project_url tu wb.get_config_value(), pass vao drission.setup(project_url=...)
   * Ly do: setup() khong co project_url -> tao project moi thay vi dung project da co
