@@ -1,13 +1,11 @@
 1.0.283
 2026-03-05 (VN)
-Change: FIX show on startup - dung chrome.exe truc tiep thay vi PortableApps launcher
+Change: REVERT chrome.exe - giu nguyen dung launcher GoogleChromePortable.exe
 
 Thay doi:
-- v1.0.283: Bo qua GoogleChromePortable.exe (launcher co splash screen):
-  * drission_flow_api.py setup(): Neu chrome_exe la launcher .exe
-    → kiem tra App/Chrome-bin/chrome.exe → dung truc tiep neu ton tai
-  * Tranh PortableApps "show on startup" splash/dialog
-  * Ket qua: Chrome mo truc tiep, khong co giao dien PortableApps
+- v1.0.283: REVERT - Bo code tim chrome.exe, chi dung 1 cach duy nhat: launcher
+  * drission_flow_api.py: Xoa logic uu tien chrome.exe
+  * Chi dung GoogleChromePortable.exe nhu truoc
 
 - v1.0.282: Defer delete - xoa folder sau khi Chrome idle (khong giu lock Excel)
 

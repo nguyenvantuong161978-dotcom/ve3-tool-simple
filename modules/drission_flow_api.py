@@ -2382,23 +2382,6 @@ class DrissionFlowAPI:
 
             # 3. Dùng Chrome portable nếu tìm thấy
             if chrome_exe:
-                # v1.0.283: Nếu đang dùng launcher (GoogleChromePortable.exe),
-                # ưu tiên dùng chrome.exe trực tiếp để tránh PortableApps splash screen
-                chrome_exe_path = Path(chrome_exe)
-                if chrome_exe_path.name.lower() == "googlechromeportable.exe":
-                    actual_chrome = chrome_exe_path.parent / "App" / "Chrome-bin" / "chrome.exe"
-                    if actual_chrome.exists():
-                        self.log(f"[CHROME] Dung chrome.exe truc tiep (bo qua launcher)")
-                        chrome_exe = str(actual_chrome)
-                        # chrome_dir vẫn là thư mục gốc portable (để tìm Data/profile)
-                        chrome_dir = chrome_exe_path.parent
-                        # Cập nhật lại user_data nếu chưa set
-                        if not user_data:
-                            for data_path in [chrome_dir / "Data" / "profile", chrome_dir / "User Data"]:
-                                if data_path.exists():
-                                    user_data = data_path
-                                    break
-
                 options.set_browser_path(chrome_exe)
                 if user_data:
                     options.set_user_data_path(str(user_data))
