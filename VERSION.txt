@@ -1,6 +1,14 @@
-1.0.281
+1.0.282
 2026-03-05 (VN)
-Change: DON GIAN HOA - Chi dung Registry, bo .account.json va Excel fallbacks
+Change: Defer delete - xoa folder sau khi Chrome idle (khong giu lock Excel)
+
+Thay doi:
+- v1.0.282: cleanup_copied_projects() - xoa deferred:
+  * Dau moi cycle (Chrome dang idle, khong giu lock Excel) → thu xoa folder co _COPIED_TO_VISUAL
+  * copy_to_visual() van chay binh thuong: copy → tao marker (neu xoa that bai)
+  * Cycle tiep theo (giua 2 project) → Chrome release lock → xoa thanh cong
+
+- v1.0.281: DON GIAN HOA - Chi dung Registry, bo .account.json va Excel fallbacks
 
 Thay doi:
 - v1.0.281: DON GIAN HOA account management - chi 1 noi duy nhat:

@@ -539,6 +539,33 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
     return False
 
 
+def cleanup_copied_projects():
+    """
+    v1.0.282: Xóa các folder đã có marker _COPIED_TO_VISUAL mà xóa lần trước chưa được.
+    Gọi đầu mỗi cycle khi Chrome đang idle (không giữ lock Excel).
+    """
+    if not LOCAL_PROJECTS.exists():
+        return
+    for item in LOCAL_PROJECTS.iterdir():
+        if not item.is_dir():
+            continue
+        if not (item / "_COPIED_TO_VISUAL").exists():
+            continue
+        try:
+            import stat
+            def _onerror(func, fpath, exc_info):
+                try:
+                    os.chmod(fpath, stat.S_IWRITE)
+                    func(fpath)
+                except Exception:
+                    pass
+            shutil.rmtree(item, onerror=_onerror)
+            if not item.exists():
+                print(f"  [DEL] Deferred delete success: {item.name}")
+        except Exception:
+            pass  # Sẽ thử lại cycle sau
+
+
 def scan_incomplete_local_projects() -> list:
     """
     Scan local PROJECTS for incomplete projects.
@@ -1014,6 +1041,9 @@ def run_scan_loop_with_agent():
         while True:
             cycle += 1
             print(f"\n[CYCLE {cycle}] Scanning...")
+
+            # v1.0.282: Dọn dẹp folder đã copy sang VISUAL nhưng chưa xóa được
+            cleanup_copied_projects()
 
             # Tìm projects cần xử lý (từ local và master)
             projects = scan_incomplete_local_projects()
