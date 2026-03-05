@@ -977,13 +977,27 @@ def _do_pre_login_if_needed():
                 return True
             return False
 
+        # v1.0.285: Kiểm tra có ảnh chưa → bằng chứng thực tế project đã chạy trước
+        _img_dir = project_dir / "img"
+        _existing_images = list(_img_dir.glob("*.png")) if _img_dir.exists() else []
+        _has_images = len(_existing_images) > 0
+
         _reg = _registry_get(code)
         if _reg.get('email') or _reg.get('index') is not None:
             # Registry có → restore
             _restore_and_save(_reg.get('email', ''), _reg.get('index'))
             print(f"[PRE-LOGIN] Registry: {code} → {_reg.get('email', 'index=' + str(_reg.get('index')))} → KHONG rotate")
+        elif _has_images:
+            # CÓ ẢNH nhưng không có Registry → project đã chạy trước, KHÔNG ROTATE
+            # Dùng account hiện tại (tốt hơn rotate sai hoàn toàn)
+            _cur = get_current_account_for_channel(channel, machine_code=machine_code)
+            if _cur:
+                _registry_save(code, channel, _cur['index'], _cur['id'])
+                print(f"[PRE-LOGIN] {len(_existing_images)} anh ton tai, KHONG rotate → dung account hien tai: {_cur['id']}")
+            else:
+                print(f"[PRE-LOGIN] {len(_existing_images)} anh ton tai, KHONG rotate (giu nguyen account)")
         else:
-            # Registry trống - kiểm tra .account.json để MIGRATE (1 lần duy nhất)
+            # Registry trống, không có ảnh - kiểm tra .account.json để MIGRATE (1 lần duy nhất)
             _migrated = False
             _account_json_path = project_dir / ".account.json"
             if _account_json_path.exists():
@@ -999,7 +1013,7 @@ def _do_pre_login_if_needed():
                     pass
 
             if not _migrated:
-                # Mã mới hoàn toàn → rotate
+                # Mã mới hoàn toàn (0 ảnh + không có lịch sử) → rotate
                 if all_accounts and len(all_accounts) > 1:
                     new_idx = rotate_account_index(channel, len(all_accounts))
                     print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")

@@ -1,8 +1,17 @@
-1.0.284
+1.0.285
 2026-03-05 (VN)
-Change: FIX migration gap - doc .account.json 1 lan de import vao Registry
+Change: FIX THUC SU - Co anh = KHONG ROTATE (du storage trong)
 
 Thay doi:
+- v1.0.285: FIX GEN GO TAN GOC - Dung anh lam bang chung, khong phu thuoc storage:
+  * _do_pre_login_if_needed(): Kiem tra img/*.png TRUOC KHI quyet dinh rotate
+  * Co anh ton tai → project DA CHAY TRUOC → KHONG ROTATE du Registry/account.json deu trong
+  * Giu nguyen account hien tai hoac luu account hien tai vao Registry
+  * Chi rotate khi: 0 anh + Registry trong + khong co .account.json (ma MOI HOAN TOAN)
+  * Ly do: Anh la bang chung thuc te, khong the bi mat boi upgrade/xoa file
+  * Truoc day: chi phu thuoc storage (Excel/json/Registry) → mat storage = rotate sai
+  * Ket qua: project dang lam do, upgrade code, khoi dong lai → KHONG BAO GIO rotate
+
 - v1.0.284: MIGRATION GAP FIX - nang cap tu code cu len v1.0.281+ bi loi:
   * Khi may moi nang cap, Registry trong → tat ca ma bi coi la "moi" → rotate sai
   * Fix: neu Registry trong → check .account.json 1 LAN DE MIGRATE vao Registry
