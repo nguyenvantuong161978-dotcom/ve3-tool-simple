@@ -962,31 +962,49 @@ def _do_pre_login_if_needed():
         # Lấy danh sách accounts 1 lần
         all_accounts = get_channel_accounts(machine_code) or []
 
-        # v1.0.281: CHỈ dùng Registry - đơn giản hóa tối đa
-        # Registry → Rotate (nếu chưa có trong registry = mã mới)
-        _reg = _registry_get(code)
-        if _reg.get('email') or _reg.get('index') is not None:
-            # Registry có → restore account index
-            idx = _reg.get('index', 0)
-            email = _reg.get('email', '')
-            # Tìm theo email trước, fallback sang index
-            restored = False
+        # v1.0.284: Registry → Migration từ .account.json (1 lần) → Rotate (mã mới)
+        import json as _jm
+
+        def _restore_and_save(email, idx):
+            """Restore account index từ email/idx, trả về True nếu thành công."""
             if email:
                 for i, acc in enumerate(all_accounts):
                     if acc.get('id', '').lower().strip() == email.lower().strip():
                         save_account_index(channel, i)
-                        restored = True
-                        break
-            if not restored and 0 <= idx < len(all_accounts):
+                        return True
+            if idx is not None and 0 <= idx < len(all_accounts):
                 save_account_index(channel, idx)
-            print(f"[PRE-LOGIN] Registry: {code} → {email or 'index=' + str(idx)} → KHONG rotate")
+                return True
+            return False
+
+        _reg = _registry_get(code)
+        if _reg.get('email') or _reg.get('index') is not None:
+            # Registry có → restore
+            _restore_and_save(_reg.get('email', ''), _reg.get('index'))
+            print(f"[PRE-LOGIN] Registry: {code} → {_reg.get('email', 'index=' + str(_reg.get('index')))} → KHONG rotate")
         else:
-            # Không có trong registry = mã mới → rotate
-            if all_accounts and len(all_accounts) > 1:
-                new_idx = rotate_account_index(channel, len(all_accounts))
-                print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
-            else:
-                print(f"[PRE-LOGIN] Chi co 1 account, khong can rotate")
+            # Registry trống - kiểm tra .account.json để MIGRATE (1 lần duy nhất)
+            _migrated = False
+            _account_json_path = project_dir / ".account.json"
+            if _account_json_path.exists():
+                try:
+                    _raw = _jm.loads(_account_json_path.read_text(encoding='utf-8'))
+                    _em = _raw.get('email', '')
+                    _ix = _raw.get('index')
+                    if _em or _ix is not None:
+                        _registry_save(code, channel, _ix or 0, _em)
+                        _migrated = _restore_and_save(_em, _ix)
+                        print(f"[PRE-LOGIN] MIGRATE → Registry: {code} → {_em or 'index=' + str(_ix)}")
+                except Exception:
+                    pass
+
+            if not _migrated:
+                # Mã mới hoàn toàn → rotate
+                if all_accounts and len(all_accounts) > 1:
+                    new_idx = rotate_account_index(channel, len(all_accounts))
+                    print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
+                else:
+                    print(f"[PRE-LOGIN] Chi co 1 account, khong can rotate")
 
         # Lấy account hiện tại (sau rotate hoặc restore)
         current_account = get_current_account_for_channel(channel, machine_code=machine_code)

@@ -1,6 +1,16 @@
-1.0.283
+1.0.284
 2026-03-05 (VN)
-Change: REVERT chrome.exe - giu nguyen dung launcher GoogleChromePortable.exe
+Change: FIX migration gap - doc .account.json 1 lan de import vao Registry
+
+Thay doi:
+- v1.0.284: MIGRATION GAP FIX - nang cap tu code cu len v1.0.281+ bi loi:
+  * Khi may moi nang cap, Registry trong → tat ca ma bi coi la "moi" → rotate sai
+  * Fix: neu Registry trong → check .account.json 1 LAN DE MIGRATE vao Registry
+    Sau khi migrate xong → Registry co du lieu → khong bao gio rotate lai
+  * Day KHONG phai fallback thuong xuyen, chi la migration 1 lan
+  * Ma that su moi (khong co .account.json) van rotate binh thuong
+
+- v1.0.283:
 
 Thay doi:
 - v1.0.283: REVERT - Bo code tim chrome.exe, chi dung 1 cach duy nhat: launcher
