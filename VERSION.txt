@@ -1,8 +1,16 @@
-1.0.280
+1.0.281
 2026-03-05 (VN)
-Change: GIAI PHAP TRIET DE - Registry trung tam ngoai project dir, luu truoc khi login
+Change: DON GIAN HOA - Chi dung Registry, bo .account.json va Excel fallbacks
 
 Thay doi:
+- v1.0.281: DON GIAN HOA account management - chi 1 noi duy nhat:
+  * _do_pre_login_if_needed(): Bo check .account.json (buoc 2) va Excel (buoc 3)
+    Chi con: Registry → Rotate (neu chua co trong registry = ma moi)
+    Bo: save_project_account_json(), save_account_to_excel()
+  * process_project_pic_basic() Step 3.5: Bo get_project_account_json(), get_account_from_excel()
+    Chi con: doc Registry → neu co thi restore, neu chua co thi luu (mid-cycle import)
+  * Ket qua: 1 noi duy nhat de doc/ghi account = config/.project_accounts.json
+
 - v1.0.280: GIAI PHAP TRIET DE - Account registry khong the bi xoa:
   * Them config/.project_accounts.json - nam NGOAI PROJECTS/, khong bi xoa theo project
   * _run_chrome1.py: Ham _registry_save() + _registry_get() - atomic write (os.replace)
