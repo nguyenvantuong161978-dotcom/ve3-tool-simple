@@ -268,6 +268,43 @@ else:
 LOCAL_PROJECTS = TOOL_DIR / "PROJECTS"
 WORKER_CHANNEL = get_channel_from_folder()
 
+# v1.0.280: Registry trung tâm - nằm NGOÀI project dir, không bao giờ bị xóa theo project
+ACCOUNT_REGISTRY = TOOL_DIR / "config" / ".project_accounts.json"
+
+
+def _registry_save(project_code: str, channel: str, index: int, email: str):
+    """Lưu account vào registry trung tâm (config/.project_accounts.json).
+    File này nằm ngoài PROJECTS/ nên không bao giờ bị xóa cùng project.
+    """
+    import json, os
+    try:
+        registry = {}
+        if ACCOUNT_REGISTRY.exists():
+            try:
+                registry = json.loads(ACCOUNT_REGISTRY.read_text(encoding="utf-8"))
+            except Exception:
+                registry = {}
+        registry[project_code] = {"channel": channel, "index": index, "email": email}
+        ACCOUNT_REGISTRY.parent.mkdir(exist_ok=True)
+        # Atomic write: ghi temp rồi rename để tránh corrupt khi crash
+        tmp = ACCOUNT_REGISTRY.parent / f".project_accounts_tmp_{os.getpid()}.json"
+        tmp.write_text(json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(ACCOUNT_REGISTRY))
+    except Exception as e:
+        print(f"[Registry] Warn save: {e}")
+
+
+def _registry_get(project_code: str) -> dict:
+    """Đọc account từ registry trung tâm. Trả về {} nếu không có."""
+    import json
+    try:
+        if ACCOUNT_REGISTRY.exists():
+            registry = json.loads(ACCOUNT_REGISTRY.read_text(encoding="utf-8"))
+            return registry.get(project_code, {})
+    except Exception:
+        pass
+    return {}
+
 
 def get_project_completion_percent(project_dir: Path, name: str) -> tuple:
     """
@@ -454,14 +491,20 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
                 _sai(channel, idx)
                 log(f"  [RESUME] Restoring by index={idx} (no email in Excel) - skipping login")
 
-            # v1.0.277: Save .account.json nếu chưa tồn tại
+            # v1.0.280: Save registry + .account.json nếu chưa tồn tại
             # Dành cho project import mid-cycle (pre-login không chạy cho project này)
             account_json_path = local_dir / ".account.json"
-            if not account_json_path.exists():
+            _reg_existing = _registry_get(code)
+            if not account_json_path.exists() or not _reg_existing.get('email'):
                 current_acc = get_current_account_for_channel(channel)
                 if current_acc and current_acc.get('id'):
-                    save_project_account_json(local_dir, channel, current_acc.get('index', 0), current_acc['id'])
-                    log(f"  [Account] Saved .account.json: {current_acc['id']} (mid-cycle import)")
+                    # Lưu registry trung tâm (ưu tiên cao nhất)
+                    _registry_save(code, channel, current_acc.get('index', 0), current_acc['id'])
+                    log(f"  [Account] Registry saved: {code} → {current_acc['id']}")
+                    # Lưu .account.json trong project dir (backup)
+                    if not account_json_path.exists():
+                        save_project_account_json(local_dir, channel, current_acc.get('index', 0), current_acc['id'])
+                        log(f"  [Account] Saved .account.json: {current_acc['id']} (mid-cycle import)")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 
@@ -919,68 +962,55 @@ def _do_pre_login_if_needed():
         # Lấy danh sách accounts 1 lần
         all_accounts = get_channel_accounts(machine_code) or []
 
-        # v1.0.278: Nếu .account.json TỒN TẠI → KHÔNG BAO GIỜ rotate (dù email không tìm thấy)
-        # Chỉ rotate khi file KHÔNG tồn tại và Excel cũng không có account
+        # v1.0.280: Thứ tự ưu tiên đọc account (từ đáng tin nhất đến ít nhất):
+        # 1. Registry trung tâm (config/.project_accounts.json) - nằm ngoài project dir
+        # 2. .account.json trong project dir
+        # 3. Excel
+        # 4. Rotate (chỉ khi không có gì)
         import json as _json
-        _account_json_path_pre = project_dir / ".account.json"
+
+        def _restore_account_index(email, idx):
+            """Tìm và set account index từ email, fallback sang idx trực tiếp."""
+            if email:
+                for i, acc in enumerate(all_accounts):
+                    if acc.get('id', '').lower().strip() == email.lower().strip():
+                        save_account_index(channel, i)
+                        return True
+            if idx is not None and 0 <= idx < len(all_accounts):
+                save_account_index(channel, idx)
+                return True
+            return False
+
         need_rotate = True
 
-        if _account_json_path_pre.exists():
-            # File tồn tại → đọc raw (không qua get_project_account_json để tránh bị lọc)
-            need_rotate = False  # KHÔNG rotate khi file tồn tại
-            try:
-                _raw = _json.loads(_account_json_path_pre.read_text(encoding="utf-8"))
-                saved_email = _raw.get('email', '').lower().strip()
-                saved_idx = _raw.get('index')
-
-                # Ưu tiên tìm theo email
-                found_by_email = False
-                if saved_email:
-                    for i, acc in enumerate(all_accounts):
-                        if acc.get('id', '').lower().strip() == saved_email:
-                            save_account_index(channel, i)
-                            print(f"[PRE-LOGIN] Account found: {saved_email} (vi tri {i+1}/{len(all_accounts)}) → dung account nay")
-                            found_by_email = True
-                            break
-                    if not found_by_email:
-                        # Email không trong GSheet → dùng index từ file
-                        if saved_idx is not None and 0 <= saved_idx < len(all_accounts):
-                            save_account_index(channel, saved_idx)
-                            print(f"[PRE-LOGIN] Email {saved_email} khong trong GSheet, dung index={saved_idx} → KHONG rotate")
-                        else:
-                            print(f"[PRE-LOGIN] Email {saved_email} khong trong GSheet, index={saved_idx} invalid → dung account hien tai")
-                elif saved_idx is not None:
-                    # Chỉ có index (không có email)
-                    if 0 <= saved_idx < len(all_accounts):
-                        save_account_index(channel, saved_idx)
-                        print(f"[PRE-LOGIN] Account by index={saved_idx} → KHONG rotate")
-                    else:
-                        print(f"[PRE-LOGIN] Index={saved_idx} out of range → dung account hien tai")
-            except Exception as e:
-                print(f"[PRE-LOGIN] WARN doc .account.json: {e} → dung account hien tai")
+        # 1. Kiểm tra registry trung tâm TRƯỚC TIÊN
+        _reg = _registry_get(code)
+        if _reg.get('email') or _reg.get('index') is not None:
+            need_rotate = False
+            _restored = _restore_account_index(_reg.get('email', ''), _reg.get('index'))
+            print(f"[PRE-LOGIN] Registry: {code} → {_reg.get('email', 'index=' + str(_reg.get('index')))} → KHONG rotate")
         else:
-            # Không có file → thử đọc Excel, nếu không có → rotate
-            account_info = {}
-            if excel_path.exists():
-                account_info = get_account_from_excel(str(excel_path)) or {}
-
-            if account_info.get('email'):
-                saved_email = account_info['email'].lower().strip()
-                for i, acc in enumerate(all_accounts):
-                    if acc.get('id', '').lower().strip() == saved_email:
-                        save_account_index(channel, i)
-                        print(f"[PRE-LOGIN] Account from Excel: {account_info['email']} (vi tri {i+1}) → khong rotate")
-                        need_rotate = False
-                        break
-            elif account_info.get('index') is not None:
-                idx = account_info['index']
-                if 0 <= idx < len(all_accounts):
-                    save_account_index(channel, idx)
-                    print(f"[PRE-LOGIN] Excel account index={idx} → dung account {all_accounts[idx]['id']} (khong rotate)")
+            # 2. Kiểm tra .account.json
+            _account_json_path_pre = project_dir / ".account.json"
+            if _account_json_path_pre.exists():
+                need_rotate = False
+                try:
+                    _raw = _json.loads(_account_json_path_pre.read_text(encoding="utf-8"))
+                    _restore_account_index(_raw.get('email', ''), _raw.get('index'))
+                    print(f"[PRE-LOGIN] .account.json: {_raw.get('email', 'unknown')} → KHONG rotate")
+                except Exception as e:
+                    print(f"[PRE-LOGIN] WARN doc .account.json: {e}")
+            else:
+                # 3. Kiểm tra Excel
+                account_info = {}
+                if excel_path.exists():
+                    account_info = get_account_from_excel(str(excel_path)) or {}
+                if account_info.get('email') or account_info.get('index') is not None:
+                    _restore_account_index(account_info.get('email', ''), account_info.get('index'))
                     need_rotate = False
-                else:
-                    print(f"[PRE-LOGIN] Excel index={idx} out of range (total={len(all_accounts)}) → rotate")
+                    print(f"[PRE-LOGIN] Excel: {account_info.get('email', 'index=' + str(account_info.get('index')))} → khong rotate")
 
+        # 4. Rotate nếu không có gì
         if need_rotate:
             if all_accounts and len(all_accounts) > 1:
                 new_idx = rotate_account_index(channel, len(all_accounts))
@@ -995,6 +1025,18 @@ def _do_pre_login_if_needed():
             return
 
         print(f"[PRE-LOGIN] Account: {current_account['id']}")
+
+        # v1.0.280: Lưu NGAY TRƯỚC khi clear Chrome + login (sớm nhất có thể)
+        # Registry trung tâm - không bao giờ bị xóa theo project dir
+        _registry_save(code, channel, current_account['index'], current_account['id'])
+        print(f"[PRE-LOGIN] Registry saved: {code} → {current_account['id']}")
+        # .account.json trong project dir (backup)
+        _account_json_path = project_dir / ".account.json"
+        if not _account_json_path.exists():
+            save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
+            print("[PRE-LOGIN] .account.json saved (moi)")
+        else:
+            print(f"[PRE-LOGIN] .account.json da co → giu nguyen")
 
         # Xóa Chrome data
         print("[PRE-LOGIN] Clearing Chrome data...")
@@ -1011,14 +1053,6 @@ def _do_pre_login_if_needed():
         login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
-        # Lưu account vào .account.json - CHỈ KHI CHƯA TỒN TẠI (v1.0.277: check file existence)
-        _account_json_path = project_dir / ".account.json"
-        if not _account_json_path.exists():
-            save_project_account_json(project_dir, channel, current_account['index'], current_account['id'])
-            print("[PRE-LOGIN] Account saved to .account.json (moi)")
-        else:
-            _existing_json = get_project_account_json(project_dir)
-            print(f"[PRE-LOGIN] .account.json da co ({_existing_json.get('email', 'unknown')}) → giu nguyen")
         # Lưu vào Excel (secondary - để tương thích)
         if excel_path.exists():
             save_account_to_excel(str(excel_path), channel, current_account['index'], current_account['id'])

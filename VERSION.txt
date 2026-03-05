@@ -1,8 +1,17 @@
-1.0.279
+1.0.280
 2026-03-05 (VN)
-Change: FIX NGUYEN NHAN GOC - _delete_project_folder() tao marker khi xoa khong het
+Change: GIAI PHAP TRIET DE - Registry trung tam ngoai project dir, luu truoc khi login
 
 Thay doi:
+- v1.0.280: GIAI PHAP TRIET DE - Account registry khong the bi xoa:
+  * Them config/.project_accounts.json - nam NGOAI PROJECTS/, khong bi xoa theo project
+  * _run_chrome1.py: Ham _registry_save() + _registry_get() - atomic write (os.replace)
+  * _do_pre_login_if_needed(): Doc registry TRUOC TIEN (truoc .account.json va Excel)
+    Luu registry NGAY SAU khi biet account, TRUOC khi clear Chrome va login
+  * Step 3.5: Luu registry cho project import mid-cycle (neu chua co)
+  * Thu tu uu tien: Registry → .account.json → Excel → Rotate
+  * Ket qua: Cho du project dir bi xoa hay .account.json bien mat, registry van con
+
 - v1.0.279: FIX NGUYEN NHAN GOC - .account.json bi xoa khi delete fail mot phan:
   * vm_manager.py _delete_project_folder(): Neu xoa khong het → tao _COPIED_TO_VISUAL marker
   * Truoc day: xoa duoc .account.json (file nho, xoa truoc) nhung khong xoa duoc file khac bi lock
