@@ -1690,10 +1690,11 @@ class VMManager:
                     if (item / f"{code}.srt").exists():
                         try:
                             st = self.quality_checker.get_project_status(code)
+                            self.log(f"[DEBUG] {code} (other channel): step={st.current_step}, imgs={st.images_done}/{st.total_scenes}, video_mode={st.video_mode}", "MANAGER")
                             if st.current_step == "done":
                                 projects.append(code)
-                        except:
-                            pass
+                        except Exception as e:
+                            self.log(f"[DEBUG] {code} get_status error: {e}", "MANAGER")
                     continue
                 if (item / f"{code}.srt").exists():
                     projects.append(code)
@@ -1928,6 +1929,7 @@ class VMManager:
 
     def create_tasks_for_project(self, project_code: str):
         status = self.quality_checker.get_project_status(project_code)
+        self.log(f"[DEBUG] create_tasks: {project_code} step={status.current_step} imgs={status.images_done}/{status.total_scenes} auto_path={self.auto_path}", "MANAGER")
 
         # Start project timer nếu đây là project mới
         if self.current_project_code != project_code:
