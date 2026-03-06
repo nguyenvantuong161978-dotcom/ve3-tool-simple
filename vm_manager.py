@@ -1127,7 +1127,15 @@ class VMManager:
     def log(self, msg: str, source: str = "MANAGER", level: str = "INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         emoji = {"INFO": "  ", "WARN": "[WARN]", "ERROR": "[FAIL]", "SUCCESS": "[OK]", "TASK": "[LIST]"}.get(level, "  ")
-        print(f"[{timestamp}] [{source}] {emoji} {msg}")
+        line = f"[{timestamp}] [{source}] {emoji} {msg}"
+        print(line)
+        try:
+            log_path = TOOL_DIR / "logs" / "manager.log"
+            log_path.parent.mkdir(exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except:
+            pass
 
     # ================================================================================
     # AGENT PROTOCOL INTEGRATION
