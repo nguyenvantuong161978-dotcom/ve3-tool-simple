@@ -512,12 +512,10 @@ class QualityChecker:
                 is_complete_enough = (status.images_done == status.total_scenes) or (completion_pct >= 80)
 
                 if is_complete_enough:
-                    if videos_complete:
-                        status.current_step = "done"
-                        if status.images_done < status.total_scenes:
-                            status.errors.append(f"Completed with {status.images_done}/{status.total_scenes} images ({completion_pct:.1f}%)")
-                    else:
-                        status.current_step = "video"
+                    # v1.0.299: Xong ảnh = xong, không cần video
+                    status.current_step = "done"
+                    if status.images_done < status.total_scenes:
+                        status.errors.append(f"Completed with {status.images_done}/{status.total_scenes} images ({completion_pct:.1f}%)")
 
         except Exception as e:
             status.errors.append(str(e))
