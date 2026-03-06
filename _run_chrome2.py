@@ -516,14 +516,39 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 )
 
                 # VÀO ĐÚNG PROJECT (dùng URL từ Excel)
-                if project_url:
-                    log(f"  [VALIDATOR] Starting Chrome with project URL...")
-                    if not validator_api.setup(project_url=project_url):
-                        log(f"  [ERROR] Failed to start Chrome!", "error")
-                        raise Exception("Chrome setup failed")
-                else:
-                    log(f"  [ERROR] No project URL - cannot validate!", "error")
-                    raise Exception("No project URL")
+                # Nếu chưa có URL, đợi Chrome 1 tạo xong project
+                if not project_url:
+                    log(f"  [WAIT] No project URL yet - waiting for Chrome 1 to create Flow project...")
+                    wait_url_interval = 15
+                    waited_url = 0
+                    max_wait_url = 1800  # 30 phút
+                    while not project_url and waited_url < max_wait_url:
+                        time.sleep(wait_url_interval)
+                        waited_url += wait_url_interval
+                        try:
+                            import openpyxl as _opxl
+                            _wb = _opxl.load_workbook(str(excel_path), read_only=True)
+                            if 'config' in _wb.sheetnames:
+                                for _row in _wb['config'].iter_rows(min_row=2):
+                                    if _row[0].value == 'flow_project_url':
+                                        project_url = _row[1].value
+                                        break
+                            _wb.close()
+                        except Exception:
+                            pass
+                        if project_url:
+                            log(f"  [v] Got project URL after {waited_url}s: {project_url[:60]}...")
+                        else:
+                            log(f"  [WAIT] Still no project URL ({waited_url}s)...")
+
+                if not project_url:
+                    log(f"  [ERROR] Timeout waiting for project URL!", "error")
+                    raise Exception("No project URL after timeout")
+
+                log(f"  [VALIDATOR] Starting Chrome with project URL...")
+                if not validator_api.setup(project_url=project_url):
+                    log(f"  [ERROR] Failed to start Chrome!", "error")
+                    raise Exception("Chrome setup failed")
 
                 # Create validator
                 validator = ReferenceValidator(

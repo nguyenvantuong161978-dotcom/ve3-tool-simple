@@ -1,6 +1,6 @@
-1.0.300
+1.0.301
 2026-03-06 (VN)
-Change: Fix GUI khong copy project khac channel (KA5 tren may AR8)
+Change: Fix Chrome 2 bo qua cho khi chua co project URL tu Chrome 1
 
 Thay doi:
 - v1.0.292: doi video_mode=small → GUI manager detect done khi anh xong
