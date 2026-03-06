@@ -534,9 +534,9 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
     # Step 5: Đợi tất cả ảnh hoàn thành (Chrome 2 có thể chưa xong)
     log(f"\n[STEP 5] Checking all images...")
     if not is_local_pic_complete(local_dir, code):
-        log(f"  Chrome 2 chưa xong, đợi tối đa 10 phút...")
-        if not wait_for_all_images(local_dir, code, timeout=600):
-            log(f"  Timeout! Chrome 2 chưa hoàn thành, tiếp tục...", "WARN")
+        log(f"  Chrome 2 chưa xong, đợi (tối đa 24h hoặc 30 phút không có tiến triển)...")
+        if not wait_for_all_images(local_dir, code):
+            log(f"  Chrome 2 stuck - tiếp tục với ảnh hiện có...", "WARN")
             # Không return False, để có thể retry sau
 
     # Step 6: Tạo video (sau khi có đủ ảnh)
