@@ -55,7 +55,7 @@ video_aspect_ratio: landscape
 video_compose_mode: fast
 video_count: full
 video_generation_mode: t2v
-video_mode: basic
+video_mode: small
 video_model: fast
 video_paygate_tier: PAYGATE_TIER_TWO
 wait_timeout: 30
