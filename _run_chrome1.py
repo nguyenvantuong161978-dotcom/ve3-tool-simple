@@ -728,7 +728,7 @@ def run_scan_loop():
                 print(f"  Starting: {target}")
                 # v1.0.289: Pre-login cho mỗi project MỚI (không chỉ lúc startup)
                 # Đảm bảo Chrome đúng account + handle rotate/restore trước khi làm
-                _do_pre_login_if_needed()
+                _do_pre_login_if_needed(target)
 
             # === v1.0.66: CHECK TIMEOUT 6 TIẾNG (coi như hoàn thành) ===
             if project_start_time:
