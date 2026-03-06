@@ -726,6 +726,9 @@ def run_scan_loop():
                 current_project = target
                 project_start_time = time.time()  # FIX v1.0.63: Track thời gian bắt đầu
                 print(f"  Starting: {target}")
+                # v1.0.289: Pre-login cho mỗi project MỚI (không chỉ lúc startup)
+                # Đảm bảo Chrome đúng account + handle rotate/restore trước khi làm
+                _do_pre_login_if_needed()
 
             # === v1.0.66: CHECK TIMEOUT 6 TIẾNG (coi như hoàn thành) ===
             if project_start_time:
@@ -931,30 +934,32 @@ def process_project_with_agent(code: str) -> bool:
         raise
 
 
-def _do_pre_login_if_needed():
+def _do_pre_login_if_needed(project_code: str = None):
     """
-    v1.0.121: PRE-LOGIN trước khi bắt đầu tạo ảnh.
+    v1.0.289: PRE-LOGIN cho từng project mới (không chỉ lúc startup).
 
     Flow:
-    1. Tìm project có 0% images
-    2. Nếu có → clear Chrome data + login → tắt Chrome
-    3. Rồi mới bắt đầu scan loop
+    1. Nếu có project_code → dùng luôn (gọi từ scan loop)
+    2. Không có → tự scan (gọi lúc startup)
+    3. Kiểm tra registry/ảnh → rotate hoặc restore account
+    4. Clear Chrome data + login cả 2 Chrome
     """
     print("\n[PRE-LOGIN] Checking if login needed...")
 
-    # v1.0.132: Dùng CÙNG logic chọn project với cycle loop
-    # Để PRE-LOGIN và cycle loop luôn chọn cùng 1 project
-    pending = scan_incomplete_local_projects()
-    if not pending:
-        print("[PRE-LOGIN] No pending projects - skip login")
-        return
+    if project_code:
+        code = project_code
+    else:
+        # Startup: tự scan
+        pending = scan_incomplete_local_projects()
+        if not pending:
+            print("[PRE-LOGIN] No pending projects - skip login")
+            return
+        code = pending[0]
 
-    # Lấy project đầu tiên (giống cycle loop)
-    code = pending[0]
     project_dir = LOCAL_PROJECTS / code
     excel_path = project_dir / f"{code}_prompts.xlsx"
 
-    print(f"[PRE-LOGIN] Selected project (same as cycle loop): {code}")
+    print(f"[PRE-LOGIN] Project: {code}")
 
     try:
         from google_login import (

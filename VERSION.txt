@@ -1,8 +1,14 @@
-1.0.288
+1.0.289
 2026-03-06 (VN)
-Change: Bo buoc tao video - tao anh xong la copy sang VISUAL
+Change: FIX rotate tai khoan sai khi chuyen sang ma moi
 
 Thay doi:
+- v1.0.289: _do_pre_login_if_needed() chay cho tung project moi:
+  * Cu: chi chay 1 lan luc startup → ma thu 2 tro di co the dung sai account
+  * Moi: chay lai moi khi bat dau project MOI trong scan loop
+  * _do_pre_login_if_needed(project_code) - nhan code tu ngoai, khong tu scan lai
+  * Ket qua: moi project luon duoc login dung account truoc khi chay
+
 - v1.0.288: Bo Step 6 tao video trong process_project_pic_basic():
   * Cu: Step 5 (doi anh) → Step 6 (tao video) → Step 7 (copy VISUAL)
   * Moi: Step 5 (doi anh) → Step 6 (copy VISUAL, khong co video)
