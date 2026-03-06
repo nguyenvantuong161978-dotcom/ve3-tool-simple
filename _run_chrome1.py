@@ -539,14 +539,9 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             log(f"  Chrome 2 stuck - tiếp tục với ảnh hiện có...", "WARN")
             # Không return False, để có thể retry sau
 
-    # Step 6: Copy to VISUAL (bỏ bước tạo video)
-    log(f"\n[STEP 6] Copying to VISUAL...")
-    if copy_to_visual(code, local_dir):
-        log(f"  [OK] Copied to VISUAL!")
-        return True
-    else:
-        log(f"  [WARN] Failed to copy to VISUAL", "WARN")
-        return True  # Vẫn return True vì ảnh đã xong
+    # Step 6: Ảnh xong - GUI manager sẽ detect "done" và tự copy + restart workers
+    log(f"\n[STEP 6] Images complete - GUI manager will handle copy to VISUAL + restart")
+    return True
 
 
 def cleanup_copied_projects():

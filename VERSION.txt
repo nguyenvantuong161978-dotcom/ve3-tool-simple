@@ -1,8 +1,14 @@
-1.0.289
+1.0.290
 2026-03-06 (VN)
-Change: FIX rotate tai khoan sai khi chuyen sang ma moi
+Change: De GUI manager copy+restart thay vi Chrome 1 tu copy
 
 Thay doi:
+- v1.0.290: Bo copy_to_visual() khoi process_project_pic_basic():
+  * Cu: Chrome 1 tu copy sang VISUAL → tu xoa local → tu chuyen ma moi
+  * Moi: Chrome 1 chi tao anh → return True → idle
+  * GUI manager detect current_step=done → stop all → copy → delete → restart all workers
+  * Ket qua: khong con conflict Chrome 1 copy trong khi Chrome 2 dang chay
+
 - v1.0.289: _do_pre_login_if_needed() chay cho tung project moi:
   * Cu: chi chay 1 lan luc startup → ma thu 2 tro di co the dung sai account
   * Moi: chay lai moi khi bat dau project MOI trong scan loop
