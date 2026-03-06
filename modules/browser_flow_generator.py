@@ -3789,14 +3789,9 @@ class BrowserFlowGenerator:
 
                 if is_reference_image and not has_media_id:
                     self._log(f"[{i+1}/{len(prompts)}] ID: {pid} - [WARN] ANH TON TAI NHUNG KHONG CO MEDIA_ID")
-                    self._log(f"   → Dang xoa {output_file.name} de tao lai...")
-                    try:
-                        output_file.unlink()  # Xóa file
-                        self._log(f"   → Da xoa! Se tao lai de co media_id", "success")
-                    except Exception as e:
-                        self._log(f"   → Khong the xoa file: {e}", "warn")
-                        self.stats["skipped"] += 1
-                        continue
+                    self._log(f"   → Se tao lai de lay media_id (giu file cu - overwrite neu thanh cong)")
+                    # SAFETY v1.0.293: KHÔNG xóa file cũ - nếu generate thành công sẽ overwrite,
+                    # nếu thất bại vẫn giữ được file gốc. Tránh mất dữ liệu khi tạo lại thất bại.
                     # Tiếp tục generate (không skip)
                 else:
                     self._log(f"[{i+1}/{len(prompts)}] ID: {pid} - Skip (da co anh)")

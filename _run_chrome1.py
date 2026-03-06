@@ -539,6 +539,14 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             log(f"  Chrome 2 stuck - tiếp tục với ảnh hiện có...", "WARN")
             # Không return False, để có thể retry sau
 
+    # v1.0.293: Tạo marker _IMAGES_DONE khi tất cả ảnh hoàn thành
+    # Giúp scan functions skip project này kể cả khi Excel bị lock tạm thời
+    try:
+        (local_dir / "_IMAGES_DONE").touch()
+        log(f"  [MARKER] Created _IMAGES_DONE marker")
+    except Exception as e:
+        log(f"  [WARN] Cannot create _IMAGES_DONE marker: {e}")
+
     # Step 6: Ảnh xong - GUI manager sẽ detect "done" và tự copy + restart workers
     log(f"\n[STEP 6] Images complete - GUI manager will handle copy to VISUAL + restart")
     return True
@@ -600,6 +608,11 @@ def scan_incomplete_local_projects() -> list:
         if is_local_pic_complete(item, code):
             continue
 
+        # v1.0.293: Safety net - nếu có marker _IMAGES_DONE thì skip
+        # (Excel có thể bị lock tạm thời khiến is_local_pic_complete trả về False)
+        if (item / "_IMAGES_DONE").exists():
+            continue
+
         # Chrome Worker CHỈ xử lý projects có Excel với prompts (Step 7 done)
         # Projects chỉ có SRT → đợi Excel Worker hoàn thành trước
         if has_excel_with_prompts(item, code):
@@ -650,6 +663,10 @@ def scan_master_projects() -> list:
             # v1.0.292: Skip nếu local đã có đủ ảnh (chờ GUI manager copy sang VISUAL)
             local_dir = LOCAL_PROJECTS / code
             if local_dir.exists() and is_local_pic_complete(local_dir, code):
+                continue
+
+            # v1.0.293: Skip nếu local có marker _IMAGES_DONE (safety net khi Excel bị lock)
+            if local_dir.exists() and (local_dir / "_IMAGES_DONE").exists():
                 continue
 
             excel_path = item / f"{code}_prompts.xlsx"

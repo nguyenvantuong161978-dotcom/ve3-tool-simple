@@ -2709,9 +2709,15 @@ class SmartEngine:
                     # Đã có đầy đủ scenes với prompts
                     self.log(f"  [SKIP] Excel đã có đủ {scenes_with_prompts} scene prompts, skip!")
                 elif total_scenes == 0:
-                    # Scenes sheet trống hoặc chưa được tạo - cần generate
-                    self.log(f"  [WARN] Excel tồn tại nhưng CHƯA CÓ scenes - cần generate!", "WARN")
-                    if srt_path.exists():
+                    # Scenes sheet trống hoặc chưa được tạo
+                    # SAFETY v1.0.293: Nếu img/ đã có ảnh → KHÔNG tạo lại prompts!
+                    # Excel có thể bị lock tạm thời khi worker khác đang ghi media_id
+                    img_dir_check = proj_dir / "img"
+                    existing_imgs = (list(img_dir_check.glob("scene_*.png")) + list(img_dir_check.glob("scene_*.mp4"))) if img_dir_check.exists() else []
+                    if existing_imgs:
+                        self.log(f"  [SAFETY] Excel shows 0 scenes nhưng img/ đã có {len(existing_imgs)} ảnh → bỏ qua make_prompts (Excel có thể bị lock tạm thời)", "WARN")
+                    elif srt_path.exists():
+                        self.log(f"  [WARN] Excel tồn tại nhưng CHƯA CÓ scenes - cần generate!", "WARN")
                         if not self.make_prompts(proj_dir, name, excel_path):
                             return {"error": "prompts_failed"}
                     else:
@@ -2877,14 +2883,8 @@ class SmartEngine:
                     # Ảnh tồn tại nhưng KHÔNG có media_id → cần tạo lại
                     has_media_id = any(k.lower() == pid.lower() for k in excel_media_ids.keys())
                     if not has_media_id:
-                        self.log(f"  [CHECK] {pid}: Ảnh tồn tại nhưng KHÔNG có media_id → cần tạo lại")
-                        # Xóa file cũ
-                        try:
-                            p.unlink()
-                            self.log(f"  [CHECK] Đã xóa {p.name}")
-                        except:
-                            pass
-                        return False  # Cần tạo lại
+                        self.log(f"  [CHECK] {pid}: Ảnh tồn tại nhưng KHÔNG có media_id → sẽ tạo lại để lấy media_id (giữ file cũ)")
+                        return False  # Cần tạo lại (sẽ overwrite khi generate thành công)
                     return True  # Có cả ảnh và media_id
                 return False  # Chưa có ảnh
 
