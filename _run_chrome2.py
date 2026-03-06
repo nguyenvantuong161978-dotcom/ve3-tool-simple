@@ -484,7 +484,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 if project_url:
                     log(f"  [v] Project URL from Excel: {project_url[:60]}...")
                 else:
-                    log(f"  [!] No project URL in Excel - will create new project")
+                    log(f"  [!] No project URL in Excel yet - will wait for Chrome 1...")
             except Exception as e:
                 log(f"  [WARN] Could not read project URL from Excel: {e}")
 
@@ -505,18 +505,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = yaml.safe_load(f)
 
-                # Setup Chrome 2 API
-                chrome_path = chrome2_path
-                validator_api = DrissionFlowAPI(
-                    chrome_portable=chrome_path,
-                    worker_id=2,
-                    total_workers=2,
-                    headless=False,
-                    webshare_enabled=False
-                )
-
-                # VÀO ĐÚNG PROJECT (dùng URL từ Excel)
-                # Nếu chưa có URL, đợi Chrome 1 tạo xong project
+                # Nếu chưa có URL, đợi Chrome 1 tạo xong project TRƯỚC KHI mở Chrome validator
                 if not project_url:
                     log(f"  [WAIT] No project URL yet - waiting for Chrome 1 to create Flow project...")
                     wait_url_interval = 15
@@ -526,8 +515,7 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                         time.sleep(wait_url_interval)
                         waited_url += wait_url_interval
                         try:
-                            import openpyxl as _opxl
-                            _wb = _opxl.load_workbook(str(excel_path), read_only=True)
+                            _wb = openpyxl.load_workbook(str(excel_path), read_only=True)
                             if 'config' in _wb.sheetnames:
                                 for _row in _wb['config'].iter_rows(min_row=2):
                                     if _row[0].value == 'flow_project_url':
@@ -544,6 +532,16 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 if not project_url:
                     log(f"  [ERROR] Timeout waiting for project URL!", "error")
                     raise Exception("No project URL after timeout")
+
+                # Setup Chrome 2 API (SAU KHI có URL)
+                chrome_path = chrome2_path
+                validator_api = DrissionFlowAPI(
+                    chrome_portable=chrome_path,
+                    worker_id=2,
+                    total_workers=2,
+                    headless=False,
+                    webshare_enabled=False
+                )
 
                 log(f"  [VALIDATOR] Starting Chrome with project URL...")
                 if not validator_api.setup(project_url=project_url):
