@@ -1686,6 +1686,14 @@ class VMManager:
             if item.is_dir():
                 code = item.name
                 if self.channel and not code.startswith(self.channel):
+                    # v1.0.295: Vẫn include project "done" dù khác channel → để copy sang master
+                    if (item / f"{code}.srt").exists():
+                        try:
+                            st = self.quality_checker.get_project_status(code)
+                            if st.current_step == "done":
+                                projects.append(code)
+                        except:
+                            pass
                     continue
                 if (item / f"{code}.srt").exists():
                     projects.append(code)
