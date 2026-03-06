@@ -1930,7 +1930,15 @@ class VMManager:
 
         # Check if project is completed
         if status.current_step == "done":
+            # v1.0.294: Re-detect auto_path nếu chưa có (có thể mount sau khi GUI khởi động)
+            if not self.auto_path:
+                self.auto_path = self._detect_auto_path()
+                if self.auto_path:
+                    self.log(f"AUTO path detected: {self.auto_path}", "SYSTEM", "SUCCESS")
+
             # Copy to master if AUTO path exists
+            if not self.auto_path:
+                self.log(f"[WARN] {project_code} XONG nhung KHONG CO AUTO PATH! Kiem tra ket noi may chu (Z:\\AUTO)", "SYSTEM", "WARN")
             if self.auto_path and project_code not in getattr(self, '_completed_projects', set()):
                 self.log("=" * 60, "SYSTEM")
                 self.log(f"PROJECT COMPLETED: {project_code}", "SYSTEM", "SUCCESS")
