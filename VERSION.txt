@@ -1,6 +1,16 @@
-1.0.285
-2026-03-05 (VN)
-Change: FIX THUC SU - Co anh = KHONG ROTATE (du storage trong)
+1.0.286
+2026-03-06 (VN)
+Change: FIX Excel bi xoa khi Chrome 1+2 dung chung file
+
+Thay doi:
+- v1.0.286: excel_manager.py load_or_create() - KHONG XOA Excel khi BadZipFile:
+  * Loi: Chrome 2 dang SAVE Excel → Chrome 1 doc → BadZipFile → retry 3 lan → XOA Excel!
+  * Fix: Sau 3 retry BadZipFile → raise PermissionError (KHONG xoa)
+  * Caller (smart_engine.py) bat exception → retry o vong lap ngoai (max 10 lan x 5s)
+  * Trong parallel mode (total_workers>1): neu van fail → return error, khong xoa, cycle sau thu lai
+  * Truoc day: BadZipFile 3 lan = xoa Excel + tao moi → smart_engine thay 0 scenes → regenerate
+
+- v1.0.285: FIX THUC SU - Co anh = KHONG ROTATE (du storage trong)
 
 Thay doi:
 - v1.0.285: FIX GEN GO TAN GOC - Dung anh lam bang chung, khong phu thuoc storage:

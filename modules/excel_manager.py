@@ -549,13 +549,12 @@ class PromptWorkbook:
                     except Exception as retry_e:
                         self.logger.warning(f"Retry {attempt} lỗi khác: {retry_e}")
 
-                # Sau 3 lần retry vẫn fail → file thực sự corrupt
-                self.logger.error(f"Excel file thực sự corrupted sau 3 retries - tạo mới")
-                try:
-                    self.path.unlink()
-                except:
-                    pass
-                self._create_new_workbook()
+                # Sau 3 lần retry vẫn fail → RAISE exception, KHÔNG XÓA
+                # v1.0.286: Trong môi trường parallel (Chrome 1 + Chrome 2 dùng chung Excel),
+                # BadZipFile có thể do file đang được write → KHÔNG BAO GIỜ xóa!
+                # Caller (smart_engine.py) sẽ retry toàn bộ ở vòng lặp ngoài
+                self.logger.error(f"Excel BadZipFile sau 3 retries - có thể worker khác đang ghi - KHONG XOA!")
+                raise PermissionError(f"Excel file unavailable after 3 retries (possibly being written by another worker): {self.path}")
             except PermissionError as e:
                 # File đang bị lock - KHÔNG XÓA, raise lỗi
                 self.logger.error(f"Excel file locked (PermissionError): {e}")
