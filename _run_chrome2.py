@@ -665,6 +665,28 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         if not step8_done:
             log(f"  [WARN] step_8 not completed after {max_wait_step8}s, skip thumbnails", "WARN")
         else:
+            # v1.0.300: Đợi Chrome 1 tạo xong NV references (có media_id) trước khi thumbnail
+            max_wait_nv = 1800  # tối đa 30 phút
+            waited_nv = 0
+            wait_interval_nv = 15
+            while waited_nv < max_wait_nv:
+                try:
+                    wb_nv = PromptWorkbook(str(excel_path))
+                    wb_nv.load_or_create()
+                    chars = wb_nv.get_characters()
+                    nv_chars = [c for c in chars if c.id.lower().startswith('nv') and not getattr(c, 'skip', False)]
+                    nv_with_media = [c for c in nv_chars if getattr(c, 'media_id', None)]
+                    if not nv_chars or len(nv_with_media) >= len(nv_chars):
+                        log(f"  [v] NV references ready ({len(nv_with_media)}/{len(nv_chars)} có media_id)")
+                        break
+                    log(f"  [WAIT] NV media_id: {len(nv_with_media)}/{len(nv_chars)} - đợi Chrome 1... ({waited_nv}s)")
+                except Exception:
+                    pass
+                time.sleep(wait_interval_nv)
+                waited_nv += wait_interval_nv
+            else:
+                log(f"  [WARN] NV references chưa có media_id sau {max_wait_nv}s, vẫn tiếp tục thumbnail", "WARN")
+
             # Kiểm tra xem đã có thumbnails chưa (để skip nếu đã chạy rồi)
             thumb_dir = local_dir / "thumbnail"
             existing_thumbs = list(thumb_dir.glob("thumb_*.png")) if thumb_dir.exists() else []
