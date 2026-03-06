@@ -725,38 +725,11 @@ def run_scan_loop():
                 # Đảm bảo Chrome đúng account + handle rotate/restore trước khi làm
                 _do_pre_login_if_needed(target)
 
-            # === v1.0.66: CHECK TIMEOUT 6 TIẾNG (coi như hoàn thành) ===
+            # v1.0.291: Bỏ timeout 6 tiếng ở đây - GUI manager đã xử lý
             if project_start_time:
                 elapsed = time.time() - project_start_time
                 elapsed_hours = elapsed / 3600
-                if elapsed >= PROJECT_TIMEOUT:
-                    print(f"\n{'='*60}")
-                    print(f"  [TIMEOUT] Project {target} đã chạy {elapsed_hours:.1f} giờ (>=6h)")
-
-                    # v1.0.74: CHỈ copy nếu có ảnh - tránh copy project rỗng
-                    local_dir = LOCAL_PROJECTS / target
-                    img_dir = local_dir / "img"
-                    img_count = 0
-                    if img_dir.exists():
-                        img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
-
-                    if img_count > 0:
-                        print(f"  Có {img_count} ảnh - Copy về máy chủ...")
-                        print(f"{'='*60}")
-                        try:
-                            copy_to_visual(target, local_dir)
-                            print(f"  [v] Copied {target} to VISUAL (timeout + {img_count} images)")
-                        except Exception as e:
-                            print(f"  [x] Failed to copy to VISUAL: {e}")
-                    else:
-                        print(f"  KHÔNG có ảnh - Bỏ qua, chuyển project tiếp theo")
-                        print(f"{'='*60}")
-
-                    current_project = None
-                    project_start_time = None
-                    continue  # Scan lại để pick project tiếp theo
-                else:
-                    print(f"  [TIME] Project running: {elapsed_hours:.1f}h / 6h")
+                print(f"  [TIME] Project running: {elapsed_hours:.1f}h")
 
             # === UPDATE AGENT STATUS để Chrome 2 biết project đang làm ===
             if _agent:
@@ -1072,9 +1045,8 @@ def run_scan_loop_with_agent():
     print(f"  Agent: {'Enabled' if _agent else 'Disabled'}")
     print(f"{'='*60}\n")
 
-    # v1.0.121: PRE-LOGIN trước khi bắt đầu scan loop
-    # Kiểm tra có project nào cần login không (0% images)
-    _do_pre_login_if_needed()
+    # v1.0.291: Bỏ startup pre-login - scan loop tự gọi _do_pre_login_if_needed(target)
+    # cho mỗi project mới → tránh double pre-login
 
     cycle = 0
     current_project = None  # Track project đang làm

@@ -1,8 +1,17 @@
-1.0.290
+1.0.291
 2026-03-06 (VN)
-Change: De GUI manager copy+restart thay vi Chrome 1 tu copy
+Change: Bo timeout 6h va double pre-login o Chrome 1
 
 Thay doi:
+- v1.0.291: Bo timeout 6 tieng o Chrome 1 (GUI manager da xu ly):
+  * Cu: Chrome 1 sau 6h tu copy_to_visual() → conflict voi GUI manager
+  * Moi: Chrome 1 chi log thoi gian, khong tu copy
+  * GUI manager o vm_manager.py da co handle_project_timeout() xu ly 6h
+
+- v1.0.291: Bo startup _do_pre_login_if_needed() tranh double pre-login:
+  * Cu: chay 1 lan luc startup + 1 lan trong scan loop = 2 lan cho project dau tien
+  * Moi: chi chay trong scan loop khi pick project MOI
+
 - v1.0.290: Bo copy_to_visual() khoi process_project_pic_basic():
   * Cu: Chrome 1 tu copy sang VISUAL → tu xoa local → tu chuyen ma moi
   * Moi: Chrome 1 chi tao anh → return True → idle
