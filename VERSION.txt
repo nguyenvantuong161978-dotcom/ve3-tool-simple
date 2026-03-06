@@ -1,6 +1,6 @@
-1.0.292
+1.0.294
 2026-03-06 (VN)
-Change: GUI manager lo copy+restart, Chrome 1 chi tao anh
+Change: Fix nv/ bi xoa, Excel bi tao lai, va auto-copy khi project XONG
 
 Thay doi:
 - v1.0.292: doi video_mode=small → GUI manager detect done khi anh xong
