@@ -1073,6 +1073,8 @@ def run_scan_loop_with_agent():
                     target = projects[0]
                     current_project = target
                     print(f"  Starting: {target}")
+                    # v1.0.292: Pre-login cho project mới
+                    _do_pre_login_if_needed(target)
 
                 try:
                     success = process_project_with_agent(target)

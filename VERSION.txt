@@ -1,6 +1,14 @@
-1.0.291
+1.0.292
 2026-03-06 (VN)
-Change: Bo timeout 6h va double pre-login o Chrome 1
+Change: FIX pre-login vao dung ham duoc goi
+
+Thay doi:
+- v1.0.292: FIX pre-login trong run_scan_loop_with_agent() (ham thuc su duoc goi):
+  * Loi: v1.0.289 sua nham run_scan_loop() - dead code, khong ai goi
+  * Fix: Them _do_pre_login_if_needed(target) vao run_scan_loop_with_agent()
+  * Ket qua: pre-login thuc su chay khi pick project moi
+
+- v1.0.291 (v1.0.289 cu): Da sua run_scan_loop() la dead code - khong co tac dung
 
 Thay doi:
 - v1.0.291: Bo timeout 6 tieng o Chrome 1 (GUI manager da xu ly):
