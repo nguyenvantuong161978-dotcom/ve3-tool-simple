@@ -361,18 +361,39 @@ def is_local_pic_complete(project_dir: Path, name: str) -> bool:
         return False
 
 
-def wait_for_all_images(project_dir: Path, name: str, timeout: int = 600) -> bool:
+def wait_for_all_images(project_dir: Path, name: str, timeout: int = 86400) -> bool:
     """
     Đợi tất cả ảnh hoàn thành (Chrome 1 + Chrome 2).
-    Timeout mặc định 10 phút.
+
+    v1.0.287: Smart wait - chờ đến khi Chrome 2 THỰC SỰ không có tiến triển:
+    - Tổng timeout: 24 giờ (tránh đợi vô tận khi có lỗi hệ thống)
+    - No-progress timeout: 30 phút không có ảnh mới → Chrome 2 bị stuck → give up
+    - Trước đây: timeout cứng 10 phút → Chrome 1 copy giữa chừng khi Chrome 2 vẫn đang chạy
     """
     import time
+    NO_PROGRESS_TIMEOUT = 1800  # 30 phút không có ảnh mới = stuck
     start = time.time()
+    last_count = -1
+    last_progress_time = time.time()
+
     while time.time() - start < timeout:
         if is_local_pic_complete(project_dir, name):
             return True
-        print(f"    Đợi Chrome 2 hoàn thành... ({int(time.time() - start)}s)")
-        time.sleep(10)
+
+        _, current, _ = get_project_completion_percent(project_dir, name)
+        if current != last_count:
+            last_count = current
+            last_progress_time = time.time()  # Có ảnh mới → reset timer
+        else:
+            no_progress = int(time.time() - last_progress_time)
+            if no_progress >= NO_PROGRESS_TIMEOUT:
+                print(f"    [WARN] Chrome 2 stuck {no_progress}s không có ảnh mới → give up")
+                return False
+
+        elapsed = int(time.time() - start)
+        no_prog = int(time.time() - last_progress_time)
+        print(f"    Đợi Chrome 2... {current} ảnh, elapsed={elapsed}s, no_progress={no_prog}s")
+        time.sleep(30)
     return False
 
 

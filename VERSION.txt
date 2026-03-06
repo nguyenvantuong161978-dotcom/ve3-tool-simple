@@ -1,6 +1,18 @@
-1.0.286
+1.0.287
 2026-03-06 (VN)
-Change: FIX Excel bi xoa khi Chrome 1+2 dung chung file
+Change: FIX Chrome 1 copy Visual trong khi Chrome 2 van dang chay
+
+Thay doi:
+- v1.0.287: wait_for_all_images() - Smart wait thay vi timeout cung:
+  * Loi: timeout 10 phut → Chrome 1 copy+xoa local trong khi Chrome 2 van dang save Excel
+    Race condition: Chrome 2 save Excel ↔ Chrome 1 xoa → Excel bi xoa/hong → lam lai
+  * Fix: Khong con timeout cung - cho den khi Chrome 2 THAT SU bi stuck:
+    - Tong max: 24 gio (tranh vong lap vo han neu co loi he thong)
+    - No-progress timeout: 30 phut khong co anh moi → Chrome 2 bi stuck → give up
+    - Check moi 30s thay vi 10s (giam load)
+  * Ket qua: Chrome 1 chi copy VISUAL khi Chrome 2 da xong hoac bi stuck that su
+
+- v1.0.286: FIX Excel bi xoa khi Chrome 1+2 dung chung file
 
 Thay doi:
 - v1.0.286: excel_manager.py load_or_create() - KHONG XOA Excel khi BadZipFile:
