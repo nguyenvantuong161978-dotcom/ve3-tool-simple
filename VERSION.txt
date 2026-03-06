@@ -1,8 +1,13 @@
-1.0.287
+1.0.288
 2026-03-06 (VN)
-Change: FIX Chrome 1 copy Visual trong khi Chrome 2 van dang chay
+Change: Bo buoc tao video - tao anh xong la copy sang VISUAL
 
 Thay doi:
+- v1.0.288: Bo Step 6 tao video trong process_project_pic_basic():
+  * Cu: Step 5 (doi anh) → Step 6 (tao video) → Step 7 (copy VISUAL)
+  * Moi: Step 5 (doi anh) → Step 6 (copy VISUAL, khong co video)
+  * Ly do: Tao video ton thoi gian, anh la du de copy sang may chu
+
 - v1.0.287: wait_for_all_images() - Smart wait thay vi timeout cung:
   * Loi: timeout 10 phut → Chrome 1 copy+xoa local trong khi Chrome 2 van dang save Excel
     Race condition: Chrome 2 save Excel ↔ Chrome 1 xoa → Excel bi xoa/hong → lam lai
