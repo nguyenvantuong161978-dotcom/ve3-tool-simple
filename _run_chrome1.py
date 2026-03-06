@@ -647,6 +647,11 @@ def scan_master_projects() -> list:
             if is_project_complete_on_master(code):
                 continue
 
+            # v1.0.292: Skip nếu local đã có đủ ảnh (chờ GUI manager copy sang VISUAL)
+            local_dir = LOCAL_PROJECTS / code
+            if local_dir.exists() and is_local_pic_complete(local_dir, code):
+                continue
+
             excel_path = item / f"{code}_prompts.xlsx"
             srt_path = item / f"{code}.srt"
 
