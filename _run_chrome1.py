@@ -610,8 +610,14 @@ def scan_incomplete_local_projects() -> list:
 
         # v1.0.293: Safety net - nếu có marker _IMAGES_DONE thì skip
         # (Excel có thể bị lock tạm thời khiến is_local_pic_complete trả về False)
+        # v1.0.303: Nếu _IMAGES_DONE tồn tại nhưng ảnh chưa đủ → marker cũ (stale) → xóa
         if (item / "_IMAGES_DONE").exists():
-            continue
+            print(f"    [{code}] _IMAGES_DONE marker found but images incomplete → removing stale marker")
+            try:
+                (item / "_IMAGES_DONE").unlink()
+            except Exception as e:
+                print(f"    [{code}] Cannot remove stale marker: {e}")
+                continue  # Không xóa được → skip để tránh xử lý lại
 
         # Chrome Worker CHỈ xử lý projects có Excel với prompts (Step 7 done)
         # Projects chỉ có SRT → đợi Excel Worker hoàn thành trước
