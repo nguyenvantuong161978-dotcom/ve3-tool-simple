@@ -244,8 +244,12 @@ def has_excel_with_prompts(project_dir: Path, name: str) -> bool:
         stats = wb.get_stats()
         total_scenes = stats.get('total_scenes', 0)
         scenes_with_prompts = stats.get('scenes_with_prompts', 0)
-        return total_scenes > 0 and scenes_with_prompts > 0
-    except:
+        if total_scenes == 0 or scenes_with_prompts == 0:
+            print(f"    [{name}] scenes={total_scenes} prompts={scenes_with_prompts} → no prompts")
+            return False
+        return True
+    except Exception as e:
+        print(f"    [{name}] has_excel_with_prompts error: {e}")
         return False
 
 
