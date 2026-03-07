@@ -232,9 +232,14 @@ def has_excel_with_prompts(project_dir: Path, name: str) -> bool:
 
         # Check Step 7 COMPLETED first
         step7_status = wb.get_step_status("step_7")
-        if not step7_status or step7_status.get("status") != "COMPLETED":
-            # Excel Worker chưa hoàn thành - KHÔNG xử lý
-            return False
+        if step7_status:
+            # step_7 có trong Excel → check status
+            status_val = step7_status.get("status")
+            if status_val != "COMPLETED":
+                # Excel Worker chưa hoàn thành - KHÔNG xử lý
+                print(f"    [{name}] step_7 status={status_val}, waiting for Excel Worker")
+                return False
+        # step_7 không có (Excel cũ hoặc không có tracking) → fallback kiểm tra scenes
 
         stats = wb.get_stats()
         total_scenes = stats.get('total_scenes', 0)

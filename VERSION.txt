@@ -1,6 +1,6 @@
-1.0.301
-2026-03-06 (VN)
-Change: Fix Chrome 2 bo qua cho khi chua co project URL tu Chrome 1
+1.0.302
+2026-03-07 (VN)
+Change: Fix Chrome 1 bi ket scan loop - step_7 missing trong Excel cu
 
 Thay doi:
 - v1.0.292: doi video_mode=small → GUI manager detect done khi anh xong
