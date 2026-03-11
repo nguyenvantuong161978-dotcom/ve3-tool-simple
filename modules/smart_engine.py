@@ -3343,7 +3343,8 @@ class SmartEngine:
                 continue  # Skip character prompts
             img_path = img_dir / f"{pid}.png"
             video_path = img_dir / f"{pid}.mp4"
-            if not img_path.exists() and not video_path.exists():
+            skip_marker = img_dir / f"{pid}.SKIP"
+            if not img_path.exists() and not video_path.exists() and not skip_marker.exists():
                 missing_images.append(p)
 
         if not missing_images:

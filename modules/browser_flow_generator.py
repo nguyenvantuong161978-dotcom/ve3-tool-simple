@@ -1778,27 +1778,6 @@ class BrowserFlowGenerator:
             # Cập nhật failed_prompts cho vòng retry tiếp theo
             failed_prompts = still_failed
 
-        # v1.0.306: Tạo .SKIP marker cho scenes permanently failed (đã thử đủ số lần)
-        # Giúp vm_manager tính "done" đúng khi có scenes vi phạm content policy
-        if failed_prompts:
-            skip_count = 0
-            for prompt_data, original_index in failed_prompts:
-                pid = str(prompt_data.get('id', original_index + 1))
-                # Chỉ tạo .SKIP cho scenes (số), không cho nv/loc (references)
-                if pid.isdigit():
-                    output_path = prompt_data.get('output_path', '')
-                    if output_path:
-                        skip_path = Path(output_path).with_suffix('.SKIP')
-                        try:
-                            skip_path.parent.mkdir(parents=True, exist_ok=True)
-                            skip_path.touch()
-                            skip_count += 1
-                            self._log(f"[SKIP] Scene {pid}: tạo .SKIP marker (đã thử {max_retry_rounds + 1} lần, không thể tạo)", "warn")
-                        except Exception as e:
-                            self._log(f"[SKIP] Không tạo được .SKIP cho scene {pid}: {e}", "warn")
-            if skip_count:
-                self._log(f"[SKIP] Tổng {skip_count} scenes bị bỏ qua vĩnh viễn → .SKIP marker")
-
         # Luu media_names tu JS vao cache (cho cac lan chay sau)
         js_media_names = self._get_media_names_from_js()
         if js_media_names:
@@ -4065,6 +4044,15 @@ class BrowserFlowGenerator:
                                 self._log(f"   [EXCEL] Đánh dấu scene {pid} SKIP (policy violation)", "info")
                             except Exception as e:
                                 self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
+
+                        # v1.0.306: Tạo .SKIP file để vm_manager tính vào images_done
+                        if not is_reference_image and pid.isdigit():
+                            try:
+                                skip_file = output_dir / f"{pid}.SKIP"
+                                skip_file.touch()
+                                self._log(f"   [SKIP] Tạo {skip_file.name} (policy violation)", "info")
+                            except Exception as e:
+                                self._log(f"   [SKIP] Không tạo được .SKIP: {e}", "warn")
 
                         continue  # Skip to next prompt
 
