@@ -2894,6 +2894,9 @@ class SmartEngine:
             # Check .mp4 variant (sau I2V)
             if p.with_suffix('.mp4').exists():
                 return True
+            # v1.0.306: Check .SKIP marker (permanently failed, đừng retry nữa)
+            if p.with_suffix('.SKIP').exists():
+                return True
             return False
 
         # Filter: chi lay prompts CHUA co anh (hoặc ảnh nv/loc không có media_id)

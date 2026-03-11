@@ -1,6 +1,22 @@
-1.0.305
-2026-03-07 (VN)
-Change: Fix Chrome 1 bi ket scan loop - step_7 missing trong Excel cu
+1.0.306
+2026-03-11 (VN)
+Change: Scene-level .SKIP marker - done khi da thu du so lan
+
+Thay doi:
+- v1.0.306: .SKIP marker cho scenes permanently failed (content policy):
+  * browser_flow_generator.py: Sau 3 lan thu (1 initial + 2 retry rounds) ma van fail
+    → Tao img/{scene_id}.SKIP marker cho scene do
+    → Chi tao cho scenes (so), khong cho nv/loc (references)
+  * vm_manager.py get_project_status(): Dem .SKIP vao images_done
+    → (png + SKIP) == total_scenes → 100% → done!
+    → Khong can threshold %, khong can _IMAGES_DONE logic phuc tap
+  * smart_engine.py _media_exists(): Check .SKIP → skip trong lan chay sau
+    → Tranh retry lai cac scene da bi bo qua vinh vien
+
+  Ket qua: Project co scenes vi pham content policy se duoc copy sang master
+  thay vi loop vo han. vm_manager tinh 100% khi tat ca scenes da duoc xu ly.
+
+- v1.0.305: Bo threshold 80% - chi done khi 100% anh xong
 
 Thay doi:
 - v1.0.292: doi video_mode=small → GUI manager detect done khi anh xong
