@@ -506,10 +506,12 @@ class QualityChecker:
 
             # v1.0.76: Only mark as "done" if total_scenes > 0
             # Prevents auto-copy when Excel has no scenes yet
-            # v1.0.99: Also mark as "done" if >= 80% images complete (allow some failures)
+            # v1.0.305: Bo threshold 80% - chi done khi 100% anh xong
+            # 80% khien GUI stop Chrome2+Excel som, master chi nhan 80% anh
+            # Timeout 6 tieng se xu ly truong hop bi ket that su
             if status.total_scenes > 0:
                 completion_pct = (status.images_done / status.total_scenes) * 100
-                is_complete_enough = (status.images_done == status.total_scenes) or (completion_pct >= 80)
+                is_complete_enough = (status.images_done == status.total_scenes)
 
                 if is_complete_enough:
                     # v1.0.299: Xong ảnh = xong, không cần video

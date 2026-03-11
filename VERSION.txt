@@ -1,4 +1,4 @@
-1.0.304
+1.0.305
 2026-03-07 (VN)
 Change: Fix Chrome 1 bi ket scan loop - step_7 missing trong Excel cu
 
