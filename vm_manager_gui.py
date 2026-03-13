@@ -332,6 +332,11 @@ class SettingsWindow(tk.Toplevel):
             messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
             self._check_resources()
 
+            # v1.0.307: Đồng bộ settings vào manager.settings.config (in-memory)
+            # Tránh save_config() ghi đè key cũ khi Start workers
+            if hasattr(self.master, 'manager') and hasattr(self.master.manager, 'settings'):
+                self.master.manager.settings.config = config.copy()
+
             # Dong bo mode_var voi parent GUI
             if hasattr(self.master, 'mode_var'):
                 self.master.mode_var.set(self.mode_var.get())

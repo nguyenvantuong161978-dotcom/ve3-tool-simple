@@ -199,8 +199,21 @@ class SettingsManager:
         return {}
 
     def save_config(self):
+        # v1.0.307: Read-modify-write để không ghi đè settings từ GUI
+        # GUI lưu deepseek_api_key, gemini_api_keys... vào file
+        # Nếu overwrite toàn bộ sẽ mất những thay đổi đó
+        file_config = {}
+        if CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    file_config = yaml.safe_load(f) or {}
+            except:
+                pass
+        # Merge: file_config làm base, self.config ghi đè
+        merged = {**file_config, **self.config}
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True)
+            yaml.dump(merged, f, default_flow_style=False, allow_unicode=True)
+        self.config = merged
 
     # Chrome settings
     @property
