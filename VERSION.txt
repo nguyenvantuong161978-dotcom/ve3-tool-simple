@@ -1,8 +1,20 @@
-1.0.306
-2026-03-11 (VN)
-Change: Scene-level .SKIP marker - done khi da thu du so lan
+1.0.307
+2026-03-13 (VN)
+Change: Fix API key bi ghi de khi Start workers + Fix .SKIP chi cho POLICY_VIOLATION
 
 Thay doi:
+- v1.0.307: Fix API key bi ghi de khi Start workers:
+  * ROOT CAUSE: Settings.save_config() ghi toan bo self.config (load tu startup)
+    len settings.yaml → de key moi ma user vua doi trong GUI
+  * vm_manager.py: save_config() doi sang read-modify-write (doc file truoc, merge, ghi lai)
+  * vm_manager_gui.py: _save_settings() dong bo config vao manager.settings.config
+
+- v1.0.306: Fix .SKIP logic - chi tao cho POLICY_VIOLATION trong production path:
+  * browser_flow_generator._generate_images_drission_mode(): Tao .SKIP khi POLICY_VIOLATION
+  * Xoa .SKIP creation sai trong generate_from_prompts() (old JS mode)
+  * smart_engine._retry_missing_images(): Check .SKIP truoc khi retry
+
+Thay doi cu:
 - v1.0.306: .SKIP marker cho scenes permanently failed (content policy):
   * browser_flow_generator.py: Sau 3 lan thu (1 initial + 2 retry rounds) ma van fail
     → Tao img/{scene_id}.SKIP marker cho scene do
