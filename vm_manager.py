@@ -2821,6 +2821,19 @@ class VMManager:
             except:
                 w.process.kill()
             w.process = None
+
+        # v1.0.308: Kill CMD window thật sự (start tạo process tách rời)
+        # w.process chỉ track "start" command (exit ngay), không kill được CMD thật
+        if sys.platform == "win32":
+            try:
+                title = f"{w.worker_type.upper()} {w.worker_num or ''}".strip()
+                subprocess.run(
+                    f'taskkill /FI "WINDOWTITLE eq {title}*" /F',
+                    shell=True, capture_output=True, timeout=5
+                )
+            except:
+                pass
+
         # Close log handle if exists (hidden mode)
         if hasattr(w, '_log_handle') and w._log_handle:
             try:
@@ -3051,9 +3064,9 @@ class VMManager:
         self.kill_all_chrome()
         time.sleep(2)
 
-        # 5. Restart Chrome workers
-        chrome_workers = [wid for wid in self.workers if wid.startswith("chrome_")]
-        for wid in chrome_workers:
+        # 5. Restart ALL workers (Chrome + Excel)
+        # v1.0.308: Fix - trước đây chỉ restart Chrome, Excel bị mất vĩnh viễn!
+        for wid in list(self.workers.keys()):
             self.log(f"Restarting {wid}...", wid)
             time.sleep(2)
             self.start_worker(wid, gui_mode=self.gui_mode)

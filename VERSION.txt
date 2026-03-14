@@ -1,8 +1,15 @@
-1.0.307
-2026-03-13 (VN)
-Change: Fix API key bi ghi de khi Start workers + Fix .SKIP chi cho POLICY_VIOLATION
+1.0.308
+2026-03-14 (VN)
+Change: Fix Excel va Chrome 2 bi mat CMD (khong restart sau timeout)
 
 Thay doi:
+- v1.0.308: Fix workers bi mat CMD:
+  * handle_project_timeout(): Stop ALL workers nhung chi restart Chrome
+    → Excel bi mat vinh vien! Fix: restart ALL workers (Chrome + Excel)
+  * stop_worker(): w.process track "start" command (exit ngay lap tuc)
+    → terminate() khong kill duoc CMD that! Fix: taskkill theo window title
+
+
 - v1.0.307: Fix API key bi ghi de khi Start workers:
   * ROOT CAUSE: Settings.save_config() ghi toan bo self.config (load tu startup)
     len settings.yaml → de key moi ma user vua doi trong GUI
