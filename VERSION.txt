@@ -1,6 +1,6 @@
-1.0.309
+1.0.310
 2026-03-14 (VN)
-Change: Fix CRITICAL - handle_project_timeout crash loop vo han (project_root)
+Change: Fix CRITICAL - handle_project_timeout task.note AttributeError (task.error thay vi task.note)
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:

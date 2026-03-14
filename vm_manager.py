@@ -3024,7 +3024,7 @@ class VMManager:
 
         # 1. Stop tất cả workers
         self.log("Stopping all workers...", "SYSTEM")
-        for wid in self.workers:
+        for wid in list(self.workers.keys()):
             self.stop_worker(wid)
 
         # v1.0.98: Clear agent status files
@@ -3057,7 +3057,7 @@ class VMManager:
                     task = self.tasks[task_id]
                     if task.status != TaskStatus.COMPLETED:
                         task.status = TaskStatus.COMPLETED
-                        task.note = "TIMEOUT_6H"
+                        task.error = "TIMEOUT_6H"
 
         # 4. Kill all Chrome
         self.log("Killing all Chrome processes...", "SYSTEM")
