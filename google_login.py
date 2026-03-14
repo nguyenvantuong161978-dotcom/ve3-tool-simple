@@ -775,6 +775,37 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         except Exception as e:
             log(f"Password step error: {e}", "WARN")
 
+        # === BƯỚC 2.5: XỬ LÝ TRANG "PHÊ DUYỆT THIẾT BỊ" (nếu có) ===
+        # v1.0.311: Sau khi nhập password, đôi khi Google hiện trang yêu cầu phê duyệt thiết bị
+        # với nút "Try another way" / "Thử cách khác". Cần click để sang được trang chọn 2FA.
+        log("Checking for device approval page...")
+        time.sleep(3)
+        try:
+            try_another_selectors = [
+                'button:contains("Try another way")',
+                'button:contains("Thử cách khác")',
+                'text:Try another way',
+                'text:Thử cách khác',
+            ]
+            clicked_try_another = False
+            for selector in try_another_selectors:
+                try:
+                    btn = driver.ele(selector, timeout=2)
+                    if btn:
+                        log(f"Found 'Try another way' button - clicking...")
+                        btn.click()
+                        clicked_try_another = True
+                        time.sleep(3)
+                        log("Clicked 'Try another way' successfully")
+                        break
+                except:
+                    continue
+
+            if not clicked_try_another:
+                log("No device approval page detected - continuing to 2FA")
+        except Exception as e:
+            log(f"Device approval check error: {e}", "WARN")
+
         # === BƯỚC 3: XỬ LÝ 2FA (nếu có) ===
         totp_secret = account_info.get("totp_secret", "")
         if totp_secret:

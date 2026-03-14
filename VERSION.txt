@@ -1,6 +1,6 @@
-1.0.310
+1.0.311
 2026-03-14 (VN)
-Change: Fix CRITICAL - handle_project_timeout task.note AttributeError (task.error thay vi task.note)
+Change: Them buoc 2.5 - Click "Try another way" khi Google hien trang phe duyet thiet bi sau nhap password
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:
