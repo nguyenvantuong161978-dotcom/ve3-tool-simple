@@ -1,6 +1,6 @@
-1.0.311
+1.0.312
 2026-03-14 (VN)
-Change: Them buoc 2.5 - Click "Try another way" khi Google hien trang phe duyet thiet bi sau nhap password
+Change: Fix buoc 2.5 - Kiem tra 2FA option TRUOC, chi click "Try another way" khi khong co 2FA
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:

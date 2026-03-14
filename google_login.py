@@ -776,33 +776,53 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log(f"Password step error: {e}", "WARN")
 
         # === BƯỚC 2.5: XỬ LÝ TRANG "PHÊ DUYỆT THIẾT BỊ" (nếu có) ===
-        # v1.0.311: Sau khi nhập password, đôi khi Google hiện trang yêu cầu phê duyệt thiết bị
-        # với nút "Try another way" / "Thử cách khác". Cần click để sang được trang chọn 2FA.
-        log("Checking for device approval page...")
+        # v1.0.312: Sau nhập password, có 2 trường hợp:
+        #   A) Trang hiện 2FA option (Google Authenticator) → click thẳng vào đó
+        #   B) Trang hiện "Try another way" (phê duyệt thiết bị) → click để sang trang chọn 2FA
+        # Ưu tiên: Kiểm tra 2FA option TRƯỚC. Chỉ click "Try another way" khi KHÔNG có 2FA.
+        log("Checking for 2FA option or device approval page...")
         time.sleep(3)
         try:
-            try_another_selectors = [
-                'button:contains("Try another way")',
-                'button:contains("Thử cách khác")',
-                'text:Try another way',
-                'text:Thử cách khác',
+            # A) Kiểm tra 2FA option trước (Google Authenticator)
+            auth_selectors_25 = [
+                'text:Google Authenticator',
+                'text:Ứng dụng xác thực',
+                'text:Authenticator app',
+                'text:Use your authenticator app',
+                'text:Dùng ứng dụng xác thực',
             ]
-            clicked_try_another = False
-            for selector in try_another_selectors:
+            found_2fa = False
+            for selector in auth_selectors_25:
                 try:
-                    btn = driver.ele(selector, timeout=2)
-                    if btn:
-                        log(f"Found 'Try another way' button - clicking...")
-                        btn.click()
-                        clicked_try_another = True
-                        time.sleep(3)
-                        log("Clicked 'Try another way' successfully")
+                    auth_opt = driver.ele(selector, timeout=1)
+                    if auth_opt:
+                        log(f"Found 2FA option directly: {selector} - no need for 'Try another way'")
+                        found_2fa = True
                         break
                 except:
                     continue
 
-            if not clicked_try_another:
-                log("No device approval page detected - continuing to 2FA")
+            # B) Không có 2FA option → thử click "Try another way"
+            if not found_2fa:
+                try_another_selectors = [
+                    'button:contains("Try another way")',
+                    'button:contains("Thử cách khác")',
+                    'text:Try another way',
+                    'text:Thử cách khác',
+                ]
+                for selector in try_another_selectors:
+                    try:
+                        btn = driver.ele(selector, timeout=2)
+                        if btn:
+                            log(f"Found 'Try another way' button - clicking...")
+                            btn.click()
+                            time.sleep(3)
+                            log("Clicked 'Try another way' successfully")
+                            break
+                    except:
+                        continue
+            else:
+                log("2FA option available - skipping 'Try another way'")
         except Exception as e:
             log(f"Device approval check error: {e}", "WARN")
 
