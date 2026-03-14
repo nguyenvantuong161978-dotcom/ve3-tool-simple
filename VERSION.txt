@@ -1,6 +1,6 @@
-1.0.308
+1.0.309
 2026-03-14 (VN)
-Change: Fix Excel va Chrome 2 bi mat CMD (khong restart sau timeout)
+Change: Fix CRITICAL - handle_project_timeout crash loop vo han (project_root)
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:

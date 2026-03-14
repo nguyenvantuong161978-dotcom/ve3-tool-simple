@@ -3034,7 +3034,7 @@ class VMManager:
         # 2. Copy kết quả về máy chủ (nếu có AUTO path VÀ có ảnh)
         # v1.0.74: Chỉ copy nếu có ảnh - tránh copy project rỗng
         if self.auto_path:
-            project_dir = self.project_root / project_code
+            project_dir = TOOL_DIR / "PROJECTS" / project_code
             img_dir = project_dir / "img"
             img_count = 0
             if img_dir.exists():
