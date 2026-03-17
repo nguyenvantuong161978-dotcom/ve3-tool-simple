@@ -1,6 +1,6 @@
-1.0.313
-2026-03-17 (VN)
-Change: Fix channel matching - AR1 khong con match AR10 (them dau "-" truoc khi so sanh)
+1.0.314
+2026-03-18 (VN)
+Change: PROTECT Excel - Khong bao gio xoa Excel khi step_7 da COMPLETED (fix bug lam lai Excel)
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:

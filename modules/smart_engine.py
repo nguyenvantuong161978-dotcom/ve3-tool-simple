@@ -221,11 +221,11 @@ class SmartEngine:
 
     def _safe_delete_excel(self, excel_path: Path) -> bool:
         """
-        Xóa Excel AN TOÀN - KHÔNG XÓA khi đang chạy song song!
+        Xóa Excel AN TOÀN - KHÔNG XÓA khi đang chạy song song hoặc step_7 đã COMPLETED!
 
         Returns:
             True nếu đã xóa thành công
-            False nếu KHÔNG được phép xóa (parallel mode)
+            False nếu KHÔNG được phép xóa
         """
         # === CRITICAL: KHÔNG BAO GIỜ XÓA EXCEL KHI CHẠY SONG SONG ===
         if self._parallel_mode:
@@ -234,7 +234,23 @@ class SmartEngine:
             self.log(f"          Worker sẽ retry sau...", "WARN")
             return False
 
-        # Chỉ xóa khi chạy đơn lẻ (total_workers=1)
+        # === v1.0.314: KHÔNG BAO GIỜ XÓA EXCEL KHI STEP_7 ĐÃ COMPLETED ===
+        # Bug: Chrome đọc Excel bị lock → 0 scenes → xóa → tạo lại → ảnh cũ không khớp
+        try:
+            if excel_path.exists():
+                from modules.excel_manager import PromptWorkbook
+                wb_check = PromptWorkbook(str(excel_path))
+                step7_info = wb_check.get_step_status("step_7")
+                if step7_info and step7_info.get("status") == "COMPLETED":
+                    self.log(f"[PROTECT] KHÔNG XÓA Excel - step_7 đã COMPLETED! (đọc 0 scenes là do file bị lock)", "WARN")
+                    self.log(f"          Worker sẽ retry sau...", "WARN")
+                    return False
+        except Exception as e:
+            # Nếu không đọc được step_7 (file lock) → cũng KHÔNG XÓA
+            self.log(f"[PROTECT] KHÔNG XÓA Excel - không đọc được step_7: {e} (có thể bị lock)", "WARN")
+            return False
+
+        # Chỉ xóa khi chạy đơn lẻ VÀ step_7 chưa COMPLETED
         try:
             if excel_path.exists():
                 excel_path.unlink()
