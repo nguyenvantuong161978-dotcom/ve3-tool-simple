@@ -1,6 +1,6 @@
-1.0.315
+1.0.316
 2026-03-18 (VN)
-Change: Fix task spam - chi tao task moi khi chua co task pending/assigned cho project
+Change: Fix step=excel khi da co anh - override thanh "image" neu img/ co file
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:
