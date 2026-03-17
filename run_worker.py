@@ -429,7 +429,20 @@ def complete_excel_with_api(project_dir: Path, name: str) -> bool:
         cfg['preferred_provider'] = 'deepseek' if deepseek_key else ('groq' if groq_keys else 'gemini')
         cfg['use_v2_flow'] = True
 
-        # Xóa Excel để regenerate
+        # v1.0.314: KHÔNG XÓA Excel nếu step_7 đã COMPLETED
+        try:
+            from modules.excel_manager import PromptWorkbook
+            wb_chk = PromptWorkbook(str(excel_path))
+            s7_chk = wb_chk.get_step_status("step_7")
+            if s7_chk and s7_chk.get("status") == "COMPLETED":
+                print(f"  [PROTECT] step_7=COMPLETED - KHÔNG xóa Excel")
+                if original_excel_backup and original_excel_backup.exists():
+                    original_excel_backup.unlink()
+                return True
+        except Exception:
+            pass  # Nếu không đọc được, tiếp tục logic cũ (có backup)
+
+        # Xóa Excel để regenerate (chỉ khi step_7 chưa COMPLETED)
         if excel_path.exists():
             excel_path.unlink()
             print(f"  [SYNC] Regenerating with API...")
@@ -721,12 +734,27 @@ def process_project(code: str, callback=None) -> bool:
             log(f"  [SKIP] No Excel and no SRT, skip!")
             return False
     elif not has_excel_with_prompts(local_dir, code):
-        # Excel exists but empty/corrupt - recreate
-        log(f"  [EXCEL] Excel empty/corrupt, recreating...")
-        excel_path.unlink()  # Delete corrupt Excel
-        if not create_excel_with_api(local_dir, code):
-            log(f"  [FAIL] Failed to recreate Excel, skip!")
-            return False
+        # v1.0.314: KHÔNG XÓA Excel nếu step_7 đã COMPLETED (có thể đọc lỗi do file lock)
+        _step7_completed = False
+        try:
+            from modules.excel_manager import PromptWorkbook
+            wb_check = PromptWorkbook(str(excel_path))
+            s7 = wb_check.get_step_status("step_7")
+            if s7 and s7.get("status") == "COMPLETED":
+                _step7_completed = True
+        except Exception:
+            # Không đọc được → coi như COMPLETED để bảo vệ
+            _step7_completed = True
+
+        if _step7_completed:
+            log(f"  [PROTECT] Excel step_7=COMPLETED - KHÔNG xóa (có thể bị lock tạm)")
+        else:
+            # Excel exists but empty/corrupt AND step_7 chưa xong - recreate
+            log(f"  [EXCEL] Excel empty/corrupt (step_7 chưa COMPLETED), recreating...")
+            excel_path.unlink()
+            if not create_excel_with_api(local_dir, code):
+                log(f"  [FAIL] Failed to recreate Excel, skip!")
+                return False
     elif needs_api_completion(local_dir, code):
         # Excel has [FALLBACK] prompts - try to complete with API
         log(f"  [EXCEL] Excel has [FALLBACK] prompts, trying API...")
