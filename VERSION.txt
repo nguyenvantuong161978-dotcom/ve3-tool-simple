@@ -1,6 +1,6 @@
-1.0.312
-2026-03-14 (VN)
-Change: Fix buoc 2.5 - Kiem tra 2FA option TRUOC, chi click "Try another way" khi khong co 2FA
+1.0.313
+2026-03-17 (VN)
+Change: Fix channel matching - AR1 khong con match AR10 (them dau "-" truoc khi so sanh)
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:

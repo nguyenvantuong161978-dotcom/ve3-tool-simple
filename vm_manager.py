@@ -1708,7 +1708,7 @@ class VMManager:
         for item in local.iterdir():
             if item.is_dir():
                 code = item.name
-                if self.channel and not code.startswith(self.channel):
+                if self.channel and not code.startswith(f"{self.channel}-"):
                     # v1.0.295: Vẫn include project "done" dù khác channel → để copy sang master
                     if (item / f"{code}.srt").exists():
                         try:

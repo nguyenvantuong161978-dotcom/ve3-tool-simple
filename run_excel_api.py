@@ -144,7 +144,7 @@ def matches_channel(project_name: str, channel: Optional[str] = None) -> bool:
     """Check if project matches channel filter."""
     if not channel:
         return True
-    return project_name.startswith(channel)
+    return project_name.startswith(f"{channel}-")
 
 
 def is_project_in_visual(name: str, auto_path: Optional[Path]) -> bool:
