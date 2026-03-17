@@ -617,16 +617,26 @@ class ExcelAPIWorker:
                     # Case 2: ĐÃ CÓ EXCEL - Check progress
                     progress = get_excel_progress(item, name)
 
+                    # v1.0.317: Nếu img/ đã có ảnh → KHÔNG sửa Excel
+                    # Chrome đang dùng prompts hiện tại, sửa sẽ gây mâu thuẫn
+                    _img_dir = item / "img"
+                    _has_images = False
+                    if _img_dir.exists():
+                        _img_count = len(list(_img_dir.glob("*.png"))) + len(list(_img_dir.glob("*.jpg")))
+                        _has_images = _img_count > 0
+
                     if progress['is_complete']:
                         # Hoàn thành 100% - Skip
-                        # v1.0.49: Log để debug
-                        # log(f"  [{name}] Excel complete (100%) - Skip")
+                        pass
+                    elif _has_images:
+                        # v1.0.317: Đã có ảnh → KHÔNG sửa Excel (dù chưa hoàn hảo)
+                        log(f"  [{name}] Excel chưa hoàn hảo nhưng đã có ảnh - KHÔNG sửa lại")
                         pass
                     elif progress['can_resume']:
-                        # Đang làm dở - Resume
+                        # Đang làm dở, chưa có ảnh - Resume
                         results.append((item, name, "resume", progress))
                     elif needs_api_completion(item, name):
-                        # Có [FALLBACK] - Fix
+                        # Có [FALLBACK], chưa có ảnh - Fix
                         results.append((item, name, "fix_fallback", progress))
                     elif not has_excel_with_prompts(item, name):
                         # v1.0.58: CRITICAL FIX - Check read_error trước khi tạo mới!

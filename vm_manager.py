@@ -433,18 +433,6 @@ class QualityChecker:
                 status.excel_status = "complete"
                 status.current_step = "image"
 
-            # v1.0.316: Nếu đã có ảnh tạo rồi → step phải là "image", không phải "excel"
-            # Chrome workers đang làm việc, không cần chờ Excel hoàn thiện thêm
-            # (Excel worker chạy độc lập sẽ tự hoàn thiện nếu cần)
-            # Chỉ override khi excel_status != "empty" (phải có ít nhất 1 prompt)
-            if status.current_step == "excel" and status.excel_status != "empty":
-                # Đếm ảnh đã tạo (check img/ folder)
-                img_dir = project_dir / "img"
-                if img_dir.exists():
-                    img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
-                    if img_count > 0:
-                        status.current_step = "image"
-
             # Check images and videos
             # Images can be in img/ (active) or img_backup/ (moved after video creation)
             # Videos are .mp4 files in img/
