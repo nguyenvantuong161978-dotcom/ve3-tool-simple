@@ -2042,14 +2042,30 @@ class VMManager:
             return
 
         if status.current_step == "excel":
-            self.create_task(TaskType.EXCEL, project_code)
+            # v1.0.315: Chỉ tạo task excel MỚI nếu chưa có task pending/assigned
+            existing_excel = [t for t in self.tasks.values()
+                              if t.task_type == TaskType.EXCEL
+                              and t.project_code == project_code
+                              and t.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED)]
+            if not existing_excel:
+                self.create_task(TaskType.EXCEL, project_code)
         elif status.current_step == "image" and status.images_missing:
-            # v1.0.234: Tạo backup Excel khi bắt đầu bước image (nếu chưa có)
-            self._create_excel_backup_if_needed(project_code)
-            self._distribute_tasks(TaskType.IMAGE, project_code, status.images_missing)
+            # v1.0.315: Chỉ tạo task image MỚI nếu chưa có task pending/assigned
+            existing_img = [t for t in self.tasks.values()
+                            if t.task_type == TaskType.IMAGE
+                            and t.project_code == project_code
+                            and t.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED)]
+            if not existing_img:
+                self._create_excel_backup_if_needed(project_code)
+                self._distribute_tasks(TaskType.IMAGE, project_code, status.images_missing)
         elif status.current_step == "video" and status.videos_needed:
-            # Use videos_needed which is filtered by video_mode (basic = Segment 1 only)
-            self._distribute_tasks(TaskType.VIDEO, project_code, status.videos_needed)
+            # v1.0.315: Chỉ tạo task video MỚI nếu chưa có task pending/assigned
+            existing_vid = [t for t in self.tasks.values()
+                            if t.task_type == TaskType.VIDEO
+                            and t.project_code == project_code
+                            and t.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED)]
+            if not existing_vid:
+                self._distribute_tasks(TaskType.VIDEO, project_code, status.videos_needed)
 
     def _distribute_tasks(self, task_type: TaskType, project_code: str, scenes: List[int]):
         n = self.num_chrome_workers

@@ -1,6 +1,6 @@
-1.0.314
+1.0.315
 2026-03-18 (VN)
-Change: PROTECT Excel - Khong bao gio xoa Excel khi step_7 da COMPLETED (fix bug lam lai Excel)
+Change: Fix task spam - chi tao task moi khi chua co task pending/assigned cho project
 
 Thay doi:
 - v1.0.308: Fix workers bi mat CMD:
