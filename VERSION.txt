@@ -1,8 +1,19 @@
-1.0.317
+1.0.318
 2026-03-18 (VN)
-Change: NGUYEN TAC: Excel xong moi tao anh, da xong khong lam lai. Revert v1.0.316
+Change: FIX TRIET DE - Excel KHONG BAO GIO bi xoa/lam lai khi da co anh
 
 Thay doi:
+- v1.0.318: FIX TRIET DE - Excel KHONG BAO GIO bi xoa/lam lai khi da co anh:
+  * ROOT CAUSE: get_step_status("step_7") tra ve {} (empty dict) khi file bi lock
+    → {} la falsy → tat ca check "if s7 and ..." deu FAIL → Excel bi xoa!
+  * FIX 1: run_worker.py main_worker(): Check img/*.png TRUOC KHI xoa Excel
+    Co anh = KHONG XOA, bat ke step_7 status la gi
+  * FIX 2: run_worker.py complete_excel_with_api(): Check anh + fix empty dict
+  * FIX 3: smart_engine.py _safe_delete_excel(): Check anh + fix empty dict
+  * FIX 4: progressive_prompts.py run_all_steps(): GUARD dau tien - co anh = return True
+  * FIX 5: progressive_prompts.py EARLY CHECK exception: Co anh = return True
+  * NGUYEN TAC: Anh la bang chung Excel da xong. Co anh = TUYET DOI KHONG lam lai Excel
+
 - v1.0.308: Fix workers bi mat CMD:
   * handle_project_timeout(): Stop ALL workers nhung chi restart Chrome
     → Excel bi mat vinh vien! Fix: restart ALL workers (Chrome + Excel)

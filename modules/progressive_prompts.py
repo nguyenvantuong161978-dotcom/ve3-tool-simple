@@ -3291,6 +3291,15 @@ Return JSON only with EXACTLY {len(batch)} scenes:
             self._log(f"ERROR: SRT not found: {srt_path}", "ERROR")
             return False
 
+        # v1.0.318: GUARD - Nếu đã có ảnh → Excel đã xong → KHÔNG chạy lại
+        _img_dir = project_dir / "img"
+        if _img_dir.exists():
+            _img_count = len(list(_img_dir.glob("*.png"))) + len(list(_img_dir.glob("*.jpg")))
+            if _img_count > 0:
+                self._log(f"\n  [GUARD] Đã có {_img_count} ảnh trong img/ - Excel đã hoàn thành!")
+                self._log("  → KHÔNG chạy lại Excel. Return True.")
+                return True
+
         # Parse SRT
         srt_entries = parse_srt_file(srt_path)
         if not srt_entries:
@@ -3342,7 +3351,17 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                 return True
         except Exception as e:
             self._log(f"  [EARLY CHECK] Warning: {e}", "WARN")
-            # Continue with normal flow if check fails
+            # v1.0.318: Nếu đã có ảnh → KHÔNG chạy lại (dù check lỗi)
+            try:
+                _img_dir = Path(project_dir) / "img"
+                if _img_dir.exists():
+                    _img_count = len(list(_img_dir.glob("*.png"))) + len(list(_img_dir.glob("*.jpg")))
+                    if _img_count > 0:
+                        self._log(f"  [EARLY CHECK] Đã có {_img_count} ảnh - KHÔNG chạy lại Excel!", "WARN")
+                        return True
+            except Exception:
+                pass
+            # Continue with normal flow if check fails AND no images
 
         # Run steps
         all_success = True

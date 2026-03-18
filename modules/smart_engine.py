@@ -234,20 +234,29 @@ class SmartEngine:
             self.log(f"          Worker sẽ retry sau...", "WARN")
             return False
 
-        # === v1.0.314: KHÔNG BAO GIỜ XÓA EXCEL KHI STEP_7 ĐÃ COMPLETED ===
-        # Bug: Chrome đọc Excel bị lock → 0 scenes → xóa → tạo lại → ảnh cũ không khớp
+        # === v1.0.318: KHÔNG XÓA EXCEL KHI ĐÃ CÓ ẢNH ===
+        try:
+            img_dir = excel_path.parent / "img"
+            if img_dir.exists():
+                img_count = len(list(img_dir.glob("*.png"))) + len(list(img_dir.glob("*.jpg")))
+                if img_count > 0:
+                    self.log(f"[PROTECT] KHÔNG XÓA Excel - đã có {img_count} ảnh!", "WARN")
+                    return False
+        except Exception:
+            pass
+
+        # === v1.0.318: KHÔNG XÓA EXCEL KHI STEP_7 ĐÃ COMPLETED ===
         try:
             if excel_path.exists():
                 from modules.excel_manager import PromptWorkbook
                 wb_check = PromptWorkbook(str(excel_path))
                 step7_info = wb_check.get_step_status("step_7")
-                if step7_info and step7_info.get("status") == "COMPLETED":
-                    self.log(f"[PROTECT] KHÔNG XÓA Excel - step_7 đã COMPLETED! (đọc 0 scenes là do file bị lock)", "WARN")
-                    self.log(f"          Worker sẽ retry sau...", "WARN")
+                if step7_info.get("status") == "COMPLETED":
+                    self.log(f"[PROTECT] KHÔNG XÓA Excel - step_7 đã COMPLETED!", "WARN")
                     return False
         except Exception as e:
             # Nếu không đọc được step_7 (file lock) → cũng KHÔNG XÓA
-            self.log(f"[PROTECT] KHÔNG XÓA Excel - không đọc được step_7: {e} (có thể bị lock)", "WARN")
+            self.log(f"[PROTECT] KHÔNG XÓA Excel - không đọc được step_7: {e}", "WARN")
             return False
 
         # Chỉ xóa khi chạy đơn lẻ VÀ step_7 chưa COMPLETED

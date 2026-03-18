@@ -429,18 +429,31 @@ def complete_excel_with_api(project_dir: Path, name: str) -> bool:
         cfg['preferred_provider'] = 'deepseek' if deepseek_key else ('groq' if groq_keys else 'gemini')
         cfg['use_v2_flow'] = True
 
-        # v1.0.314: KHÔNG XÓA Excel nếu step_7 đã COMPLETED
+        # v1.0.318: KHÔNG XÓA Excel nếu đã có ảnh hoặc step_7 COMPLETED
+        _img_dir = project_dir / "img"
+        if _img_dir.exists():
+            _img_count = len(list(_img_dir.glob("*.png"))) + len(list(_img_dir.glob("*.jpg")))
+            if _img_count > 0:
+                print(f"  [PROTECT] Đã có {_img_count} ảnh - KHÔNG xóa Excel")
+                if original_excel_backup and original_excel_backup.exists():
+                    original_excel_backup.unlink()
+                return True
+
         try:
             from modules.excel_manager import PromptWorkbook
             wb_chk = PromptWorkbook(str(excel_path))
             s7_chk = wb_chk.get_step_status("step_7")
-            if s7_chk and s7_chk.get("status") == "COMPLETED":
+            if s7_chk.get("status") == "COMPLETED":
                 print(f"  [PROTECT] step_7=COMPLETED - KHÔNG xóa Excel")
                 if original_excel_backup and original_excel_backup.exists():
                     original_excel_backup.unlink()
                 return True
         except Exception:
-            pass  # Nếu không đọc được, tiếp tục logic cũ (có backup)
+            # Không đọc được → coi như protected
+            print(f"  [PROTECT] Không đọc được step_7 - KHÔNG xóa Excel")
+            if original_excel_backup and original_excel_backup.exists():
+                original_excel_backup.unlink()
+            return True
 
         # Xóa Excel để regenerate (chỉ khi step_7 chưa COMPLETED)
         if excel_path.exists():
@@ -734,23 +747,38 @@ def process_project(code: str, callback=None) -> bool:
             log(f"  [SKIP] No Excel and no SRT, skip!")
             return False
     elif not has_excel_with_prompts(local_dir, code):
-        # v1.0.314: KHÔNG XÓA Excel nếu step_7 đã COMPLETED (có thể đọc lỗi do file lock)
-        _step7_completed = False
-        try:
-            from modules.excel_manager import PromptWorkbook
-            wb_check = PromptWorkbook(str(excel_path))
-            s7 = wb_check.get_step_status("step_7")
-            if s7 and s7.get("status") == "COMPLETED":
-                _step7_completed = True
-        except Exception:
-            # Không đọc được → coi như COMPLETED để bảo vệ
-            _step7_completed = True
+        # v1.0.318: TUYỆT ĐỐI KHÔNG XÓA Excel nếu đã có ảnh hoặc step_7 COMPLETED
+        _protected = False
 
-        if _step7_completed:
-            log(f"  [PROTECT] Excel step_7=COMPLETED - KHÔNG xóa (có thể bị lock tạm)")
+        # CHECK 1: Đã có ảnh → KHÔNG BAO GIỜ xóa Excel
+        _img_dir = local_dir / "img"
+        if _img_dir.exists():
+            _img_count = len(list(_img_dir.glob("*.png"))) + len(list(_img_dir.glob("*.jpg")))
+            if _img_count > 0:
+                _protected = True
+                log(f"  [PROTECT] Đã có {_img_count} ảnh - KHÔNG xóa Excel (có thể bị lock tạm)")
+
+        # CHECK 2: step_7 COMPLETED hoặc không đọc được (coi như protected)
+        if not _protected:
+            try:
+                from modules.excel_manager import PromptWorkbook
+                wb_check = PromptWorkbook(str(excel_path))
+                s7 = wb_check.get_step_status("step_7")
+                # s7 = {} khi step_7 row không tồn tại → có thể file bị lock
+                # s7.get("status") == "COMPLETED" khi step_7 đã xong
+                if s7.get("status") == "COMPLETED":
+                    _protected = True
+                    log(f"  [PROTECT] Excel step_7=COMPLETED - KHÔNG xóa")
+            except Exception:
+                # Không đọc được → coi như COMPLETED để bảo vệ
+                _protected = True
+                log(f"  [PROTECT] Không đọc được Excel - KHÔNG xóa (có thể bị lock)")
+
+        if _protected:
+            pass  # Không xóa, tiếp tục flow (sẽ retry cycle sau)
         else:
-            # Excel exists but empty/corrupt AND step_7 chưa xong - recreate
-            log(f"  [EXCEL] Excel empty/corrupt (step_7 chưa COMPLETED), recreating...")
+            # Excel exists but empty/corrupt AND không có ảnh AND step_7 chưa xong - recreate
+            log(f"  [EXCEL] Excel empty/corrupt (step_7 chưa COMPLETED, 0 ảnh), recreating...")
             excel_path.unlink()
             if not create_excel_with_api(local_dir, code):
                 log(f"  [FAIL] Failed to recreate Excel, skip!")
