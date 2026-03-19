@@ -1,8 +1,17 @@
-1.0.318
-2026-03-18 (VN)
-Change: FIX TRIET DE - Excel KHONG BAO GIO bi xoa/lam lai khi da co anh
+1.0.319
+2026-03-19 (VN)
+Change: FIX API tra ve SRT range sai - clamp segments trong [1, total_srt]
 
 Thay doi:
+- v1.0.319: FIX SRT range vuot qua tong so SRT entries:
+  * Bug: API Step 1.5 tra ve segment co SRT range 31-33 khi chi co 28 entries
+    → Step 5 khong tim duoc SRT → "No SRT entries" → retry 5 lan vo ich (~4 phut)
+    → Fallback scenes chat luong kem
+  * FIX 1: progressive_prompts.py Step 1.5: Clamp tat ca segment ranges vao [1, total_srt]
+    Segments co range vuot qua total_srt se bi loai bo
+  * FIX 2: progressive_prompts.py Step 5: Clamp srt_start/srt_end truoc khi filter
+    Defense-in-depth cho truong hop Excel cu co ranges sai
+
 - v1.0.318: FIX TRIET DE - Excel KHONG BAO GIO bi xoa/lam lai khi da co anh:
   * ROOT CAUSE: get_step_status("step_7") tra ve {} (empty dict) khi file bi lock
     → {} la falsy → tat ca check "if s7 and ..." deu FAIL → Excel bi xoa!

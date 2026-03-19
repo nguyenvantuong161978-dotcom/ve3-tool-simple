@@ -938,6 +938,28 @@ Return JSON only:
         total_srt = len(srt_entries)
 
         # =====================================================================
+        # v1.0.319: CLAMP - Đảm bảo tất cả segment ranges nằm trong [1, total_srt]
+        # Bug: API trả về ranges vượt quá tổng SRT (ví dụ: SRT 31-33 khi chỉ có 28 entries)
+        # → Step 5 không tìm được SRT entries → "No SRT entries" → retry 5 lần vô ích
+        # =====================================================================
+        valid_segments = []
+        for seg in segments:
+            seg_start = seg.get("srt_range_start", 1)
+            seg_end = seg.get("srt_range_end", total_srt)
+            # Clamp to valid range
+            seg["srt_range_start"] = max(1, min(seg_start, total_srt))
+            seg["srt_range_end"] = max(1, min(seg_end, total_srt))
+            # Bỏ segment nếu range vô nghĩa (start > total_srt)
+            if seg["srt_range_start"] > total_srt:
+                self._log(f"  [CLAMP] Bỏ segment '{seg.get('segment_name')}': SRT {seg_start}-{seg_end} vượt quá {total_srt} entries")
+                continue
+            if seg_start != seg["srt_range_start"] or seg_end != seg["srt_range_end"]:
+                self._log(f"  [CLAMP] Segment '{seg.get('segment_name')}': SRT {seg_start}-{seg_end} → {seg['srt_range_start']}-{seg['srt_range_end']}")
+            valid_segments.append(seg)
+        segments = valid_segments
+        data["segments"] = segments
+
+        # =====================================================================
         # PHASE 2: Calculate image_count for EACH segment individually IN PARALLEL
         # ROOT CAUSE FIX: Single API call with all segments hits max_tokens limit
         # → API must compress → reduces image_count to fit response
@@ -2235,6 +2257,10 @@ Create scenes (~8s each). Return JSON:
             srt_start = seg.get("srt_range_start", 1)
             srt_end = seg.get("srt_range_end", total_entries)
             message = seg.get("message", "")
+
+            # v1.0.319: Clamp SRT range to valid bounds
+            srt_start = max(1, min(srt_start, total_entries))
+            srt_end = max(1, min(srt_end, total_entries))
 
             self._log(f"  Segment {seg_id}/{len(story_segments)}: {seg_name} ({image_count} images, SRT {srt_start}-{srt_end})")
 
