@@ -5578,42 +5578,85 @@ if (btn) {
         # ---- BATCH B: Portrait (chon doc 9:16) ----
         self.log("[THUMB] Batch B: Portrait (3 anh)...")
 
+        def _is_portrait(img_path):
+            """Kiem tra anh co phai portrait (height > width) khong."""
+            try:
+                from PIL import Image
+                with Image.open(img_path) as img:
+                    w, h = img.size
+                    self.log(f"[THUMB] Kich thuoc: {w}x{h} ({'portrait' if h > w else 'LANDSCAPE - SAI!'})")
+                    return h > w
+            except Exception as e:
+                self.log(f"[THUMB] Khong doc duoc kich thuoc anh: {e}", "WARN")
+                return True  # Khong doc duoc thi coi nhu OK
+
         for i, thumb in enumerate(thumbnails[:3]):
             if thumb.status_portrait == "done" and thumb.img_path_portrait and (proj_dir / thumb.img_path_portrait).exists():
-                self.log(f"[THUMB] thumb_{i+4:03d} da co, skip")
-                success_count += 1
-                continue
+                # v1.0.320: Kiem tra anh da co co phai portrait khong
+                existing_path = proj_dir / thumb.img_path_portrait
+                if _is_portrait(existing_path):
+                    self.log(f"[THUMB] thumb_{i+4:03d} da co (portrait OK), skip")
+                    success_count += 1
+                    continue
+                else:
+                    self.log(f"[THUMB] thumb_{i+4:03d} da co nhung la LANDSCAPE - tao lai!")
+                    # Xoa anh sai, tiep tuc tao lai
+                    try:
+                        existing_path.unlink()
+                    except Exception:
+                        pass
 
             fname = f"thumb_{i+4:03d}.png"
             save_path = thumb_dir / fname
 
-            # Chon PORTRAIT truoc moi anh (vi Chrome restart sau moi anh lam mat orientation)
-            self.log(f"[THUMB] Chon PORTRAIT cho {fname}...")
-            orient_ok = drission.select_orientation("PORTRAIT")
-            if not orient_ok:
-                self.log(f"[THUMB] WARN: Khong chon duoc PORTRAIT cho {fname}, thu tiep", "WARN")
+            # v1.0.320: Retry toi da 3 lan neu anh bi tao thanh landscape
+            max_portrait_retries = 3
+            portrait_ok = False
 
-            image_inputs = _build_image_inputs(thumb)
-            self.log(f"[THUMB] Tao {fname} (portrait): {thumb.img_prompt[:60]}...")
+            for retry in range(max_portrait_retries):
+                # Chon PORTRAIT truoc moi lan tao (vi Chrome restart lam mat orientation)
+                retry_label = f" (retry {retry+1}/{max_portrait_retries})" if retry > 0 else ""
+                self.log(f"[THUMB] Chon PORTRAIT cho {fname}{retry_label}...")
+                orient_ok = drission.select_orientation("PORTRAIT")
+                if not orient_ok:
+                    self.log(f"[THUMB] WARN: Khong chon duoc PORTRAIT cho {fname}, thu tiep", "WARN")
 
-            ok, images, err = drission.generate_image(
-                prompt=thumb.img_prompt,
-                save_dir=thumb_dir,
-                filename=f"thumb_{i+4:03d}",
-                max_retries=3,
-                image_inputs=image_inputs if image_inputs else None,
-            )
+                image_inputs = _build_image_inputs(thumb)
+                self.log(f"[THUMB] Tao {fname} (portrait){retry_label}: {thumb.img_prompt[:60]}...")
 
-            if ok and images:
+                ok, images, err = drission.generate_image(
+                    prompt=thumb.img_prompt,
+                    save_dir=thumb_dir,
+                    filename=f"thumb_{i+4:03d}",
+                    max_retries=3,
+                    image_inputs=image_inputs if image_inputs else None,
+                )
+
+                if ok and images:
+                    # Kiem tra kich thuoc anh
+                    if _is_portrait(save_path):
+                        portrait_ok = True
+                        break
+                    else:
+                        self.log(f"[THUMB] {fname} bi tao thanh LANDSCAPE! Xoa va thu lai...", "WARN")
+                        try:
+                            save_path.unlink()
+                        except Exception:
+                            pass
+                else:
+                    self.log(f"[THUMB] {fname} tao FAIL: {err}", "WARN")
+                    break  # Khong retry neu generate fail hoan toan
+
+            if portrait_ok:
                 img_rel = f"thumbnail/{fname}"
                 wb.update_thumbnail(thumb.thumb_id, status_portrait="done", img_path_portrait=img_rel)
                 wb.save()
                 success_count += 1
-                self.log(f"[THUMB] [v] {fname} OK")
+                self.log(f"[THUMB] [v] {fname} OK (portrait)")
             else:
                 wb.update_thumbnail(thumb.thumb_id, status_portrait="error")
                 wb.save()
-                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
+                self.log(f"[THUMB] [x] {fname} FAIL: khong tao duoc portrait sau {max_portrait_retries} lan", "WARN")
 
         # ---- Reset ve Landscape cho scene generation ----
         self.log("[THUMB] Reset ve Landscape...")

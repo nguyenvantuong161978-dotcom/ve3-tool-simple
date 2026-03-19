@@ -1,8 +1,13 @@
-1.0.319
+1.0.320
 2026-03-19 (VN)
-Change: FIX API tra ve SRT range sai - clamp segments trong [1, total_srt]
+Change: Thumbnail portrait - kiem tra kich thuoc, tao lai neu bi landscape
 
 Thay doi:
+- v1.0.320: Thumbnail portrait validation:
+  * Sau khi tao anh portrait (thumb_004-006), kiem tra width vs height
+  * Neu width > height (landscape) → xoa va tao lai (retry toi da 3 lan)
+  * Anh da co nhung la landscape → cung tao lai
+  * Dung PIL/Pillow de doc kich thuoc anh
 - v1.0.319: FIX SRT range vuot qua tong so SRT entries:
   * Bug: API Step 1.5 tra ve segment co SRT range 31-33 khi chi co 28 entries
     → Step 5 khong tim duoc SRT → "No SRT entries" → retry 5 lan vo ich (~4 phut)
