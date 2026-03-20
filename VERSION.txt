@@ -1,6 +1,6 @@
-1.0.321
+1.0.322
 2026-03-21 (VN)
-Change: Dismiss popup "New Image Aspect Ratios" truoc khi tim nut "Du an moi"
+Change: Fix Chrome 2 tao thumbnail truoc khi Chrome 1 tao xong NV references
 
 Thay doi:
 - v1.0.320: Thumbnail portrait validation:
