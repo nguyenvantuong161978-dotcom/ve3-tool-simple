@@ -1,6 +1,6 @@
-1.0.320
-2026-03-19 (VN)
-Change: Thumbnail portrait - kiem tra kich thuoc, tao lai neu bi landscape
+1.0.321
+2026-03-21 (VN)
+Change: Dismiss popup "New Image Aspect Ratios" truoc khi tim nut "Du an moi"
 
 Thay doi:
 - v1.0.320: Thumbnail portrait validation:

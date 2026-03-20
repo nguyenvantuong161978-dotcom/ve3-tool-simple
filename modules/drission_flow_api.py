@@ -1287,6 +1287,32 @@ class DrissionFlowAPI:
         MAX_REFRESH = 6  # Tối đa 6 lần refresh (60s)
         clicked_success = False
         for refresh_count in range(MAX_REFRESH):
+            # v1.0.321: Dismiss popup thông báo (New Image Aspect Ratios, etc.)
+            # Popup có nút "Bắt đầu" / "Get started" che nút "Dự án mới"
+            if refresh_count == 0:
+                try:
+                    popup_dismissed = False
+                    dismiss_selectors = [
+                        'tag:button@@text():Bắt đầu',
+                        'tag:button@@text():Get started',
+                        'tag:button@@text():Bắt Đầu',
+                        'tag:button@@text():Got it',
+                        'tag:button@@text():Dismiss',
+                    ]
+                    for sel in dismiss_selectors:
+                        try:
+                            popup_btn = self.driver.ele(sel, timeout=1)
+                            if popup_btn:
+                                popup_btn.click()
+                                self.log(f"[v] Dismissed popup (clicked '{sel.split(':')[-1]}')")
+                                popup_dismissed = True
+                                time.sleep(1)
+                                break
+                        except:
+                            continue
+                except:
+                    pass
+
             # Thử tìm button trong 10s
             for i in range(10):
                 # Check URL trước - có thể đã vào project rồi
@@ -1350,6 +1376,26 @@ class DrissionFlowAPI:
                 time.sleep(1)
                 if i == 4:
                     self.log("  ... đợi button 'Dự án mới' xuất hiện...")
+                    # v1.0.321: Lâu quá → thử dismiss popup
+                    try:
+                        for _sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
+                                     'tag:button@@text():Got it']:
+                            try:
+                                _btn = self.driver.ele(_sel, timeout=1)
+                                if _btn:
+                                    _btn.click()
+                                    self.log(f"[v] Dismissed popup ('{_sel.split(':')[-1]}')")
+                                    time.sleep(1)
+                                    break
+                            except:
+                                continue
+                        else:
+                            # Không thấy popup button → click điểm trống
+                            self.driver.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
+                            self.log("[INFO] Clicked diem trong de dismiss popup")
+                            time.sleep(1)
+                    except:
+                        pass
             else:
                 # Không tìm thấy button → check URL trước khi F5
                 try:
@@ -1359,6 +1405,25 @@ class DrissionFlowAPI:
                         return True
                 except:
                     pass
+                # v1.0.321: Trước khi F5, thử click vào điểm trống để dismiss popup
+                if refresh_count < 2:
+                    try:
+                        self.log(f"[INFO] Thu click vao diem trong de dismiss popup...")
+                        self.driver.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
+                        time.sleep(1)
+                        # Thử click "Bắt đầu" lần nữa (popup có thể hiện lại)
+                        for sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started']:
+                            try:
+                                popup_btn = self.driver.ele(sel, timeout=1)
+                                if popup_btn:
+                                    popup_btn.click()
+                                    self.log(f"[v] Dismissed popup sau click diem trong")
+                                    time.sleep(1)
+                                    break
+                            except:
+                                continue
+                    except:
+                        pass
                 # F5 refresh
                 self.log(f"[WARN] Không tìm thấy button - F5 refresh (lần {refresh_count + 1}/{MAX_REFRESH})...")
                 try:
@@ -3073,6 +3138,23 @@ class DrissionFlowAPI:
             # v1.0.201: Logic giống warmup - 20 lần retry, reload mỗi 5 lần, không giới hạn thời gian
             flow_url = "https://labs.google/fx/vi/tools/flow"
             for attempt in range(20):
+                # v1.0.321: Dismiss popup thông báo (New Image Aspect Ratios, etc.)
+                # Popup xuất hiện SAU khi click "Create with Flow", che nút "Dự án mới"
+                try:
+                    for _dismiss_sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
+                                         'tag:button@@text():Got it']:
+                        try:
+                            _dismiss_btn = self.driver.ele(_dismiss_sel, timeout=0.5)
+                            if _dismiss_btn:
+                                _dismiss_btn.click()
+                                self.log(f"[v] Dismissed popup ('{_dismiss_sel.split(':')[-1]}')")
+                                time.sleep(1)
+                                break
+                        except:
+                            continue
+                except:
+                    pass
+
                 # Tìm button "Dự án mới" (add_2) - đây là mục tiêu cuối cùng
                 try:
                     btn = self.driver.ele('tag:button@@text():add_2', timeout=1)
