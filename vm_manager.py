@@ -3458,19 +3458,21 @@ class VMManager:
                 self.collect_results()
 
                 # 3. Health check mỗi 30s (6 vòng x 5s)
+                # v1.0.341: Skip 60s đầu để workers ổn định (tránh restart do log cũ)
                 health_check_counter += 1
-                if health_check_counter >= 6:
+                _uptime = time.time() - self._start_time if hasattr(self, '_start_time') else 999
+                if health_check_counter >= 6 and _uptime > 60:
                     health_check_counter = 0
                     workers_with_errors = self.check_worker_health()
                     for wid, error_type in workers_with_errors:
-                        # Sử dụng handle_worker_error thay vì restart trực tiếp
-                        # Hàm này sẽ quyết định: restart, clear data, hoặc IPv6 rotation
                         self.handle_worker_error(wid, error_type)
 
                     # Auto-recovery for Chrome connection lost errors
-                    if self.check_and_auto_recover():
-                        # If recovery was triggered, skip this iteration
-                        continue
+                    # v1.0.341: Skip 60s đầu sau start (tránh đọc log cũ → restart trùng)
+                    if hasattr(self, '_start_time') and (time.time() - self._start_time) > 60:
+                        if self.check_and_auto_recover():
+                            # If recovery was triggered, skip this iteration
+                            continue
 
                 # 4. Check completed tasks và retry nếu cần
                 for task in list(self.tasks.values()):

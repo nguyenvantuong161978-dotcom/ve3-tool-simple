@@ -1,6 +1,6 @@
-1.0.340
+1.0.341
 2026-03-21 (VN)
-Change: Fix command - VM tu tao commands dir + skip ACK files
+Change: Fix Chrome mo 2 lan - skip health check 60s dau
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
