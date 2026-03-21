@@ -917,6 +917,10 @@ class VMManager:
         self.auto_path = self._detect_auto_path()
         self.channel = self._get_channel_from_folder()
 
+        # Watchdog: report status + read commands from master
+        self._watchdog_thread = None
+        self._vm_id = TOOL_DIR.parent.name  # e.g., "AR8-T1"
+
     def _setup_agent_dirs(self):
         for d in [AGENT_DIR, TASKS_DIR, RESULTS_DIR, STATUS_DIR, LOGS_DIR]:
             d.mkdir(parents=True, exist_ok=True)
@@ -1899,7 +1903,7 @@ class VMManager:
     def _release_claim(self, project_code: str):
         """Release claim khi project xong (distributed mode)."""
         try:
-            from modules.task_queue import TaskQueue
+            from modules.robust_copy import TaskQueue
             import yaml
             settings_path = TOOL_DIR / "config" / "settings.yaml"
             if not settings_path.exists():
@@ -3231,6 +3235,7 @@ class VMManager:
             gui_mode: If True, minimize CMD windows and log to files (for GUI mode)
         """
         self.gui_mode = gui_mode  # Track mode for restart
+        self._start_time = time.time()
         self.kill_all_chrome()
         if self.enable_excel:
             self.start_worker("excel", gui_mode=gui_mode)
@@ -3238,12 +3243,145 @@ class VMManager:
         for i in range(1, self.num_chrome_workers + 1):
             self.start_worker(f"chrome_{i}", gui_mode=gui_mode)
             time.sleep(2)
+        # Start watchdog (report status + read commands from master)
+        self.start_watchdog()
 
     def stop_all(self):
         self._stop_flag = True
         for wid in list(self.workers.keys()):
             self.stop_worker(wid)
         self.kill_all_chrome()
+
+    # ================================================================================
+    # WATCHDOG - Report status + read commands from master
+    # ================================================================================
+
+    def start_watchdog(self):
+        """Start watchdog thread (gửi status + đọc commands từ master)."""
+        if not self.auto_path:
+            self.log("No AUTO path - watchdog disabled", "MANAGER", "WARN")
+            return
+        if self._watchdog_thread and self._watchdog_thread.is_alive():
+            return
+        self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self._watchdog_thread.start()
+        self.log(f"Watchdog started (VM_ID={self._vm_id})", "MANAGER")
+
+    def _watchdog_loop(self):
+        """Loop: mỗi 10s gửi status + check commands."""
+        while not self._stop_flag:
+            try:
+                self._report_status_to_master()
+                self._check_master_commands()
+            except Exception as e:
+                self.log(f"Watchdog error: {e}", "MANAGER", "ERROR")
+            time.sleep(10)
+
+    def _report_status_to_master(self):
+        """Ghi status JSON lên AUTO/status/{VM_ID}.json."""
+        if not self.auto_path:
+            return
+        try:
+            status_dir = self.auto_path / "status"
+            status_dir.mkdir(parents=True, exist_ok=True)
+            status_file = status_dir / f"{self._vm_id}.json"
+
+            # Tính uptime
+            uptime_min = 0
+            if hasattr(self, '_start_time'):
+                uptime_min = int((time.time() - self._start_time) / 60)
+
+            # Worker states
+            worker_states = {}
+            for wid, w in self.workers.items():
+                worker_states[wid] = {
+                    "status": w.status.value if hasattr(w.status, 'value') else str(w.status),
+                    "current_task": w.current_task or "",
+                }
+
+            # Determine overall state
+            running_workers = sum(1 for w in self.workers.values()
+                                  if w.process and w.process.poll() is None)
+            if self._stop_flag:
+                state = "stopped"
+            elif running_workers > 0:
+                state = f"running ({running_workers} workers)"
+            else:
+                state = "idle"
+
+            # Read version
+            version = ""
+            try:
+                version = (TOOL_DIR / "VERSION.txt").read_text(encoding='utf-8').split('\n')[0].strip()
+            except Exception:
+                pass
+
+            data = {
+                "channel": self._vm_id,
+                "state": state,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "version": version,
+                "uptime_minutes": uptime_min,
+                "project": self.current_project_code or "",
+                "workers": worker_states,
+            }
+
+            status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        except Exception:
+            pass  # Silent fail - network có thể mất tạm thời
+
+    def _check_master_commands(self):
+        """Đọc commands từ AUTO/commands/{VM_ID}.* và thực thi."""
+        if not self.auto_path:
+            return
+        try:
+            cmd_dir = self.auto_path / "commands"
+            if not cmd_dir.exists():
+                return
+
+            for cmd_file in cmd_dir.glob(f"{self._vm_id}.*"):
+                cmd_name = cmd_file.suffix.lstrip('.')  # e.g., "run", "stop", "update"
+                self.log(f"Master command: {cmd_name}", "MANAGER", "INFO")
+
+                try:
+                    if cmd_name == "run":
+                        if self._stop_flag:
+                            self._stop_flag = False
+                            self.start_all(gui_mode=self.gui_mode)
+                    elif cmd_name == "stop":
+                        self.stop_all()
+                    elif cmd_name == "update":
+                        self._do_git_update()
+                except Exception as e:
+                    self.log(f"Command '{cmd_name}' error: {e}", "MANAGER", "ERROR")
+
+                # Xóa command file sau khi xử lý
+                try:
+                    cmd_file.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _do_git_update(self):
+        """Pull code mới từ git và restart."""
+        self.log("Git update started...", "MANAGER")
+        try:
+            self.stop_all()
+            result = subprocess.run(
+                ['git', 'pull', 'origin', 'main'],
+                capture_output=True, text=True, timeout=120,
+                cwd=str(TOOL_DIR),
+            )
+            self.log(f"Git pull: {result.stdout.strip()}", "MANAGER")
+            if result.returncode == 0:
+                self.log("Update OK - Restarting workers...", "MANAGER")
+                self._stop_flag = False
+                self.start_all(gui_mode=self.gui_mode)
+            else:
+                self.log(f"Git pull FAIL: {result.stderr}", "MANAGER", "ERROR")
+        except Exception as e:
+            self.log(f"Git update error: {e}", "MANAGER", "ERROR")
 
     # ================================================================================
     # ORCHESTRATION

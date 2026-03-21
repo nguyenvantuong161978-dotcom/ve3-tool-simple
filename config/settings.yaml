@@ -69,5 +69,6 @@ webshare_proxy:
   rotating_host: p.webshare.io
   rotating_password: cf1bi3yvq0t1
   rotating_port: 80
+distributed_mode: false
 whisper_language: en
 whisper_model: base

@@ -1001,7 +1001,7 @@ def _is_distributed_mode() -> bool:
 def _get_task_queue():
     """Tạo TaskQueue instance cho distributed mode."""
     try:
-        from modules.task_queue import TaskQueue
+        from modules.robust_copy import TaskQueue
         return TaskQueue(
             master_projects=str(MASTER_PROJECTS),
             vm_id=VM_ID,

@@ -4,9 +4,9 @@
 VE3 Tool - Master Control Panel
 
 GUI trên máy chủ để quản lý các VM đang chạy ve3-tool-simple.
-Tham khảo kiến trúc D:\\upload\\control.py.
+File độc lập - không cần import module nào khác.
 
-Giao tiếp: File-based IPC qua \\tsclient hoặc SMB share.
+Giao tiếp: File-based IPC qua shared folder.
 - Commands: AUTO/commands/{VM_ID}.{cmd}
 - Status:   AUTO/status/{VM_ID}.json
 - Queue:    AUTO/ve3-tool-simple/PROJECTS/ (_CLAIMED files)
@@ -18,7 +18,6 @@ Chạy:
 import os
 import sys
 import json
-import time
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -30,7 +29,6 @@ from datetime import datetime
 # CONFIG
 # ============================================================================
 
-# Auto-detect AUTO path
 POSSIBLE_AUTO_PATHS = [
     Path(r"D:\AUTO"),
     Path(r"C:\AUTO"),
@@ -56,12 +54,14 @@ STATUS_DIR = AUTO_PATH / "status"
 MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
 VISUAL_DIR = AUTO_PATH / "visual"
 
-# Ensure dirs exist
+# Tự tạo thư mục nếu chưa có
 COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
 STATUS_DIR.mkdir(parents=True, exist_ok=True)
+MASTER_PROJECTS.mkdir(parents=True, exist_ok=True)
+VISUAL_DIR.mkdir(parents=True, exist_ok=True)
 
-# Refresh interval (ms)
 REFRESH_MS = 10000  # 10 seconds
+CLAIM_TIMEOUT_HOURS = 8
 
 
 # ============================================================================
@@ -78,6 +78,75 @@ BLUE = "#89b4fa"
 YELLOW = "#f9e2af"
 ORANGE = "#fab387"
 PURPLE = "#cba6f7"
+
+
+# ============================================================================
+# QUEUE HELPERS (nhúng trực tiếp, không cần import)
+# ============================================================================
+
+def _is_claim_expired(claimed_file: Path) -> bool:
+    """Check xem claim đã quá hạn chưa."""
+    try:
+        content = claimed_file.read_text(encoding='utf-8').strip()
+        lines = content.split('\n')
+        if len(lines) < 2:
+            return True
+        timestamp_str = lines[1].strip()
+        claim_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+        elapsed_hours = (datetime.now() - claim_time).total_seconds() / 3600
+        return elapsed_hours > CLAIM_TIMEOUT_HOURS
+    except Exception:
+        return True
+
+
+def _read_claim_vm_id(claimed_file: Path):
+    """Đọc VM ID từ file _CLAIMED."""
+    try:
+        content = claimed_file.read_text(encoding='utf-8').strip()
+        first_line = content.split('\n')[0].strip()
+        return first_line if first_line else None
+    except Exception:
+        return None
+
+
+def _is_in_visual(code: str) -> bool:
+    """Check xem project đã có trong visual chưa."""
+    try:
+        visual_dir = VISUAL_DIR / code
+        return visual_dir.exists() and any(visual_dir.iterdir())
+    except Exception:
+        return False
+
+
+def get_queue_status() -> dict:
+    """Lấy trạng thái queue (không cần TaskQueue class)."""
+    status = {"total": 0, "available": 0, "claimed": {}, "expired": 0}
+    if not MASTER_PROJECTS.exists():
+        return status
+    try:
+        for item in MASTER_PROJECTS.iterdir():
+            if not item.is_dir():
+                continue
+            srt_files = list(item.glob("*.srt"))
+            if not srt_files:
+                continue
+            if _is_in_visual(item.name):
+                continue
+            status["total"] += 1
+            claimed_file = item / "_CLAIMED"
+            if not claimed_file.exists():
+                status["available"] += 1
+            elif _is_claim_expired(claimed_file):
+                status["expired"] += 1
+            else:
+                vm_id = _read_claim_vm_id(claimed_file)
+                if vm_id:
+                    if vm_id not in status["claimed"]:
+                        status["claimed"][vm_id] = []
+                    status["claimed"][vm_id].append(item.name)
+    except Exception:
+        pass
+    return status
 
 
 # ============================================================================
@@ -164,9 +233,7 @@ class MasterControlGUI:
     def _update_queue_status(self):
         """Update queue status display."""
         try:
-            from modules.task_queue import TaskQueue
-            tq = TaskQueue(str(MASTER_PROJECTS), "MASTER", str(VISUAL_DIR))
-            status = tq.get_status()
+            status = get_queue_status()
 
             claimed_str = ""
             for vm_id, codes in status["claimed"].items():
@@ -185,24 +252,23 @@ class MasterControlGUI:
 
     def _update_vm_list(self):
         """Update VM status cards."""
-        # Read all status files
         vm_statuses = {}
+
+        # Read status files
         try:
             for f in STATUS_DIR.glob("*.json"):
                 try:
                     data = json.loads(f.read_text(encoding='utf-8'))
-                    vm_id = f.stem  # e.g., AR8-T1
+                    vm_id = f.stem
                     vm_statuses[vm_id] = data
                 except Exception:
                     continue
         except Exception:
             pass
 
-        # Also detect VMs from _CLAIMED files (may not have status file yet)
+        # Detect VMs from _CLAIMED files
         try:
-            from modules.task_queue import TaskQueue
-            tq = TaskQueue(str(MASTER_PROJECTS), "MASTER", str(VISUAL_DIR))
-            queue_status = tq.get_status()
+            queue_status = get_queue_status()
             for vm_id in queue_status.get("claimed", {}):
                 if vm_id not in vm_statuses:
                     vm_statuses[vm_id] = {
@@ -221,7 +287,7 @@ class MasterControlGUI:
                 self._create_vm_card(vm_id)
             self._update_vm_card(vm_id, data)
 
-        # Remove old VMs no longer reporting
+        # Remove old VMs
         for vm_id in list(self.vm_frames.keys()):
             if vm_id not in vm_statuses:
                 self.vm_frames[vm_id]["frame"].destroy()
