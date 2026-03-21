@@ -1,8 +1,14 @@
-1.0.335
+1.0.336
 2026-03-21 (VN)
-Change: Watchdog + _CLAIMED co account + fix Chrome mo 2 lan
+Change: _CLAIMED copy ve local + Chrome doc account tu _CLAIMED
 
 Thay doi:
+- v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
+  * import_from_master(): Sau khi claim tren master → copy _CLAIMED ve local
+  * Chrome worker: Doc _CLAIMED dong 4 (email|pass|totp) → set account index
+  * Flow: Trang tinh NGUON → TaskQueue.claim() → _CLAIMED → Chrome dung dung account
+  * Fallback: Neu _CLAIMED khong co account → dung rotation cu
+
 - v1.0.335: 3 fix:
   * GUI _start() them start_watchdog() → master thay VM status
   * _CLAIMED dung TaskQueue.claim() → doc account tu trang tinh NGUON

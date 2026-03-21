@@ -970,6 +970,29 @@ def _do_pre_login_if_needed(project_code: str = None):
         channel = extract_channel_from_machine_code(machine_code)
         print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
+        # v1.0.336: Distributed mode - đọc account từ _CLAIMED (trang tính NGUON)
+        _claimed_path = project_dir / "_CLAIMED"
+        if _claimed_path.exists():
+            try:
+                _claimed_lines = _claimed_path.read_text(encoding='utf-8').strip().split('\n')
+                if len(_claimed_lines) >= 4 and _claimed_lines[3].strip():
+                    _claimed_account = _claimed_lines[3].strip()  # email|pass|totp
+                    _claimed_email = _claimed_account.split('|')[0] if '|' in _claimed_account else _claimed_account
+                    print(f"[PRE-LOGIN] _CLAIMED account: {_claimed_email}")
+
+                    # Tìm account trong danh sách và set index
+                    all_accounts = get_channel_accounts(machine_code) or []
+                    for i, acc in enumerate(all_accounts):
+                        if acc.get('id', '').lower().strip() == _claimed_email.lower().strip():
+                            save_account_index(channel, i)
+                            _registry_save(code, channel, i, _claimed_email)
+                            print(f"[PRE-LOGIN] Account from _CLAIMED: {_claimed_email} (index {i})")
+                            break
+                    else:
+                        print(f"[PRE-LOGIN] _CLAIMED email not in accounts list, using rotation")
+            except Exception as e:
+                print(f"[PRE-LOGIN] Error reading _CLAIMED: {e}")
+
         # Lấy danh sách accounts 1 lần
         all_accounts = get_channel_accounts(machine_code) or []
 
