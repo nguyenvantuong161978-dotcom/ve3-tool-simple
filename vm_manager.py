@@ -1885,6 +1885,8 @@ class VMManager:
         if copy_success:
             dest_desc = used_path or str(self.auto_path)
             self.log(f"Copied {project_code} to {dest_desc}/visual/{project_code}", "SYSTEM", "SUCCESS")
+            # v1.0.326: Release claim nếu distributed mode
+            self._release_claim(project_code)
         else:
             self.log(f"Copy {project_code} FAILED - all paths tried!", "SYSTEM", "ERROR")
 
@@ -1893,6 +1895,29 @@ class VMManager:
             self._delete_project_folder(project_code)
 
         return copy_success
+
+    def _release_claim(self, project_code: str):
+        """Release claim khi project xong (distributed mode)."""
+        try:
+            from modules.task_queue import TaskQueue
+            import yaml
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+            if not settings_path.exists():
+                return
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            if not config.get('distributed_mode', False):
+                return
+            if not self.auto_path:
+                return
+            master_projects = str(self.auto_path / "ve3-tool-simple" / "PROJECTS")
+            vm_id = TOOL_DIR.parent.name
+            tq = TaskQueue(master_projects, vm_id,
+                           log=lambda msg, lvl="INFO": self.log(msg, "SYSTEM", lvl))
+            tq.release(project_code)
+            self.log(f"Released claim: {project_code}", "SYSTEM", "INFO")
+        except Exception as e:
+            self.log(f"Release claim error: {e}", "SYSTEM", "WARN")
 
     def _delete_project_folder(self, project_code: str):
         """v1.0.94: Xóa local project folder với retry logic mạnh hơn.

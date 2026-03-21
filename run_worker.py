@@ -118,6 +118,9 @@ def get_channel_from_folder() -> str:
 # Auto-detect channel for this worker
 WORKER_CHANNEL = get_channel_from_folder()
 
+# VM ID = full folder name (e.g., "AR8-T1")
+VM_ID = TOOL_DIR.parent.name
+
 
 def matches_channel(code: str) -> bool:
     """Check if project code matches this worker's channel."""
@@ -670,6 +673,8 @@ def copy_to_visual(code: str, local_dir: Path) -> bool:
                 MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
                 MASTER_VISUAL = AUTO_PATH / "visual"
             print(f"  [OK] Copied to: {used_path}/visual/{code}")
+            # v1.0.326: Release claim nếu distributed mode
+            _release_claim(code)
             delete_local_project(code)
             return True
         else:
@@ -684,11 +689,25 @@ def copy_to_visual(code: str, local_dir: Path) -> bool:
                 shutil.rmtree(dst)
             shutil.copytree(local_dir, dst)
             print(f"  [OK] Copied to: {dst}")
+            _release_claim(code)
             delete_local_project(code)
             return True
         except Exception as e:
             print(f"  [FAIL] Copy failed: {e}")
             return False
+
+
+def _release_claim(code: str):
+    """Release claim khi project xong (distributed mode)."""
+    if not _is_distributed_mode():
+        return
+    try:
+        tq = _get_task_queue()
+        if tq:
+            tq.release(code)
+            print(f"  [QUEUE] Released claim: {code}")
+    except Exception as e:
+        print(f"  [QUEUE] Release error: {e}")
 
 
 def is_local_complete(project_dir: Path, name: str) -> bool:
@@ -965,10 +984,66 @@ def safe_iterdir(path: Path) -> list:
         return []
 
 
+def _is_distributed_mode() -> bool:
+    """Check xem distributed mode có được bật không (settings.yaml)."""
+    try:
+        import yaml
+        settings_path = TOOL_DIR / "config" / "settings.yaml"
+        if settings_path.exists():
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            return config.get('distributed_mode', False)
+    except Exception:
+        pass
+    return False
+
+
+def _get_task_queue():
+    """Tạo TaskQueue instance cho distributed mode."""
+    try:
+        from modules.task_queue import TaskQueue
+        return TaskQueue(
+            master_projects=str(MASTER_PROJECTS),
+            vm_id=VM_ID,
+            visual_path=str(MASTER_VISUAL),
+            log=lambda msg, lvl="INFO": print(f"  {msg}"),
+        )
+    except ImportError:
+        return None
+
+
 def scan_master_projects() -> list:
-    """Scan master PROJECTS folder for pending projects."""
+    """Scan master PROJECTS folder for pending projects.
+
+    v1.0.326: Hỗ trợ distributed mode (claim-based).
+    - distributed_mode=false (mặc định): Luồng cũ - filter theo channel
+    - distributed_mode=true: Luồng mới - claim project, bỏ channel filter
+    """
     pending = []
 
+    # === DISTRIBUTED MODE: claim-based ===
+    if _is_distributed_mode():
+        tq = _get_task_queue()
+        if tq:
+            print(f"  [QUEUE] Distributed mode - VM: {VM_ID}")
+
+            # Dọn claims quá hạn
+            tq.cleanup_stale_claims()
+
+            # Check claim hiện tại của mình
+            my_claims = tq.get_my_claims()
+            if my_claims:
+                print(f"  [QUEUE] Đang claim: {my_claims}")
+                return my_claims  # Tiếp tục làm mã đã claim
+
+            # Claim mã mới (ưu tiên channel mình trước)
+            code = tq.claim_next(preferred_channel=WORKER_CHANNEL)
+            if code:
+                return [code]
+
+            return []
+
+    # === LUỒNG CŨ: channel-based filter ===
     print(f"  [DEBUG] Checking: {MASTER_PROJECTS}")
     print(f"  [DEBUG] Worker channel: {WORKER_CHANNEL or 'ALL (no filter)'}")
 

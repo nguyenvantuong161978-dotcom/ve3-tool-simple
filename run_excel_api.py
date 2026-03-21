@@ -604,9 +604,24 @@ class ExcelAPIWorker:
         self.completed_count = 0
         self.failed_count = 0
 
+    def _is_distributed_mode(self) -> bool:
+        """Check xem distributed mode có được bật không."""
+        try:
+            import yaml
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f) or {}
+                return config.get('distributed_mode', False)
+        except Exception:
+            pass
+        return False
+
     def scan_projects_needing_excel(self) -> List[tuple]:
         """
         Scan for projects that need Excel creation or completion.
+
+        v1.0.326: Hỗ trợ distributed mode - bỏ channel filter.
 
         Returns:
             List of (project_dir, name, status, progress) tuples
@@ -614,6 +629,8 @@ class ExcelAPIWorker:
             progress: dict from get_excel_progress()
         """
         results = []
+        distributed = self._is_distributed_mode()
+        channel_filter = None if distributed else self.channel
 
         # Scan local projects
         if self.local_projects.exists():
@@ -622,7 +639,7 @@ class ExcelAPIWorker:
                     continue
 
                 name = item.name
-                if not matches_channel(name, self.channel):
+                if not matches_channel(name, channel_filter):
                     continue
 
                 srt_path = item / f"{name}.srt"
@@ -682,7 +699,7 @@ class ExcelAPIWorker:
                         continue
 
                     name = item.name
-                    if not matches_channel(name, self.channel):
+                    if not matches_channel(name, channel_filter):
                         continue
 
                     # Skip if already in local results

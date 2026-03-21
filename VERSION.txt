@@ -1,6 +1,28 @@
-1.0.325
+1.0.326
 2026-03-21 (VN)
-Change: Atomic Excel save + auto-recovery tu backup khi file corrupt
+Change: Distributed mode - nhieu VM chia nhau ma tu master (file-based claim)
+
+Thay doi:
+- v1.0.326: Distributed Task Queue - nhieu VM chia nhau project:
+  * modules/task_queue.py: Module moi - TaskQueue class
+    - claim_next(): Scan master, tim project chua ai claim, claim bang file _CLAIMED
+    - claim(): Ghi _CLAIMED (VM_ID + timestamp) → doi 2-4s → doc lai verify
+    - release(): Xoa _CLAIMED khi project xong
+    - cleanup_stale_claims(): Timeout 8h → giai phong ma bi ket (VM chet)
+    - scan_available(): List project chua bi claim
+    - get_status(): Tong quan queue (available, claimed, expired)
+  * Race condition prevention: VM ghi _CLAIMED → doi random 2-4s → doc lai
+    Neu noi dung la VM khac → bo qua. Worst case: ca 2 bo qua → cycle sau lay lai
+    KHONG BAO GIO 2 VM cung lam 1 ma
+  * Bat/tat bang setting: distributed_mode: true/false trong settings.yaml
+  * Mac dinh: false (luong cu - channel filter)
+  * Khi bat:
+    - run_worker.py scan_master_projects(): Dung TaskQueue thay vi channel filter
+      Uu tien channel minh truoc, het thi lay channel khac
+    - run_excel_api.py scan_projects_needing_excel(): Bo channel filter
+    - vm_manager.py copy_project_to_master(): Release claim khi copy xong
+    - run_worker.py copy_to_visual(): Release claim khi copy xong
+  * Luong cu giu nguyen 100%, chi can tat distributed_mode la dung luong cu
 
 Thay doi:
 - v1.0.325: FIX CRITICAL - Excel bi corrupt vinh vien (BadZipFile):
