@@ -1,6 +1,6 @@
-1.0.359
+1.0.360
 2026-03-21 (VN)
-Change: FIX Chrome bo channel filter khi distributed mode + Excel skip completed claims
+Change: FIX GUI + VM Manager bo channel filter khi distributed mode - theo doi moi ma
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

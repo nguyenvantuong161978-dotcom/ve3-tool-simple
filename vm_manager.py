@@ -967,6 +967,19 @@ class VMManager:
             return folder.split("-T")[0]
         return None
 
+    def _is_distributed_mode(self) -> bool:
+        """v1.0.359: Check distributed mode từ settings.yaml."""
+        try:
+            import yaml
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f) or {}
+                return config.get('distributed_mode', True)
+        except Exception:
+            pass
+        return True
+
     # ================================================================================
     # CHROME AUTO-SCALING
     # ================================================================================
@@ -1723,10 +1736,14 @@ class VMManager:
         local = TOOL_DIR / "PROJECTS"
         if not local.exists():
             return projects
+
+        # v1.0.359: Distributed mode → bỏ channel filter
+        distributed = self._is_distributed_mode()
+
         for item in local.iterdir():
             if item.is_dir():
                 code = item.name
-                if self.channel and not code.startswith(f"{self.channel}-"):
+                if not distributed and self.channel and not code.startswith(f"{self.channel}-"):
                     # v1.0.295: Vẫn include project "done" dù khác channel → để copy sang master
                     if (item / f"{code}.srt").exists():
                         try:
