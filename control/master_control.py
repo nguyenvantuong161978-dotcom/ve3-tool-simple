@@ -389,9 +389,36 @@ class MasterControlGUI:
         """Send command to a specific VM."""
         cmd_file = COMMANDS_DIR / f"{vm_id}.{cmd}"
         try:
+            # Xóa ACK cũ trước khi gửi lệnh mới
+            ack_file = COMMANDS_DIR / f"{vm_id}.{cmd}.ack"
+            if ack_file.exists():
+                ack_file.unlink()
+
             cmd_file.write_text(json.dumps({"command": cmd, "timestamp": datetime.now().isoformat()}),
                                encoding='utf-8')
             print(f"[CMD] Sent {cmd} to {vm_id}")
+
+            # Chờ ACK (tối đa 15s)
+            def wait_ack():
+                import time
+                for _ in range(15):
+                    time.sleep(1)
+                    if ack_file.exists():
+                        try:
+                            ack_data = json.loads(ack_file.read_text(encoding='utf-8'))
+                            result = ack_data.get('result', '?')
+                            ts = ack_data.get('timestamp', '')
+                            print(f"[ACK] {vm_id}: {cmd} → {result} ({ts})")
+                            # Hiển thị trên GUI
+                            self.root.after(0, lambda: messagebox.showinfo(
+                                "ACK", f"{vm_id} đã nhận lệnh {cmd.upper()}\n\nKết quả: {result}"))
+                            ack_file.unlink()
+                            return
+                        except Exception:
+                            pass
+                print(f"[ACK] {vm_id}: {cmd} → TIMEOUT (VM chưa phản hồi)")
+
+            threading.Thread(target=wait_ack, daemon=True).start()
         except Exception as e:
             messagebox.showerror("Error", f"Cannot send {cmd} to {vm_id}: {e}")
 

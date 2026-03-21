@@ -1,6 +1,6 @@
-1.0.338
+1.0.339
 2026-03-21 (VN)
-Change: control vao AUTO/ve3-tool-simple/control/
+Change: Watchdog luon chay + ACK khi nhan lenh tu master
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

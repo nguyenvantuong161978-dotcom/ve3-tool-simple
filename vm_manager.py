@@ -3268,8 +3268,11 @@ class VMManager:
         self.log(f"Watchdog started (VM_ID={self._vm_id})", "MANAGER")
 
     def _watchdog_loop(self):
-        """Loop: mỗi 10s gửi status + check commands."""
-        while not self._stop_flag:
+        """Loop: mỗi 10s gửi status + check commands.
+        v1.0.339: Watchdog LUÔN chạy (kể cả khi _stop_flag=True)
+        để VM vẫn nhận lệnh RUN từ master khi đang stopped.
+        """
+        while True:
             try:
                 self._report_status_to_master()
                 self._check_master_commands()
@@ -3348,18 +3351,41 @@ class VMManager:
                         if self._stop_flag:
                             self._stop_flag = False
                             self.start_all(gui_mode=self.gui_mode)
+                        self._ack_command(cmd_name, "OK")
                     elif cmd_name == "stop":
                         self.stop_all()
+                        self._ack_command(cmd_name, "OK")
                     elif cmd_name == "update":
+                        self._ack_command(cmd_name, "STARTED")
                         self._do_git_update()
+                        self._ack_command(cmd_name, "OK")
+                    else:
+                        self._ack_command(cmd_name, "UNKNOWN")
                 except Exception as e:
                     self.log(f"Command '{cmd_name}' error: {e}", "MANAGER", "ERROR")
+                    self._ack_command(cmd_name, f"ERROR: {e}")
 
                 # Xóa command file sau khi xử lý
                 try:
                     cmd_file.unlink()
                 except Exception:
                     pass
+        except Exception:
+            pass
+
+    def _ack_command(self, cmd_name: str, result: str):
+        """Ghi ACK lên master để master biết lệnh đã được thực hiện."""
+        try:
+            cmd_dir = self.auto_path / "ve3-tool-simple" / "control" / "commands"
+            ack_file = cmd_dir / f"{self._vm_id}.{cmd_name}.ack"
+            ack_content = json.dumps({
+                "vm_id": self._vm_id,
+                "command": cmd_name,
+                "result": result,
+                "timestamp": datetime.now().isoformat(),
+            })
+            ack_file.write_text(ack_content, encoding='utf-8')
+            self.log(f"ACK: {cmd_name} → {result}", "MANAGER")
         except Exception:
             pass
 
