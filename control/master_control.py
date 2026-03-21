@@ -49,10 +49,11 @@ if not AUTO_PATH:
     print("ERROR: Cannot find AUTO path!")
     sys.exit(1)
 
-CONTROL_DIR = AUTO_PATH / "control"
+VE3_DIR = AUTO_PATH / "ve3-tool-simple"
+CONTROL_DIR = VE3_DIR / "control"
 COMMANDS_DIR = CONTROL_DIR / "commands"
 STATUS_DIR = CONTROL_DIR / "status"
-MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
+MASTER_PROJECTS = VE3_DIR / "PROJECTS"
 VISUAL_DIR = AUTO_PATH / "visual"
 
 # Tự tạo thư mục nếu chưa có
