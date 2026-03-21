@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VE3 Tool - Master Control Panel
+VE3 Tool - Master Control Panel v2
 
 GUI trên máy chủ để quản lý các VM đang chạy ve3-tool-simple.
 File độc lập - không cần import module nào khác.
 
-Giao tiếp: File-based IPC qua shared folder.
-- Commands: AUTO/commands/{VM_ID}.{cmd}
-- Status:   AUTO/status/{VM_ID}.json
-- Queue:    AUTO/ve3-tool-simple/PROJECTS/ (_CLAIMED files)
+v1.0.350: Redesign - bỏ popup, thêm log panel, layout gọn hơn.
 
 Chạy:
     python master_control.py
@@ -19,8 +16,9 @@ import os
 import sys
 import json
 import threading
+import time
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from pathlib import Path
 from datetime import datetime
 
@@ -56,84 +54,81 @@ STATUS_DIR = CONTROL_DIR / "status"
 MASTER_PROJECTS = VE3_DIR / "PROJECTS"
 VISUAL_DIR = AUTO_PATH / "visual"
 
-# Tự tạo thư mục nếu chưa có
-CONTROL_DIR.mkdir(parents=True, exist_ok=True)
-COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
-STATUS_DIR.mkdir(parents=True, exist_ok=True)
-MASTER_PROJECTS.mkdir(parents=True, exist_ok=True)
-VISUAL_DIR.mkdir(parents=True, exist_ok=True)
+# Tự tạo thư mục
+for d in [CONTROL_DIR, COMMANDS_DIR, STATUS_DIR, MASTER_PROJECTS, VISUAL_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
 
-REFRESH_MS = 10000  # 10 seconds
+REFRESH_MS = 8000  # 8 seconds
 CLAIM_TIMEOUT_HOURS = 8
 
 
 # ============================================================================
-# COLORS (Catppuccin Dark Theme)
+# COLORS
 # ============================================================================
 
-BG = "#1e1e2e"
-BG_CARD = "#313244"
-FG = "#cdd6f4"
+BG = "#0f0f17"
+BG2 = "#1a1a2e"
+BG_CARD = "#16213e"
+BG_CARD_HOVER = "#1a2744"
+FG = "#e0e0e0"
 FG_DIM = "#6c7086"
-GREEN = "#a6e3a1"
-RED = "#f38ba8"
-BLUE = "#89b4fa"
-YELLOW = "#f9e2af"
-ORANGE = "#fab387"
-PURPLE = "#cba6f7"
+FG_MUTED = "#8890a0"
+GREEN = "#4ade80"
+GREEN_DIM = "#22543d"
+RED = "#f87171"
+RED_DIM = "#7f1d1d"
+BLUE = "#60a5fa"
+YELLOW = "#fbbf24"
+ORANGE = "#fb923c"
+PURPLE = "#a78bfa"
+CYAN = "#22d3ee"
+BORDER = "#2a2a4e"
 
 
 # ============================================================================
-# QUEUE HELPERS (nhúng trực tiếp, không cần import)
+# QUEUE HELPERS
 # ============================================================================
 
 def _is_claim_expired(claimed_file: Path) -> bool:
-    """Check xem claim đã quá hạn chưa."""
     try:
         content = claimed_file.read_text(encoding='utf-8').strip()
         lines = content.split('\n')
         if len(lines) < 2:
             return True
-        timestamp_str = lines[1].strip()
-        claim_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-        elapsed_hours = (datetime.now() - claim_time).total_seconds() / 3600
-        return elapsed_hours > CLAIM_TIMEOUT_HOURS
+        claim_time = datetime.strptime(lines[1].strip(), "%Y-%m-%d %H:%M:%S")
+        return (datetime.now() - claim_time).total_seconds() / 3600 > CLAIM_TIMEOUT_HOURS
     except Exception:
         return True
 
 
 def _read_claim_vm_id(claimed_file: Path):
-    """Đọc VM ID từ file _CLAIMED."""
     try:
         content = claimed_file.read_text(encoding='utf-8').strip()
-        first_line = content.split('\n')[0].strip()
-        return first_line if first_line else None
+        return content.split('\n')[0].strip() or None
     except Exception:
         return None
 
 
 def _is_in_visual(code: str) -> bool:
-    """Check xem project đã có trong visual chưa."""
     try:
-        visual_dir = VISUAL_DIR / code
-        return visual_dir.exists() and any(visual_dir.iterdir())
+        d = VISUAL_DIR / code
+        return d.exists() and any(d.iterdir())
     except Exception:
         return False
 
 
 def get_queue_status() -> dict:
-    """Lấy trạng thái queue (không cần TaskQueue class)."""
-    status = {"total": 0, "available": 0, "claimed": {}, "expired": 0}
+    status = {"total": 0, "available": 0, "claimed": {}, "expired": 0, "visual": 0}
     if not MASTER_PROJECTS.exists():
         return status
     try:
         for item in MASTER_PROJECTS.iterdir():
             if not item.is_dir():
                 continue
-            srt_files = list(item.glob("*.srt"))
-            if not srt_files:
+            if not list(item.glob("*.srt")):
                 continue
             if _is_in_visual(item.name):
+                status["visual"] += 1
                 continue
             status["total"] += 1
             claimed_file = item / "_CLAIMED"
@@ -144,9 +139,7 @@ def get_queue_status() -> dict:
             else:
                 vm_id = _read_claim_vm_id(claimed_file)
                 if vm_id:
-                    if vm_id not in status["claimed"]:
-                        status["claimed"][vm_id] = []
-                    status["claimed"][vm_id].append(item.name)
+                    status["claimed"].setdefault(vm_id, []).append(item.name)
     except Exception:
         pass
     return status
@@ -159,281 +152,320 @@ def get_queue_status() -> dict:
 class MasterControlGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("VE3 Tool - Master Control")
+        self.root.title("Master Control")
         self.root.configure(bg=BG)
-        self.root.geometry("1200x800")
+        self.root.geometry("900x700")
+        self.root.minsize(700, 500)
 
-        self.vm_frames = {}  # VM_ID → frame widgets
-        self._stop_event = threading.Event()
+        self.vm_widgets = {}  # VM_ID → widget dict
+        self._stop = threading.Event()
+        self._log_lines = []  # Log history
 
-        self._build_ui()
+        self._build()
         self._refresh()
 
-    def _build_ui(self):
-        """Build main UI."""
-        # === TOP BAR ===
-        top = tk.Frame(self.root, bg=BG)
-        top.pack(fill=tk.X, padx=10, pady=5)
+    # ------------------------------------------------------------------ UI
+    def _build(self):
+        # === HEADER ===
+        hdr = tk.Frame(self.root, bg=BG2, pady=8)
+        hdr.pack(fill=tk.X)
 
-        tk.Label(top, text="VE3 MASTER CONTROL", font=("Consolas", 16, "bold"),
-                 bg=BG, fg=PURPLE).pack(side=tk.LEFT)
+        tk.Label(hdr, text="MASTER CONTROL", font=("Segoe UI", 14, "bold"),
+                 bg=BG2, fg=PURPLE).pack(side=tk.LEFT, padx=15)
 
-        tk.Label(top, text=f"AUTO: {AUTO_PATH}", font=("Consolas", 9),
-                 bg=BG, fg=FG_DIM).pack(side=tk.LEFT, padx=20)
+        self.summary_lbl = tk.Label(hdr, text="", font=("Segoe UI", 10),
+                                     bg=BG2, fg=FG_MUTED)
+        self.summary_lbl.pack(side=tk.LEFT, padx=10)
 
-        # Buttons
-        btn_frame = tk.Frame(top, bg=BG)
-        btn_frame.pack(side=tk.RIGHT)
+        # ALL buttons
+        bf = tk.Frame(hdr, bg=BG2)
+        bf.pack(side=tk.RIGHT, padx=10)
+        for txt, clr, cmd in [("RUN ALL", GREEN, "run"),
+                               ("STOP ALL", RED, "stop"),
+                               ("UPDATE ALL", BLUE, "update")]:
+            tk.Button(bf, text=txt, bg=clr, fg=BG, font=("Segoe UI", 9, "bold"),
+                      activebackground=clr, relief=tk.FLAT, padx=12, pady=2,
+                      command=lambda c=cmd: self._cmd_all(c)).pack(side=tk.LEFT, padx=3)
 
-        tk.Button(btn_frame, text="RUN ALL", bg=GREEN, fg=BG, font=("Consolas", 10, "bold"),
-                  command=lambda: self._send_command_all("run"), width=10).pack(side=tk.LEFT, padx=2)
-        tk.Button(btn_frame, text="STOP ALL", bg=RED, fg=BG, font=("Consolas", 10, "bold"),
-                  command=lambda: self._send_command_all("stop"), width=10).pack(side=tk.LEFT, padx=2)
-        tk.Button(btn_frame, text="UPDATE ALL", bg=BLUE, fg=BG, font=("Consolas", 10, "bold"),
-                  command=lambda: self._send_command_all("update"), width=10).pack(side=tk.LEFT, padx=2)
+        # === QUEUE BAR ===
+        self.queue_lbl = tk.Label(self.root, text="", font=("Consolas", 10),
+                                   bg=BG, fg=FG_DIM, anchor=tk.W)
+        self.queue_lbl.pack(fill=tk.X, padx=15, pady=(6, 2))
 
-        # === QUEUE STATUS ===
-        queue_frame = tk.Frame(self.root, bg=BG_CARD, relief=tk.RIDGE, bd=1)
-        queue_frame.pack(fill=tk.X, padx=10, pady=5)
+        # === MAIN: VM list (top) + Log (bottom) ===
+        pw = tk.PanedWindow(self.root, orient=tk.VERTICAL, bg=BG,
+                            sashwidth=4, sashrelief=tk.FLAT)
+        pw.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        self.queue_label = tk.Label(queue_frame, text="Queue: ...", font=("Consolas", 11),
-                                    bg=BG_CARD, fg=FG, anchor=tk.W)
-        self.queue_label.pack(fill=tk.X, padx=10, pady=5)
+        # -- VM container --
+        vm_outer = tk.Frame(pw, bg=BG)
+        pw.add(vm_outer, stretch="always")
 
-        # === VM LIST (scrollable) ===
-        canvas_frame = tk.Frame(self.root, bg=BG)
-        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.vm_canvas = tk.Canvas(vm_outer, bg=BG, highlightthickness=0, bd=0)
+        sb = ttk.Scrollbar(vm_outer, orient=tk.VERTICAL, command=self.vm_canvas.yview)
+        self.vm_inner = tk.Frame(self.vm_canvas, bg=BG)
+        self.vm_inner.bind("<Configure>",
+                           lambda e: self.vm_canvas.configure(scrollregion=self.vm_canvas.bbox("all")))
+        self.vm_canvas.create_window((0, 0), window=self.vm_inner, anchor="nw", tags="inner")
+        self.vm_canvas.configure(yscrollcommand=sb.set)
+        self.vm_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.vm_canvas.bind("<Configure>",
+                            lambda e: self.vm_canvas.itemconfig("inner", width=e.width))
+        self.vm_canvas.bind_all("<MouseWheel>",
+                                lambda e: self.vm_canvas.yview_scroll(-1 * (e.delta // 120), "units"))
 
-        self.canvas = tk.Canvas(canvas_frame, bg=BG, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-        self.vm_container = tk.Frame(self.canvas, bg=BG)
+        # -- Log panel --
+        log_frame = tk.Frame(pw, bg=BG2)
+        pw.add(log_frame, height=140)
 
-        self.vm_container.bind("<Configure>",
-                               lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0, 0), window=self.vm_container, anchor="nw")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
+        tk.Label(log_frame, text="Log", font=("Segoe UI", 9, "bold"),
+                 bg=BG2, fg=FG_DIM).pack(anchor=tk.W, padx=8, pady=(4, 0))
 
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text = tk.Text(log_frame, bg=BG, fg=FG_MUTED, font=("Consolas", 9),
+                                height=6, bd=0, highlightthickness=0,
+                                state=tk.DISABLED, wrap=tk.WORD)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(2, 6))
 
-        # Mouse wheel scroll
-        self.canvas.bind_all("<MouseWheel>",
-                             lambda e: self.canvas.yview_scroll(-1 * (e.delta // 120), "units"))
+        # Tag colors for log
+        self.log_text.tag_config("ok", foreground=GREEN)
+        self.log_text.tag_config("err", foreground=RED)
+        self.log_text.tag_config("warn", foreground=YELLOW)
+        self.log_text.tag_config("info", foreground=BLUE)
+        self.log_text.tag_config("time", foreground=FG_DIM)
 
+    # ------------------------------------------------------------------ Log
+    def _log(self, msg: str, tag: str = "info"):
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.insert(tk.END, f"{ts} ", "time")
+        self.log_text.insert(tk.END, f"{msg}\n", tag)
+        self.log_text.see(tk.END)
+        # Giữ tối đa 200 dòng
+        lines = int(self.log_text.index('end-1c').split('.')[0])
+        if lines > 200:
+            self.log_text.delete('1.0', f'{lines - 200}.0')
+        self.log_text.config(state=tk.DISABLED)
+
+    # ------------------------------------------------------------------ Refresh
     def _refresh(self):
-        """Refresh VM status + queue status."""
-        if self._stop_event.is_set():
+        if self._stop.is_set():
             return
-
         try:
-            self._update_queue_status()
-            self._update_vm_list()
+            self._update_queue()
+            self._update_vms()
         except Exception as e:
             print(f"Refresh error: {e}")
-
         self.root.after(REFRESH_MS, self._refresh)
 
-    def _update_queue_status(self):
-        """Update queue status display."""
-        try:
-            status = get_queue_status()
+    def _update_queue(self):
+        qs = get_queue_status()
+        claimed_count = sum(len(v) for v in qs["claimed"].values())
+        vm_count = len(qs["claimed"])
+        self.queue_lbl.config(
+            text=f"Queue: {qs['available']} cho  |  {claimed_count} dang lam ({vm_count} VM)  |  "
+                 f"{qs['expired']} het han  |  {qs['visual']} xong")
 
-            claimed_str = ""
-            for vm_id, codes in status["claimed"].items():
-                claimed_str += f"  {vm_id}: {', '.join(codes)}"
+        # Summary in header
+        total_vms = len(self.vm_widgets)
+        running = sum(1 for w in self.vm_widgets.values()
+                      if "running" in w.get("_state", ""))
+        self.summary_lbl.config(text=f"{running}/{total_vms} VM dang chay   |   "
+                                     f"AUTO: {AUTO_PATH}")
 
-            text = (f"Queue: {status['total']} total | "
-                    f"{status['available']} available | "
-                    f"{len(status['claimed'])} VMs working | "
-                    f"{status['expired']} expired")
-            if claimed_str:
-                text += f"\n  Claims:{claimed_str}"
-
-            self.queue_label.config(text=text)
-        except Exception as e:
-            self.queue_label.config(text=f"Queue: Error - {e}")
-
-    def _update_vm_list(self):
-        """Update VM status cards."""
-        vm_statuses = {}
+    def _update_vms(self):
+        vm_data = {}
 
         # Read status files
         try:
             for f in STATUS_DIR.glob("*.json"):
                 try:
                     data = json.loads(f.read_text(encoding='utf-8'))
-                    vm_id = f.stem
-                    vm_statuses[vm_id] = data
+                    vm_data[f.stem] = data
                 except Exception:
                     continue
         except Exception:
             pass
 
-        # Detect VMs from _CLAIMED files
+        # Detect from _CLAIMED
         try:
-            queue_status = get_queue_status()
-            for vm_id in queue_status.get("claimed", {}):
-                if vm_id not in vm_statuses:
-                    vm_statuses[vm_id] = {
+            qs = get_queue_status()
+            for vm_id, codes in qs.get("claimed", {}).items():
+                if vm_id not in vm_data:
+                    vm_data[vm_id] = {
                         "channel": vm_id,
-                        "state": "claimed (no status)",
+                        "state": "claimed",
                         "timestamp": "",
-                        "project": ", ".join(queue_status["claimed"][vm_id]),
+                        "project": ", ".join(codes),
                     }
         except Exception:
             pass
 
-        # Update/create VM cards
-        for vm_id in sorted(vm_statuses.keys()):
-            data = vm_statuses[vm_id]
-            if vm_id not in self.vm_frames:
-                self._create_vm_card(vm_id)
-            self._update_vm_card(vm_id, data)
+        # Update cards
+        for vm_id in sorted(vm_data.keys()):
+            if vm_id not in self.vm_widgets:
+                self._create_card(vm_id)
+            self._update_card(vm_id, vm_data[vm_id])
 
-        # Remove old VMs
-        for vm_id in list(self.vm_frames.keys()):
-            if vm_id not in vm_statuses:
-                self.vm_frames[vm_id]["frame"].destroy()
-                del self.vm_frames[vm_id]
+        # Remove stale
+        for vm_id in list(self.vm_widgets.keys()):
+            if vm_id not in vm_data:
+                self.vm_widgets[vm_id]["frame"].destroy()
+                del self.vm_widgets[vm_id]
 
-    def _create_vm_card(self, vm_id: str):
-        """Create a VM status card."""
-        frame = tk.Frame(self.vm_container, bg=BG_CARD, relief=tk.RIDGE, bd=1)
-        frame.pack(fill=tk.X, padx=5, pady=3)
+    # ------------------------------------------------------------------ VM Card
+    def _create_card(self, vm_id: str):
+        card = tk.Frame(self.vm_inner, bg=BG_CARD, bd=0,
+                        highlightbackground=BORDER, highlightthickness=1)
+        card.pack(fill=tk.X, padx=4, pady=3)
 
-        # Left: info
-        info = tk.Frame(frame, bg=BG_CARD)
-        info.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Row layout
+        row = tk.Frame(card, bg=BG_CARD)
+        row.pack(fill=tk.X, padx=2, pady=6)
 
-        name_label = tk.Label(info, text=vm_id, font=("Consolas", 13, "bold"),
-                              bg=BG_CARD, fg=FG)
-        name_label.pack(anchor=tk.W)
+        # Indicator dot
+        dot = tk.Canvas(row, width=10, height=10, bg=BG_CARD, highlightthickness=0)
+        dot.pack(side=tk.LEFT, padx=(8, 6), pady=0)
+        dot_id = dot.create_oval(1, 1, 9, 9, fill=FG_DIM, outline="")
 
-        status_label = tk.Label(info, text="...", font=("Consolas", 10),
-                                bg=BG_CARD, fg=FG_DIM)
-        status_label.pack(anchor=tk.W)
+        # VM name
+        name = tk.Label(row, text=vm_id, font=("Segoe UI", 11, "bold"),
+                        bg=BG_CARD, fg=FG, width=12, anchor=tk.W)
+        name.pack(side=tk.LEFT, padx=(0, 8))
 
-        project_label = tk.Label(info, text="", font=("Consolas", 10),
-                                 bg=BG_CARD, fg=YELLOW)
-        project_label.pack(anchor=tk.W)
+        # State
+        state_lbl = tk.Label(row, text="--", font=("Consolas", 10),
+                             bg=BG_CARD, fg=FG_DIM, width=22, anchor=tk.W)
+        state_lbl.pack(side=tk.LEFT, padx=4)
 
-        # Right: buttons
-        btns = tk.Frame(frame, bg=BG_CARD)
-        btns.pack(side=tk.RIGHT, padx=10, pady=5)
+        # Project
+        proj_lbl = tk.Label(row, text="", font=("Consolas", 10),
+                            bg=BG_CARD, fg=YELLOW, anchor=tk.W)
+        proj_lbl.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
-        tk.Button(btns, text="RUN", bg=GREEN, fg=BG, font=("Consolas", 9),
-                  command=lambda v=vm_id: self._send_command(v, "run"), width=7).pack(pady=1)
-        tk.Button(btns, text="STOP", bg=RED, fg=BG, font=("Consolas", 9),
-                  command=lambda v=vm_id: self._send_command(v, "stop"), width=7).pack(pady=1)
-        tk.Button(btns, text="UPDATE", bg=BLUE, fg=BG, font=("Consolas", 9),
-                  command=lambda v=vm_id: self._send_command(v, "update"), width=7).pack(pady=1)
+        # Version
+        ver_lbl = tk.Label(row, text="", font=("Consolas", 9),
+                           bg=BG_CARD, fg=FG_DIM)
+        ver_lbl.pack(side=tk.LEFT, padx=4)
 
-        # Status indicator
-        indicator = tk.Label(frame, text="  ", bg=FG_DIM, width=2)
-        indicator.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 0))
+        # Buttons (compact)
+        for txt, clr, cmd in [("RUN", GREEN, "run"),
+                               ("STOP", RED, "stop"),
+                               ("UPD", BLUE, "update")]:
+            tk.Button(row, text=txt, bg=clr, fg=BG, font=("Segoe UI", 8, "bold"),
+                      activebackground=clr, relief=tk.FLAT, padx=8, pady=1,
+                      command=lambda v=vm_id, c=cmd: self._cmd(v, c)
+                      ).pack(side=tk.LEFT, padx=2)
 
-        self.vm_frames[vm_id] = {
-            "frame": frame,
-            "name": name_label,
-            "status": status_label,
-            "project": project_label,
-            "indicator": indicator,
+        self.vm_widgets[vm_id] = {
+            "frame": card,
+            "dot": dot,
+            "dot_id": dot_id,
+            "state": state_lbl,
+            "project": proj_lbl,
+            "version": ver_lbl,
+            "_state": "",
         }
 
-    def _update_vm_card(self, vm_id: str, data: dict):
-        """Update a VM card with new data."""
-        widgets = self.vm_frames.get(vm_id)
-        if not widgets:
+    def _update_card(self, vm_id: str, data: dict):
+        w = self.vm_widgets.get(vm_id)
+        if not w:
             return
 
         state = data.get("state", "unknown")
-        timestamp = data.get("timestamp", "")
-        project = data.get("project", data.get("current_project", ""))
+        project = data.get("project", "")
         version = data.get("version", "")
         uptime = data.get("uptime_minutes", 0)
+        timestamp = data.get("timestamp", "")
 
-        # Status text
-        parts = []
-        if state:
-            parts.append(f"State: {state}")
-        if version:
-            parts.append(f"v{version}")
+        # State text
+        state_parts = [state]
         if uptime:
-            hours = uptime // 60
-            mins = uptime % 60
-            parts.append(f"Uptime: {hours}h{mins}m")
-        if timestamp:
-            parts.append(f"Last: {timestamp}")
-
-        widgets["status"].config(text=" | ".join(parts))
+            h, m = uptime // 60, uptime % 60
+            state_parts.append(f"{h}h{m:02d}m")
+        w["state"].config(text=" | ".join(state_parts))
+        w["_state"] = state
 
         # Project
-        if project:
-            widgets["project"].config(text=f"Project: {project}")
+        w["project"].config(text=project if project else "")
+
+        # Version
+        w["version"].config(text=f"v{version}" if version else "")
+
+        # Dot color
+        if "running" in state.lower():
+            color = GREEN
+        elif state in ("idle", "claimed"):
+            color = ORANGE
+        elif state in ("stopped", "killed"):
+            color = RED
+        elif state in ("updating", "starting"):
+            color = BLUE
         else:
-            widgets["project"].config(text="")
+            color = FG_DIM
+        w["dot"].itemconfig(w["dot_id"], fill=color)
 
-        # Indicator color
-        color_map = {
-            "running": GREEN,
-            "idle": ORANGE,
-            "stopped": RED,
-            "killed": RED,
-            "updating": BLUE,
-            "starting": BLUE,
-        }
-        color = GREEN if "running" in state.lower() else color_map.get(state, FG_DIM)
-        widgets["indicator"].config(bg=color)
+        # Card border color
+        border = GREEN if "running" in state.lower() else BORDER
+        w["frame"].config(highlightbackground=border)
 
-    def _send_command(self, vm_id: str, cmd: str):
-        """Send command to a specific VM."""
+        # State label color
+        if "running" in state.lower():
+            w["state"].config(fg=GREEN)
+        elif state in ("stopped", "killed"):
+            w["state"].config(fg=RED)
+        else:
+            w["state"].config(fg=FG_MUTED)
+
+    # ------------------------------------------------------------------ Commands
+    def _cmd(self, vm_id: str, cmd: str):
+        """Send command to VM, show result in log (no popup)."""
         cmd_file = COMMANDS_DIR / f"{vm_id}.{cmd}"
+        ack_file = COMMANDS_DIR / f"{vm_id}.{cmd}.ack"
         try:
-            # Xóa ACK cũ trước khi gửi lệnh mới
-            ack_file = COMMANDS_DIR / f"{vm_id}.{cmd}.ack"
             if ack_file.exists():
                 ack_file.unlink()
-
-            cmd_file.write_text(json.dumps({"command": cmd, "timestamp": datetime.now().isoformat()}),
-                               encoding='utf-8')
-            print(f"[CMD] Sent {cmd} to {vm_id}")
-
-            # Chờ ACK - update cần lâu hơn (download ZIP)
-            def wait_ack():
-                import time
-                max_wait = 120 if cmd == "update" else 30
-                for _ in range(max_wait):
-                    time.sleep(1)
-                    if ack_file.exists():
-                        try:
-                            ack_data = json.loads(ack_file.read_text(encoding='utf-8'))
-                            result = ack_data.get('result', '?')
-                            ts = ack_data.get('timestamp', '')
-                            print(f"[ACK] {vm_id}: {cmd} → {result} ({ts})")
-                            self.root.after(0, lambda r=result: messagebox.showinfo(
-                                "ACK", f"{vm_id} đã nhận lệnh {cmd.upper()}\n\nKết quả: {r}"))
-                            ack_file.unlink()
-                            return
-                        except Exception:
-                            pass
-                print(f"[ACK] {vm_id}: {cmd} → TIMEOUT ({max_wait}s)")
-
-            threading.Thread(target=wait_ack, daemon=True).start()
+            cmd_file.write_text(json.dumps({
+                "command": cmd,
+                "timestamp": datetime.now().isoformat()
+            }), encoding='utf-8')
+            self._log(f"[{vm_id}] Gui lenh {cmd.upper()}", "info")
         except Exception as e:
-            messagebox.showerror("Error", f"Cannot send {cmd} to {vm_id}: {e}")
-
-    def _send_command_all(self, cmd: str):
-        """Send command to all VMs."""
-        confirm = messagebox.askyesno("Confirm", f"Send '{cmd.upper()}' to ALL VMs?")
-        if not confirm:
+            self._log(f"[{vm_id}] LOI gui {cmd}: {e}", "err")
             return
 
-        for vm_id in list(self.vm_frames.keys()):
-            self._send_command(vm_id, cmd)
+        # Wait ACK in background
+        def wait():
+            max_wait = 120 if cmd == "update" else 30
+            for _ in range(max_wait):
+                time.sleep(1)
+                if ack_file.exists():
+                    try:
+                        ack = json.loads(ack_file.read_text(encoding='utf-8'))
+                        result = ack.get('result', '?')
+                        self.root.after(0, lambda r=result: self._log(
+                            f"[{vm_id}] {cmd.upper()} → {r}", "ok" if "OK" in str(r) else "warn"))
+                        ack_file.unlink()
+                        return
+                    except Exception:
+                        pass
+            self.root.after(0, lambda: self._log(
+                f"[{vm_id}] {cmd.upper()} → TIMEOUT ({max_wait}s)", "err"))
+
+        threading.Thread(target=wait, daemon=True).start()
+
+    def _cmd_all(self, cmd: str):
+        """Send command to all VMs."""
+        vms = list(self.vm_widgets.keys())
+        if not vms:
+            self._log("Khong co VM nao", "warn")
+            return
+        self._log(f"Gui {cmd.upper()} toi {len(vms)} VM...", "info")
+        for vm_id in vms:
+            self._cmd(vm_id, cmd)
 
     def on_close(self):
-        """Handle window close."""
-        self._stop_event.set()
+        self._stop.set()
         self.root.destroy()
 
 

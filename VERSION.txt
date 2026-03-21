@@ -1,6 +1,6 @@
-1.0.349
+1.0.350
 2026-03-21 (VN)
-Change: FIX Chrome workers scan_master - dung TaskQueue/CLAIMED, chi lay 1 ma moi lan
+Change: Redesign Master Control - bo popup, them log panel, layout gon dep hon
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
