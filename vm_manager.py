@@ -2098,12 +2098,12 @@ class VMManager:
                 self.project_start_time = None
                 self.current_project_code = None
 
-                # v1.0.94: STEP 4 - RESET (restart all workers) để chạy mã mới
-                self.log("Step 4: Restarting all workers for next project...", "SYSTEM")
+                # v1.0.363: STEP 4 - Restart workers (guard trong start_worker skip nếu đang chạy)
+                self.log("Step 4: Restarting workers for next project...", "SYSTEM")
                 for wid in list(self.workers.keys()):
+                    w = self.workers[wid]
                     time.sleep(2)
                     self.start_worker(wid, gui_mode=self.gui_mode)
-                    w = self.workers[wid]
                     w.last_restart_time = datetime.now()
                     w.restart_count += 1
 
@@ -2855,8 +2855,11 @@ class VMManager:
                     pass  # Ignore if can't clear
 
             if sys.platform == "win32":
-                # Windows - start with cmd window
-                title = f"{w.worker_type.upper()} {w.worker_num or ''}"
+                # v1.0.363: Dùng CREATE_NEW_CONSOLE + cmd /k thay vì "start" command
+                # "start" tạo process tách rời → w.process không track được CMD thật
+                # → poll() luôn trả 0 → guard fail → double CMD hoặc mất CMD
+                # cmd /k + CREATE_NEW_CONSOLE: w.process track đúng cmd.exe process
+                title = f"{w.worker_type.upper()} {w.worker_num or ''}".strip()
                 cmd_args = f"python -X utf8 {script.name}"
                 if args:
                     cmd_args += f" {args}"
@@ -2866,20 +2869,22 @@ class VMManager:
                 worker_env['PYTHONIOENCODING'] = 'utf-8'
                 worker_env['PYTHONUTF8'] = '1'
 
-                if gui_mode:
-                    # GUI mode - CMD window will be moved off-screen
-                    cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
-                    w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
+                # cmd /k: set title + chcp + chạy script
+                cmd_str = f'cmd /k "title {title} && chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
+                w.process = subprocess.Popen(
+                    cmd_str,
+                    shell=True,
+                    cwd=str(TOOL_DIR),
+                    env=worker_env,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                )
 
+                if gui_mode:
                     # Move CMD windows off-screen after a short delay
                     def move_cmd_offscreen():
                         time.sleep(2)  # Wait for CMD to open
                         self.hide_cmd_windows()
                     threading.Thread(target=move_cmd_offscreen, daemon=True).start()
-                else:
-                    # Normal mode - visible CMD window
-                    cmd = f'start "{title}" cmd /k "chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
-                    w.process = subprocess.Popen(cmd, shell=True, cwd=str(TOOL_DIR), env=worker_env)
             else:
                 # Linux/Mac
                 worker_env = os.environ.copy()
@@ -2908,23 +2913,16 @@ class VMManager:
         w = self.workers[worker_id]
         if w.process:
             try:
+                # v1.0.363: CREATE_NEW_CONSOLE → w.process track đúng process thật
+                # terminate() gửi CTRL_BREAK_EVENT, kill() force kill
                 w.process.terminate()
                 w.process.wait(timeout=5)
             except:
-                w.process.kill()
+                try:
+                    w.process.kill()
+                except:
+                    pass
             w.process = None
-
-        # v1.0.308: Kill CMD window thật sự (start tạo process tách rời)
-        # w.process chỉ track "start" command (exit ngay), không kill được CMD thật
-        if sys.platform == "win32":
-            try:
-                title = f"{w.worker_type.upper()} {w.worker_num or ''}".strip()
-                subprocess.run(
-                    f'taskkill /FI "WINDOWTITLE eq {title}*" /F',
-                    shell=True, capture_output=True, timeout=5
-                )
-            except:
-                pass
 
         # Close log handle if exists (hidden mode)
         if hasattr(w, '_log_handle') and w._log_handle:
@@ -3163,8 +3161,7 @@ class VMManager:
         self.kill_all_chrome()
         time.sleep(2)
 
-        # 5. Restart ALL workers (Chrome + Excel)
-        # v1.0.308: Fix - trước đây chỉ restart Chrome, Excel bị mất vĩnh viễn!
+        # 5. v1.0.363: Restart workers (guard trong start_worker skip nếu đang chạy)
         for wid in list(self.workers.keys()):
             self.log(f"Restarting {wid}...", wid)
             time.sleep(2)
