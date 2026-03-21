@@ -767,9 +767,8 @@ def run_scan_loop():
         cycle += 1
         print(f"\n[BASIC CYCLE {cycle}] Scanning...")
 
-        incomplete_local = scan_incomplete_local_projects()
-        pending_master = scan_master_projects()
-        pending = list(dict.fromkeys(incomplete_local + pending_master))
+        # v1.0.353: Chrome CHỈ scan local - Excel worker lo import từ master
+        pending = scan_incomplete_local_projects()
 
         if not pending:
             print(f"  No pending projects")
@@ -1157,10 +1156,8 @@ def run_scan_loop_with_agent():
             # v1.0.282: Dọn dẹp folder đã copy sang VISUAL nhưng chưa xóa được
             cleanup_copied_projects()
 
-            # Tìm projects cần xử lý (từ local và master)
+            # v1.0.353: Chrome CHỈ scan local - Excel worker lo import từ master
             projects = scan_incomplete_local_projects()
-            if not projects:
-                projects = scan_master_projects()
 
             if projects:
                 # CHỈ XỬ LÝ 1 PROJECT - ưu tiên project đang làm dở
