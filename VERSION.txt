@@ -1,6 +1,6 @@
-1.0.357
+1.0.358
 2026-03-21 (VN)
-Change: FIX Excel file lock - save() retry 5 lan, load_or_create() retry 3 lan khi file bi lock
+Change: FIX Chrome workers Excel lock - retry load/save trong smart_engine.py
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

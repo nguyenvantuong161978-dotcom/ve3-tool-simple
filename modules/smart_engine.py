@@ -1064,9 +1064,8 @@ class SmartEngine:
         - Sử dụng lại reference images khi chạy lại
         - Đảm bảo ảnh mới khớp style với ảnh cũ
         """
-        import openpyxl
         try:
-            wb = openpyxl.load_workbook(excel_path)
+            wb = self._load_excel_with_retry(excel_path, read_only=True)
 
             # Tìm trong sheet 'config' trước
             if 'config' in wb.sheetnames:
@@ -1095,18 +1094,57 @@ class SmartEngine:
 
         return ""
 
+    def _load_excel_with_retry(self, excel_path, read_only: bool = False, max_retries: int = 5, base_delay: float = 2.0):
+        """
+        v1.0.357: Load openpyxl workbook với retry khi file bị lock.
+        Dùng cho các chỗ load trực tiếp qua openpyxl (không qua PromptWorkbook).
+        """
+        import openpyxl
+        import time
+        for attempt in range(max_retries):
+            try:
+                return openpyxl.load_workbook(excel_path, read_only=read_only)
+            except PermissionError as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (attempt + 1)
+                    self.log(f"  Excel load locked (attempt {attempt + 1}/{max_retries}), retry sau {delay}s...", "WARN")
+                    time.sleep(delay)
+                else:
+                    self.log(f"  Excel load locked sau {max_retries} attempts: {e}", "ERROR")
+                    raise
+        return None
+
+    def _save_excel_with_retry(self, wb, excel_path, max_retries: int = 5, base_delay: float = 2.0) -> bool:
+        """
+        v1.0.357: Save openpyxl workbook với retry khi file bị lock.
+        Dùng cho các chỗ save trực tiếp qua openpyxl (không qua PromptWorkbook).
+        """
+        import time
+        for attempt in range(max_retries):
+            try:
+                wb.save(excel_path)
+                return True
+            except PermissionError as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (attempt + 1)
+                    self.log(f"  Excel save locked (attempt {attempt + 1}/{max_retries}), retry sau {delay}s...", "WARN")
+                    time.sleep(delay)
+                else:
+                    self.log(f"  Excel save locked sau {max_retries} attempts: {e}", "ERROR")
+                    raise
+        return False
+
     def _save_project_id_to_excel(self, excel_path: Path, project_id: str) -> bool:
         """
         Lưu flow_project_id vào Excel (tạo sheet 'config' nếu chưa có).
 
         Gọi sau khi tạo ảnh để lưu project_id cho lần chạy sau.
         """
-        import openpyxl
         if not project_id:
             return False
 
         try:
-            wb = openpyxl.load_workbook(excel_path)
+            wb = self._load_excel_with_retry(excel_path)
 
             # Tạo hoặc lấy sheet 'config'
             if 'config' not in wb.sheetnames:
@@ -1132,7 +1170,7 @@ class SmartEngine:
                 ws.cell(row=next_row, column=1, value='flow_project_id')
                 ws.cell(row=next_row, column=2, value=project_id)
 
-            wb.save(excel_path)
+            self._save_excel_with_retry(wb, excel_path)
             wb.close()
             self.log(f"  -> Lưu project_id vào Excel: {project_id[:8]}...")
             return True
@@ -1151,10 +1189,8 @@ class SmartEngine:
         Returns:
             Số dòng đã xóa
         """
-        import openpyxl
-
         try:
-            wb = openpyxl.load_workbook(excel_path)
+            wb = self._load_excel_with_retry(excel_path)
 
             # Tìm sheet characters
             sheet_name = None
@@ -1214,7 +1250,7 @@ class SmartEngine:
                 deleted_count += 1
 
             if deleted_count > 0:
-                wb.save(excel_path)
+                self._save_excel_with_retry(wb, excel_path)
                 self.log(f"  [OK] Đã xóa {deleted_count} dòng trẻ con khỏi Excel")
 
             wb.close()
@@ -1228,10 +1264,8 @@ class SmartEngine:
 
     def _load_character_prompts(self, excel_path: Path, proj_dir: Path) -> List[Dict]:
         """Load CHI character prompts (nv*, loc*) tu Excel - cho parallel generation."""
-        import openpyxl
-
         prompts = []
-        wb = openpyxl.load_workbook(excel_path)
+        wb = self._load_excel_with_retry(excel_path, read_only=True)
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
@@ -3653,7 +3687,7 @@ class SmartEngine:
 
         try:
             # 1. Load scenes từ Excel (Scenes sheet)
-            wb = openpyxl.load_workbook(excel_path)
+            wb = self._load_excel_with_retry(excel_path, read_only=True)
 
             # Tìm sheet Scenes
             scenes_sheet = None
@@ -4519,8 +4553,7 @@ class SmartEngine:
                     excel_files = list(proj_dir.glob("prompts/*.xlsx"))
                     if excel_files:
                         try:
-                            import openpyxl
-                            wb = openpyxl.load_workbook(excel_files[0])
+                            wb = self._load_excel_with_retry(excel_files[0], read_only=True)
                             if 'config' in wb.sheetnames:
                                 ws = wb['config']
                                 for row in ws.iter_rows(min_row=2, max_row=20, values_only=True):
@@ -5210,8 +5243,7 @@ class SmartEngine:
         # === ĐỌC PROJECT URL TỪ EXCEL ===
         project_url = None
         try:
-            import openpyxl
-            wb_config = openpyxl.load_workbook(excel_path)
+            wb_config = self._load_excel_with_retry(excel_path, read_only=True)
             if 'config' in wb_config.sheetnames:
                 ws = wb_config['config']
                 for row in ws.iter_rows(min_row=1, max_row=10, values_only=True):
