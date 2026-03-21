@@ -1,8 +1,15 @@
-1.0.333
+1.0.334
 2026-03-21 (VN)
-Change: Import 1 ma moi lan tu master - xong moi lay tiep
+Change: _CLAIMED marker - may khac khong lay trung ma
 
 Thay doi:
+- v1.0.334: Tao _CLAIMED tren master thay vi xoa folder:
+  * Truoc: import xong → XOA folder tren master → may chu khong biet ai dang lam gi
+  * Sau: import xong → tao _CLAIMED (VM_ID + timestamp + hostname)
+  * May khac scan master → thay _CLAIMED → skip (khong lay trung)
+  * _CLAIMED cua minh → van lay duoc (resume)
+  * Master control hien thi ai dang lam ma nao
+
 - v1.0.333: Excel Worker chi import 1 ma tu master moi lan:
   * Truoc: import TAT CA projects tu master cung luc → VM bi qua tai
   * Sau: import 1 ma → xu ly xong → cycle sau lay ma tiep

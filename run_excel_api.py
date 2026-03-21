@@ -257,12 +257,18 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
             shutil.copytree(master_dir, local_dir)
         log(f"[IMPORT] Copied: {name}")
 
-        # Delete from master after successful copy (tránh xử lý trùng)
+        # v1.0.334: Tạo _CLAIMED trên master thay vì xóa folder
+        # Để máy khác thấy và không lấy trùng
         try:
-            shutil.rmtree(master_dir)
-            log(f"[IMPORT] Deleted from master: {name}")
+            from modules.robust_copy import TaskQueue
+            import socket
+            vm_id = TOOL_DIR.parent.name
+            claimed_file = master_dir / "_CLAIMED"
+            claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{socket.gethostname()}\n"
+            claimed_file.write_text(claim_content, encoding='utf-8')
+            log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
         except Exception as e:
-            log(f"[IMPORT] Warning - cannot delete from master: {e}", "WARN")
+            log(f"[IMPORT] Warning - cannot create _CLAIMED: {e}", "WARN")
 
         return local_dir
     except Exception as e:
@@ -702,6 +708,17 @@ class ExcelAPIWorker:
                     name = item.name
                     if not matches_channel(name, channel_filter):
                         continue
+
+                    # v1.0.334: Skip if already claimed by another VM
+                    claimed_file = item / "_CLAIMED"
+                    if claimed_file.exists():
+                        try:
+                            claim_vm = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
+                            my_vm_id = TOOL_DIR.parent.name
+                            if claim_vm != my_vm_id:
+                                continue  # Máy khác đã claim
+                        except Exception:
+                            pass
 
                     # Skip if already in local folder
                     local_check = self.local_projects / name
