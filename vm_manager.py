@@ -3229,13 +3229,16 @@ class VMManager:
         self.log("All Chrome workers restarted!", "SYSTEM", "SUCCESS")
 
     def start_all(self, gui_mode: bool = False):
-        """Start all workers.
+        """Start all workers + orchestration (giống GUI _start()).
 
         Args:
             gui_mode: If True, minimize CMD windows and log to files (for GUI mode)
         """
         self.gui_mode = gui_mode  # Track mode for restart
         self._start_time = time.time()
+        self.chrome_last_restart = time.time()  # Reset timer tránh auto-restart
+        self._stop_flag = False
+
         self.kill_all_chrome()
         if self.enable_excel:
             self.start_worker("excel", gui_mode=gui_mode)
@@ -3243,6 +3246,12 @@ class VMManager:
         for i in range(1, self.num_chrome_workers + 1):
             self.start_worker(f"chrome_{i}", gui_mode=gui_mode)
             time.sleep(2)
+
+        # Start orchestration thread (scan projects, health check, etc.)
+        if self._orch_thread is None or not self._orch_thread.is_alive():
+            self._orch_thread = threading.Thread(target=self.orchestrate, daemon=True)
+            self._orch_thread.start()
+
         # Start watchdog (report status + read commands from master)
         self.start_watchdog()
 

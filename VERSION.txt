@@ -1,6 +1,6 @@
-1.0.344
+1.0.345
 2026-03-21 (VN)
-Change: Watchdog chay ngay khi mo tool - khong can an BAT DAU
+Change: start_all() giong GUI - co orchestrate + reset timers
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
