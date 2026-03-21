@@ -1,6 +1,24 @@
-1.0.324
+1.0.325
 2026-03-21 (VN)
-Change: Fallback AUTO paths - tu dong chuyen sang path khac khi SMB mat ket noi
+Change: Atomic Excel save + auto-recovery tu backup khi file corrupt
+
+Thay doi:
+- v1.0.325: FIX CRITICAL - Excel bi corrupt vinh vien (BadZipFile):
+  * ROOT CAUSE: openpyxl save() ghi truc tiep vao file. Neu crash/kill giua chung
+    → file bi ghi mot nua → corrupt vinh vien → retry vo ich vi file DA HONG
+  * FIX 1 - Atomic save (excel_manager.py save()):
+    - Buoc 1: Ghi vao temp file (.xlsx.tmp)
+    - Buoc 2: Verify temp file la zip hop le (testzip())
+    - Buoc 3: Rename file goc thanh backup (.xlsx.bak)
+    - Buoc 4: Rename temp → chinh thuc (atomic tren cung filesystem)
+    - Neu crash o buoc 1-2: file goc van nguyen
+    - Neu crash o buoc 3-4: co backup de restore
+  * FIX 2 - Auto-recovery tu backup (excel_manager.py load_or_create()):
+    - Sau 3 retry BadZipFile → tim .xlsx.bak
+    - Load backup → neu OK → restore thanh file chinh
+    - File corrupt luu lai .xlsx.corrupt (de debug)
+    - Log: "RECOVERY THANH CONG tu backup!"
+  * Ket qua: Excel KHONG BAO GIO bi mat du crash/kill bat ky luc nao
 
 Thay doi:
 - v1.0.324: Fallback AUTO paths khi copy VM↔Master:

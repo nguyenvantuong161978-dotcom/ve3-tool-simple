@@ -517,9 +517,7 @@ class PromptWorkbook:
     def load_or_create(self) -> "PromptWorkbook":
         """
         Load file Excel nếu tồn tại, hoặc tạo mới nếu chưa có.
-        CHỈ xóa file nếu thực sự corrupted (BadZipFile), KHÔNG xóa khi file bị lock.
-
-        v1.0.49: Fix bug xóa Excel khi file bị lock bởi Chrome Worker
+        v1.0.325: Tự động recovery từ .bak nếu file gốc bị corrupt.
 
         Returns:
             self để hỗ trợ method chaining
@@ -549,11 +547,35 @@ class PromptWorkbook:
                     except Exception as retry_e:
                         self.logger.warning(f"Retry {attempt} lỗi khác: {retry_e}")
 
-                # Sau 3 lần retry vẫn fail → RAISE exception, KHÔNG XÓA
-                # v1.0.286: Trong môi trường parallel (Chrome 1 + Chrome 2 dùng chung Excel),
-                # BadZipFile có thể do file đang được write → KHÔNG BAO GIỜ xóa!
-                # Caller (smart_engine.py) sẽ retry toàn bộ ở vòng lặp ngoài
-                self.logger.error(f"Excel BadZipFile sau 3 retries - có thể worker khác đang ghi - KHONG XOA!")
+                # v1.0.325: Thử recovery từ .bak backup
+                bak_path = self.path.with_suffix('.xlsx.bak')
+                if bak_path.exists():
+                    self.logger.warning(f"File gốc corrupt! Thử recovery từ backup: {bak_path.name}")
+                    try:
+                        self.workbook = load_workbook(str(bak_path))
+                        # Backup load OK → restore làm file chính
+                        import os
+                        import shutil
+                        # Rename file corrupt để giữ lại (debug)
+                        corrupt_path = self.path.with_suffix('.xlsx.corrupt')
+                        try:
+                            if corrupt_path.exists():
+                                os.unlink(str(corrupt_path))
+                            os.rename(str(self.path), str(corrupt_path))
+                        except Exception:
+                            try:
+                                os.unlink(str(self.path))
+                            except Exception:
+                                pass
+                        # Copy backup thành file chính
+                        shutil.copy2(str(bak_path), str(self.path))
+                        self.logger.info(f"RECOVERY THÀNH CÔNG từ backup! File corrupt lưu tại: {corrupt_path.name}")
+                        return self
+                    except Exception as bak_e:
+                        self.logger.error(f"Backup cũng lỗi: {bak_e}")
+
+                # Không có backup hoặc backup cũng lỗi
+                self.logger.error(f"Excel BadZipFile sau 3 retries - KHONG CO BACKUP de recovery!")
                 raise PermissionError(f"Excel file unavailable after 3 retries (possibly being written by another worker): {self.path}")
             except PermissionError as e:
                 # File đang bị lock - KHÔNG XÓA, raise lỗi
@@ -736,15 +758,75 @@ class PromptWorkbook:
             ws.column_dimensions[get_column_letter(col)].width = column_widths.get(column_name, 15)
 
     def save(self) -> None:
-        """Lưu workbook ra file."""
+        """Lưu workbook ra file với atomic write để tránh corruption.
+
+        v1.0.325: Atomic save - ghi vào temp file trước, rename sau.
+        Nếu crash giữa chừng → file gốc vẫn nguyên, chỉ mất temp file.
+        Giữ .bak backup để recovery nếu cần.
+        """
         if self.workbook is None:
             raise RuntimeError("Workbook chưa được load hoặc tạo")
-        
+
         # Đảm bảo thư mục tồn tại
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        
-        self.workbook.save(self.path)
-        self.logger.debug(f"Saved Excel file: {self.path}")
+
+        import os
+        temp_path = self.path.with_suffix('.xlsx.tmp')
+        bak_path = self.path.with_suffix('.xlsx.bak')
+
+        try:
+            # Bước 1: Ghi vào temp file
+            self.workbook.save(str(temp_path))
+
+            # Bước 2: Verify temp file là zip hợp lệ
+            from zipfile import ZipFile, BadZipFile
+            try:
+                with ZipFile(str(temp_path), 'r') as zf:
+                    zf.testzip()  # Kiểm tra integrity
+            except BadZipFile:
+                self.logger.error(f"Temp file bị corrupt sau khi save! Giữ nguyên file gốc.")
+                try:
+                    os.unlink(str(temp_path))
+                except Exception:
+                    pass
+                raise RuntimeError("Excel save failed: temp file corrupt")
+
+            # Bước 3: Backup file gốc (nếu có)
+            if self.path.exists():
+                try:
+                    # Xóa backup cũ nếu có
+                    if bak_path.exists():
+                        os.unlink(str(bak_path))
+                    os.rename(str(self.path), str(bak_path))
+                except Exception as e:
+                    self.logger.warning(f"Không tạo được backup: {e}")
+                    # Vẫn tiếp tục - có thể file gốc bị lock
+                    try:
+                        os.unlink(str(self.path))
+                    except Exception:
+                        pass
+
+            # Bước 4: Rename temp → chính thức (atomic trên cùng filesystem)
+            os.rename(str(temp_path), str(self.path))
+            self.logger.debug(f"Saved Excel file: {self.path}")
+
+        except Exception as e:
+            # Cleanup temp file nếu có lỗi
+            try:
+                if temp_path.exists():
+                    os.unlink(str(temp_path))
+            except Exception:
+                pass
+
+            # Nếu file gốc bị xóa nhưng rename fail → restore từ backup
+            if not self.path.exists() and bak_path.exists():
+                try:
+                    os.rename(str(bak_path), str(self.path))
+                    self.logger.warning(f"Restored file gốc từ backup sau lỗi save")
+                except Exception:
+                    pass
+
+            raise
     
     # ========================================================================
     # CHARACTERS METHODS
