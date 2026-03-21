@@ -921,6 +921,10 @@ class VMManager:
         self._watchdog_thread = None
         self._vm_id = TOOL_DIR.parent.name  # e.g., "AR8-T1"
 
+        # v1.0.346: GUI callbacks - master commands gọi thẳng GUI buttons
+        self._gui_start_callback = None  # Callback = ấn BẮT ĐẦU trên GUI
+        self._gui_stop_callback = None   # Callback = ấn DỪNG trên GUI
+
     def _setup_agent_dirs(self):
         for d in [AGENT_DIR, TASKS_DIR, RESULTS_DIR, STATUS_DIR, LOGS_DIR]:
             d.mkdir(parents=True, exist_ok=True)
@@ -3359,12 +3363,21 @@ class VMManager:
 
                 try:
                     if cmd_name == "run":
-                        if self._stop_flag:
+                        if self._gui_start_callback:
+                            # v1.0.346: Gọi thẳng GUI _start() = ấn nút BẮT ĐẦU
+                            self.log("Master RUN → GUI BẮT ĐẦU", "MANAGER", "INFO")
+                            self._gui_start_callback()
+                        elif self._stop_flag:
                             self._stop_flag = False
                             self.start_all(gui_mode=self.gui_mode)
                         self._ack_command(cmd_name, "OK")
                     elif cmd_name == "stop":
-                        self.stop_all()
+                        if self._gui_stop_callback:
+                            # v1.0.346: Gọi thẳng GUI _stop() = ấn nút DỪNG
+                            self.log("Master STOP → GUI DỪNG", "MANAGER", "INFO")
+                            self._gui_stop_callback()
+                        else:
+                            self.stop_all()
                         self._ack_command(cmd_name, "OK")
                     elif cmd_name == "update":
                         self._ack_command(cmd_name, "STARTED")

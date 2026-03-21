@@ -1152,6 +1152,11 @@ class SimpleGUI(tk.Tk):
         self.after(300, self._position_tool_window)  # Dat tool vao vi tri trai man hinh
         self._update_loop()
 
+        # v1.0.346: Đăng ký GUI callbacks cho master commands
+        # Master gửi RUN = ấn BẮT ĐẦU, STOP = ấn DỪNG (chạy trên Tkinter main thread)
+        self.manager._gui_start_callback = lambda: self.after(0, self._start)
+        self.manager._gui_stop_callback = lambda: self.after(0, self._stop)
+
         # v1.0.344: Start watchdog ngay khi mở tool (không cần ấn BẮT ĐẦU)
         # Để VM nghe lệnh từ master ngay lập tức
         self.manager.start_watchdog()
@@ -2333,6 +2338,10 @@ class SimpleGUI(tk.Tk):
             print(f"Error loading projects: {e}")
 
     def _start(self):
+        # v1.0.346: Không start nếu đang chạy (tránh duplicate từ master RUN)
+        if self.running:
+            return
+
         if not self.manager:
             self.manager = VMManager(num_chrome_workers=2)
 
