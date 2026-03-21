@@ -1,8 +1,15 @@
-1.0.331
+1.0.332
 2026-03-21 (VN)
-Change: Fix UPDATE - sua remote URL sai + distributed_mode mac dinh true
+Change: distributed_mode default True - VM khong can sua settings.yaml
 
 Thay doi:
+- v1.0.332: distributed_mode default True trong code:
+  * ZIP update khong copy settings.yaml (giu API keys cua VM)
+  * VM khong co key distributed_mode trong settings → truoc day default=False → khong chay
+  * Fix: Doi default tu False → True trong run_worker.py, run_excel_api.py, vm_manager.py
+  * VM chi can UPDATE la tu dong chay distributed mode, khong can sua settings
+
+
 - v1.0.331: Fix UPDATE tren VM bi ve version cu (v229):
   * ROOT CAUSE: VM co git remote "origin" tro sang repo CU (truoc khi doi ten)
     → git fetch origin main lay version cu → reset --hard ve v229
