@@ -1,6 +1,6 @@
-1.0.350
+1.0.351
 2026-03-21 (VN)
-Change: Redesign Master Control - bo popup, them log panel, layout gon dep hon
+Change: FIX PRE-LOGIN dung account tu _CLAIMED truc tiep, khong can tim trong tool accounts
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

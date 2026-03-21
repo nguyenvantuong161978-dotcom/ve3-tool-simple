@@ -1016,107 +1016,96 @@ def _do_pre_login_if_needed(project_code: str = None):
         channel = extract_channel_from_machine_code(machine_code)
         print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
-        # v1.0.336: Distributed mode - đọc account từ _CLAIMED (trang tính NGUON)
+        # v1.0.351: Distributed mode - đọc account từ _CLAIMED (trang tính NGUON)
+        # Nếu _CLAIMED có account đầy đủ → login TRỰC TIẾP, bỏ qua rotation cũ
         _claimed_path = project_dir / "_CLAIMED"
+        _claimed_account_dict = None
+
         if _claimed_path.exists():
             try:
                 _claimed_lines = _claimed_path.read_text(encoding='utf-8').strip().split('\n')
                 if len(_claimed_lines) >= 4 and _claimed_lines[3].strip():
-                    _claimed_account = _claimed_lines[3].strip()  # email|pass|totp
-                    _claimed_email = _claimed_account.split('|')[0] if '|' in _claimed_account else _claimed_account
-                    print(f"[PRE-LOGIN] _CLAIMED account: {_claimed_email}")
-
-                    # Tìm account trong danh sách và set index
-                    all_accounts = get_channel_accounts(machine_code) or []
-                    for i, acc in enumerate(all_accounts):
-                        if acc.get('id', '').lower().strip() == _claimed_email.lower().strip():
-                            save_account_index(channel, i)
-                            _registry_save(code, channel, i, _claimed_email)
-                            print(f"[PRE-LOGIN] Account from _CLAIMED: {_claimed_email} (index {i})")
-                            break
-                    else:
-                        print(f"[PRE-LOGIN] _CLAIMED email not in accounts list, using rotation")
+                    _claimed_str = _claimed_lines[3].strip()  # email|pass|totp
+                    _parts = _claimed_str.split('|')
+                    if len(_parts) >= 2:
+                        _claimed_account_dict = {
+                            'id': _parts[0].strip(),
+                            'password': _parts[1].strip(),
+                            'totp_secret': _parts[2].strip() if len(_parts) >= 3 else '',
+                            'index': 0,
+                        }
+                        print(f"[PRE-LOGIN] _CLAIMED account: {_claimed_account_dict['id']}")
             except Exception as e:
                 print(f"[PRE-LOGIN] Error reading _CLAIMED: {e}")
 
-        # Lấy danh sách accounts 1 lần
-        all_accounts = get_channel_accounts(machine_code) or []
-
-        # v1.0.284: Registry → Migration từ .account.json (1 lần) → Rotate (mã mới)
-        import json as _jm
-
-        def _restore_and_save(email, idx):
-            """Restore account index từ email/idx, trả về True nếu thành công."""
-            if email:
-                for i, acc in enumerate(all_accounts):
-                    if acc.get('id', '').lower().strip() == email.lower().strip():
-                        save_account_index(channel, i)
-                        return True
-            if idx is not None and 0 <= idx < len(all_accounts):
-                save_account_index(channel, idx)
-                return True
-            return False
-
-        # v1.0.285: Kiểm tra có ảnh chưa → bằng chứng thực tế project đã chạy trước
-        _img_dir = project_dir / "img"
-        _existing_images = list(_img_dir.glob("*.png")) if _img_dir.exists() else []
-        _has_images = len(_existing_images) > 0
-
-        _reg = _registry_get(code)
-        if _reg.get('email') or _reg.get('index') is not None:
-            # Registry có → restore
-            _restore_and_save(_reg.get('email', ''), _reg.get('index'))
-            print(f"[PRE-LOGIN] Registry: {code} → {_reg.get('email', 'index=' + str(_reg.get('index')))} → KHONG rotate")
-        elif _has_images:
-            # CÓ ẢNH nhưng không có Registry → project đã chạy trước, KHÔNG ROTATE
-            # Dùng account hiện tại (tốt hơn rotate sai hoàn toàn)
-            _cur = get_current_account_for_channel(channel, machine_code=machine_code)
-            if _cur:
-                _registry_save(code, channel, _cur['index'], _cur['id'])
-                print(f"[PRE-LOGIN] {len(_existing_images)} anh ton tai, KHONG rotate → dung account hien tai: {_cur['id']}")
-            else:
-                print(f"[PRE-LOGIN] {len(_existing_images)} anh ton tai, KHONG rotate (giu nguyen account)")
+        if _claimed_account_dict:
+            # === DÙNG ACCOUNT TỪ _CLAIMED (trang tính NGUON) ===
+            current_account = _claimed_account_dict
+            print(f"[PRE-LOGIN] Dung account tu _CLAIMED: {current_account['id']}")
+            _registry_save(code, channel, 0, current_account['id'])
         else:
-            # Registry trống, không có ảnh - kiểm tra .account.json để MIGRATE (1 lần duy nhất)
-            _migrated = False
-            _account_json_path = project_dir / ".account.json"
-            if _account_json_path.exists():
-                try:
-                    _raw = _jm.loads(_account_json_path.read_text(encoding='utf-8'))
-                    _em = _raw.get('email', '')
-                    _ix = _raw.get('index')
-                    if _em or _ix is not None:
-                        _registry_save(code, channel, _ix or 0, _em)
-                        _migrated = _restore_and_save(_em, _ix)
-                        print(f"[PRE-LOGIN] MIGRATE → Registry: {code} → {_em or 'index=' + str(_ix)}")
-                except Exception:
-                    pass
+            # === FALLBACK: Luồng cũ (rotation từ tool accounts) ===
+            all_accounts = get_channel_accounts(machine_code) or []
 
-            if not _migrated:
-                # Mã mới hoàn toàn (0 ảnh + không có lịch sử) → rotate
-                if all_accounts and len(all_accounts) > 1:
-                    new_idx = rotate_account_index(channel, len(all_accounts))
-                    print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
-                else:
-                    print(f"[PRE-LOGIN] Chi co 1 account, khong can rotate")
+            import json as _jm
 
-        # Lấy account hiện tại (sau rotate hoặc restore)
-        current_account = get_current_account_for_channel(channel, machine_code=machine_code)
-        if not current_account:
-            print("[PRE-LOGIN] No account found - skip login")
-            return
+            def _restore_and_save(email, idx):
+                if email:
+                    for i, acc in enumerate(all_accounts):
+                        if acc.get('id', '').lower().strip() == email.lower().strip():
+                            save_account_index(channel, i)
+                            return True
+                if idx is not None and 0 <= idx < len(all_accounts):
+                    save_account_index(channel, idx)
+                    return True
+                return False
+
+            _img_dir = project_dir / "img"
+            _existing_images = list(_img_dir.glob("*.png")) if _img_dir.exists() else []
+            _has_images = len(_existing_images) > 0
+
+            _reg = _registry_get(code)
+            if _reg.get('email') or _reg.get('index') is not None:
+                _restore_and_save(_reg.get('email', ''), _reg.get('index'))
+                print(f"[PRE-LOGIN] Registry: {code} → {_reg.get('email', 'index=' + str(_reg.get('index')))} → KHONG rotate")
+            elif _has_images:
+                _cur = get_current_account_for_channel(channel, machine_code=machine_code)
+                if _cur:
+                    _registry_save(code, channel, _cur['index'], _cur['id'])
+                    print(f"[PRE-LOGIN] {len(_existing_images)} anh ton tai → dung account hien tai: {_cur['id']}")
+            else:
+                _migrated = False
+                _account_json_path = project_dir / ".account.json"
+                if _account_json_path.exists():
+                    try:
+                        _raw = _jm.loads(_account_json_path.read_text(encoding='utf-8'))
+                        _em = _raw.get('email', '')
+                        _ix = _raw.get('index')
+                        if _em or _ix is not None:
+                            _registry_save(code, channel, _ix or 0, _em)
+                            _migrated = _restore_and_save(_em, _ix)
+                            print(f"[PRE-LOGIN] MIGRATE → Registry: {code} → {_em or 'index=' + str(_ix)}")
+                    except Exception:
+                        pass
+                if not _migrated:
+                    if all_accounts and len(all_accounts) > 1:
+                        new_idx = rotate_account_index(channel, len(all_accounts))
+                        print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
+
+            current_account = get_current_account_for_channel(channel, machine_code=machine_code)
+            if not current_account:
+                print("[PRE-LOGIN] No account found - skip login")
+                return
 
         print(f"[PRE-LOGIN] Account: {current_account['id']}")
-
-        # Lưu Registry NGAY TRƯỚC khi clear Chrome + login (sớm nhất có thể)
-        _registry_save(code, channel, current_account['index'], current_account['id'])
+        _registry_save(code, channel, current_account.get('index', 0), current_account['id'])
         print(f"[PRE-LOGIN] Registry saved: {code} → {current_account['id']}")
 
         # Xóa Chrome data
         print("[PRE-LOGIN] Clearing Chrome data...")
         clear_chrome_data_for_new_account()
 
-        # Login CẢ 2 Chrome TUẦN TỰ (không song song)
+        # Login CẢ 2 Chrome TUẦN TỰ
         chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 1...")
         login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
