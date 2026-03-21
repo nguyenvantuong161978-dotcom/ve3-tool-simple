@@ -3032,17 +3032,24 @@ class VMManager:
         self.log(f"ACCOUNT ISSUE: {project_code} - 1h < 5 ảnh → Reset + retry", "SYSTEM", "WARN")
         self.log("=" * 60, "SYSTEM")
 
-        # 1. Đọc account info TRƯỚC KHI restore (để giữ lại sau restore)
+        # 1. v1.0.362: Đọc account từ _CLAIMED (không dùng Excel nữa)
         excel_path = TOOL_DIR / "PROJECTS" / project_code / f"{project_code}_prompts.xlsx"
         saved_account_info = None
         try:
-            from google_login import get_account_from_excel
-            if excel_path.exists():
-                saved_account_info = get_account_from_excel(str(excel_path))
-                if saved_account_info:
-                    self.log(f"[Account] Ghi nhớ account: {saved_account_info.get('email')} trước khi restore", "SYSTEM")
+            claimed_path = TOOL_DIR / "PROJECTS" / project_code / "_CLAIMED"
+            if claimed_path.exists():
+                claimed_lines = claimed_path.read_text(encoding='utf-8').strip().split('\n')
+                if len(claimed_lines) >= 4 and claimed_lines[3].strip():
+                    parts = claimed_lines[3].strip().split('|')
+                    if len(parts) >= 2:
+                        saved_account_info = {
+                            'email': parts[0].strip(),
+                            'index': 0,
+                            'channel': '',
+                        }
+                        self.log(f"[Account] _CLAIMED account: {saved_account_info['email']}", "SYSTEM")
         except Exception as e:
-            self.log(f"[Account] Không đọc được account: {e}", "SYSTEM", "WARN")
+            self.log(f"[Account] Không đọc được _CLAIMED: {e}", "SYSTEM", "WARN")
 
         # 2. Restore Excel backup (về trạng thái sạch, giữ nguyên prompts)
         self._restore_excel_from_backup(project_code)

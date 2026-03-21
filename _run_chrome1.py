@@ -478,28 +478,15 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
         log(f"  Excel exists but no prompts - waiting for Excel Worker to complete")
         return False
 
-    # Step 3.5: Account tracking (v1.0.281 - Registry only)
-    # CHỈ dùng Registry trung tâm, không dùng .account.json hay Excel
+    # Step 3.5: v1.0.362 - Account tracking chỉ từ _CLAIMED
     try:
-        from google_login import (
-            extract_channel_from_machine_code, get_current_account_for_channel,
-            save_account_index as _sai
-        )
-
-        channel = extract_channel_from_machine_code(code)
-        if channel:
-            _reg = _registry_get(code)
-            if _reg.get('email') or _reg.get('index') is not None:
-                # Registry có → restore account index
-                idx = _reg.get('index', 0)
-                _sai(channel, idx)
-                log(f"  [RESUME] Registry: {_reg.get('email', 'index=' + str(idx))}")
-            else:
-                # Chưa có trong registry = mid-cycle import → lưu ngay
-                current_acc = get_current_account_for_channel(channel)
-                if current_acc and current_acc.get('id'):
-                    _registry_save(code, channel, current_acc.get('index', 0), current_acc['id'])
-                    log(f"  [Account] Registry saved: {code} → {current_acc['id']} (mid-cycle import)")
+        claimed_path = local_dir / "_CLAIMED"
+        if claimed_path.exists():
+            claimed_lines = claimed_path.read_text(encoding='utf-8').strip().split('\n')
+            if len(claimed_lines) >= 4 and claimed_lines[3].strip():
+                parts = claimed_lines[3].strip().split('|')
+                if len(parts) >= 2:
+                    log(f"  [Account] _CLAIMED: {parts[0].strip()}")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 
@@ -1004,16 +991,12 @@ def _do_pre_login_if_needed(project_code: str = None):
 
     try:
         from google_login import (
-            detect_machine_code, extract_channel_from_machine_code,
-            get_current_account_for_channel,
-            get_channel_accounts, rotate_account_index,
-            save_account_index,
+            detect_machine_code,
             login_google_chrome,
         )
 
         machine_code = detect_machine_code()
-        channel = extract_channel_from_machine_code(machine_code)
-        print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
+        print(f"[PRE-LOGIN] Machine code: {machine_code}")
 
         # v1.0.352: Đọc _CLAIMED từ LOCAL hoặc MASTER (vì pre-login chạy trước copy_from_master)
         _claimed_path = project_dir / "_CLAIMED"
@@ -1050,67 +1033,14 @@ def _do_pre_login_if_needed(project_code: str = None):
                 print(f"[PRE-LOGIN] Error reading _CLAIMED: {e}")
 
         if _claimed_account_dict:
-            # === DÙNG ACCOUNT TỪ _CLAIMED (trang tính NGUON) ===
+            # v1.0.362: CHỈ dùng account từ _CLAIMED
             current_account = _claimed_account_dict
             print(f"[PRE-LOGIN] Dung account tu _CLAIMED: {current_account['id']}")
-            _registry_save(code, channel, 0, current_account['id'])
         else:
-            # === FALLBACK: Luồng cũ (rotation từ tool accounts) ===
-            all_accounts = get_channel_accounts(machine_code) or []
-
-            import json as _jm
-
-            def _restore_and_save(email, idx):
-                if email:
-                    for i, acc in enumerate(all_accounts):
-                        if acc.get('id', '').lower().strip() == email.lower().strip():
-                            save_account_index(channel, i)
-                            return True
-                if idx is not None and 0 <= idx < len(all_accounts):
-                    save_account_index(channel, idx)
-                    return True
-                return False
-
-            _img_dir = project_dir / "img"
-            _existing_images = list(_img_dir.glob("*.png")) if _img_dir.exists() else []
-            _has_images = len(_existing_images) > 0
-
-            _reg = _registry_get(code)
-            if _reg.get('email') or _reg.get('index') is not None:
-                _restore_and_save(_reg.get('email', ''), _reg.get('index'))
-                print(f"[PRE-LOGIN] Registry: {code} → {_reg.get('email', 'index=' + str(_reg.get('index')))} → KHONG rotate")
-            elif _has_images:
-                _cur = get_current_account_for_channel(channel, machine_code=machine_code)
-                if _cur:
-                    _registry_save(code, channel, _cur['index'], _cur['id'])
-                    print(f"[PRE-LOGIN] {len(_existing_images)} anh ton tai → dung account hien tai: {_cur['id']}")
-            else:
-                _migrated = False
-                _account_json_path = project_dir / ".account.json"
-                if _account_json_path.exists():
-                    try:
-                        _raw = _jm.loads(_account_json_path.read_text(encoding='utf-8'))
-                        _em = _raw.get('email', '')
-                        _ix = _raw.get('index')
-                        if _em or _ix is not None:
-                            _registry_save(code, channel, _ix or 0, _em)
-                            _migrated = _restore_and_save(_em, _ix)
-                            print(f"[PRE-LOGIN] MIGRATE → Registry: {code} → {_em or 'index=' + str(_ix)}")
-                    except Exception:
-                        pass
-                if not _migrated:
-                    if all_accounts and len(all_accounts) > 1:
-                        new_idx = rotate_account_index(channel, len(all_accounts))
-                        print(f"[PRE-LOGIN] Ma moi → rotate sang account {new_idx + 1}/{len(all_accounts)}")
-
-            current_account = get_current_account_for_channel(channel, machine_code=machine_code)
-            if not current_account:
-                print("[PRE-LOGIN] No account found - skip login")
-                return
+            print("[PRE-LOGIN] Khong tim thay _CLAIMED - skip login")
+            return
 
         print(f"[PRE-LOGIN] Account: {current_account['id']}")
-        _registry_save(code, channel, current_account.get('index', 0), current_account['id'])
-        print(f"[PRE-LOGIN] Registry saved: {code} → {current_account['id']}")
 
         # Xóa Chrome data
         print("[PRE-LOGIN] Clearing Chrome data...")

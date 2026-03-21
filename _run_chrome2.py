@@ -410,20 +410,15 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             log(f"  No Excel after 120s, skip!")
             return False
 
-    # Step 3.5a: Account tracking (v1.0.106)
-    # Chrome 2 chỉ đọc account từ Excel (Chrome 1 đã lưu)
+    # Step 3.5a: v1.0.362 - Account tracking chỉ từ _CLAIMED
     try:
-        from google_login import (
-            get_account_from_excel, extract_channel_from_machine_code,
-            set_account_index_for_resume
-        )
-
-        channel = extract_channel_from_machine_code(code)
-        if channel:
-            account_info = get_account_from_excel(str(excel_path))
-            if account_info and account_info.get('email'):
-                log(f"  [RESUME] Account from Excel: {account_info.get('email')} (index {account_info.get('index')})")
-                set_account_index_for_resume(str(excel_path), channel)
+        claimed_path = local_dir / "_CLAIMED"
+        if claimed_path.exists():
+            claimed_lines = claimed_path.read_text(encoding='utf-8').strip().split('\n')
+            if len(claimed_lines) >= 4 and claimed_lines[3].strip():
+                parts = claimed_lines[3].strip().split('|')
+                if len(parts) >= 2:
+                    log(f"  [Account] _CLAIMED: {parts[0].strip()}")
     except Exception as e:
         log(f"  Account tracking error (non-critical): {e}", "WARN")
 

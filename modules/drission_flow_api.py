@@ -1627,7 +1627,7 @@ class DrissionFlowAPI:
             if str(tool_dir) not in sys.path:
                 sys.path.insert(0, str(tool_dir))
 
-            from google_login import detect_machine_code, get_account_info, login_google_chrome
+            from google_login import detect_machine_code, login_google_chrome
 
             # 1. Detect mã máy
             machine_code = detect_machine_code()
@@ -1637,39 +1637,39 @@ class DrissionFlowAPI:
 
             self.log(f"Mã máy: {machine_code}")
 
-            # v1.0.152: Ưu tiên dùng account đã lưu (từ PRE-LOGIN)
+            # v1.0.362: Chỉ dùng 2 nguồn: memory hoặc _CLAIMED
             account_info = None
 
-            # 2a. Thử dùng account đã lưu trong memory
+            # 2a. Dùng account đã lưu trong memory (từ lần login trước)
             if self._saved_account:
                 self.log("Dùng account đã lưu trong memory...")
                 account_info = self._saved_account
 
-            # 2b. Thử đọc từ Excel của project (PRE-LOGIN đã lưu)
+            # 2b. Đọc từ _CLAIMED (account từ trang tính NGUON)
             if not account_info:
-                from google_login import get_account_from_excel, get_account_by_index
                 tool_dir = Path(__file__).parent.parent
                 projects_dir = tool_dir / "PROJECTS"
                 if projects_dir.exists():
-                    # Tìm project có Excel
                     for item in projects_dir.iterdir():
                         if not item.is_dir():
                             continue
-                        excel_path = item / f"{item.name}_prompts.xlsx"
-                        if excel_path.exists():
-                            saved = get_account_from_excel(str(excel_path))
-                            if saved and saved.get('email'):
-                                # v1.0.154: Dùng machine_code (KA2-T2) thay vì channel (KA2)
-                                # vì get_channel_accounts cần machine_code đầy đủ
-                                self.log(f"Đọc account từ Excel: {saved['email']} (index {saved['index']})")
-                                account_info = get_account_by_index(machine_code, saved['index'])
-                                if account_info:
-                                    break
-
-            # 2c. Fallback: Đọc từ Google Sheet (có thể bị rotate)
-            if not account_info:
-                self.log("Đọc thông tin tài khoản từ Google Sheet...")
-                account_info = get_account_info(machine_code)
+                        claimed_path = item / "_CLAIMED"
+                        if claimed_path.exists():
+                            try:
+                                claimed_lines = claimed_path.read_text(encoding='utf-8').strip().split('\n')
+                                if len(claimed_lines) >= 4 and claimed_lines[3].strip():
+                                    parts = claimed_lines[3].strip().split('|')
+                                    if len(parts) >= 2:
+                                        account_info = {
+                                            'id': parts[0].strip(),
+                                            'password': parts[1].strip(),
+                                            'totp_secret': parts[2].strip() if len(parts) >= 3 else '',
+                                            'index': 0,
+                                        }
+                                        self.log(f"Đọc account từ _CLAIMED: {account_info['id']}")
+                                        break
+                            except Exception as e:
+                                self.log(f"[WARN] Lỗi đọc _CLAIMED: {e}")
 
             if not account_info:
                 self.log("[x] Không lấy được thông tin tài khoản", "ERROR")
