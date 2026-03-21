@@ -1,6 +1,6 @@
-1.0.337
+1.0.338
 2026-03-21 (VN)
-Change: commands + status vao AUTO/control/ cho gon
+Change: control vao AUTO/ve3-tool-simple/control/
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
