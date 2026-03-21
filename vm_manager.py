@@ -1910,7 +1910,7 @@ class VMManager:
                 return
             with open(settings_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
-            if not config.get('distributed_mode', False):
+            if not config.get('distributed_mode', True):
                 return
             if not self.auto_path:
                 return

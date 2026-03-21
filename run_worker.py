@@ -992,10 +992,10 @@ def _is_distributed_mode() -> bool:
         if settings_path.exists():
             with open(settings_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
-            return config.get('distributed_mode', False)
+            return config.get('distributed_mode', True)
     except Exception:
         pass
-    return False
+    return True
 
 
 def _get_task_queue():
