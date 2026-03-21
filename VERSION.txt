@@ -1,6 +1,6 @@
-1.0.343
+1.0.344
 2026-03-21 (VN)
-Change: Auto-restart sau UPDATE + ACK timeout 120s cho update
+Change: Watchdog chay ngay khi mo tool - khong can an BAT DAU
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

@@ -1152,6 +1152,10 @@ class SimpleGUI(tk.Tk):
         self.after(300, self._position_tool_window)  # Dat tool vao vi tri trai man hinh
         self._update_loop()
 
+        # v1.0.344: Start watchdog ngay khi mở tool (không cần ấn BẮT ĐẦU)
+        # Để VM nghe lệnh từ master ngay lập tức
+        self.manager.start_watchdog()
+
     def _load_mode_from_yaml(self):
         """Load excel_mode tu settings.yaml va cap nhat mode_var + display label."""
         try:
