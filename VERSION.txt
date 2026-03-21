@@ -1,6 +1,6 @@
-1.0.355
+1.0.356
 2026-03-21 (VN)
-Change: ATOMIC CLAIM - TaskQueue.claim_next() trong scan, import_from_master skip claim khi da claim
+Change: FIX Excel corrupt - recovery tu backup, xoa file corrupt de tao moi, fix testzip EOFError
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

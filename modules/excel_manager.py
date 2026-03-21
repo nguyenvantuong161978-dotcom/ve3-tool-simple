@@ -552,10 +552,13 @@ class PromptWorkbook:
                 if bak_path.exists():
                     self.logger.warning(f"File gốc corrupt! Thử recovery từ backup: {bak_path.name}")
                     try:
-                        self.workbook = load_workbook(str(bak_path))
-                        # Backup load OK → restore làm file chính
                         import os
                         import shutil
+                        # v1.0.355: openpyxl không nhận .bak → copy sang .xlsx.recover trước
+                        recover_path = self.path.with_name(self.path.stem + '_recover.xlsx')
+                        shutil.copy2(str(bak_path), str(recover_path))
+                        self.workbook = load_workbook(str(recover_path))
+                        # Backup load OK → restore làm file chính
                         # Rename file corrupt để giữ lại (debug)
                         corrupt_path = self.path.with_suffix('.xlsx.corrupt')
                         try:
@@ -567,16 +570,37 @@ class PromptWorkbook:
                                 os.unlink(str(self.path))
                             except Exception:
                                 pass
-                        # Copy backup thành file chính
-                        shutil.copy2(str(bak_path), str(self.path))
+                        # Rename recover → file chính
+                        os.rename(str(recover_path), str(self.path))
                         self.logger.info(f"RECOVERY THÀNH CÔNG từ backup! File corrupt lưu tại: {corrupt_path.name}")
                         return self
                     except Exception as bak_e:
                         self.logger.error(f"Backup cũng lỗi: {bak_e}")
+                        # Cleanup recover file
+                        try:
+                            recover_path = self.path.with_name(self.path.stem + '_recover.xlsx')
+                            if recover_path.exists():
+                                os.unlink(str(recover_path))
+                        except Exception:
+                            pass
 
-                # Không có backup hoặc backup cũng lỗi
-                self.logger.error(f"Excel BadZipFile sau 3 retries - KHONG CO BACKUP de recovery!")
-                raise PermissionError(f"Excel file unavailable after 3 retries (possibly being written by another worker): {self.path}")
+                # v1.0.355: File corrupt vĩnh viễn, không có backup
+                # XÓA file corrupt để worker tạo mới thay vì loop forever
+                self.logger.error(f"Excel BadZipFile sau 3 retries - XOA file corrupt de tao moi!")
+                try:
+                    import os
+                    corrupt_path = self.path.with_suffix('.xlsx.corrupt')
+                    if corrupt_path.exists():
+                        os.unlink(str(corrupt_path))
+                    os.rename(str(self.path), str(corrupt_path))
+                    self.logger.warning(f"File corrupt renamed to: {corrupt_path.name}")
+                except Exception as del_e:
+                    try:
+                        os.unlink(str(self.path))
+                        self.logger.warning(f"Deleted corrupt file: {self.path.name}")
+                    except Exception:
+                        self.logger.error(f"Cannot delete corrupt file: {del_e}")
+                raise PermissionError(f"Excel file corrupt and removed, will recreate: {self.path}")
             except PermissionError as e:
                 # File đang bị lock - KHÔNG XÓA, raise lỗi
                 self.logger.error(f"Excel file locked (PermissionError): {e}")
@@ -783,8 +807,9 @@ class PromptWorkbook:
             try:
                 with ZipFile(str(temp_path), 'r') as zf:
                     zf.testzip()  # Kiểm tra integrity
-            except BadZipFile:
-                self.logger.error(f"Temp file bị corrupt sau khi save! Giữ nguyên file gốc.")
+            except (BadZipFile, EOFError, OSError) as zip_err:
+                # v1.0.355: Catch EOFError + OSError (testzip có thể raise nhiều loại lỗi)
+                self.logger.error(f"Temp file bị corrupt sau khi save! Giữ nguyên file gốc. Error: {zip_err}")
                 try:
                     os.unlink(str(temp_path))
                 except Exception:
@@ -800,11 +825,13 @@ class PromptWorkbook:
                     os.rename(str(self.path), str(bak_path))
                 except Exception as e:
                     self.logger.warning(f"Không tạo được backup: {e}")
-                    # Vẫn tiếp tục - có thể file gốc bị lock
+                    # v1.0.355: Thử unlink, nếu fail → file bị lock → KHÔNG thể save
                     try:
                         os.unlink(str(self.path))
                     except Exception:
-                        pass
+                        # File gốc bị lock hoàn toàn → abort save, giữ temp
+                        self.logger.error(f"File gốc bị lock, không thể save! Giữ temp: {temp_path.name}")
+                        raise PermissionError(f"Cannot replace locked file: {self.path}")
 
             # Bước 4: Rename temp → chính thức (atomic trên cùng filesystem)
             os.rename(str(temp_path), str(self.path))
