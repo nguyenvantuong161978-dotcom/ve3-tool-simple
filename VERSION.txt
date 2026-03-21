@@ -1,6 +1,6 @@
-1.0.341
+1.0.342
 2026-03-21 (VN)
-Change: Fix Chrome mo 2 lan - skip health check 60s dau
+Change: Fix remote UPDATE - ho tro ZIP khi VM khong co git
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

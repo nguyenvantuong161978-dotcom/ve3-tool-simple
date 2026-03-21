@@ -3392,24 +3392,96 @@ class VMManager:
             pass
 
     def _do_git_update(self):
-        """Pull code mới từ git và restart."""
-        self.log("Git update started...", "MANAGER")
+        """Pull code mới - hỗ trợ cả git và ZIP download."""
+        import urllib.request
+        import zipfile
+
+        GITHUB_ZIP_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple/archive/refs/heads/main.zip"
+        GITHUB_GIT_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple.git"
+
+        self.log("Update started...", "MANAGER")
         try:
             self.stop_all()
-            result = subprocess.run(
-                ['git', 'pull', 'origin', 'main'],
-                capture_output=True, text=True, timeout=120,
-                cwd=str(TOOL_DIR),
-            )
-            self.log(f"Git pull: {result.stdout.strip()}", "MANAGER")
-            if result.returncode == 0:
-                self.log("Update OK - Restarting workers...", "MANAGER")
-                self._stop_flag = False
-                self.start_all(gui_mode=self.gui_mode)
+
+            # Thử git trước
+            git_ok = False
+            try:
+                r = subprocess.run(['git', '--version'], capture_output=True, timeout=10)
+                git_ok = (r.returncode == 0)
+            except Exception:
+                pass
+
+            if git_ok:
+                # Đảm bảo remote URL đúng
+                try:
+                    r = subprocess.run(['git', 'remote', 'get-url', 'origin'],
+                                      cwd=str(TOOL_DIR), capture_output=True, text=True, timeout=10)
+                    if r.returncode != 0:
+                        subprocess.run(['git', 'remote', 'add', 'origin', GITHUB_GIT_URL],
+                                      cwd=str(TOOL_DIR), capture_output=True, timeout=10)
+                    elif GITHUB_GIT_URL not in r.stdout.strip():
+                        subprocess.run(['git', 'remote', 'set-url', 'origin', GITHUB_GIT_URL],
+                                      cwd=str(TOOL_DIR), capture_output=True, timeout=10)
+                except Exception:
+                    pass
+
+                for cmd in [['git', 'fetch', 'origin', 'main'],
+                            ['git', 'checkout', 'main'],
+                            ['git', 'reset', '--hard', 'origin/main']]:
+                    subprocess.run(cmd, cwd=str(TOOL_DIR), capture_output=True, text=True, timeout=120)
+                self.log("Git update OK", "MANAGER")
             else:
-                self.log(f"Git pull FAIL: {result.stderr}", "MANAGER", "ERROR")
+                # Không có git → tải ZIP
+                self.log("No git - downloading ZIP...", "MANAGER")
+                import ssl
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+
+                zip_path = TOOL_DIR / "update_temp.zip"
+                extract_dir = TOOL_DIR / "update_temp"
+
+                download_url = f"{GITHUB_ZIP_URL}?t={int(time.time())}"
+                with urllib.request.urlopen(download_url, context=ssl_ctx) as resp:
+                    with open(str(zip_path), 'wb') as f:
+                        f.write(resp.read())
+
+                with zipfile.ZipFile(str(zip_path), 'r') as zf:
+                    zf.extractall(str(extract_dir))
+
+                src = extract_dir / "ve3-tool-simple-main"
+                files_to_update = [
+                    "vm_manager.py", "vm_manager_gui.py", "run_excel_api.py",
+                    "run_worker.py", "START.py", "START.bat", "requirements.txt",
+                    "_run_chrome1.py", "_run_chrome2.py", "google_login.py", "VERSION.txt",
+                ]
+                for fn in files_to_update:
+                    s = src / fn
+                    if s.exists():
+                        shutil.copy2(str(s), str(TOOL_DIR / fn))
+
+                # Copy modules/
+                src_mod = src / "modules"
+                dst_mod = TOOL_DIR / "modules"
+                if src_mod.exists():
+                    for py in src_mod.glob("*.py"):
+                        shutil.copy2(str(py), str(dst_mod / py.name))
+
+                # Cleanup
+                if zip_path.exists():
+                    zip_path.unlink()
+                if extract_dir.exists():
+                    shutil.rmtree(str(extract_dir))
+
+                self.log("ZIP update OK", "MANAGER")
+
+            # Restart
+            self.log("Restarting workers...", "MANAGER")
+            self._stop_flag = False
+            self.start_all(gui_mode=self.gui_mode)
+
         except Exception as e:
-            self.log(f"Git update error: {e}", "MANAGER", "ERROR")
+            self.log(f"Update error: {e}", "MANAGER", "ERROR")
 
     # ================================================================================
     # ORCHESTRATION
