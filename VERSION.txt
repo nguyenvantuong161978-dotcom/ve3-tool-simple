@@ -1,6 +1,6 @@
-1.0.339
+1.0.340
 2026-03-21 (VN)
-Change: Watchdog luon chay + ACK khi nhan lenh tu master
+Change: Fix command - VM tu tao commands dir + skip ACK files
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

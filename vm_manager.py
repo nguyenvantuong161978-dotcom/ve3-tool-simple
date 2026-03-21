@@ -3339,10 +3339,12 @@ class VMManager:
             return
         try:
             cmd_dir = self.auto_path / "ve3-tool-simple" / "control" / "commands"
-            if not cmd_dir.exists():
-                return
+            cmd_dir.mkdir(parents=True, exist_ok=True)
 
             for cmd_file in cmd_dir.glob(f"{self._vm_id}.*"):
+                # Skip ACK files
+                if cmd_file.name.endswith('.ack'):
+                    continue
                 cmd_name = cmd_file.suffix.lstrip('.')  # e.g., "run", "stop", "update"
                 self.log(f"Master command: {cmd_name}", "MANAGER", "INFO")
 
