@@ -3282,7 +3282,7 @@ class VMManager:
         if not self.auto_path:
             return
         try:
-            status_dir = self.auto_path / "status"
+            status_dir = self.auto_path / "control" / "status"
             status_dir.mkdir(parents=True, exist_ok=True)
             status_file = status_dir / f"{self._vm_id}.json"
 
@@ -3335,7 +3335,7 @@ class VMManager:
         if not self.auto_path:
             return
         try:
-            cmd_dir = self.auto_path / "commands"
+            cmd_dir = self.auto_path / "control" / "commands"
             if not cmd_dir.exists():
                 return
 

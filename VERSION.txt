@@ -1,6 +1,6 @@
-1.0.336
+1.0.337
 2026-03-21 (VN)
-Change: _CLAIMED copy ve local + Chrome doc account tu _CLAIMED
+Change: commands + status vao AUTO/control/ cho gon
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
