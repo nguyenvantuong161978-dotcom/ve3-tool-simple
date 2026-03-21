@@ -691,8 +691,9 @@ class ExcelAPIWorker:
                             log(f"  [{name}] Excel {progress['total_progress']:.0f}% but no prompts - Skip (in progress?)")
                             pass
 
-        # Scan master projects (if accessible) - IMPORT to local before processing
-        if self.master_projects and safe_path_exists(self.master_projects):
+        # Scan master projects (if accessible) - IMPORT 1 project at a time
+        # v1.0.333: Chỉ import 1 mã từ master, xong mới lấy tiếp (tránh import hết)
+        if self.master_projects and safe_path_exists(self.master_projects) and not results:
             try:
                 for item in self.master_projects.iterdir():
                     if not item.is_dir():
@@ -700,10 +701,6 @@ class ExcelAPIWorker:
 
                     name = item.name
                     if not matches_channel(name, channel_filter):
-                        continue
-
-                    # Skip if already in local results
-                    if any(r[1] == name for r in results):
                         continue
 
                     # Skip if already in local folder
@@ -728,24 +725,22 @@ class ExcelAPIWorker:
                     excel_path = local_dir / f"{name}_prompts.xlsx"
 
                     if not excel_path.exists():
-                        # Case 1: CHƯA CÓ EXCEL - Tạo mới
                         results.append((local_dir, name, "create_new", None))
                     else:
-                        # Case 2: ĐÃ CÓ EXCEL - Check progress
                         progress = get_excel_progress(local_dir, name)
 
                         if progress['is_complete']:
-                            # Hoàn thành 100% - Skip
                             pass
                         elif progress['can_resume']:
-                            # Đang làm dở - Resume
                             results.append((local_dir, name, "resume", progress))
                         elif needs_api_completion(local_dir, name):
-                            # Có [FALLBACK] - Fix
                             results.append((local_dir, name, "fix_fallback", progress))
                         elif not has_excel_with_prompts(local_dir, name):
-                            # Excel rỗng hoặc lỗi - Tạo lại
                             results.append((local_dir, name, "create_new", None))
+
+                    # v1.0.333: Chỉ import 1 mã - xong mã này mới lấy tiếp
+                    if results:
+                        break
             except (OSError, PermissionError) as e:
                 log(f"Error scanning master: {e}", "WARN")
 

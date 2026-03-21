@@ -1,8 +1,13 @@
-1.0.332
+1.0.333
 2026-03-21 (VN)
-Change: distributed_mode default True - VM khong can sua settings.yaml
+Change: Import 1 ma moi lan tu master - xong moi lay tiep
 
 Thay doi:
+- v1.0.333: Excel Worker chi import 1 ma tu master moi lan:
+  * Truoc: import TAT CA projects tu master cung luc → VM bi qua tai
+  * Sau: import 1 ma → xu ly xong → cycle sau lay ma tiep
+  * Chi import khi local PROJECTS khong co gi dang lam (results empty)
+
 - v1.0.332: distributed_mode default True trong code:
   * ZIP update khong copy settings.yaml (giu API keys cua VM)
   * VM khong co key distributed_mode trong settings → truoc day default=False → khong chay
