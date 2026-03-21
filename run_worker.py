@@ -49,9 +49,19 @@ POSSIBLE_AUTO_PATHS = [
 
 def detect_auto_path() -> Path:
     """
-    Auto-detect đường dẫn đến thư mục \AUTO trên máy chủ.
-    Thử các đường dẫn có thể và trả về cái đầu tiên hoạt động.
+    Auto-detect đường dẫn đến thư mục \\AUTO trên máy chủ.
+    v1.0.324: Dùng robust_copy.get_working_auto_path() với đầy đủ fallback paths.
     """
+    try:
+        from modules.robust_copy import get_working_auto_path
+        result = get_working_auto_path(log=lambda msg, lvl="INFO": print(f"  {msg}"))
+        if result:
+            print(f"  [v] Found AUTO at: {result}")
+            return Path(result)
+        return None
+    except ImportError:
+        pass
+    # Fallback nếu module chưa có
     for path_str in POSSIBLE_AUTO_PATHS:
         try:
             path = Path(path_str)
@@ -557,8 +567,10 @@ def copy_from_master(code: str) -> Path:
     """Copy project from master to local (or return local if already exists).
 
     v1.0.67: KHÔNG XÓA master source sau khi copy.
-    Logic mới: Dựa vào VISUAL folder để biết mã đã xong (is_project_complete_on_master).
+    v1.0.324: Re-detect AUTO path nếu source không accessible.
     """
+    global AUTO_PATH, MASTER_PROJECTS, MASTER_VISUAL
+
     src = MASTER_PROJECTS / code
     dst = LOCAL_PROJECTS / code
 
@@ -592,8 +604,26 @@ def copy_from_master(code: str) -> Path:
 
     # Local doesn't exist, need to copy from master
     if not src.exists():
-        print(f"  [FAIL] Source not found: {src}")
-        return None
+        # v1.0.324: Thử re-detect AUTO path (có thể SMB mất, cần fallback)
+        print(f"  [WARN] Source not found: {src}, trying re-detect AUTO path...")
+        try:
+            from modules.robust_copy import get_working_auto_path
+            new_path = get_working_auto_path(
+                current_path=str(AUTO_PATH) if AUTO_PATH else None,
+                log=lambda msg, lvl="INFO": print(f"  {msg}"),
+            )
+            if new_path and (not AUTO_PATH or str(AUTO_PATH) != new_path):
+                print(f"  [AUTO] Path switched: {AUTO_PATH} → {new_path}")
+                AUTO_PATH = Path(new_path)
+                MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
+                MASTER_VISUAL = AUTO_PATH / "visual"
+                src = MASTER_PROJECTS / code
+        except ImportError:
+            pass
+
+        if not src.exists():
+            print(f"  [FAIL] Source not found: {src}")
+            return None
 
     # v1.0.323: Robust copy từ master
     print(f"  [COPY] Copying from master: {code}")
@@ -616,29 +646,38 @@ def copy_from_master(code: str) -> Path:
 
 def copy_to_visual(code: str, local_dir: Path) -> bool:
     """Copy completed project to VISUAL folder on master.
-    v1.0.323: Dùng robust_copy với robocopy + retry + verify.
+    v1.0.324: Dùng robust_copy_to_master với fallback AUTO paths.
     """
-    dst = MASTER_VISUAL / code
+    global AUTO_PATH, MASTER_PROJECTS, MASTER_VISUAL
 
     print(f"  [OUT] Copying to VISUAL: {code}")
 
     try:
-        from modules.robust_copy import robust_copy_tree
+        from modules.robust_copy import robust_copy_to_master
         _log = lambda msg, lvl="INFO": print(f"  {msg}")
-        ok = robust_copy_tree(
-            str(local_dir), str(dst),
-            max_retries=3, retry_delay=5, verify=True,
+        ok, used_path = robust_copy_to_master(
+            str(local_dir),
+            f"visual/{code}",
+            current_auto_path=str(AUTO_PATH) if AUTO_PATH else None,
+            max_retries=3, retry_delay=5,
             log=_log,
         )
         if ok:
-            print(f"  [OK] Copied to: {dst}")
+            # Cập nhật AUTO_PATH nếu switch sang path khác
+            if used_path and (not AUTO_PATH or str(AUTO_PATH) != used_path):
+                print(f"  [AUTO] Path switched: {AUTO_PATH} → {used_path}")
+                AUTO_PATH = Path(used_path)
+                MASTER_PROJECTS = AUTO_PATH / "ve3-tool-simple" / "PROJECTS"
+                MASTER_VISUAL = AUTO_PATH / "visual"
+            print(f"  [OK] Copied to: {used_path}/visual/{code}")
             delete_local_project(code)
             return True
         else:
-            print(f"  [FAIL] Copy THẤT BẠI sau retry!")
+            print(f"  [FAIL] Copy THẤT BẠI - all paths tried!")
             return False
     except ImportError:
         # Fallback
+        dst = MASTER_VISUAL / code
         try:
             MASTER_VISUAL.mkdir(parents=True, exist_ok=True)
             if dst.exists():

@@ -300,6 +300,19 @@ def _verify_copy(src: Path, dst: Path, log: Callable) -> bool:
     return True
 
 
+POSSIBLE_AUTO_PATHS = [
+    r"Z:\AUTO",
+    r"Y:\AUTO",
+    r"\\tsclient\D\AUTO",
+    r"\\tsclient\C\AUTO",
+    r"\\vmware-host\Shared Folders\D\AUTO",
+    r"\\vmware-host\Shared Folders\AUTO",
+    r"\\VBOXSVR\AUTO",
+    r"D:\AUTO",
+    r"C:\AUTO",
+]
+
+
 def find_auto_path(log: Callable = None) -> Optional[str]:
     """
     Tìm AUTO path khả dụng - thử nhiều đường dẫn.
@@ -309,19 +322,7 @@ def find_auto_path(log: Callable = None) -> Optional[str]:
     """
     log = log or _log_default
 
-    # Danh sách paths theo thứ tự ưu tiên
-    candidates = [
-        r"Z:\AUTO",
-        r"Y:\AUTO",
-        r"\\tsclient\D\AUTO",
-        r"\\tsclient\C\AUTO",
-        r"\\vmware-host\Shared Folders\D\AUTO",
-        r"\\VBOXSVR\AUTO",
-        r"D:\AUTO",
-        r"C:\AUTO",
-    ]
-
-    for path in candidates:
+    for path in POSSIBLE_AUTO_PATHS:
         try:
             p = Path(path)
             if p.exists() and p.is_dir():
@@ -332,6 +333,111 @@ def find_auto_path(log: Callable = None) -> Optional[str]:
 
     log(f"[AUTO] Không tìm thấy AUTO path nào!", "ERROR")
     return None
+
+
+def get_working_auto_path(current_path: str = None, log: Callable = None) -> Optional[str]:
+    """
+    Lấy AUTO path đang hoạt động.
+    Nếu current_path vẫn accessible → dùng tiếp.
+    Nếu current_path mất kết nối → tìm path khác (fallback).
+
+    Args:
+        current_path: Path hiện tại đang dùng (có thể None)
+        log: Hàm log
+
+    Returns:
+        Đường dẫn AUTO path khả dụng, None nếu không có
+    """
+    log = log or _log_default
+
+    # Kiểm tra path hiện tại
+    if current_path:
+        try:
+            p = Path(current_path)
+            if p.exists() and p.is_dir():
+                return current_path
+        except Exception:
+            pass
+        log(f"[AUTO] Path hiện tại KHÔNG truy cập được: {current_path}", "WARN")
+        log(f"[AUTO] Tìm path dự phòng...", "INFO")
+
+    # Tìm path khác
+    for path in POSSIBLE_AUTO_PATHS:
+        if path == current_path:
+            continue  # Đã thử rồi
+        try:
+            p = Path(path)
+            if p.exists() and p.is_dir():
+                log(f"[AUTO] Tìm thấy path dự phòng: {path}")
+                return path
+        except Exception:
+            continue
+
+    log(f"[AUTO] Không tìm thấy AUTO path nào!", "ERROR")
+    return None
+
+
+def robust_copy_to_master(
+    src: str,
+    relative_dest: str,
+    current_auto_path: str = None,
+    max_retries: int = 3,
+    retry_delay: int = 5,
+    log: Callable = None,
+) -> tuple:
+    """
+    Copy thư mục sang master với fallback path.
+
+    Nếu copy qua path hiện tại fail → tự tìm path khác và retry.
+
+    Args:
+        src: Thư mục nguồn (local)
+        relative_dest: Đường dẫn tương đối trên master (e.g., "visual/AR3-0005")
+        current_auto_path: AUTO path hiện tại
+        max_retries: Số lần retry
+        retry_delay: Delay giữa retry
+        log: Hàm log
+
+    Returns:
+        (success: bool, used_auto_path: str or None)
+    """
+    log = log or _log_default
+
+    # Thử path hiện tại trước
+    paths_to_try = []
+    if current_auto_path:
+        paths_to_try.append(current_auto_path)
+    # Thêm tất cả paths khác
+    for p in POSSIBLE_AUTO_PATHS:
+        if p not in paths_to_try:
+            paths_to_try.append(p)
+
+    for auto_path in paths_to_try:
+        try:
+            ap = Path(auto_path)
+            if not ap.exists():
+                continue
+        except Exception:
+            continue
+
+        dst = str(Path(auto_path) / relative_dest)
+        log(f"[COPY] Thử copy qua: {auto_path}")
+
+        ok = robust_copy_tree(
+            src, dst,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            verify=True,
+            log=log,
+        )
+
+        if ok:
+            return (True, auto_path)
+        else:
+            log(f"[COPY] FAIL qua {auto_path}, thử path khác...", "WARN")
+
+    log(f"[COPY] TẤT CẢ paths đều FAIL!", "ERROR")
+    return (False, None)
 
 
 def robust_delete_tree(

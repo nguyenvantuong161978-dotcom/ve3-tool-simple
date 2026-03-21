@@ -1,6 +1,20 @@
-1.0.323
+1.0.324
 2026-03-21 (VN)
-Change: Robust copy - robocopy + retry + verify cho copy VM↔Master
+Change: Fallback AUTO paths - tu dong chuyen sang path khac khi SMB mat ket noi
+
+Thay doi:
+- v1.0.324: Fallback AUTO paths khi copy VM↔Master:
+  * vm_manager.py _detect_auto_path(): Dung get_working_auto_path() voi day du fallback paths
+  * vm_manager.py copy_project_to_master(): Dung robust_copy_to_master() - thu path hien tai,
+    neu fail → tu dong chuyen sang path khac (\\tsclient, \\vmware-host, etc.)
+    Cap nhat self.auto_path khi switch sang path moi
+  * run_worker.py detect_auto_path(): Dung get_working_auto_path()
+  * run_worker.py copy_to_visual(): Dung robust_copy_to_master() voi fallback paths
+    Cap nhat AUTO_PATH, MASTER_PROJECTS, MASTER_VISUAL khi switch
+  * run_worker.py copy_from_master(): Re-detect AUTO path khi source khong accessible
+    Thu get_working_auto_path() de tim path moi truoc khi fail
+  * modules/robust_copy.py: Da co san get_working_auto_path() va robust_copy_to_master()
+  * Ket qua: SMB (Z:\AUTO) mat → tu dong dung \\tsclient\D\AUTO hoac path khac
 
 Thay doi:
 - v1.0.320: Thumbnail portrait validation:

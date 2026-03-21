@@ -934,6 +934,16 @@ class VMManager:
             self.workers[wid] = WorkerInfo(worker_id=wid, worker_type="chrome", worker_num=i+1)
 
     def _detect_auto_path(self) -> Optional[Path]:
+        # v1.0.324: Dùng robust_copy.get_working_auto_path() với đầy đủ fallback paths
+        try:
+            from modules.robust_copy import get_working_auto_path
+            result = get_working_auto_path(log=lambda msg, lvl="INFO": self.log(msg, "SYSTEM", lvl))
+            if result:
+                return Path(result)
+            return None
+        except ImportError:
+            pass
+        # Fallback nếu module chưa có
         for p in [Path(r"\\tsclient\D\AUTO"), Path(r"\\vmware-host\Shared Folders\D\AUTO"),
                   Path(r"Z:\AUTO"), Path(r"Y:\AUTO"), Path(r"D:\AUTO")]:
             try:
@@ -1825,10 +1835,6 @@ class VMManager:
         Returns:
             True nếu copy thành công, False nếu thất bại
         """
-        if not self.auto_path:
-            self.log("No AUTO path detected, skip copy", "SYSTEM", "WARN")
-            return False
-
         src_dir = TOOL_DIR / "PROJECTS" / project_code
         if not src_dir.exists():
             self.log(f"Project {project_code} not found in PROJECTS/", "SYSTEM", "ERROR")
@@ -1837,21 +1843,30 @@ class VMManager:
         # Create thumbnail before copying
         self.create_thumbnail(project_code)
 
-        # Đích: AUTO/visual/{project_code}/
-        dest_dir = self.auto_path / "visual" / project_code
-
-        # v1.0.323: Robust copy với robocopy + retry + verify
+        # v1.0.324: Robust copy với fallback AUTO paths
+        _log = lambda msg, lvl="INFO": self.log(msg, "SYSTEM", lvl)
+        copy_success = False
+        used_path = None
         try:
-            from modules.robust_copy import robust_copy_tree
-            _log = lambda msg, lvl="INFO": self.log(msg, "SYSTEM", lvl)
-            copy_success = robust_copy_tree(
-                str(src_dir), str(dest_dir),
-                max_retries=3, retry_delay=5, verify=True,
+            from modules.robust_copy import robust_copy_to_master
+            copy_success, used_path = robust_copy_to_master(
+                str(src_dir),
+                f"visual/{project_code}",
+                current_auto_path=str(self.auto_path) if self.auto_path else None,
+                max_retries=3, retry_delay=5,
                 log=_log,
             )
+            # Cập nhật auto_path nếu đã switch sang path khác
+            if used_path and (not self.auto_path or str(self.auto_path) != used_path):
+                self.log(f"AUTO path switched: {self.auto_path} → {used_path}", "SYSTEM", "INFO")
+                self.auto_path = Path(used_path)
         except ImportError:
+            if not self.auto_path:
+                self.log("No AUTO path detected, skip copy", "SYSTEM", "WARN")
+                return False
             # Fallback nếu module chưa có
             import shutil
+            dest_dir = self.auto_path / "visual" / project_code
             dest_dir.mkdir(parents=True, exist_ok=True)
             copy_success = True
             for item in src_dir.iterdir():
@@ -1868,9 +1883,10 @@ class VMManager:
                     copy_success = False
 
         if copy_success:
-            self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
+            dest_desc = used_path or str(self.auto_path)
+            self.log(f"Copied {project_code} to {dest_desc}/visual/{project_code}", "SYSTEM", "SUCCESS")
         else:
-            self.log(f"Copy {project_code} had errors", "SYSTEM", "ERROR")
+            self.log(f"Copy {project_code} FAILED - all paths tried!", "SYSTEM", "ERROR")
 
         # v1.0.94: Chỉ xóa nếu delete_after=True (backward compatible)
         if copy_success and delete_after:

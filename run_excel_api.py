@@ -122,7 +122,19 @@ def safe_path_exists(path: Path) -> bool:
 
 
 def detect_auto_path() -> Optional[Path]:
-    """Detect network AUTO path."""
+    """Detect network AUTO path.
+    v1.0.324: Dùng robust_copy.get_working_auto_path() với đầy đủ fallback paths.
+    """
+    try:
+        from modules.robust_copy import get_working_auto_path
+        result = get_working_auto_path(log=lambda msg, lvl="INFO": log(msg, lvl))
+        if result:
+            log(f"Found AUTO path: {result}")
+            return Path(result)
+        return None
+    except ImportError:
+        pass
+    # Fallback nếu module chưa có
     for p in POSSIBLE_AUTO_PATHS:
         if safe_path_exists(p):
             log(f"Found AUTO path: {p}")
