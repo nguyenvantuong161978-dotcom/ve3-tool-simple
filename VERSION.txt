@@ -1,6 +1,6 @@
-1.0.356
+1.0.357
 2026-03-21 (VN)
-Change: FIX Excel corrupt - recovery tu backup, xoa file corrupt de tao moi, fix testzip EOFError
+Change: FIX Excel file lock - save() retry 5 lan, load_or_create() retry 3 lan khi file bi lock
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

@@ -602,8 +602,23 @@ class PromptWorkbook:
                         self.logger.error(f"Cannot delete corrupt file: {del_e}")
                 raise PermissionError(f"Excel file corrupt and removed, will recreate: {self.path}")
             except PermissionError as e:
-                # File đang bị lock - KHÔNG XÓA, raise lỗi
-                self.logger.error(f"Excel file locked (PermissionError): {e}")
+                # v1.0.357: File đang bị lock → retry với delay (giống BadZipFile)
+                # Chrome/Excel worker có thể lock file vài giây khi save/read
+                self.logger.warning(f"Excel file locked (PermissionError): {e}")
+                import time
+                for attempt in range(1, 4):
+                    self.logger.info(f"Retry loading ({attempt}/3) sau {attempt * 2}s (PermissionError)...")
+                    time.sleep(attempt * 2)  # 2s, 4s, 6s
+                    try:
+                        self.workbook = load_workbook(self.path)
+                        self.logger.info(f"Retry {attempt} thành công!")
+                        return self
+                    except PermissionError:
+                        self.logger.warning(f"Retry {attempt} vẫn locked")
+                    except Exception as retry_e:
+                        self.logger.warning(f"Retry {attempt} lỗi khác: {retry_e}")
+                # Hết 3 retry vẫn locked
+                self.logger.error(f"Excel file locked sau 3 retries!")
                 raise  # Để caller biết và xử lý
             except Exception as e:
                 # Lỗi khác - thử đợi và retry, KHÔNG XÓA file
@@ -785,7 +800,7 @@ class PromptWorkbook:
         """Lưu workbook ra file với atomic write để tránh corruption.
 
         v1.0.325: Atomic save - ghi vào temp file trước, rename sau.
-        Nếu crash giữa chừng → file gốc vẫn nguyên, chỉ mất temp file.
+        v1.0.357: Retry 5 lần khi file bị lock (WinError 32).
         Giữ .bak backup để recovery nếu cần.
         """
         if self.workbook is None:
@@ -795,65 +810,112 @@ class PromptWorkbook:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
         import os
+        import time
         temp_path = self.path.with_suffix('.xlsx.tmp')
         bak_path = self.path.with_suffix('.xlsx.bak')
 
-        try:
-            # Bước 1: Ghi vào temp file
-            self.workbook.save(str(temp_path))
+        max_save_retries = 5
+        save_retry_delay = 2  # seconds
 
-            # Bước 2: Verify temp file là zip hợp lệ
-            from zipfile import ZipFile, BadZipFile
+        for save_attempt in range(max_save_retries):
             try:
-                with ZipFile(str(temp_path), 'r') as zf:
-                    zf.testzip()  # Kiểm tra integrity
-            except (BadZipFile, EOFError, OSError) as zip_err:
-                # v1.0.355: Catch EOFError + OSError (testzip có thể raise nhiều loại lỗi)
-                self.logger.error(f"Temp file bị corrupt sau khi save! Giữ nguyên file gốc. Error: {zip_err}")
-                try:
-                    os.unlink(str(temp_path))
-                except Exception:
-                    pass
-                raise RuntimeError("Excel save failed: temp file corrupt")
-
-            # Bước 3: Backup file gốc (nếu có)
-            if self.path.exists():
-                try:
-                    # Xóa backup cũ nếu có
-                    if bak_path.exists():
-                        os.unlink(str(bak_path))
-                    os.rename(str(self.path), str(bak_path))
-                except Exception as e:
-                    self.logger.warning(f"Không tạo được backup: {e}")
-                    # v1.0.355: Thử unlink, nếu fail → file bị lock → KHÔNG thể save
-                    try:
-                        os.unlink(str(self.path))
-                    except Exception:
-                        # File gốc bị lock hoàn toàn → abort save, giữ temp
-                        self.logger.error(f"File gốc bị lock, không thể save! Giữ temp: {temp_path.name}")
-                        raise PermissionError(f"Cannot replace locked file: {self.path}")
-
-            # Bước 4: Rename temp → chính thức (atomic trên cùng filesystem)
-            os.rename(str(temp_path), str(self.path))
-            self.logger.debug(f"Saved Excel file: {self.path}")
-
-        except Exception as e:
-            # Cleanup temp file nếu có lỗi
-            try:
+                # Cleanup temp từ attempt trước (nếu có)
                 if temp_path.exists():
-                    os.unlink(str(temp_path))
-            except Exception:
-                pass
+                    try:
+                        os.unlink(str(temp_path))
+                    except Exception:
+                        pass
 
-            # Nếu file gốc bị xóa nhưng rename fail → restore từ backup
-            if not self.path.exists() and bak_path.exists():
+                # Bước 1: Ghi vào temp file
+                self.workbook.save(str(temp_path))
+
+                # Bước 2: Verify temp file là zip hợp lệ
+                from zipfile import ZipFile, BadZipFile
                 try:
-                    os.rename(str(bak_path), str(self.path))
-                    self.logger.warning(f"Restored file gốc từ backup sau lỗi save")
+                    with ZipFile(str(temp_path), 'r') as zf:
+                        zf.testzip()  # Kiểm tra integrity
+                except (BadZipFile, EOFError, OSError) as zip_err:
+                    self.logger.error(f"Temp file bị corrupt sau khi save! Error: {zip_err}")
+                    try:
+                        os.unlink(str(temp_path))
+                    except Exception:
+                        pass
+                    raise RuntimeError("Excel save failed: temp file corrupt")
+
+                # Bước 3: Backup file gốc (nếu có)
+                if self.path.exists():
+                    try:
+                        if bak_path.exists():
+                            os.unlink(str(bak_path))
+                        os.rename(str(self.path), str(bak_path))
+                    except PermissionError:
+                        # v1.0.357: File bị lock → retry sau delay
+                        raise  # Để outer retry loop xử lý
+                    except Exception as e:
+                        self.logger.warning(f"Không tạo được backup: {e}")
+                        try:
+                            os.unlink(str(self.path))
+                        except PermissionError:
+                            raise  # Để outer retry loop xử lý
+                        except Exception:
+                            pass
+
+                # Bước 4: Rename temp → chính thức (atomic trên cùng filesystem)
+                os.rename(str(temp_path), str(self.path))
+                self.logger.debug(f"Saved Excel file: {self.path}")
+                return  # SUCCESS!
+
+            except PermissionError as e:
+                # v1.0.357: File bị lock bởi process khác (Chrome worker đang đọc)
+                # Retry với delay - Chrome chỉ lock file vài giây khi đọc
+                if save_attempt < max_save_retries - 1:
+                    delay = save_retry_delay * (save_attempt + 1)  # 2, 4, 6, 8s
+                    self.logger.warning(f"File locked (attempt {save_attempt + 1}/{max_save_retries}), retry sau {delay}s...")
+                    time.sleep(delay)
+
+                    # Cleanup: restore file gốc từ backup nếu cần
+                    if not self.path.exists() and bak_path.exists():
+                        try:
+                            os.rename(str(bak_path), str(self.path))
+                        except Exception:
+                            pass
+                    # Cleanup temp
+                    try:
+                        if temp_path.exists():
+                            os.unlink(str(temp_path))
+                    except Exception:
+                        pass
+                    continue  # Retry
+                else:
+                    # Hết retry → cleanup và raise
+                    self.logger.error(f"File locked sau {max_save_retries} attempts! Error: {e}")
+                    try:
+                        if temp_path.exists():
+                            os.unlink(str(temp_path))
+                    except Exception:
+                        pass
+                    if not self.path.exists() and bak_path.exists():
+                        try:
+                            os.rename(str(bak_path), str(self.path))
+                            self.logger.warning(f"Restored file gốc từ backup sau lỗi save")
+                        except Exception:
+                            pass
+                    raise
+
+            except Exception as e:
+                # Lỗi khác (không phải lock) → cleanup và raise ngay
+                try:
+                    if temp_path.exists():
+                        os.unlink(str(temp_path))
                 except Exception:
                     pass
-
-            raise
+                if not self.path.exists() and bak_path.exists():
+                    try:
+                        os.rename(str(bak_path), str(self.path))
+                        self.logger.warning(f"Restored file gốc từ backup sau lỗi save")
+                    except Exception:
+                        pass
+                raise
     
     # ========================================================================
     # CHARACTERS METHODS
