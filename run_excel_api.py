@@ -233,7 +233,16 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
                 return local_dir
             shutil.rmtree(local_dir)
 
-        shutil.copytree(master_dir, local_dir)
+        # v1.0.323: Robust copy từ master
+        try:
+            from modules.robust_copy import robust_copy_tree
+            _log = lambda msg, lvl="INFO": log(f"{msg}", lvl)
+            ok = robust_copy_tree(str(master_dir), str(local_dir), max_retries=3, retry_delay=5, verify=True, log=_log)
+            if not ok:
+                log(f"[IMPORT] Robust copy thất bại cho {name}!", "ERROR")
+                return None
+        except ImportError:
+            shutil.copytree(master_dir, local_dir)
         log(f"[IMPORT] Copied: {name}")
 
         # Delete from master after successful copy (tránh xử lý trùng)

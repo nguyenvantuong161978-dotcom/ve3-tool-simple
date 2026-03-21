@@ -1,6 +1,6 @@
-1.0.322
+1.0.323
 2026-03-21 (VN)
-Change: Fix Chrome 2 tao thumbnail truoc khi Chrome 1 tao xong NV references
+Change: Robust copy - robocopy + retry + verify cho copy VM↔Master
 
 Thay doi:
 - v1.0.320: Thumbnail portrait validation:

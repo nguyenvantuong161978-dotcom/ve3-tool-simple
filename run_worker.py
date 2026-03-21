@@ -595,8 +595,17 @@ def copy_from_master(code: str) -> Path:
         print(f"  [FAIL] Source not found: {src}")
         return None
 
+    # v1.0.323: Robust copy từ master
     print(f"  [COPY] Copying from master: {code}")
-    shutil.copytree(src, dst)
+    try:
+        from modules.robust_copy import robust_copy_tree
+        _log = lambda msg, lvl="INFO": print(f"  {msg}")
+        ok = robust_copy_tree(str(src), str(dst), max_retries=3, retry_delay=5, verify=True, log=_log)
+        if not ok:
+            print(f"  [FAIL] Robust copy thất bại!")
+            return None
+    except ImportError:
+        shutil.copytree(src, dst)
     print(f"  [OK] Copied to: {dst}")
 
     # v1.0.67: KHÔNG XÓA master source - dựa vào VISUAL để check done
@@ -606,29 +615,41 @@ def copy_from_master(code: str) -> Path:
 
 
 def copy_to_visual(code: str, local_dir: Path) -> bool:
-    """Copy completed project to VISUAL folder on master."""
+    """Copy completed project to VISUAL folder on master.
+    v1.0.323: Dùng robust_copy với robocopy + retry + verify.
+    """
     dst = MASTER_VISUAL / code
 
     print(f"  [OUT] Copying to VISUAL: {code}")
 
     try:
-        # Create VISUAL dir on master
-        MASTER_VISUAL.mkdir(parents=True, exist_ok=True)
-
-        if dst.exists():
-            shutil.rmtree(dst)
-
-        # Copy entire project folder
-        shutil.copytree(local_dir, dst)
-        print(f"  [OK] Copied to: {dst}")
-
-        # Cleanup: delete local project after successful copy
-        delete_local_project(code)
-
-        return True
-    except Exception as e:
-        print(f"  [FAIL] Copy failed: {e}")
-        return False
+        from modules.robust_copy import robust_copy_tree
+        _log = lambda msg, lvl="INFO": print(f"  {msg}")
+        ok = robust_copy_tree(
+            str(local_dir), str(dst),
+            max_retries=3, retry_delay=5, verify=True,
+            log=_log,
+        )
+        if ok:
+            print(f"  [OK] Copied to: {dst}")
+            delete_local_project(code)
+            return True
+        else:
+            print(f"  [FAIL] Copy THẤT BẠI sau retry!")
+            return False
+    except ImportError:
+        # Fallback
+        try:
+            MASTER_VISUAL.mkdir(parents=True, exist_ok=True)
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(local_dir, dst)
+            print(f"  [OK] Copied to: {dst}")
+            delete_local_project(code)
+            return True
+        except Exception as e:
+            print(f"  [FAIL] Copy failed: {e}")
+            return False
 
 
 def is_local_complete(project_dir: Path, name: str) -> bool:

@@ -1839,23 +1839,33 @@ class VMManager:
 
         # Đích: AUTO/visual/{project_code}/
         dest_dir = self.auto_path / "visual" / project_code
-        dest_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy tất cả files và folders
-        import shutil
-        copy_success = True
-        for item in src_dir.iterdir():
-            dest_item = dest_dir / item.name
-            try:
-                if item.is_dir():
-                    if dest_item.exists():
-                        shutil.rmtree(str(dest_item))
-                    shutil.copytree(str(item), str(dest_item))
-                else:
-                    shutil.copy2(str(item), str(dest_item))
-            except Exception as e:
-                self.log(f"Failed to copy {item.name}: {e}", "SYSTEM", "ERROR")
-                copy_success = False
+        # v1.0.323: Robust copy với robocopy + retry + verify
+        try:
+            from modules.robust_copy import robust_copy_tree
+            _log = lambda msg, lvl="INFO": self.log(msg, "SYSTEM", lvl)
+            copy_success = robust_copy_tree(
+                str(src_dir), str(dest_dir),
+                max_retries=3, retry_delay=5, verify=True,
+                log=_log,
+            )
+        except ImportError:
+            # Fallback nếu module chưa có
+            import shutil
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            copy_success = True
+            for item in src_dir.iterdir():
+                dest_item = dest_dir / item.name
+                try:
+                    if item.is_dir():
+                        if dest_item.exists():
+                            shutil.rmtree(str(dest_item))
+                        shutil.copytree(str(item), str(dest_item))
+                    else:
+                        shutil.copy2(str(item), str(dest_item))
+                except Exception as e:
+                    self.log(f"Failed to copy {item.name}: {e}", "SYSTEM", "ERROR")
+                    copy_success = False
 
         if copy_success:
             self.log(f"Copied {project_code} to {dest_dir}", "SYSTEM", "SUCCESS")
