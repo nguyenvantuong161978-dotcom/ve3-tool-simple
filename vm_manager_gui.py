@@ -2363,11 +2363,18 @@ class SimpleGUI(tk.Tk):
                 self.manager.start_worker(f"chrome_{i}", gui_mode=True)
                 time.sleep(2)
 
+            # v1.0.335: Reset timers tránh auto-restart/recovery chạy ngay sau start
+            self.manager.chrome_last_restart = time.time()
+            self.manager._start_time = time.time()
+
             # 4. Start orchestration (chỉ tạo thread mới nếu thread cũ đã chết)
             self.manager._stop_flag = False
             if self.manager._orch_thread is None or not self.manager._orch_thread.is_alive():
                 self.manager._orch_thread = threading.Thread(target=self.manager.orchestrate, daemon=True)
                 self.manager._orch_thread.start()
+
+            # v1.0.335: Start watchdog để báo status cho master
+            self.manager.start_watchdog()
 
             # 5. Auto-arrange tat ca cua so sau khi workers da mo (doi ~8s)
             time.sleep(8)

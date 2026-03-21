@@ -257,16 +257,27 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
             shutil.copytree(master_dir, local_dir)
         log(f"[IMPORT] Copied: {name}")
 
-        # v1.0.334: Tạo _CLAIMED trên master thay vì xóa folder
-        # Để máy khác thấy và không lấy trùng
+        # v1.0.335: Dùng TaskQueue.claim() để tạo _CLAIMED với account từ trang tính
         try:
             from modules.robust_copy import TaskQueue
-            import socket
             vm_id = TOOL_DIR.parent.name
-            claimed_file = master_dir / "_CLAIMED"
-            claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{socket.gethostname()}\n"
-            claimed_file.write_text(claim_content, encoding='utf-8')
-            log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
+            auto_path = master_dir.parent.parent.parent  # AUTO/ve3-tool-simple/PROJECTS/../../../ = AUTO
+            tq = TaskQueue(
+                master_projects=str(master_dir.parent),
+                vm_id=vm_id,
+                visual_path=str(auto_path / "visual"),
+                tool_dir=str(TOOL_DIR),
+                log=lambda msg, lvl="INFO": log(f"{msg}", lvl),
+            )
+            if tq.claim(name):
+                log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
+            else:
+                # Fallback: tạo _CLAIMED đơn giản nếu claim() thất bại
+                import socket
+                claimed_file = master_dir / "_CLAIMED"
+                claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{socket.gethostname()}\n"
+                claimed_file.write_text(claim_content, encoding='utf-8')
+                log(f"[IMPORT] Claimed (fallback): {name} → {vm_id}")
         except Exception as e:
             log(f"[IMPORT] Warning - cannot create _CLAIMED: {e}", "WARN")
 

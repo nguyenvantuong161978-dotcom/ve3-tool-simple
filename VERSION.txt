@@ -1,8 +1,14 @@
-1.0.334
+1.0.335
 2026-03-21 (VN)
-Change: _CLAIMED marker - may khac khong lay trung ma
+Change: Watchdog + _CLAIMED co account + fix Chrome mo 2 lan
 
 Thay doi:
+- v1.0.335: 3 fix:
+  * GUI _start() them start_watchdog() → master thay VM status
+  * _CLAIMED dung TaskQueue.claim() → doc account tu trang tinh NGUON
+  * Reset chrome_last_restart khi BAT DAU → tranh auto-restart mo Chrome 2 lan
+
+
 - v1.0.334: Tao _CLAIMED tren master thay vi xoa folder:
   * Truoc: import xong → XOA folder tren master → may chu khong biet ai dang lam gi
   * Sau: import xong → tao _CLAIMED (VM_ID + timestamp + hostname)
