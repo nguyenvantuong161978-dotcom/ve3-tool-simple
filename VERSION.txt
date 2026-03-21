@@ -1,6 +1,6 @@
-1.0.354
+1.0.355
 2026-03-21 (VN)
-Change: CLAIM TRUOC COPY SAU - tranh nhieu VM copy cung 1 ma khi chua co _CLAIMED
+Change: ATOMIC CLAIM - TaskQueue.claim_next() trong scan, import_from_master skip claim khi da claim
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

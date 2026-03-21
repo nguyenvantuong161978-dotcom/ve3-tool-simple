@@ -189,7 +189,7 @@ def is_project_in_visual(name: str, auto_path: Optional[Path]) -> bool:
         return False
 
 
-def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Optional[Path]:
+def import_from_master(master_dir: Path, name: str, local_projects: Path, already_claimed: bool = False) -> Optional[Path]:
     """
     Copy project từ master về local để xử lý.
 
@@ -197,6 +197,7 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
         master_dir: Thư mục project trên master
         name: Tên project
         local_projects: Thư mục PROJECTS local
+        already_claimed: True nếu đã claim qua TaskQueue.claim_next() rồi, skip claim step
 
     Returns:
         Path tới project local nếu thành công, None nếu lỗi
@@ -233,28 +234,30 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
         local_projects.mkdir(parents=True, exist_ok=True)
 
         # === BƯỚC 1: CLAIM trên master TRƯỚC KHI copy ===
+        # v1.0.355: Skip claim nếu đã claim qua TaskQueue.claim_next()
         vm_id = TOOL_DIR.parent.name
         import socket
         _hostname = socket.gethostname()
-        claimed_ok = False
+        claimed_ok = already_claimed  # True nếu scan đã claim rồi
 
-        try:
-            from modules.robust_copy import TaskQueue
-            auto_path = master_dir.parent.parent.parent  # AUTO
-            tq = TaskQueue(
-                master_projects=str(master_dir.parent),
-                vm_id=vm_id,
-                visual_path=str(auto_path / "visual"),
-                tool_dir=str(TOOL_DIR),
-                log=lambda msg, lvl="INFO": log(f"{msg}", lvl),
-            )
-            if tq.claim(name):
-                log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
-                claimed_ok = True
-            else:
-                log(f"[IMPORT] TaskQueue.claim() returned False for {name} (da bi may khac claim)", "WARN")
-        except Exception as e:
-            log(f"[IMPORT] TaskQueue.claim() error: {e}", "WARN")
+        if not claimed_ok:
+            try:
+                from modules.robust_copy import TaskQueue
+                auto_path = master_dir.parent.parent.parent  # AUTO
+                tq = TaskQueue(
+                    master_projects=str(master_dir.parent),
+                    vm_id=vm_id,
+                    visual_path=str(auto_path / "visual"),
+                    tool_dir=str(TOOL_DIR),
+                    log=lambda msg, lvl="INFO": log(f"{msg}", lvl),
+                )
+                if tq.claim(name):
+                    log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
+                    claimed_ok = True
+                else:
+                    log(f"[IMPORT] TaskQueue.claim() returned False for {name} (da bi may khac claim)", "WARN")
+            except Exception as e:
+                log(f"[IMPORT] TaskQueue.claim() error: {e}", "WARN")
 
         if not claimed_ok:
             try:
@@ -732,67 +735,74 @@ class ExcelAPIWorker:
                             log(f"  [{name}] Excel {progress['total_progress']:.0f}% but no prompts - Skip (in progress?)")
                             pass
 
-        # Scan master projects (if accessible) - IMPORT 1 project at a time
-        # v1.0.333: Chỉ import 1 mã từ master, xong mới lấy tiếp (tránh import hết)
+        # v1.0.355: Dùng TaskQueue.claim_next() - claim atomic, tránh race condition
+        # Khi 2 VM bật cùng lúc, claim_next() đảm bảo chỉ 1 VM thắng
         if self.master_projects and safe_path_exists(self.master_projects) and not results:
             try:
-                for item in self.master_projects.iterdir():
-                    if not item.is_dir():
-                        continue
+                from modules.robust_copy import TaskQueue
+                vm_id = TOOL_DIR.parent.name
+                auto_path = self.auto_path or self.master_projects.parent.parent
+                tq = TaskQueue(
+                    master_projects=str(self.master_projects),
+                    vm_id=vm_id,
+                    visual_path=str(auto_path / "visual"),
+                    tool_dir=str(TOOL_DIR),
+                    log=lambda msg, lvl="INFO": log(f"{msg}", lvl),
+                )
 
-                    name = item.name
-                    if not matches_channel(name, channel_filter):
-                        continue
+                # Check claim hiện tại (resume nếu có)
+                my_claims = tq.get_my_claims()
+                claimed_name = None
+                if my_claims:
+                    # Ưu tiên claim chưa có trong local
+                    for c in my_claims:
+                        local_check = self.local_projects / c
+                        if not local_check.exists():
+                            claimed_name = c
+                            break
+                    if not claimed_name:
+                        claimed_name = my_claims[0]
+                    log(f"  [QUEUE] Resume claim: {claimed_name}")
+                else:
+                    # Claim mã mới (1 mã duy nhất)
+                    claimed_name = tq.claim_next(preferred_channel=channel_filter)
+                    if claimed_name:
+                        log(f"  [QUEUE] New claim: {claimed_name}")
 
-                    # v1.0.334: Skip if already claimed by another VM
-                    claimed_file = item / "_CLAIMED"
-                    if claimed_file.exists():
-                        try:
-                            claim_vm = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
-                            my_vm_id = TOOL_DIR.parent.name
-                            if claim_vm != my_vm_id:
-                                continue  # Máy khác đã claim
-                        except Exception:
-                            pass
+                if claimed_name:
+                    master_dir = self.master_projects / claimed_name
+                    local_check = self.local_projects / claimed_name
 
-                    # Skip if already in local folder
-                    local_check = self.local_projects / name
+                    # Skip if local already has it
                     if local_check.exists():
-                        continue
-
-                    srt_path = item / f"{name}.srt"
-                    if not safe_path_exists(srt_path):
-                        continue
-
-                    # v1.0.69: Skip if already in VISUAL (đã hoàn thành)
-                    if is_project_in_visual(name, self.auto_path):
-                        continue
-
-                    # IMPORT: Copy from master to local BEFORE adding to results
-                    local_dir = import_from_master(item, name, self.local_projects)
-                    if local_dir is None:
-                        continue  # Import failed, skip
-
-                    # Add LOCAL path (not master) to results - Check progress
-                    excel_path = local_dir / f"{name}_prompts.xlsx"
-
-                    if not excel_path.exists():
-                        results.append((local_dir, name, "create_new", None))
-                    else:
-                        progress = get_excel_progress(local_dir, name)
-
-                        if progress['is_complete']:
-                            pass
-                        elif progress['can_resume']:
-                            results.append((local_dir, name, "resume", progress))
-                        elif needs_api_completion(local_dir, name):
-                            results.append((local_dir, name, "fix_fallback", progress))
-                        elif not has_excel_with_prompts(local_dir, name):
-                            results.append((local_dir, name, "create_new", None))
-
-                    # v1.0.333: Chỉ import 1 mã - xong mã này mới lấy tiếp
-                    if results:
-                        break
+                        srt = local_check / f"{claimed_name}.srt"
+                        if srt.exists():
+                            excel_path = local_check / f"{claimed_name}_prompts.xlsx"
+                            if not excel_path.exists():
+                                results.append((local_check, claimed_name, "create_new", None))
+                            else:
+                                progress = get_excel_progress(local_check, claimed_name)
+                                if not progress['is_complete']:
+                                    if progress['can_resume']:
+                                        results.append((local_check, claimed_name, "resume", progress))
+                                    elif needs_api_completion(local_check, claimed_name):
+                                        results.append((local_check, claimed_name, "fix_fallback", progress))
+                    elif master_dir.exists():
+                        # Copy từ master (đã claim rồi qua claim_next, không cần claim lại)
+                        local_dir = import_from_master(master_dir, claimed_name, self.local_projects, already_claimed=True)
+                        if local_dir:
+                            excel_path = local_dir / f"{claimed_name}_prompts.xlsx"
+                            if not excel_path.exists():
+                                results.append((local_dir, claimed_name, "create_new", None))
+                            else:
+                                progress = get_excel_progress(local_dir, claimed_name)
+                                if not progress['is_complete']:
+                                    if progress['can_resume']:
+                                        results.append((local_dir, claimed_name, "resume", progress))
+                else:
+                    log(f"  [QUEUE] No available projects on master")
+            except ImportError:
+                log(f"  [QUEUE] TaskQueue not available, skip master scan", "WARN")
             except (OSError, PermissionError) as e:
                 log(f"Error scanning master: {e}", "WARN")
 
