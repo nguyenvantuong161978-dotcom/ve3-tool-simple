@@ -1016,10 +1016,22 @@ def _do_pre_login_if_needed(project_code: str = None):
         channel = extract_channel_from_machine_code(machine_code)
         print(f"[PRE-LOGIN] Machine code: {machine_code}, Channel: {channel}")
 
-        # v1.0.351: Distributed mode - đọc account từ _CLAIMED (trang tính NGUON)
-        # Nếu _CLAIMED có account đầy đủ → login TRỰC TIẾP, bỏ qua rotation cũ
+        # v1.0.352: Đọc _CLAIMED từ LOCAL hoặc MASTER (vì pre-login chạy trước copy_from_master)
         _claimed_path = project_dir / "_CLAIMED"
         _claimed_account_dict = None
+
+        # Nếu local chưa có _CLAIMED → đọc từ master
+        if not _claimed_path.exists():
+            try:
+                _master_claimed = MASTER_PROJECTS / code / "_CLAIMED"
+                if _master_claimed.exists():
+                    # Copy về local luôn
+                    import shutil
+                    project_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(_master_claimed), str(_claimed_path))
+                    print(f"[PRE-LOGIN] Copied _CLAIMED from master to local")
+            except Exception as e:
+                print(f"[PRE-LOGIN] Cannot copy _CLAIMED from master: {e}")
 
         if _claimed_path.exists():
             try:

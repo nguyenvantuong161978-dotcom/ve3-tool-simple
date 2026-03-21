@@ -1,6 +1,6 @@
-1.0.351
+1.0.352
 2026-03-21 (VN)
-Change: FIX PRE-LOGIN dung account tu _CLAIMED truc tiep, khong can tim trong tool accounts
+Change: FIX PRE-LOGIN copy _CLAIMED tu master ve local truoc khi doc (vi pre-login chay truoc copy_from_master)
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
