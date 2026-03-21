@@ -2661,7 +2661,7 @@ class SimpleGUI(tk.Tk):
                     # === DUNG GIT ===
                     self.status_var.set("Dang cap nhat qua Git...")
 
-                    # Kiem tra remote origin
+                    # Kiem tra remote origin - dam bao URL dung
                     result = subprocess.run(
                         ["git", "remote", "get-url", "origin"],
                         cwd=str(TOOL_DIR),
@@ -2671,8 +2671,17 @@ class SimpleGUI(tk.Tk):
                     )
 
                     if result.returncode != 0:
+                        # Chua co remote → them moi
                         subprocess.run(
                             ["git", "remote", "add", "origin", GITHUB_GIT_URL],
+                            cwd=str(TOOL_DIR),
+                            capture_output=True,
+                            timeout=10
+                        )
+                    elif GITHUB_GIT_URL not in result.stdout.strip():
+                        # Remote co nhung URL sai → sua lai
+                        subprocess.run(
+                            ["git", "remote", "set-url", "origin", GITHUB_GIT_URL],
                             cwd=str(TOOL_DIR),
                             capture_output=True,
                             timeout=10
