@@ -1,6 +1,6 @@
-1.0.348
+1.0.349
 2026-03-21 (VN)
-Change: FIX _CLAIMED - run_worker.py them claim khi copy tu master + run_excel_api.py log chi tiet
+Change: FIX Chrome workers scan_master - dung TaskQueue/CLAIMED, chi lay 1 ma moi lan
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

@@ -647,7 +647,40 @@ def scan_incomplete_local_projects() -> list:
 
 
 def scan_master_projects() -> list:
-    """Scan master PROJECTS folder for pending projects."""
+    """Scan master PROJECTS folder for pending projects.
+
+    v1.0.349: Distributed mode - dùng TaskQueue, check _CLAIMED.
+    Chỉ trả về 1 project (đã claim hoặc claim mới).
+    """
+    # === DISTRIBUTED MODE: claim-based (chỉ lấy 1 mã) ===
+    try:
+        from run_worker import _is_distributed_mode, VM_ID
+        if _is_distributed_mode():
+            try:
+                from modules.robust_copy import TaskQueue
+                tq = TaskQueue(
+                    master_projects=str(MASTER_PROJECTS),
+                    vm_id=VM_ID,
+                    visual_path=str(MASTER_VISUAL),
+                    tool_dir=str(TOOL_DIR),
+                    log=lambda msg, lvl="INFO": print(f"  {msg}"),
+                )
+                # Check claim hiện tại
+                my_claims = tq.get_my_claims()
+                if my_claims:
+                    print(f"  [QUEUE] Đang claim: {my_claims}")
+                    return my_claims
+                # Claim mã mới (1 mã duy nhất)
+                code = tq.claim_next(preferred_channel=WORKER_CHANNEL)
+                if code:
+                    return [code]
+                return []
+            except Exception as e:
+                print(f"  [WARN] TaskQueue error: {e}")
+    except ImportError:
+        pass
+
+    # === FALLBACK: scan thủ công (check _CLAIMED) ===
     pending = []
 
     if not safe_path_exists(MASTER_PROJECTS):
@@ -663,22 +696,32 @@ def scan_master_projects() -> list:
             if not matches_channel(code):
                 continue
 
+            # v1.0.349: Skip if claimed by another VM
+            claimed_file = item / "_CLAIMED"
+            if claimed_file.exists():
+                try:
+                    claim_vm = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
+                    my_vm_id = TOOL_DIR.parent.name
+                    if claim_vm != my_vm_id:
+                        continue
+                except Exception:
+                    pass
+
             if is_project_complete_on_master(code):
                 continue
 
-            # v1.0.292: Skip nếu local đã có đủ ảnh (chờ GUI manager copy sang VISUAL)
+            # v1.0.292: Skip nếu local đã có đủ ảnh
             local_dir = LOCAL_PROJECTS / code
             if local_dir.exists() and is_local_pic_complete(local_dir, code):
                 continue
 
-            # v1.0.293: Skip nếu local có marker _IMAGES_DONE (safety net khi Excel bị lock)
+            # v1.0.293: Skip nếu local có marker _IMAGES_DONE
             if local_dir.exists() and (local_dir / "_IMAGES_DONE").exists():
                 continue
 
             excel_path = item / f"{code}_prompts.xlsx"
             srt_path = item / f"{code}.srt"
 
-            # Wrap network path checks in try-except
             try:
                 if has_excel_with_prompts(item, code):
                     print(f"    - {code}: ready (has prompts)")
@@ -690,8 +733,11 @@ def scan_master_projects() -> list:
                 print(f"  [WARN] Network error checking {code}: {e}")
                 continue
 
+            # v1.0.349: Chỉ lấy 1 mã (giống distributed mode)
+            if pending:
+                break
+
         except (OSError, PermissionError) as e:
-            # Network disconnected while iterating
             print(f"  [WARN] Network error scanning: {e}")
             break
 
