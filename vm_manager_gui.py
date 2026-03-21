@@ -2363,8 +2363,8 @@ class SimpleGUI(tk.Tk):
             log("main", f"=== STARTED === Mode: {self.mode_var.get()}, IPv6: {ipv6_status}", "INFO")
 
         def run():
-            # v1.0.121: Revert - PRE-LOGIN xử lý trong Chrome workers
-            # Flow: Excel starts → Chrome workers start (login trong worker)
+            # v1.0.346: Kill Chrome cũ trước khi start (giống start_all)
+            self.manager.kill_all_chrome()
 
             # 1. Start Excel worker first
             if self.manager.enable_excel:
@@ -2402,7 +2402,7 @@ class SimpleGUI(tk.Tk):
         pass
 
     def _stop(self):
-        if self.manager:
+        if self.manager and self.running:
             self.running = False
             self.status_var.set("Dang dung...")
 

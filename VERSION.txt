@@ -1,6 +1,6 @@
-1.0.346
+1.0.347
 2026-03-21 (VN)
-Change: Master RUN/STOP goi thang GUI _start()/_stop() - giong het an nut BAT DAU/DUNG
+Change: _start() them kill_all_chrome() truoc khi start + guard _stop() khi khong chay
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
