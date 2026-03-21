@@ -228,42 +228,16 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
                 log(f"[IMPORT] {name}: Local has {len(img_files)} images, keeping existing work")
                 return local_dir
 
-    # Copy từ master (chỉ khi local KHÔNG có Excel hoặc images)
+    # v1.0.354: CLAIM TRƯỚC → COPY SAU (tránh nhiều VM copy cùng mã)
     try:
-        log(f"[IMPORT] Copying {name} from master to local...")
         local_projects.mkdir(parents=True, exist_ok=True)
 
-        if local_dir.exists():
-            # Double-check: KHÔNG XÓA nếu có Excel hoặc images
-            excel_path = local_dir / f"{name}_prompts.xlsx"
-            img_dir = local_dir / "img"
-            if excel_path.exists():
-                log(f"[IMPORT] {name}: ABORT - Local has Excel, not deleting!")
-                return local_dir
-            if img_dir.exists() and len(list(img_dir.glob("*.png"))) > 0:
-                log(f"[IMPORT] {name}: ABORT - Local has images, not deleting!")
-                return local_dir
-            shutil.rmtree(local_dir)
-
-        # v1.0.323: Robust copy từ master
-        try:
-            from modules.robust_copy import robust_copy_tree
-            _log = lambda msg, lvl="INFO": log(f"{msg}", lvl)
-            ok = robust_copy_tree(str(master_dir), str(local_dir), max_retries=3, retry_delay=5, verify=True, log=_log)
-            if not ok:
-                log(f"[IMPORT] Robust copy thất bại cho {name}!", "ERROR")
-                return None
-        except ImportError:
-            shutil.copytree(master_dir, local_dir)
-        log(f"[IMPORT] Copied: {name}")
-
-        # v1.0.348: LUÔN tạo _CLAIMED trên master + copy về local
+        # === BƯỚC 1: CLAIM trên master TRƯỚC KHI copy ===
         vm_id = TOOL_DIR.parent.name
         import socket
         _hostname = socket.gethostname()
         claimed_ok = False
 
-        # Thử 1: TaskQueue.claim() (có account từ trang tính)
         try:
             from modules.robust_copy import TaskQueue
             auto_path = master_dir.parent.parent.parent  # AUTO
@@ -278,11 +252,10 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
                 log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
                 claimed_ok = True
             else:
-                log(f"[IMPORT] TaskQueue.claim() returned False for {name}", "WARN")
+                log(f"[IMPORT] TaskQueue.claim() returned False for {name} (da bi may khac claim)", "WARN")
         except Exception as e:
             log(f"[IMPORT] TaskQueue.claim() error: {e}", "WARN")
 
-        # Thử 2: Fallback - ghi _CLAIMED trực tiếp nếu TaskQueue fail
         if not claimed_ok:
             try:
                 claimed_file = master_dir / "_CLAIMED"
@@ -293,18 +266,44 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
             except Exception as e:
                 log(f"[IMPORT] Fallback claim FAILED: {e}", "ERROR")
 
-        # Copy _CLAIMED về local để Chrome worker đọc account
-        if claimed_ok:
-            try:
-                master_claimed = master_dir / "_CLAIMED"
-                local_claimed = local_dir / "_CLAIMED"
-                if master_claimed.exists():
-                    shutil.copy2(str(master_claimed), str(local_claimed))
-                    log(f"[IMPORT] _CLAIMED copied to local: {name}")
-                else:
-                    log(f"[IMPORT] _CLAIMED not found on master after claim!", "WARN")
-            except Exception as e:
-                log(f"[IMPORT] Copy _CLAIMED to local error: {e}", "WARN")
+        if not claimed_ok:
+            log(f"[IMPORT] Cannot claim {name} - skip!", "WARN")
+            return None
+
+        # === BƯỚC 2: COPY từ master về local (sau khi đã claim) ===
+        log(f"[IMPORT] Copying {name} from master to local...")
+
+        if local_dir.exists():
+            excel_path = local_dir / f"{name}_prompts.xlsx"
+            img_dir = local_dir / "img"
+            if excel_path.exists():
+                log(f"[IMPORT] {name}: ABORT - Local has Excel, not deleting!")
+                return local_dir
+            if img_dir.exists() and len(list(img_dir.glob("*.png"))) > 0:
+                log(f"[IMPORT] {name}: ABORT - Local has images, not deleting!")
+                return local_dir
+            shutil.rmtree(local_dir)
+
+        try:
+            from modules.robust_copy import robust_copy_tree
+            _log = lambda msg, lvl="INFO": log(f"{msg}", lvl)
+            ok = robust_copy_tree(str(master_dir), str(local_dir), max_retries=3, retry_delay=5, verify=True, log=_log)
+            if not ok:
+                log(f"[IMPORT] Robust copy thất bại cho {name}!", "ERROR")
+                return None
+        except ImportError:
+            shutil.copytree(master_dir, local_dir)
+        log(f"[IMPORT] Copied: {name}")
+
+        # === BƯỚC 3: Copy _CLAIMED về local ===
+        try:
+            master_claimed = master_dir / "_CLAIMED"
+            local_claimed = local_dir / "_CLAIMED"
+            if master_claimed.exists():
+                shutil.copy2(str(master_claimed), str(local_claimed))
+                log(f"[IMPORT] _CLAIMED copied to local: {name}")
+        except Exception as e:
+            log(f"[IMPORT] Copy _CLAIMED to local error: {e}", "WARN")
 
         return local_dir
     except Exception as e:

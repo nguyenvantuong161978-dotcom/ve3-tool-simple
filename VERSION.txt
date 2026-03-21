@@ -1,6 +1,6 @@
-1.0.353
+1.0.354
 2026-03-21 (VN)
-Change: Chrome CHI scan local - bo scan_master_projects, Excel worker lo import tu master
+Change: CLAIM TRUOC COPY SAU - tranh nhieu VM copy cung 1 ma khi chua co _CLAIMED
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
