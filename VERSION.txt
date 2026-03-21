@@ -1,6 +1,6 @@
-1.0.358
+1.0.359
 2026-03-21 (VN)
-Change: FIX Chrome workers Excel lock - retry load/save trong smart_engine.py
+Change: FIX Chrome bo channel filter khi distributed mode + Excel skip completed claims
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

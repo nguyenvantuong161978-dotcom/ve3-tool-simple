@@ -754,14 +754,28 @@ class ExcelAPIWorker:
                 my_claims = tq.get_my_claims()
                 claimed_name = None
                 if my_claims:
-                    # Ưu tiên claim chưa có trong local
+                    # v1.0.359: Skip claim đã hoàn thành Excel
                     for c in my_claims:
                         local_check = self.local_projects / c
                         if not local_check.exists():
+                            # Chưa copy về local → cần resume
                             claimed_name = c
                             break
-                    if not claimed_name:
-                        claimed_name = my_claims[0]
+                        # Check xem Excel đã hoàn thành chưa
+                        _excel = local_check / f"{c}_prompts.xlsx"
+                        if not _excel.exists():
+                            # Chưa có Excel → cần tạo
+                            claimed_name = c
+                            break
+                        _prog = get_excel_progress(local_check, c)
+                        if not _prog.get('is_complete', False):
+                            # Excel chưa xong → cần resume
+                            claimed_name = c
+                            break
+                        else:
+                            log(f"  [QUEUE] Skip completed claim: {c}")
+
+                if claimed_name:
                     log(f"  [QUEUE] Resume claim: {claimed_name}")
                 else:
                     # Claim mã mới (1 mã duy nhất)

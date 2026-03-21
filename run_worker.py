@@ -122,14 +122,22 @@ WORKER_CHANNEL = get_channel_from_folder()
 VM_ID = TOOL_DIR.parent.name
 
 
-def matches_channel(code: str) -> bool:
-    """Check if project code matches this worker's channel."""
-    if WORKER_CHANNEL is None:
+def matches_channel(code: str, channel_filter: str = None) -> bool:
+    """Check if project code matches this worker's channel.
+
+    v1.0.359: Distributed mode → bỏ channel filter (Chrome xử lý mã từ bất kỳ channel nào).
+    """
+    # v1.0.359: Distributed mode → accept all channels
+    if _is_distributed_mode():
+        return True
+
+    channel = channel_filter or WORKER_CHANNEL
+    if channel is None:
         return True  # No filter if channel not detected
 
     # Project code format: AR35-0001
     # Check if starts with channel prefix
-    return code.startswith(f"{WORKER_CHANNEL}-")
+    return code.startswith(f"{channel}-")
 
 
 def is_project_complete_on_master(code: str) -> bool:
