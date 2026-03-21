@@ -735,9 +735,33 @@ class ExcelAPIWorker:
                             log(f"  [{name}] Excel {progress['total_progress']:.0f}% but no prompts - Skip (in progress?)")
                             pass
 
+        # v1.0.361: Check xem local có project nào đang chờ Chrome xử lý không
+        # Nếu có → KHÔNG lấy mã mới (xong hết mới lấy tiếp)
+        has_ongoing_project = False
+        if self.local_projects.exists():
+            for item in self.local_projects.iterdir():
+                if not item.is_dir():
+                    continue
+                _name = item.name
+                _srt = item / f"{_name}.srt"
+                if not _srt.exists():
+                    continue
+                # Skip nếu đã copy về master (hoàn tất)
+                if (item / "_COPIED_TO_VISUAL").exists():
+                    continue
+                # Có Excel với prompts nhưng chưa copy về master → Chrome đang làm
+                _excel = item / f"{_name}_prompts.xlsx"
+                if _excel.exists():
+                    _prog = get_excel_progress(item, _name)
+                    if _prog.get('is_complete', False):
+                        # Excel xong, chưa copy master → đang chờ Chrome
+                        log(f"  [{_name}] Excel done, waiting for Chrome + copy to master")
+                        has_ongoing_project = True
+                        break
+
         # v1.0.355: Dùng TaskQueue.claim_next() - claim atomic, tránh race condition
-        # Khi 2 VM bật cùng lúc, claim_next() đảm bảo chỉ 1 VM thắng
-        if self.master_projects and safe_path_exists(self.master_projects) and not results:
+        # v1.0.361: Chỉ lấy mã mới khi KHÔNG có project đang chờ Chrome
+        if self.master_projects and safe_path_exists(self.master_projects) and not results and not has_ongoing_project:
             try:
                 from modules.robust_copy import TaskQueue
                 vm_id = TOOL_DIR.parent.name

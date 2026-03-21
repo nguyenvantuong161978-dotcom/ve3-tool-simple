@@ -1,6 +1,6 @@
-1.0.360
+1.0.361
 2026-03-21 (VN)
-Change: FIX GUI + VM Manager bo channel filter khi distributed mode - theo doi moi ma
+Change: Excel worker doi Chrome xong + copy master truoc khi lay ma moi
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
