@@ -1,6 +1,6 @@
-1.0.347
+1.0.348
 2026-03-21 (VN)
-Change: _start() them kill_all_chrome() truoc khi start + guard _stop() khi khong chay
+Change: FIX _CLAIMED - run_worker.py them claim khi copy tu master + run_excel_api.py log chi tiet
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

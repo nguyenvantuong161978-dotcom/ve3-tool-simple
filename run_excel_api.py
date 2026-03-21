@@ -257,12 +257,16 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
             shutil.copytree(master_dir, local_dir)
         log(f"[IMPORT] Copied: {name}")
 
-        # v1.0.336: Dùng TaskQueue.claim() để tạo _CLAIMED với account từ trang tính
-        # Tạo trên master + copy về local để Chrome worker biết dùng account nào
+        # v1.0.348: LUÔN tạo _CLAIMED trên master + copy về local
+        vm_id = TOOL_DIR.parent.name
+        import socket
+        _hostname = socket.gethostname()
+        claimed_ok = False
+
+        # Thử 1: TaskQueue.claim() (có account từ trang tính)
         try:
             from modules.robust_copy import TaskQueue
-            vm_id = TOOL_DIR.parent.name
-            auto_path = master_dir.parent.parent.parent  # AUTO/ve3-tool-simple/PROJECTS/../../../ = AUTO
+            auto_path = master_dir.parent.parent.parent  # AUTO
             tq = TaskQueue(
                 master_projects=str(master_dir.parent),
                 vm_id=vm_id,
@@ -272,22 +276,35 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path) -> Opt
             )
             if tq.claim(name):
                 log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
+                claimed_ok = True
             else:
-                # Fallback: tạo _CLAIMED đơn giản
-                import socket
+                log(f"[IMPORT] TaskQueue.claim() returned False for {name}", "WARN")
+        except Exception as e:
+            log(f"[IMPORT] TaskQueue.claim() error: {e}", "WARN")
+
+        # Thử 2: Fallback - ghi _CLAIMED trực tiếp nếu TaskQueue fail
+        if not claimed_ok:
+            try:
                 claimed_file = master_dir / "_CLAIMED"
-                claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{socket.gethostname()}\n"
+                claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{_hostname}\n"
                 claimed_file.write_text(claim_content, encoding='utf-8')
                 log(f"[IMPORT] Claimed (fallback): {name} → {vm_id}")
+                claimed_ok = True
+            except Exception as e:
+                log(f"[IMPORT] Fallback claim FAILED: {e}", "ERROR")
 
-            # Copy _CLAIMED về local để Chrome worker đọc account
-            master_claimed = master_dir / "_CLAIMED"
-            local_claimed = local_dir / "_CLAIMED"
-            if master_claimed.exists():
-                shutil.copy2(str(master_claimed), str(local_claimed))
-                log(f"[IMPORT] _CLAIMED copied to local: {name}")
-        except Exception as e:
-            log(f"[IMPORT] Warning - cannot create _CLAIMED: {e}", "WARN")
+        # Copy _CLAIMED về local để Chrome worker đọc account
+        if claimed_ok:
+            try:
+                master_claimed = master_dir / "_CLAIMED"
+                local_claimed = local_dir / "_CLAIMED"
+                if master_claimed.exists():
+                    shutil.copy2(str(master_claimed), str(local_claimed))
+                    log(f"[IMPORT] _CLAIMED copied to local: {name}")
+                else:
+                    log(f"[IMPORT] _CLAIMED not found on master after claim!", "WARN")
+            except Exception as e:
+                log(f"[IMPORT] Copy _CLAIMED to local error: {e}", "WARN")
 
         return local_dir
     except Exception as e:

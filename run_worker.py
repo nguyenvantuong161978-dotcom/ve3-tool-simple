@@ -641,6 +641,37 @@ def copy_from_master(code: str) -> Path:
         shutil.copytree(src, dst)
     print(f"  [OK] Copied to: {dst}")
 
+    # v1.0.348: Tạo _CLAIMED trên master nếu chưa có
+    master_claimed = src / "_CLAIMED"
+    if not master_claimed.exists():
+        try:
+            from modules.robust_copy import TaskQueue
+            tq = TaskQueue(
+                master_projects=str(MASTER_PROJECTS),
+                vm_id=VM_ID,
+                visual_path=str(MASTER_VISUAL),
+                tool_dir=str(TOOL_DIR),
+                log=lambda msg, lvl="INFO": print(f"  {msg}"),
+            )
+            if tq.claim(code):
+                print(f"  [CLAIM] Claimed on master: {code} → {VM_ID}")
+            else:
+                # Fallback: ghi _CLAIMED trực tiếp
+                import socket
+                claim_content = f"{VM_ID}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{socket.gethostname()}\n"
+                master_claimed.write_text(claim_content, encoding='utf-8')
+                print(f"  [CLAIM] Claimed (fallback): {code} → {VM_ID}")
+        except Exception as e:
+            print(f"  [WARN] Cannot create _CLAIMED: {e}")
+
+    # Copy _CLAIMED về local
+    try:
+        local_claimed = dst / "_CLAIMED"
+        if master_claimed.exists() and not local_claimed.exists():
+            shutil.copy2(str(master_claimed), str(local_claimed))
+    except Exception:
+        pass
+
     # v1.0.67: KHÔNG XÓA master source - dựa vào VISUAL để check done
     # delete_master_source(code)  # REMOVED
 
