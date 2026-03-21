@@ -398,10 +398,11 @@ class MasterControlGUI:
                                encoding='utf-8')
             print(f"[CMD] Sent {cmd} to {vm_id}")
 
-            # Chờ ACK (tối đa 15s)
+            # Chờ ACK - update cần lâu hơn (download ZIP)
             def wait_ack():
                 import time
-                for _ in range(15):
+                max_wait = 120 if cmd == "update" else 30
+                for _ in range(max_wait):
                     time.sleep(1)
                     if ack_file.exists():
                         try:
@@ -409,14 +410,13 @@ class MasterControlGUI:
                             result = ack_data.get('result', '?')
                             ts = ack_data.get('timestamp', '')
                             print(f"[ACK] {vm_id}: {cmd} → {result} ({ts})")
-                            # Hiển thị trên GUI
-                            self.root.after(0, lambda: messagebox.showinfo(
-                                "ACK", f"{vm_id} đã nhận lệnh {cmd.upper()}\n\nKết quả: {result}"))
+                            self.root.after(0, lambda r=result: messagebox.showinfo(
+                                "ACK", f"{vm_id} đã nhận lệnh {cmd.upper()}\n\nKết quả: {r}"))
                             ack_file.unlink()
                             return
                         except Exception:
                             pass
-                print(f"[ACK] {vm_id}: {cmd} → TIMEOUT (VM chưa phản hồi)")
+                print(f"[ACK] {vm_id}: {cmd} → TIMEOUT ({max_wait}s)")
 
             threading.Thread(target=wait_ack, daemon=True).start()
         except Exception as e:

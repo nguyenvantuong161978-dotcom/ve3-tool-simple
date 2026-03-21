@@ -1,6 +1,6 @@
-1.0.342
+1.0.343
 2026-03-21 (VN)
-Change: Fix remote UPDATE - ho tro ZIP khi VM khong co git
+Change: Auto-restart sau UPDATE + ACK timeout 120s cho update
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

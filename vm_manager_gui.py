@@ -2804,12 +2804,9 @@ class SimpleGUI(tk.Tk):
                 self.status_var.set("Cap nhat xong! Khoi dong lai tool.")
                 self.update_btn.config(text="XONG", bg='#00ff88')
 
-                # Hoi co muon khoi dong lai khong
-                from tkinter import messagebox
-                update_msg = f"Da cap nhat xong!\n\nPhien ban moi: {new_version}\n\nBan co muon khoi dong lai tool?"
-                if messagebox.askyesno("Cap nhat xong", update_msg):
-                    import os
-                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                # v1.0.343: Tự restart luôn, không hỏi
+                import os
+                os.execv(sys.executable, [sys.executable] + sys.argv)
 
             except Exception as e:
                 self.status_var.set(f"Loi: {str(e)[:40]}")
