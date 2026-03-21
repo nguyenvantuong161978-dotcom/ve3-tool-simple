@@ -1,6 +1,21 @@
-1.0.326
+1.0.327
 2026-03-21 (VN)
-Change: Distributed mode - nhieu VM chia nhau ma tu master (file-based claim)
+Change: Account tu Google Sheet + Master Control GUI
+
+Thay doi:
+- v1.0.327: Account doc tu Google Sheet NGUON + cache trong _CLAIMED:
+  * task_queue.py: Khi claim → doc sheet NGUON (col G=code, col R=account)
+    → Ghi account vao dong 4 cua _CLAIMED (email|pass|totp)
+    → get_account(code): Doc account tu _CLAIMED cache (khong can doc sheet lai)
+    → Sheet chi doc 1 LAN duy nhat (cache _sheet_cache)
+  * _CLAIMED format moi: VM_ID / timestamp / hostname / account
+  * run_worker.py: Pass tool_dir vao TaskQueue de doc config/creds.json
+  * master_control.py: GUI Tkinter tren may chu de quan ly VM
+    - Hien thi trang thai tat ca VM (running/stopped/updating)
+    - Queue status: available, claimed, expired
+    - Nut RUN/STOP/UPDATE per VM va ALL
+    - File-based IPC: commands/{VM_ID}.{cmd} va status/{VM_ID}.json
+    - Tham khao kien truc D:\upload\control.py
 
 Thay doi:
 - v1.0.326: Distributed Task Queue - nhieu VM chia nhau project:

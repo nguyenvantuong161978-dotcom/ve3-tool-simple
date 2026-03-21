@@ -1006,6 +1006,7 @@ def _get_task_queue():
             master_projects=str(MASTER_PROJECTS),
             vm_id=VM_ID,
             visual_path=str(MASTER_VISUAL),
+            tool_dir=str(TOOL_DIR),
             log=lambda msg, lvl="INFO": print(f"  {msg}"),
         )
     except ImportError:

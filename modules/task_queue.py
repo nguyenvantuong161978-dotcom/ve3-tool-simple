@@ -6,6 +6,13 @@ Cơ chế:
 - Claim = tạo file _CLAIMED trong thư mục project
 - Race condition: ghi → đợi → đọc lại → verify
 - Timeout: VM chết → _CLAIMED quá hạn → tự giải phóng
+- Account: Đọc từ Google Sheet 1 lần khi claim → cache trong _CLAIMED
+
+_CLAIMED format:
+    Line 1: VM_ID (e.g., AR8-T1)
+    Line 2: Timestamp (e.g., 2026-03-21 10:30:00)
+    Line 3: Hostname
+    Line 4: Account (e.g., email@gmail.com|password|totp_secret) - optional
 
 Sử dụng:
     from modules.task_queue import TaskQueue
@@ -13,6 +20,7 @@ Sử dụng:
     tq = TaskQueue(master_projects_path, vm_id="AR8-T1")
     project = tq.claim_next()  # Lấy 1 project chưa ai claim
     if project:
+        account = tq.get_account(project)  # Lấy account từ _CLAIMED cache
         # Làm việc với project
         tq.release(project)    # Xong → giải phóng
 """
@@ -43,6 +51,7 @@ class TaskQueue:
         master_projects: str,
         vm_id: str,
         visual_path: str = None,
+        tool_dir: str = None,
         timeout_hours: float = CLAIM_TIMEOUT_HOURS,
         log: Callable = None,
     ):
@@ -51,15 +60,18 @@ class TaskQueue:
             master_projects: Đường dẫn MASTER PROJECTS (e.g., Z:\\AUTO\\ve3-tool-simple\\PROJECTS)
             vm_id: ID của VM này (e.g., "AR8-T1")
             visual_path: Đường dẫn VISUAL folder để check done (e.g., Z:\\AUTO\\visual)
+            tool_dir: Đường dẫn tool (để đọc config/creds.json cho Google Sheet)
             timeout_hours: Sau bao nhiêu giờ thì coi VM đã chết
             log: Hàm log
         """
         self.master_projects = Path(master_projects)
         self.vm_id = vm_id
         self.visual_path = Path(visual_path) if visual_path else None
+        self.tool_dir = Path(tool_dir) if tool_dir else None
         self.timeout_hours = timeout_hours
         self.log = log or _log_default
         self.hostname = socket.gethostname()
+        self._sheet_cache = None  # Cache toàn bộ sheet NGUON
 
     def scan_available(self) -> List[str]:
         """
@@ -160,28 +172,32 @@ class TaskQueue:
             return False
 
         try:
-            # Bước 1: Ghi _CLAIMED
-            claim_content = self._make_claim_content()
+            # Bước 1: Đọc account từ Google Sheet (1 lần duy nhất)
+            account_str = self._get_account_from_sheet(code)
+
+            # Bước 2: Ghi _CLAIMED (VM_ID + timestamp + hostname + account)
+            claim_content = self._make_claim_content(account=account_str)
             claimed_file.write_text(claim_content, encoding='utf-8')
 
-            # Bước 2: Đợi random 2-4 giây
+            # Bước 3: Đợi random 2-4 giây
             wait_time = 2 + random.random() * 2
             time.sleep(wait_time)
 
-            # Bước 3: Đọc lại và verify
+            # Bước 4: Đọc lại và verify
             try:
                 read_back = claimed_file.read_text(encoding='utf-8').strip()
                 first_line = read_back.split('\n')[0].strip()
             except Exception:
-                # Không đọc được → fail
                 self.log(f"[QUEUE] {code}: không đọc lại được _CLAIMED", "WARN")
                 return False
 
             if first_line == self.vm_id:
                 self.log(f"[QUEUE] CLAIMED: {code} → {self.vm_id}")
+                if account_str:
+                    email = account_str.split('|')[0] if '|' in account_str else account_str
+                    self.log(f"[QUEUE] Account: {email}")
                 return True
             else:
-                # VM khác đã ghi đè
                 self.log(f"[QUEUE] {code}: đã bị {first_line} claim trước", "INFO")
                 return False
 
@@ -308,10 +324,10 @@ class TaskQueue:
     # PRIVATE METHODS
     # ========================================================================
 
-    def _make_claim_content(self) -> str:
+    def _make_claim_content(self, account: str = "") -> str:
         """Tạo nội dung file _CLAIMED."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return f"{self.vm_id}\n{timestamp}\n{self.hostname}\n"
+        return f"{self.vm_id}\n{timestamp}\n{self.hostname}\n{account}\n"
 
     def _is_claim_expired(self, claimed_file: Path) -> bool:
         """Check xem claim đã quá hạn chưa."""
@@ -357,3 +373,143 @@ class TaskQueue:
         except Exception as e:
             self.log(f"[QUEUE] Không xóa được _CLAIMED: {e}", "WARN")
             return False
+
+    # ========================================================================
+    # ACCOUNT METHODS - Đọc account từ Google Sheet + cache trong _CLAIMED
+    # ========================================================================
+
+    def get_account(self, code: str) -> Optional[dict]:
+        """
+        Lấy account từ _CLAIMED cache (đã đọc từ sheet khi claim).
+
+        Returns:
+            {"id": "email", "password": "pass", "totp_secret": "secret"} hoặc None
+        """
+        claimed_file = self.master_projects / code / CLAIMED_FILE
+
+        # Thử đọc từ _CLAIMED trên master
+        account_str = self._read_account_from_claimed(claimed_file)
+
+        # Thử đọc từ _CLAIMED local (đã copy về)
+        if not account_str and self.tool_dir:
+            local_claimed = self.tool_dir / "PROJECTS" / code / CLAIMED_FILE
+            account_str = self._read_account_from_claimed(local_claimed)
+
+        if account_str:
+            return self._parse_account_string(account_str)
+        return None
+
+    def _read_account_from_claimed(self, claimed_file: Path) -> Optional[str]:
+        """Đọc account string từ dòng 4 của _CLAIMED."""
+        try:
+            if not claimed_file.exists():
+                return None
+            content = claimed_file.read_text(encoding='utf-8').strip()
+            lines = content.split('\n')
+            if len(lines) >= 4:
+                account_str = lines[3].strip()
+                return account_str if account_str else None
+        except Exception:
+            pass
+        return None
+
+    def _parse_account_string(self, account_str: str) -> Optional[dict]:
+        """Parse account string format: email|password|totp_secret."""
+        if not account_str:
+            return None
+        parts = account_str.split('|')
+        if len(parts) >= 2:
+            return {
+                "id": parts[0].strip(),
+                "password": parts[1].strip(),
+                "totp_secret": parts[2].strip() if len(parts) >= 3 else "",
+            }
+        return None
+
+    def _get_account_from_sheet(self, code: str) -> str:
+        """
+        Đọc account từ Google Sheet NGUON.
+        Column G = project code, Column R = account (email|pass|totp).
+
+        Dùng cache để tránh đọc sheet nhiều lần.
+
+        Returns:
+            Account string (email|pass|totp) hoặc "" nếu không tìm thấy
+        """
+        if not self.tool_dir:
+            return ""
+
+        try:
+            # Load sheet data (cache)
+            if self._sheet_cache is None:
+                self._sheet_cache = self._load_nguon_sheet()
+
+            if not self._sheet_cache:
+                return ""
+
+            # Tìm code trong column G (index 6)
+            code_upper = code.upper()
+            for row in self._sheet_cache:
+                if len(row) > 17:  # Phải đủ cột R (index 17)
+                    cell_g = str(row[6]).strip().upper()  # Column G = index 6
+                    if cell_g == code_upper:
+                        account = str(row[17]).strip()  # Column R = index 17
+                        if account:
+                            self.log(f"[QUEUE] Found account for {code} from sheet")
+                            return account
+
+            self.log(f"[QUEUE] No account found for {code} in sheet NGUON", "WARN")
+            return ""
+
+        except Exception as e:
+            self.log(f"[QUEUE] Lỗi đọc sheet: {e}", "WARN")
+            return ""
+
+    def _load_nguon_sheet(self) -> list:
+        """Load toàn bộ sheet NGUON từ Google Sheets (1 lần)."""
+        try:
+            import json
+
+            config_file = self.tool_dir / "config" / "config.json"
+            if not config_file.exists():
+                self.log(f"[QUEUE] config.json not found", "WARN")
+                return []
+
+            cfg = json.loads(config_file.read_text(encoding='utf-8'))
+
+            sa_path = (
+                cfg.get("SERVICE_ACCOUNT_JSON") or
+                cfg.get("CREDENTIAL_PATH") or
+                "creds.json"
+            )
+            spreadsheet_name = cfg.get("SPREADSHEET_NAME")
+            if not spreadsheet_name:
+                self.log(f"[QUEUE] Missing SPREADSHEET_NAME in config", "WARN")
+                return []
+
+            # Tìm file credentials
+            sa_file = Path(sa_path)
+            if not sa_file.exists():
+                sa_file = self.tool_dir / "config" / sa_path
+            if not sa_file.exists():
+                self.log(f"[QUEUE] Creds file not found: {sa_path}", "WARN")
+                return []
+
+            import gspread
+            from google.oauth2.service_account import Credentials
+
+            scopes = [
+                "https://www.googleapis.com/auth/spreadsheets.readonly",
+                "https://www.googleapis.com/auth/drive.readonly",
+            ]
+            creds = Credentials.from_service_account_file(str(sa_file), scopes=scopes)
+            gc = gspread.authorize(creds)
+
+            ws = gc.open(spreadsheet_name).worksheet("NGUON")
+            data = ws.get_all_values()
+            self.log(f"[QUEUE] Loaded sheet NGUON: {len(data)} rows")
+            return data
+
+        except Exception as e:
+            self.log(f"[QUEUE] Lỗi load sheet NGUON: {e}", "WARN")
+            return []
