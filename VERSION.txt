@@ -1,6 +1,6 @@
-1.0.369
+1.0.370
 2026-03-22 (VN)
-Change: Fix CMD khong hien thi - bo hide_cmd + tim CMD bang PID thay vi title
+Change: Master control retry lenh khi TIMEOUT + fix CMD khong hien thi
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

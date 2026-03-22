@@ -445,23 +445,31 @@ class MasterControlGUI:
 
     # ------------------------------------------------------------------ Commands
     def _cmd(self, vm_id: str, cmd: str):
-        """Send command to VM, show result in log (no popup)."""
-        cmd_file = COMMANDS_DIR / f"{vm_id}.{cmd}"
-        ack_file = COMMANDS_DIR / f"{vm_id}.{cmd}.ack"
-        try:
-            if ack_file.exists():
-                ack_file.unlink()
-            cmd_file.write_text(json.dumps({
-                "command": cmd,
-                "timestamp": datetime.now().isoformat()
-            }), encoding='utf-8')
-            self._log(f"[{vm_id}] Gui lenh {cmd.upper()}", "info")
-        except Exception as e:
-            self._log(f"[{vm_id}] LOI gui {cmd}: {e}", "err")
-            return
+        """Send command to VM with auto-retry on timeout."""
+        max_retries = 5  # v1.0.369: Retry tối đa 5 lần khi TIMEOUT
 
-        # Wait ACK in background
-        def wait():
+        def _send_and_wait(attempt: int):
+            cmd_file = COMMANDS_DIR / f"{vm_id}.{cmd}"
+            ack_file = COMMANDS_DIR / f"{vm_id}.{cmd}.ack"
+            try:
+                if ack_file.exists():
+                    ack_file.unlink()
+                cmd_file.write_text(json.dumps({
+                    "command": cmd,
+                    "timestamp": datetime.now().isoformat()
+                }), encoding='utf-8')
+                if attempt == 1:
+                    self.root.after(0, lambda: self._log(
+                        f"[{vm_id}] Gui lenh {cmd.upper()}", "info"))
+                else:
+                    self.root.after(0, lambda a=attempt: self._log(
+                        f"[{vm_id}] Retry {cmd.upper()} (lan {a}/{max_retries})", "warn"))
+            except Exception as e:
+                self.root.after(0, lambda e=e: self._log(
+                    f"[{vm_id}] LOI gui {cmd}: {e}", "err"))
+                return
+
+            # Wait ACK
             max_wait = 120 if cmd == "update" else 30
             for _ in range(max_wait):
                 time.sleep(1)
@@ -472,13 +480,21 @@ class MasterControlGUI:
                         self.root.after(0, lambda r=result: self._log(
                             f"[{vm_id}] {cmd.upper()} → {r}", "ok" if "OK" in str(r) else "warn"))
                         ack_file.unlink()
-                        return
+                        return  # Success → done
                     except Exception:
                         pass
-            self.root.after(0, lambda: self._log(
-                f"[{vm_id}] {cmd.upper()} → TIMEOUT ({max_wait}s)", "err"))
 
-        threading.Thread(target=wait, daemon=True).start()
+            # TIMEOUT → retry nếu chưa hết lần
+            if attempt < max_retries:
+                self.root.after(0, lambda: self._log(
+                    f"[{vm_id}] {cmd.upper()} TIMEOUT → retry...", "warn"))
+                time.sleep(2)
+                _send_and_wait(attempt + 1)
+            else:
+                self.root.after(0, lambda: self._log(
+                    f"[{vm_id}] {cmd.upper()} THAT BAI sau {max_retries} lan", "err"))
+
+        threading.Thread(target=lambda: _send_and_wait(1), daemon=True).start()
 
     def _cmd_all(self, cmd: str):
         """Send command to all VMs."""
