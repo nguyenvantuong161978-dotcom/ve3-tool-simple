@@ -3439,6 +3439,24 @@ class VMManager:
                     except Exception:
                         pass
 
+            # v1.0.372: Thêm completed_today + last_image_time cho master control
+            completed_today = len(getattr(self, '_completed_projects', set()))
+
+            last_image_time = ""
+            if project_code:
+                try:
+                    img_dir = TOOL_DIR / "PROJECTS" / project_code / "img"
+                    if img_dir.exists():
+                        newest = 0
+                        for f in img_dir.glob("scene_*.png"):
+                            mt = f.stat().st_mtime
+                            if mt > newest:
+                                newest = mt
+                        if newest > 0:
+                            last_image_time = datetime.fromtimestamp(newest).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    pass
+
             data = {
                 "channel": self._vm_id,
                 "state": state,
@@ -3450,6 +3468,8 @@ class VMManager:
                 "images_done": images_done,
                 "total_scenes": total_scenes,
                 "excel_step": excel_step,
+                "completed_today": completed_today,
+                "last_image_time": last_image_time,
                 "workers": worker_states,
             }
 

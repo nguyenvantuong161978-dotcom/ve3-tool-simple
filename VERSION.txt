@@ -1,6 +1,6 @@
-1.0.371
+1.0.372
 2026-03-22 (VN)
-Change: UPDATE tu master restart toan bo Python process de load code moi
+Change: Master Control v3 - compact cards, per-VM log, daily stats, stale warning
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

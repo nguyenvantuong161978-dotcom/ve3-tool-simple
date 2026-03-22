@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-VE3 Tool - Master Control Panel v2
+VE3 Tool - Master Control Panel v3
 
-GUI trên máy chủ để quản lý các VM đang chạy ve3-tool-simple.
-File độc lập - không cần import module nào khác.
+v1.0.372: Redesign - compact cards, per-VM log, daily stats, stale warning.
 
-v1.0.350: Redesign - bỏ popup, thêm log panel, layout gọn hơn.
-
-Chạy:
+Chay:
     python master_control.py
 """
 
@@ -20,7 +17,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 
 # ============================================================================
@@ -54,35 +51,34 @@ STATUS_DIR = CONTROL_DIR / "status"
 MASTER_PROJECTS = VE3_DIR / "PROJECTS"
 VISUAL_DIR = AUTO_PATH / "visual"
 
-# Tự tạo thư mục
 for d in [CONTROL_DIR, COMMANDS_DIR, STATUS_DIR, MASTER_PROJECTS, VISUAL_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-REFRESH_MS = 8000  # 8 seconds
+REFRESH_MS = 8000
 CLAIM_TIMEOUT_HOURS = 8
+STALE_MINUTES = 30  # Canh bao neu khong co anh moi sau X phut
 
 
 # ============================================================================
 # COLORS
 # ============================================================================
 
-BG = "#0f0f17"
-BG2 = "#1a1a2e"
-BG_CARD = "#16213e"
-BG_CARD_HOVER = "#1a2744"
+BG = "#0d0d14"
+BG2 = "#151520"
+BG_CARD = "#1a1a2e"
 FG = "#e0e0e0"
-FG_DIM = "#6c7086"
+FG_DIM = "#5a5f75"
 FG_MUTED = "#8890a0"
 GREEN = "#4ade80"
-GREEN_DIM = "#22543d"
 RED = "#f87171"
-RED_DIM = "#7f1d1d"
 BLUE = "#60a5fa"
 YELLOW = "#fbbf24"
 ORANGE = "#fb923c"
 PURPLE = "#a78bfa"
 CYAN = "#22d3ee"
 BORDER = "#2a2a4e"
+BORDER_RUN = "#2d5a3d"
+BORDER_WARN = "#5a3a1d"
 
 
 # ============================================================================
@@ -145,6 +141,51 @@ def get_queue_status() -> dict:
     return status
 
 
+def count_visual_today() -> int:
+    """Dem so folder trong visual/ duoc tao/sua hom nay."""
+    count = 0
+    today = date.today()
+    try:
+        if VISUAL_DIR.exists():
+            for item in VISUAL_DIR.iterdir():
+                if item.is_dir():
+                    try:
+                        mtime = datetime.fromtimestamp(item.stat().st_mtime).date()
+                        if mtime == today:
+                            count += 1
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return count
+
+
+def _time_ago(ts_str: str) -> str:
+    """Chuyen timestamp thanh 'X phut truoc' / 'X gio truoc'."""
+    if not ts_str:
+        return "--"
+    try:
+        ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+        diff = (datetime.now() - ts).total_seconds()
+        if diff < 60:
+            return f"{int(diff)}s"
+        elif diff < 3600:
+            return f"{int(diff / 60)}p"
+        else:
+            h = int(diff / 3600)
+            m = int((diff % 3600) / 60)
+            return f"{h}h{m:02d}"
+    except Exception:
+        return "--"
+
+
+def _progress_bar(pct: float, width: int = 15) -> str:
+    """Tao progress bar bang ky tu: ████░░░░"""
+    filled = int(pct * width)
+    empty = width - filled
+    return "\u2588" * filled + "\u2591" * empty
+
+
 # ============================================================================
 # MASTER CONTROL GUI
 # ============================================================================
@@ -154,12 +195,12 @@ class MasterControlGUI:
         self.root = root
         self.root.title("Master Control")
         self.root.configure(bg=BG)
-        self.root.geometry("900x700")
-        self.root.minsize(700, 500)
+        self.root.geometry("1100x800")
+        self.root.minsize(900, 600)
 
-        self.vm_widgets = {}  # VM_ID → widget dict
+        self.vm_widgets = {}  # VM_ID -> widget dict
+        self.vm_logs = {}  # VM_ID -> list of (timestamp, message, tag)
         self._stop = threading.Event()
-        self._log_lines = []  # Log history
 
         self._build()
         self._refresh()
@@ -167,42 +208,50 @@ class MasterControlGUI:
     # ------------------------------------------------------------------ UI
     def _build(self):
         # === HEADER ===
-        hdr = tk.Frame(self.root, bg=BG2, pady=8)
+        hdr = tk.Frame(self.root, bg=BG2, pady=6)
         hdr.pack(fill=tk.X)
 
-        tk.Label(hdr, text="MASTER CONTROL", font=("Segoe UI", 14, "bold"),
-                 bg=BG2, fg=PURPLE).pack(side=tk.LEFT, padx=15)
+        left = tk.Frame(hdr, bg=BG2)
+        left.pack(side=tk.LEFT, padx=12)
 
-        self.summary_lbl = tk.Label(hdr, text="", font=("Segoe UI", 10),
+        tk.Label(left, text="MASTER CONTROL", font=("Segoe UI", 13, "bold"),
+                 bg=BG2, fg=PURPLE).pack(side=tk.LEFT)
+
+        self.summary_lbl = tk.Label(left, text="", font=("Segoe UI", 10),
                                      bg=BG2, fg=FG_MUTED)
-        self.summary_lbl.pack(side=tk.LEFT, padx=10)
+        self.summary_lbl.pack(side=tk.LEFT, padx=12)
 
         # ALL buttons
         bf = tk.Frame(hdr, bg=BG2)
-        bf.pack(side=tk.RIGHT, padx=10)
+        bf.pack(side=tk.RIGHT, padx=12)
         for txt, clr, cmd in [("RUN ALL", GREEN, "run"),
                                ("STOP ALL", RED, "stop"),
-                               ("UPDATE ALL", BLUE, "update")]:
+                               ("UPD ALL", BLUE, "update")]:
             tk.Button(bf, text=txt, bg=clr, fg=BG, font=("Segoe UI", 9, "bold"),
-                      activebackground=clr, relief=tk.FLAT, padx=12, pady=2,
+                      activebackground=clr, relief=tk.FLAT, padx=14, pady=3,
                       command=lambda c=cmd: self._cmd_all(c)).pack(side=tk.LEFT, padx=3)
 
-        # === QUEUE BAR ===
-        self.queue_lbl = tk.Label(self.root, text="", font=("Consolas", 10),
+        # === STATS BAR ===
+        stats = tk.Frame(self.root, bg=BG, pady=2)
+        stats.pack(fill=tk.X)
+
+        self.queue_lbl = tk.Label(stats, text="", font=("Consolas", 10),
                                    bg=BG, fg=FG_DIM, anchor=tk.W)
-        self.queue_lbl.pack(fill=tk.X, padx=15, pady=(6, 2))
+        self.queue_lbl.pack(side=tk.LEFT, padx=15)
 
-        # === MAIN: VM list (top) + Log (bottom) ===
-        pw = tk.PanedWindow(self.root, orient=tk.VERTICAL, bg=BG,
-                            sashwidth=4, sashrelief=tk.FLAT)
-        pw.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.daily_lbl = tk.Label(stats, text="", font=("Consolas", 10),
+                                    bg=BG, fg=GREEN, anchor=tk.E)
+        self.daily_lbl.pack(side=tk.RIGHT, padx=15)
 
-        # -- VM container --
-        vm_outer = tk.Frame(pw, bg=BG)
-        pw.add(vm_outer, stretch="always")
+        # Separator
+        tk.Frame(self.root, bg=BORDER, height=1).pack(fill=tk.X, padx=10)
 
-        self.vm_canvas = tk.Canvas(vm_outer, bg=BG, highlightthickness=0, bd=0)
-        sb = ttk.Scrollbar(vm_outer, orient=tk.VERTICAL, command=self.vm_canvas.yview)
+        # === VM CONTAINER (scrollable) ===
+        container = tk.Frame(self.root, bg=BG)
+        container.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+
+        self.vm_canvas = tk.Canvas(container, bg=BG, highlightthickness=0, bd=0)
+        sb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=self.vm_canvas.yview)
         self.vm_inner = tk.Frame(self.vm_canvas, bg=BG)
         self.vm_inner.bind("<Configure>",
                            lambda e: self.vm_canvas.configure(scrollregion=self.vm_canvas.bbox("all")))
@@ -215,37 +264,33 @@ class MasterControlGUI:
         self.vm_canvas.bind_all("<MouseWheel>",
                                 lambda e: self.vm_canvas.yview_scroll(-1 * (e.delta // 120), "units"))
 
-        # -- Log panel --
-        log_frame = tk.Frame(pw, bg=BG2)
-        pw.add(log_frame, height=140)
+    # ------------------------------------------------------------------ VM Log (per card)
+    def _add_vm_log(self, vm_id: str, msg: str, tag: str = "info"):
+        if vm_id not in self.vm_logs:
+            self.vm_logs[vm_id] = []
+        ts = datetime.now().strftime("%H:%M")
+        self.vm_logs[vm_id].append((ts, msg, tag))
+        # Giu toi da 5 dong
+        if len(self.vm_logs[vm_id]) > 5:
+            self.vm_logs[vm_id] = self.vm_logs[vm_id][-5:]
+        # Update widget
+        self._render_vm_log(vm_id)
 
-        tk.Label(log_frame, text="Log", font=("Segoe UI", 9, "bold"),
-                 bg=BG2, fg=FG_DIM).pack(anchor=tk.W, padx=8, pady=(4, 0))
-
-        self.log_text = tk.Text(log_frame, bg=BG, fg=FG_MUTED, font=("Consolas", 9),
-                                height=6, bd=0, highlightthickness=0,
-                                state=tk.DISABLED, wrap=tk.WORD)
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(2, 6))
-
-        # Tag colors for log
-        self.log_text.tag_config("ok", foreground=GREEN)
-        self.log_text.tag_config("err", foreground=RED)
-        self.log_text.tag_config("warn", foreground=YELLOW)
-        self.log_text.tag_config("info", foreground=BLUE)
-        self.log_text.tag_config("time", foreground=FG_DIM)
-
-    # ------------------------------------------------------------------ Log
-    def _log(self, msg: str, tag: str = "info"):
-        ts = datetime.now().strftime("%H:%M:%S")
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.insert(tk.END, f"{ts} ", "time")
-        self.log_text.insert(tk.END, f"{msg}\n", tag)
-        self.log_text.see(tk.END)
-        # Giữ tối đa 200 dòng
-        lines = int(self.log_text.index('end-1c').split('.')[0])
-        if lines > 200:
-            self.log_text.delete('1.0', f'{lines - 200}.0')
-        self.log_text.config(state=tk.DISABLED)
+    def _render_vm_log(self, vm_id: str):
+        w = self.vm_widgets.get(vm_id)
+        if not w or "log" not in w:
+            return
+        log_lbl = w["log"]
+        lines = self.vm_logs.get(vm_id, [])
+        if not lines:
+            log_lbl.config(text="")
+            return
+        # Show last 3 lines
+        display = lines[-3:]
+        text_parts = []
+        for ts, msg, tag in display:
+            text_parts.append(f"{ts} {msg}")
+        log_lbl.config(text="  |  ".join(text_parts))
 
     # ------------------------------------------------------------------ Refresh
     def _refresh(self):
@@ -263,15 +308,18 @@ class MasterControlGUI:
         claimed_count = sum(len(v) for v in qs["claimed"].values())
         vm_count = len(qs["claimed"])
         self.queue_lbl.config(
-            text=f"Queue: {qs['available']} cho  |  {claimed_count} dang lam ({vm_count} VM)  |  "
-                 f"{qs['expired']} het han  |  {qs['visual']} xong")
+            text=f"Cho: {qs['available']}   |   Dang lam: {claimed_count} ({vm_count} VM)"
+                 f"   |   Het han: {qs['expired']}   |   Xong: {qs['visual']}")
 
-        # Summary in header
+        # Daily stats
+        today_count = count_visual_today()
+        self.daily_lbl.config(text=f"Hom nay: {today_count} ma xong")
+
+        # Summary
         total_vms = len(self.vm_widgets)
         running = sum(1 for w in self.vm_widgets.values()
                       if "running" in w.get("_state", ""))
-        self.summary_lbl.config(text=f"{running}/{total_vms} VM dang chay   |   "
-                                     f"AUTO: {AUTO_PATH}")
+        self.summary_lbl.config(text=f"{running}/{total_vms} VM   |   {AUTO_PATH}")
 
     def _update_vms(self):
         vm_data = {}
@@ -317,51 +365,75 @@ class MasterControlGUI:
     def _create_card(self, vm_id: str):
         card = tk.Frame(self.vm_inner, bg=BG_CARD, bd=0,
                         highlightbackground=BORDER, highlightthickness=1)
-        card.pack(fill=tk.X, padx=4, pady=3)
+        card.pack(fill=tk.X, padx=8, pady=3)
 
-        # Row layout
-        row = tk.Frame(card, bg=BG_CARD)
-        row.pack(fill=tk.X, padx=2, pady=6)
+        # === ROW 1: Name | State | Project | Version | Buttons ===
+        row1 = tk.Frame(card, bg=BG_CARD)
+        row1.pack(fill=tk.X, padx=8, pady=(6, 0))
 
-        # Indicator dot
-        dot = tk.Canvas(row, width=10, height=10, bg=BG_CARD, highlightthickness=0)
-        dot.pack(side=tk.LEFT, padx=(8, 6), pady=0)
+        # Dot
+        dot = tk.Canvas(row1, width=10, height=10, bg=BG_CARD, highlightthickness=0)
+        dot.pack(side=tk.LEFT, padx=(0, 4))
         dot_id = dot.create_oval(1, 1, 9, 9, fill=FG_DIM, outline="")
 
         # VM name
-        name = tk.Label(row, text=vm_id, font=("Segoe UI", 11, "bold"),
-                        bg=BG_CARD, fg=FG, width=12, anchor=tk.W)
-        name.pack(side=tk.LEFT, padx=(0, 8))
+        name_lbl = tk.Label(row1, text=vm_id, font=("Segoe UI", 11, "bold"),
+                            bg=BG_CARD, fg=FG, anchor=tk.W)
+        name_lbl.pack(side=tk.LEFT, padx=(0, 6))
 
         # State
-        state_lbl = tk.Label(row, text="--", font=("Consolas", 10),
-                             bg=BG_CARD, fg=FG_DIM, width=18, anchor=tk.W)
-        state_lbl.pack(side=tk.LEFT, padx=4)
+        state_lbl = tk.Label(row1, text="--", font=("Consolas", 10),
+                             bg=BG_CARD, fg=FG_DIM, anchor=tk.W)
+        state_lbl.pack(side=tk.LEFT, padx=(0, 8))
 
-        # Project + progress (v1.0.364)
-        proj_lbl = tk.Label(row, text="", font=("Consolas", 10),
+        # Project
+        proj_lbl = tk.Label(row1, text="", font=("Consolas", 10, "bold"),
                             bg=BG_CARD, fg=YELLOW, anchor=tk.W)
-        proj_lbl.pack(side=tk.LEFT, padx=4)
+        proj_lbl.pack(side=tk.LEFT, padx=(0, 6))
 
-        # Progress detail
-        progress_lbl = tk.Label(row, text="", font=("Consolas", 9),
-                                bg=BG_CARD, fg=CYAN, anchor=tk.W)
-        progress_lbl.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
-
-        # Version
-        ver_lbl = tk.Label(row, text="", font=("Consolas", 9),
+        # Version (right side)
+        ver_lbl = tk.Label(row1, text="", font=("Consolas", 9),
                            bg=BG_CARD, fg=FG_DIM)
-        ver_lbl.pack(side=tk.LEFT, padx=4)
+        ver_lbl.pack(side=tk.RIGHT, padx=(0, 4))
 
-        # Buttons (compact)
+        # Buttons
+        btn_frame = tk.Frame(row1, bg=BG_CARD)
+        btn_frame.pack(side=tk.RIGHT, padx=(4, 0))
         for txt, clr, cmd in [("RUN", GREEN, "run"),
                                ("STOP", RED, "stop"),
                                ("DONE", ORANGE, "done"),
                                ("UPD", BLUE, "update")]:
-            tk.Button(row, text=txt, bg=clr, fg=BG, font=("Segoe UI", 8, "bold"),
-                      activebackground=clr, relief=tk.FLAT, padx=8, pady=1,
+            tk.Button(btn_frame, text=txt, bg=clr, fg=BG,
+                      font=("Segoe UI", 8, "bold"),
+                      activebackground=clr, relief=tk.FLAT, padx=7, pady=0,
                       command=lambda v=vm_id, c=cmd: self._cmd(v, c)
-                      ).pack(side=tk.LEFT, padx=2)
+                      ).pack(side=tk.LEFT, padx=1)
+
+        # === ROW 2: Progress bar | Images | Excel | Daily | Last image ===
+        row2 = tk.Frame(card, bg=BG_CARD)
+        row2.pack(fill=tk.X, padx=8, pady=(2, 0))
+
+        progress_lbl = tk.Label(row2, text="", font=("Consolas", 10),
+                                bg=BG_CARD, fg=CYAN, anchor=tk.W)
+        progress_lbl.pack(side=tk.LEFT, padx=(14, 0))
+
+        # Stale warning (right side of row2)
+        warn_lbl = tk.Label(row2, text="", font=("Segoe UI", 9, "bold"),
+                            bg=BG_CARD, fg=RED, anchor=tk.E)
+        warn_lbl.pack(side=tk.RIGHT, padx=(0, 4))
+
+        # Daily + last image
+        stats_lbl = tk.Label(row2, text="", font=("Consolas", 9),
+                             bg=BG_CARD, fg=FG_MUTED, anchor=tk.E)
+        stats_lbl.pack(side=tk.RIGHT, padx=(8, 4))
+
+        # === ROW 3: Per-VM log ===
+        row3 = tk.Frame(card, bg=BG_CARD)
+        row3.pack(fill=tk.X, padx=8, pady=(1, 5))
+
+        log_lbl = tk.Label(row3, text="", font=("Consolas", 8),
+                           bg=BG_CARD, fg=FG_DIM, anchor=tk.W)
+        log_lbl.pack(side=tk.LEFT, padx=(14, 0), fill=tk.X, expand=True)
 
         self.vm_widgets[vm_id] = {
             "frame": card,
@@ -370,8 +442,12 @@ class MasterControlGUI:
             "state": state_lbl,
             "project": proj_lbl,
             "progress": progress_lbl,
+            "stats": stats_lbl,
+            "warn": warn_lbl,
             "version": ver_lbl,
+            "log": log_lbl,
             "_state": "",
+            "_prev_images": 0,
         }
 
     def _update_card(self, vm_id: str, data: dict):
@@ -383,15 +459,14 @@ class MasterControlGUI:
         project = data.get("project", "")
         version = data.get("version", "")
         uptime = data.get("uptime_minutes", 0)
-        timestamp = data.get("timestamp", "")
-
-        # v1.0.364: Project progress data
         project_elapsed = data.get("project_elapsed_minutes", 0)
         images_done = data.get("images_done", 0)
         total_scenes = data.get("total_scenes", 0)
         excel_step = data.get("excel_step", "")
+        completed_today = data.get("completed_today", 0)
+        last_image_time = data.get("last_image_time", "")
 
-        # State text
+        # --- State ---
         state_parts = [state]
         if uptime:
             h, m = uptime // 60, uptime % 60
@@ -399,54 +474,80 @@ class MasterControlGUI:
         w["state"].config(text=" | ".join(state_parts))
         w["_state"] = state
 
-        # Project + elapsed time
-        proj_text = project
-        if project and project_elapsed:
-            ph, pm = project_elapsed // 60, project_elapsed % 60
-            proj_text = f"{project} ({ph}h{pm:02d}m)"
-        w["project"].config(text=proj_text if proj_text else "")
-
-        # Progress: images + excel step
-        progress_parts = []
-        if total_scenes > 0:
-            pct = int(images_done / total_scenes * 100)
-            progress_parts.append(f"{images_done}/{total_scenes} anh ({pct}%)")
-        if excel_step and excel_step != "done":
-            progress_parts.append(f"Excel: {excel_step}")
-        w["progress"].config(text=" | ".join(progress_parts))
-
-        # Version
-        w["version"].config(text=f"v{version}" if version else "")
-
-        # Dot color
-        if "running" in state.lower():
-            color = GREEN
-        elif state in ("idle", "claimed"):
-            color = ORANGE
-        elif state in ("stopped", "killed"):
-            color = RED
-        elif state in ("updating", "starting"):
-            color = BLUE
-        else:
-            color = FG_DIM
-        w["dot"].itemconfig(w["dot_id"], fill=color)
-
-        # Card border color
-        border = GREEN if "running" in state.lower() else BORDER
-        w["frame"].config(highlightbackground=border)
-
-        # State label color
+        # State color
         if "running" in state.lower():
             w["state"].config(fg=GREEN)
+            w["dot"].itemconfig(w["dot_id"], fill=GREEN)
+            w["frame"].config(highlightbackground=BORDER_RUN)
         elif state in ("stopped", "killed"):
             w["state"].config(fg=RED)
+            w["dot"].itemconfig(w["dot_id"], fill=RED)
+            w["frame"].config(highlightbackground=BORDER)
+        elif state in ("idle", "claimed"):
+            w["state"].config(fg=ORANGE)
+            w["dot"].itemconfig(w["dot_id"], fill=ORANGE)
+            w["frame"].config(highlightbackground=BORDER)
         else:
             w["state"].config(fg=FG_MUTED)
+            w["dot"].itemconfig(w["dot_id"], fill=FG_DIM)
+            w["frame"].config(highlightbackground=BORDER)
+
+        # --- Project ---
+        proj_text = ""
+        if project:
+            proj_text = project
+            if project_elapsed:
+                ph, pm = project_elapsed // 60, project_elapsed % 60
+                proj_text = f"{project} ({ph}h{pm:02d}m)"
+        w["project"].config(text=proj_text)
+
+        # --- Progress ---
+        progress_parts = []
+        if total_scenes > 0:
+            pct = images_done / total_scenes
+            bar = _progress_bar(pct, 12)
+            progress_parts.append(f"{bar} {images_done}/{total_scenes} ({int(pct * 100)}%)")
+        if excel_step:
+            if excel_step == "done":
+                progress_parts.append("Excel: done")
+            else:
+                progress_parts.append(f"Excel: {excel_step}")
+        w["progress"].config(text="   ".join(progress_parts))
+
+        # --- Daily stats + last image ---
+        stats_parts = []
+        if completed_today > 0:
+            stats_parts.append(f"Hom nay: {completed_today} ma")
+        last_ago = _time_ago(last_image_time)
+        if last_ago != "--":
+            stats_parts.append(f"Anh moi: {last_ago}")
+        w["stats"].config(text="   ".join(stats_parts))
+
+        # --- Stale warning ---
+        is_stale = False
+        if "running" in state.lower() and last_image_time:
+            try:
+                ts = datetime.strptime(last_image_time, "%Y-%m-%d %H:%M:%S")
+                minutes_ago = (datetime.now() - ts).total_seconds() / 60
+                if minutes_ago > STALE_MINUTES:
+                    is_stale = True
+                    w["warn"].config(text=f"!! CHAM ({int(minutes_ago)}p)")
+                    w["frame"].config(highlightbackground=BORDER_WARN)
+            except Exception:
+                pass
+        if not is_stale:
+            w["warn"].config(text="")
+
+        # --- Version ---
+        w["version"].config(text=f"v{version}" if version else "")
+
+        # --- Render per-VM log ---
+        self._render_vm_log(vm_id)
 
     # ------------------------------------------------------------------ Commands
     def _cmd(self, vm_id: str, cmd: str):
         """Send command to VM with auto-retry on timeout."""
-        max_retries = 5  # v1.0.369: Retry tối đa 5 lần khi TIMEOUT
+        max_retries = 5
 
         def _send_and_wait(attempt: int):
             cmd_file = COMMANDS_DIR / f"{vm_id}.{cmd}"
@@ -459,14 +560,14 @@ class MasterControlGUI:
                     "timestamp": datetime.now().isoformat()
                 }), encoding='utf-8')
                 if attempt == 1:
-                    self.root.after(0, lambda: self._log(
-                        f"[{vm_id}] Gui lenh {cmd.upper()}", "info"))
+                    self.root.after(0, lambda: self._add_vm_log(
+                        vm_id, f"Gui {cmd.upper()}", "info"))
                 else:
-                    self.root.after(0, lambda a=attempt: self._log(
-                        f"[{vm_id}] Retry {cmd.upper()} (lan {a}/{max_retries})", "warn"))
+                    self.root.after(0, lambda a=attempt: self._add_vm_log(
+                        vm_id, f"Retry {cmd.upper()} ({a}/{max_retries})", "warn"))
             except Exception as e:
-                self.root.after(0, lambda e=e: self._log(
-                    f"[{vm_id}] LOI gui {cmd}: {e}", "err"))
+                self.root.after(0, lambda: self._add_vm_log(
+                    vm_id, f"LOI: {e}", "err"))
                 return
 
             # Wait ACK
@@ -477,22 +578,23 @@ class MasterControlGUI:
                     try:
                         ack = json.loads(ack_file.read_text(encoding='utf-8'))
                         result = ack.get('result', '?')
-                        self.root.after(0, lambda r=result: self._log(
-                            f"[{vm_id}] {cmd.upper()} → {r}", "ok" if "OK" in str(r) else "warn"))
+                        tag = "ok" if "OK" in str(result) else "warn"
+                        self.root.after(0, lambda r=result, t=tag: self._add_vm_log(
+                            vm_id, f"{cmd.upper()} -> {r}", t))
                         ack_file.unlink()
-                        return  # Success → done
+                        return
                     except Exception:
                         pass
 
-            # TIMEOUT → retry nếu chưa hết lần
+            # TIMEOUT -> retry
             if attempt < max_retries:
-                self.root.after(0, lambda: self._log(
-                    f"[{vm_id}] {cmd.upper()} TIMEOUT → retry...", "warn"))
+                self.root.after(0, lambda: self._add_vm_log(
+                    vm_id, f"{cmd.upper()} TIMEOUT -> retry", "warn"))
                 time.sleep(2)
                 _send_and_wait(attempt + 1)
             else:
-                self.root.after(0, lambda: self._log(
-                    f"[{vm_id}] {cmd.upper()} THAT BAI sau {max_retries} lan", "err"))
+                self.root.after(0, lambda: self._add_vm_log(
+                    vm_id, f"{cmd.upper()} THAT BAI ({max_retries} lan)", "err"))
 
         threading.Thread(target=lambda: _send_and_wait(1), daemon=True).start()
 
@@ -500,9 +602,7 @@ class MasterControlGUI:
         """Send command to all VMs."""
         vms = list(self.vm_widgets.keys())
         if not vms:
-            self._log("Khong co VM nao", "warn")
             return
-        self._log(f"Gui {cmd.upper()} toi {len(vms)} VM...", "info")
         for vm_id in vms:
             self._cmd(vm_id, cmd)
 
