@@ -3694,9 +3694,18 @@ class VMManager:
 
                 self.log("ZIP update OK", "MANAGER")
 
-            # v1.0.371: Restart TOÀN BỘ Python process để load code mới
-            # start_all() chỉ restart workers nhưng vm_manager.py/gui vẫn dùng code cũ trong memory
+            # v1.0.373: Restart TOÀN BỘ Python process để load code mới
             self.log("Restarting tool (load code moi)...", "MANAGER")
+
+            # XÓA command file TRƯỚC khi execv
+            # Nếu không xóa → restart → watchdog thấy file → UPDATE lại → LOOP VÔ HẠN
+            try:
+                cmd_dir = self.auto_path / "ve3-tool-simple" / "control" / "commands"
+                for f in cmd_dir.glob(f"{self._vm_id}.update*"):
+                    if not f.name.endswith('.ack'):
+                        f.unlink()
+            except Exception:
+                pass
 
             # ACK trước khi execv (execv replace process → code sau không chạy)
             self._ack_command("update", "OK - RESTARTING")

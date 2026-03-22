@@ -1,6 +1,6 @@
-1.0.372
+1.0.373
 2026-03-22 (VN)
-Change: Master Control v3 - compact cards, per-VM log, daily stats, stale warning
+Change: Fix UPDATE loop vo han + Master Control compact hon
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
