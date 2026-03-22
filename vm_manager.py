@@ -1389,10 +1389,16 @@ class VMManager:
             self.log(f"403 count: {self.worker_error_counts[worker_id]}/9 ({worker_id}), "
                      f"model {current_model}: {model_403_count}/{threshold}", "ERROR", "WARN")
 
-            # Check if need IPv6 rotation (chỉ khi có IPv6 enabled)
+            # v1.0.373: IPv6 rotation CHỈ do chrome_1 quyết định
+            # Chrome 2 theo mạng hiện tại, không tự rotate IPv6
             if self.ipv6_manager and self.ipv6_manager.enabled:
                 if self.consecutive_403_count >= self.max_403_before_ipv6:
-                    return "rotate_ipv6"
+                    if worker_id == "chrome_1":
+                        return "rotate_ipv6"
+                    else:
+                        # Chrome 2: reset counter, chỉ restart (theo mạng Chrome 1 đã set)
+                        self.log(f"[{worker_id}] Skip IPv6 rotation (chi Chrome 1 quyet dinh)", worker_id, "INFO")
+                        self.consecutive_403_count = 0
 
             # Check if need to switch model
             if model_403_count >= threshold:
