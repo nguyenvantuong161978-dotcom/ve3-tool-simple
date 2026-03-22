@@ -360,19 +360,31 @@ class IPv6Rotator:
         # Nếu tất cả đều trùng (không nên xảy ra), random 1 cái
         return random.choice(self.ipv6_list)
 
-    def test_ipv6_connectivity(self, ipv6: str = None, timeout: int = 3) -> bool:
+    def test_ipv6_connectivity(self, ipv6: str = None, timeout: int = 5) -> bool:
         """
         Test xem IPv6 có kết nối được internet không.
+        v1.0.375: Dùng curl HTTP thay vì ping (nhiều mạng chặn ICMP).
 
         Args:
             ipv6: IPv6 để test (None = test IP hiện tại)
-            timeout: Timeout ping (giây)
+            timeout: Timeout (giây)
 
         Returns:
-            True nếu ping thành công
+            True nếu kết nối thành công
         """
         try:
-            # Ping Google DNS IPv6
+            # Thử curl -6 trước (chính xác hơn ping)
+            cmd = f'curl -6 --connect-timeout {timeout} -s -o nul -w "%{{http_code}}" https://www.google.com'
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=timeout + 3
+            )
+            if result.returncode == 0 and result.stdout.strip().startswith(('2', '3')):
+                return True
+        except:
+            pass
+
+        try:
+            # Fallback: ping Google DNS IPv6
             cmd = f'ping -n 1 -w {timeout * 1000} 2001:4860:4860::8888'
             result = subprocess.run(
                 cmd, shell=True, capture_output=True, text=True, timeout=timeout + 2
@@ -458,6 +470,11 @@ class IPv6Rotator:
             commands.append('netsh interface ipv6 set prefixpolicy ::/0 40 1')
             commands.append('netsh interface ipv6 set prefixpolicy 2002::/16 30 2')
             commands.append('netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 10 4')
+
+            # Bước 5: v1.0.375 - Set DNS IPv6 (Google Public DNS)
+            # Thiếu DNS → máy không resolve domain qua IPv6
+            commands.append(f'netsh interface ipv6 set dnsservers "{self.interface_name}" static 2001:4860:4860::8888 primary')
+            commands.append(f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8844 index=2')
 
             # Check admin và chạy commands
             if _is_admin():

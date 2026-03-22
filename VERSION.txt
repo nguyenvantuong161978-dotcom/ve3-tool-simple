@@ -1,6 +1,6 @@
-1.0.374
+1.0.375
 2026-03-23 (VN)
-Change: IPv6 rotation chi do Chrome 1 quyet dinh + fix UPDATE loop
+Change: IPv6 them DNS + test bang HTTP thay vi ping
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

@@ -2596,16 +2596,28 @@ class SimpleGUI(tk.Tk):
 
         for i, ip in enumerate(ipv6_list[:test_count]):
             try:
-                # Ping Google DNS IPv6 using the local IPv6 address
-                # On Windows: ping -n 1 -w 2000 2001:4860:4860::8888
-                result = subprocess.run(
-                    ['ping', '-n', '1', '-w', '2000', '2001:4860:4860::8888'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-                )
-                if result.returncode == 0:
+                # v1.0.375: Dùng curl -6 thay vì ping (nhiều mạng chặn ICMP nhưng HTTP vẫn OK)
+                ok = False
+                try:
+                    result = subprocess.run(
+                        'curl -6 --connect-timeout 5 -s -o nul -w "%{http_code}" https://www.google.com',
+                        shell=True, capture_output=True, text=True, timeout=8,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    ok = result.returncode == 0 and result.stdout.strip().startswith(('2', '3'))
+                except Exception:
+                    pass
+
+                if not ok:
+                    # Fallback: ping
+                    result = subprocess.run(
+                        ['ping', '-n', '1', '-w', '3000', '2001:4860:4860::8888'],
+                        capture_output=True, text=True, timeout=5,
+                        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                    )
+                    ok = result.returncode == 0
+
+                if ok:
                     working_count += 1
                     print(f"[IPv6] Test {i+1}/{test_count}: OK")
                 else:
