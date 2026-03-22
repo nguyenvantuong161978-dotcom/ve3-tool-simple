@@ -1,6 +1,6 @@
-1.0.378
+1.0.379
 2026-03-23 (VN)
-Change: Nut LAY IPv6 tu trang tinh trong Settings
+Change: Chuyen nut LAY IPv6 vao Setup VM + debug log match
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

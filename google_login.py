@@ -247,6 +247,18 @@ def get_channel_ipv6(channel_code: str, max_retries: int = 3) -> list:
                 log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
                 return []
 
+            log(f"[IPv6] Tìm mã '{code_upper}' trong {len(all_data)} dòng, cột B (idx={channel_col_idx}), cột IPv6 (idx={ipv6_col_idx})")
+
+            # Debug: hiện vài mã đầu trong cột B
+            sample_codes = []
+            for r in all_data[:10]:
+                if len(r) > channel_col_idx:
+                    c = str(r[channel_col_idx]).strip()
+                    if c:
+                        sample_codes.append(c)
+            if sample_codes:
+                log(f"[IPv6] Mẫu cột B: {sample_codes}")
+
             for row_idx, row in enumerate(all_data, start=1):
                 if len(row) <= max(channel_col_idx, ipv6_col_idx):
                     continue
@@ -263,7 +275,7 @@ def get_channel_ipv6(channel_code: str, max_retries: int = 3) -> list:
                 if is_match:
                     ipv6_cell = str(row[ipv6_col_idx]).strip()
                     if not ipv6_cell:
-                        log(f"IPv6 cell empty for {row_code}", "WARN")
+                        log(f"IPv6 cell empty for {row_code} (row {row_idx})", "WARN")
                         return []
 
                     # Parse: mỗi dòng trong ô = 1 IPv6
@@ -273,7 +285,7 @@ def get_channel_ipv6(channel_code: str, max_retries: int = 3) -> list:
                         if line and ':' in line:  # IPv6 luôn có dấu ':'
                             ipv6_list.append(line)
 
-                    log(f"Found {len(ipv6_list)} IPv6 for {code_upper} (matched: {row_code})")
+                    log(f"Found {len(ipv6_list)} IPv6 for {code_upper} (matched: {row_code}, row {row_idx})")
                     for i, ip in enumerate(ipv6_list):
                         log(f"  IPv6 {i+1}: {ip}")
                     return ipv6_list
