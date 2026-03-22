@@ -1,6 +1,6 @@
-1.0.376
+1.0.377
 2026-03-23 (VN)
-Change: Fix IPv6 proxy getaddrinfo failed - fallback DNS resolution
+Change: Fix reference image loop - check cache khi Excel bi lock
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

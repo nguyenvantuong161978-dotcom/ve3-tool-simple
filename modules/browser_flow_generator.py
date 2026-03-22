@@ -3785,7 +3785,9 @@ class BrowserFlowGenerator:
                 # Nếu là ảnh nv*/loc* nhưng KHÔNG có media_id → xóa và tạo lại
                 # Normalize key để so sánh (case-insensitive)
                 pid_lower = pid.lower()
-                has_media_id = any(k.lower() == pid_lower for k in excel_media_ids.keys())
+                # Check cả Excel VÀ cache (phòng trường hợp Excel bị lock không save được)
+                all_check = {**cached_media_names, **excel_media_ids}
+                has_media_id = any(k.lower() == pid_lower for k in all_check.keys())
 
                 if is_reference_image and not has_media_id:
                     self._log(f"[{i+1}/{len(prompts)}] ID: {pid} - [WARN] ANH TON TAI NHUNG KHONG CO MEDIA_ID")
