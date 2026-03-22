@@ -2912,10 +2912,18 @@ class VMManager:
             return
         w = self.workers[worker_id]
         if w.process:
+            pid = w.process.pid
             try:
-                # v1.0.363: CREATE_NEW_CONSOLE → w.process track đúng process thật
-                # terminate() gửi CTRL_BREAK_EVENT, kill() force kill
-                w.process.terminate()
+                # v1.0.367: Kill TOÀN BỘ process tree (cmd.exe + python con)
+                # terminate() chỉ kill cmd.exe, python con chạy tiếp thành orphan
+                if sys.platform == "win32":
+                    # taskkill /T = kill process tree, /F = force
+                    subprocess.run(
+                        f'taskkill /PID {pid} /T /F',
+                        shell=True, capture_output=True, timeout=10
+                    )
+                else:
+                    w.process.terminate()
                 w.process.wait(timeout=5)
             except:
                 try:
@@ -2923,6 +2931,22 @@ class VMManager:
                 except:
                     pass
             w.process = None
+
+        # v1.0.367: Kill python processes chạy script tương ứng (phòng orphan)
+        if sys.platform == "win32":
+            try:
+                script_name = ""
+                if w.worker_type == "excel":
+                    script_name = "run_excel_api.py"
+                elif w.worker_type == "chrome" and w.worker_num:
+                    script_name = f"_run_chrome{w.worker_num}.py"
+                if script_name:
+                    subprocess.run(
+                        f'wmic process where "commandline like \'%{script_name}%\'" call terminate',
+                        shell=True, capture_output=True, timeout=10
+                    )
+            except:
+                pass
 
         # Close log handle if exists (hidden mode)
         if hasattr(w, '_log_handle') and w._log_handle:
@@ -3427,21 +3451,23 @@ class VMManager:
 
                 try:
                     if cmd_name == "run":
+                        # v1.0.367: Ưu tiên GUI callback (để arrange cửa sổ)
+                        # Nếu không có GUI → start trực tiếp
                         if self._gui_start_callback:
-                            # v1.0.346: Gọi thẳng GUI _start() = ấn nút BẮT ĐẦU
                             self.log("Master RUN → GUI BẮT ĐẦU", "MANAGER", "INFO")
                             self._gui_start_callback()
-                        elif self._stop_flag:
+                        else:
                             self._stop_flag = False
                             self.start_all(gui_mode=self.gui_mode)
                         self._ack_command(cmd_name, "OK")
                     elif cmd_name == "stop":
+                        # v1.0.367: Gọi stop_all() trực tiếp (không qua GUI callback)
+                        # GUI callback chỉ schedule trên Tkinter thread → không stop ngay
+                        self.log("Master STOP → Dừng tất cả workers", "MANAGER", "INFO")
+                        self.stop_all()
+                        # Cập nhật GUI nếu có
                         if self._gui_stop_callback:
-                            # v1.0.346: Gọi thẳng GUI _stop() = ấn nút DỪNG
-                            self.log("Master STOP → GUI DỪNG", "MANAGER", "INFO")
                             self._gui_stop_callback()
-                        else:
-                            self.stop_all()
                         self._ack_command(cmd_name, "OK")
                     elif cmd_name == "update":
                         self._ack_command(cmd_name, "STARTED")

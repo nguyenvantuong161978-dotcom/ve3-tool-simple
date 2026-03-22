@@ -1,6 +1,6 @@
-1.0.366
+1.0.367
 2026-03-22 (VN)
-Change: Fix hien thi anh tren master + arrange cua so khi RUN tu master
+Change: Fix STOP khong dung - kill process tree + goi stop_all truc tiep
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
