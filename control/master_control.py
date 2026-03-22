@@ -335,13 +335,18 @@ class MasterControlGUI:
 
         # State
         state_lbl = tk.Label(row, text="--", font=("Consolas", 10),
-                             bg=BG_CARD, fg=FG_DIM, width=22, anchor=tk.W)
+                             bg=BG_CARD, fg=FG_DIM, width=18, anchor=tk.W)
         state_lbl.pack(side=tk.LEFT, padx=4)
 
-        # Project
+        # Project + progress (v1.0.364)
         proj_lbl = tk.Label(row, text="", font=("Consolas", 10),
                             bg=BG_CARD, fg=YELLOW, anchor=tk.W)
-        proj_lbl.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+        proj_lbl.pack(side=tk.LEFT, padx=4)
+
+        # Progress detail
+        progress_lbl = tk.Label(row, text="", font=("Consolas", 9),
+                                bg=BG_CARD, fg=CYAN, anchor=tk.W)
+        progress_lbl.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
 
         # Version
         ver_lbl = tk.Label(row, text="", font=("Consolas", 9),
@@ -363,6 +368,7 @@ class MasterControlGUI:
             "dot_id": dot_id,
             "state": state_lbl,
             "project": proj_lbl,
+            "progress": progress_lbl,
             "version": ver_lbl,
             "_state": "",
         }
@@ -378,6 +384,12 @@ class MasterControlGUI:
         uptime = data.get("uptime_minutes", 0)
         timestamp = data.get("timestamp", "")
 
+        # v1.0.364: Project progress data
+        project_elapsed = data.get("project_elapsed_minutes", 0)
+        images_done = data.get("images_done", 0)
+        total_scenes = data.get("total_scenes", 0)
+        excel_step = data.get("excel_step", "")
+
         # State text
         state_parts = [state]
         if uptime:
@@ -386,8 +398,21 @@ class MasterControlGUI:
         w["state"].config(text=" | ".join(state_parts))
         w["_state"] = state
 
-        # Project
-        w["project"].config(text=project if project else "")
+        # Project + elapsed time
+        proj_text = project
+        if project and project_elapsed:
+            ph, pm = project_elapsed // 60, project_elapsed % 60
+            proj_text = f"{project} ({ph}h{pm:02d}m)"
+        w["project"].config(text=proj_text if proj_text else "")
+
+        # Progress: images + excel step
+        progress_parts = []
+        if total_scenes > 0:
+            pct = int(images_done / total_scenes * 100)
+            progress_parts.append(f"{images_done}/{total_scenes} anh ({pct}%)")
+        if excel_step and excel_step != "done":
+            progress_parts.append(f"Excel: {excel_step}")
+        w["progress"].config(text=" | ".join(progress_parts))
 
         # Version
         w["version"].config(text=f"v{version}" if version else "")

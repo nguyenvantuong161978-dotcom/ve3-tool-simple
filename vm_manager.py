@@ -3353,13 +3353,38 @@ class VMManager:
             except Exception:
                 pass
 
+            # v1.0.364: Thêm tiến độ project cho master theo dõi
+            project_code = self.current_project_code or ""
+            project_elapsed_min = 0
+            images_done = 0
+            total_scenes = 0
+            excel_step = ""
+
+            if project_code:
+                # Thời gian chạy project hiện tại
+                if self.project_start_time:
+                    project_elapsed_min = int((time.time() - self.project_start_time) / 60)
+
+                # Tiến độ ảnh + Excel step
+                try:
+                    pstatus = self.quality_checker.get_project_status(project_code)
+                    images_done = pstatus.images_done
+                    total_scenes = pstatus.total_scenes
+                    excel_step = pstatus.current_step or ""
+                except Exception:
+                    pass
+
             data = {
                 "channel": self._vm_id,
                 "state": state,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "version": version,
                 "uptime_minutes": uptime_min,
-                "project": self.current_project_code or "",
+                "project": project_code,
+                "project_elapsed_minutes": project_elapsed_min,
+                "images_done": images_done,
+                "total_scenes": total_scenes,
+                "excel_step": excel_step,
                 "workers": worker_states,
             }
 
