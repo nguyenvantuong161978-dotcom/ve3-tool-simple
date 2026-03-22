@@ -711,18 +711,21 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                         break
 
                     nv_with_media = [c for c in nv_chars if getattr(c, 'media_id', None)]
-                    if len(nv_with_media) >= len(nv_chars):
-                        log(f"  [v] NV references ready ({len(nv_with_media)}/{len(nv_chars)} có media_id)")
-                        nv_ready = True
-                        break
 
-                    # v1.0.322: Thêm check img/ - Chrome 1 đã tạo ảnh NV chưa?
+                    # v1.0.380: Check CẢ media_id VÀ PNG files thực tế
                     nv_dir = local_dir / "nv"
                     nv_pngs = list(nv_dir.glob("nv*.png")) if nv_dir.exists() else []
+
                     if waited_nv == 0:
                         log(f"  [INFO] NV chars: {len(nv_chars)}, NV media_id: {len(nv_with_media)}, NV pngs: {len(nv_pngs)}")
 
-                    log(f"  [WAIT] NV media_id: {len(nv_with_media)}/{len(nv_chars)} - đợi Chrome 1... ({waited_nv}s)")
+                    # Cần CẢ HAI: media_id đủ VÀ PNG files đủ
+                    if len(nv_with_media) >= len(nv_chars) and len(nv_pngs) >= len(nv_chars):
+                        log(f"  [v] NV references ready ({len(nv_with_media)}/{len(nv_chars)} media_id, {len(nv_pngs)} pngs)")
+                        nv_ready = True
+                        break
+
+                    log(f"  [WAIT] NV: media_id {len(nv_with_media)}/{len(nv_chars)}, pngs {len(nv_pngs)}/{len(nv_chars)} - đợi Chrome 1... ({waited_nv}s)")
                 except Exception as e:
                     log(f"  [WAIT] Đọc Excel lỗi: {e} - đợi... ({waited_nv}s)")
                 time.sleep(wait_interval_nv)

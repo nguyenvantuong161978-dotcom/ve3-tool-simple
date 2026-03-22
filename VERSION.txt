@@ -1,6 +1,6 @@
-1.0.379
+1.0.380
 2026-03-23 (VN)
-Change: Chuyen nut LAY IPv6 vao Setup VM + debug log match
+Change: 3 fix - DNS timeout, Chrome 2 proxy check, Chrome 2 doi NV xong moi lam thumb
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

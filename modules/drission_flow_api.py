@@ -2573,15 +2573,31 @@ class DrissionFlowAPI:
                                 else:
                                     self.log(f"[WARN] IPv6 proxy failed to start", "WARN")
                             else:
-                                self.log(f"[NET] [Worker{self.worker_id}] Dùng IPv6 proxy từ Chrome 1")
-                                self._ipv6_proxy = True  # Mark as using proxy
+                                # Chrome 2+: Check proxy thật sự chạy trước khi dùng
+                                import socket as _sock
+                                _proxy_running = False
+                                try:
+                                    _test_sock = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+                                    _test_sock.settimeout(2)
+                                    _test_sock.connect(('127.0.0.1', proxy_port))
+                                    _test_sock.close()
+                                    _proxy_running = True
+                                except Exception:
+                                    pass
 
-                            # Cả 2 Chrome đều dùng proxy
-                            options.set_argument(f'--proxy-server=socks5://127.0.0.1:{proxy_port}')
-                            options.set_argument('--proxy-bypass-list=<-loopback>')
-                            self.log(f"[NET] Chrome → SOCKS5 proxy → IPv6 ONLY")
-                            self.log(f"   Proxy: socks5://127.0.0.1:{proxy_port}")
-                            _using_ipv6_proxy = True
+                                if _proxy_running:
+                                    self.log(f"[NET] [Worker{self.worker_id}] Dùng IPv6 proxy từ Chrome 1")
+                                    self._ipv6_proxy = True
+                                else:
+                                    self.log(f"[NET] [Worker{self.worker_id}] Proxy port {proxy_port} KHÔNG chạy - skip proxy", "WARN")
+
+                            # Chỉ dùng proxy nếu thật sự có
+                            if self._ipv6_proxy:
+                                options.set_argument(f'--proxy-server=socks5://127.0.0.1:{proxy_port}')
+                                options.set_argument('--proxy-bypass-list=<-loopback>')
+                                self.log(f"[NET] Chrome → SOCKS5 proxy → IPv6 ONLY")
+                                self.log(f"   Proxy: socks5://127.0.0.1:{proxy_port}")
+                            _using_ipv6_proxy = bool(self._ipv6_proxy)
                         except Exception as proxy_err:
                             self.log(f"[WARN] IPv6 proxy error: {proxy_err}", "WARN")
                     else:

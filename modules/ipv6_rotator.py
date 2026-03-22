@@ -471,23 +471,36 @@ class IPv6Rotator:
             commands.append('netsh interface ipv6 set prefixpolicy 2002::/16 30 2')
             commands.append('netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 10 4')
 
-            # Bước 5: v1.0.375 - Set DNS IPv6 (Google Public DNS)
-            # Thiếu DNS → máy không resolve domain qua IPv6
-            commands.append(f'netsh interface ipv6 set dnsservers "{self.interface_name}" static 2001:4860:4860::8888 primary')
-            commands.append(f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8844 index=2')
-
             # Check admin và chạy commands
             if _is_admin():
                 # Đã có quyền admin - chạy trực tiếp
                 self.log("[IPv6] Running with admin privileges...")
                 for cmd in commands:
                     subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+
+                # Bước 5: v1.0.375 - Set DNS IPv6 (Google Public DNS)
+                # Chạy RIÊNG với timeout dài hơn, fail thì chỉ warn (không fail IPv6)
+                dns_commands = [
+                    f'netsh interface ipv6 set dnsservers "{self.interface_name}" static 2001:4860:4860::8888 primary',
+                    f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8844 index=2',
+                ]
+                for dns_cmd in dns_commands:
+                    try:
+                        subprocess.run(dns_cmd, shell=True, capture_output=True, timeout=15)
+                    except Exception as dns_err:
+                        self.log(f"[IPv6] [WARN] DNS command timeout (non-fatal): {dns_err}")
             else:
                 # Cần yêu cầu quyền admin
                 self.log("[IPv6] Requesting admin privileges...")
                 if not _run_netsh_admin(commands, self.log):
                     self.log("[IPv6] [x] Failed to get admin privileges")
                     return False
+                # DNS riêng (non-fatal)
+                dns_commands = [
+                    f'netsh interface ipv6 set dnsservers "{self.interface_name}" static 2001:4860:4860::8888 primary',
+                    f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8844 index=2',
+                ]
+                _run_netsh_admin(dns_commands, self.log)  # Best-effort
 
             # Đợi adapter cập nhật (quan trọng: cần đủ thời gian để Windows nhận IPv6)
             self.log("[IPv6] Waiting for network adapter to update...")
