@@ -1,6 +1,6 @@
-1.0.377
+1.0.378
 2026-03-23 (VN)
-Change: Fix reference image loop - check cache khi Excel bi lock
+Change: Nut LAY IPv6 tu trang tinh trong Settings
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

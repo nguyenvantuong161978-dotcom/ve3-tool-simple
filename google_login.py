@@ -33,6 +33,7 @@ ACCOUNT_INDEX_FILE = TOOL_DIR / "config" / ".account_index.json"  # Track accoun
 SHEET_NAME = "THÔNG TIN"  # v1.0.105: Sheet mới chứa thông tin tài khoản
 CHANNEL_COLUMN = "B"  # Cột B: Mã kênh (AR35, AR47, KA2...)
 ACCOUNTS_COLUMN = "AT"  # Cột AT: Tài khoản Veo3 (nhiều dòng, format: id|pass|2fa)
+IPV6_COLUMN = "AT"  # Cột chứa danh sách IPv6 (mỗi dòng trong ô = 1 IPv6)
 
 
 def log(msg: str, level: str = "INFO"):
@@ -205,6 +206,88 @@ def get_channel_accounts(channel_code: str, max_retries: int = 3) -> list:
             continue
 
     log(f"Code '{code_upper}' not found after {max_retries} attempts: {last_error}", "ERROR")
+    return []
+
+
+def get_channel_ipv6(channel_code: str, max_retries: int = 3) -> list:
+    """
+    Lấy danh sách IPv6 cho một kênh từ Google Sheet.
+
+    - Sheet: THÔNG TIN
+    - Cột B: Mã kênh (KA4-T3, AR8-T1...)
+    - Cột IPV6_COLUMN: Danh sách IPv6 (mỗi dòng trong ô = 1 IPv6)
+
+    Returns:
+        List of IPv6 strings: ["2001:ee0:b004:3f01::2", ...]
+    """
+    import time
+
+    code_upper = channel_code.upper()
+    last_error = None
+
+    channel_col_idx = col_letter_to_index(CHANNEL_COLUMN)  # B = 1
+    ipv6_col_idx = col_letter_to_index(IPV6_COLUMN)
+
+    for attempt in range(max_retries):
+        if attempt > 0:
+            wait_time = 2 * attempt
+            log(f"Retry đọc IPv6 ({attempt + 1}/{max_retries}) sau {wait_time}s...")
+            time.sleep(wait_time)
+
+        gc, spreadsheet_name = load_gsheet_client()
+        if not gc:
+            last_error = "Cannot load gsheet client"
+            continue
+
+        try:
+            ws = gc.open(spreadsheet_name).worksheet(SHEET_NAME)
+            all_data = ws.get_all_values()
+
+            if not all_data:
+                log(f"Sheet '{SHEET_NAME}' is empty", "ERROR")
+                return []
+
+            for row_idx, row in enumerate(all_data, start=1):
+                if len(row) <= max(channel_col_idx, ipv6_col_idx):
+                    continue
+
+                row_code = str(row[channel_col_idx]).strip().upper()
+
+                # Match: chính xác hoặc prefix
+                is_match = (
+                    row_code == code_upper or
+                    row_code.startswith(code_upper + "-") or
+                    code_upper.startswith(row_code + "-")
+                )
+
+                if is_match:
+                    ipv6_cell = str(row[ipv6_col_idx]).strip()
+                    if not ipv6_cell:
+                        log(f"IPv6 cell empty for {row_code}", "WARN")
+                        return []
+
+                    # Parse: mỗi dòng trong ô = 1 IPv6
+                    ipv6_list = []
+                    for line in ipv6_cell.split('\n'):
+                        line = line.strip()
+                        if line and ':' in line:  # IPv6 luôn có dấu ':'
+                            ipv6_list.append(line)
+
+                    log(f"Found {len(ipv6_list)} IPv6 for {code_upper} (matched: {row_code})")
+                    for i, ip in enumerate(ipv6_list):
+                        log(f"  IPv6 {i+1}: {ip}")
+                    return ipv6_list
+
+            last_error = f"Code '{code_upper}' not found"
+            if attempt < max_retries - 1:
+                continue
+
+        except Exception as e:
+            last_error = str(e)
+            log(f"Error reading IPv6 (attempt {attempt + 1}): {e}", "WARN")
+            continue
+
+    log(f"IPv6 for '{code_upper}' not found: {last_error}", "ERROR")
     return []
 
 

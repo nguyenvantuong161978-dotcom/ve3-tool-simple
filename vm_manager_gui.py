@@ -227,6 +227,17 @@ class SettingsWindow(tk.Toplevel):
         tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
                   bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
 
+        # === IPv6 - Nút lấy từ trang tính (v1.0.378) ===
+        self.ipv6_status = tk.Label(chrome_frame, text="", bg='#16213e', fg='#00d9ff',
+                                     font=("Consolas", 9), anchor="w")
+        self.ipv6_status.pack(fill="x", pady=(8, 0))
+
+        tk.Button(chrome_frame, text="LAY IPv6 TU TRANG TINH", command=self._fetch_ipv6_from_sheet,
+                  bg='#e17055', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10).pack(anchor="w", pady=5)
+
+        # Hiện số IPv6 hiện có
+        self._show_ipv6_count()
+
         # === VEO3 ACCOUNTS (v1.0.108) ===
         account_frame = tk.LabelFrame(main_frame, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
                                        font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -555,6 +566,49 @@ class SettingsWindow(tk.Toplevel):
             else:
                 self.chrome2_var.set(path)
             self._check_resources()
+
+    def _show_ipv6_count(self):
+        """Hien thi so IPv6 hien co trong file."""
+        ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
+        if not ipv6_file.exists():
+            ipv6_file = TOOL_DIR / "config" / "ipv6_list.txt"
+        if ipv6_file.exists():
+            lines = [l.strip() for l in ipv6_file.read_text(encoding='utf-8').splitlines()
+                     if l.strip() and not l.strip().startswith('#')]
+            self.ipv6_status.config(text=f"IPv6: {len(lines)} IPs trong file", fg='#00ff88')
+        else:
+            self.ipv6_status.config(text="IPv6: Chua co file", fg='#ff6b6b')
+
+    def _fetch_ipv6_from_sheet(self):
+        """Lay IPv6 tu trang tinh THONG TIN va luu vao config/ipv6.txt."""
+        from tkinter import messagebox
+        try:
+            self.ipv6_status.config(text="Dang lay IPv6 tu trang tinh...", fg='#ffd93d')
+            self.update_idletasks()
+
+            from google_login import detect_machine_code, get_channel_ipv6
+
+            machine_code = detect_machine_code()
+            if not machine_code:
+                messagebox.showerror("Loi", "Khong detect duoc ma may!")
+                return
+
+            ipv6_list = get_channel_ipv6(machine_code)
+            if not ipv6_list:
+                messagebox.showwarning("Khong co", f"Khong tim thay IPv6 cho {machine_code}")
+                self.ipv6_status.config(text=f"IPv6: Khong tim thay cho {machine_code}", fg='#ff6b6b')
+                return
+
+            # Save vao config/ipv6.txt
+            ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
+            ipv6_file.write_text('\n'.join(ipv6_list) + '\n', encoding='utf-8')
+
+            self.ipv6_status.config(text=f"IPv6: Da luu {len(ipv6_list)} IPs cho {machine_code}", fg='#00ff88')
+            messagebox.showinfo("OK", f"Da luu {len(ipv6_list)} IPv6 vao config/ipv6.txt")
+
+        except Exception as e:
+            self.ipv6_status.config(text=f"Loi: {e}", fg='#ff6b6b')
+            messagebox.showerror("Loi", f"Khong the lay IPv6: {e}")
 
 
 # ================================================================================
