@@ -1,6 +1,6 @@
-1.0.370
+1.0.371
 2026-03-22 (VN)
-Change: Master control retry lenh khi TIMEOUT + fix CMD khong hien thi
+Change: UPDATE tu master restart toan bo Python process de load code moi
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

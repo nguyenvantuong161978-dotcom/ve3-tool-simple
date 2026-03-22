@@ -2907,8 +2907,7 @@ class VMManager:
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                 )
 
-                # v1.0.369: Bỏ hide_cmd_windows() - để _arrange_windows() sắp xếp
-                # hide trước rồi arrange sau gây mất CMD nếu title bị thay đổi
+                self.log(f"CMD created: PID={w.process.pid}, cmd=[cmd /k {cmd_str[:60]}...]", worker_id, "INFO")
             else:
                 # Linux/Mac
                 worker_env = os.environ.copy()
@@ -3496,6 +3495,8 @@ class VMManager:
                     elif cmd_name == "update":
                         self._ack_command(cmd_name, "STARTED")
                         self._do_git_update()
+                        # ACK OK trước khi os.execv trong _do_git_update
+                        # (nếu đến đây = execv không chạy → fallback restart)
                         self._ack_command(cmd_name, "OK")
                     elif cmd_name == "done":
                         # v1.0.364: Master ấn DONE → ép hoàn thành project hiện tại
@@ -3673,10 +3674,16 @@ class VMManager:
 
                 self.log("ZIP update OK", "MANAGER")
 
-            # Restart
-            self.log("Restarting workers...", "MANAGER")
-            self._stop_flag = False
-            self.start_all(gui_mode=self.gui_mode)
+            # v1.0.371: Restart TOÀN BỘ Python process để load code mới
+            # start_all() chỉ restart workers nhưng vm_manager.py/gui vẫn dùng code cũ trong memory
+            self.log("Restarting tool (load code moi)...", "MANAGER")
+
+            # ACK trước khi execv (execv replace process → code sau không chạy)
+            self._ack_command("update", "OK - RESTARTING")
+            time.sleep(1)
+
+            import os as _os
+            _os.execv(sys.executable, [sys.executable] + sys.argv)
 
         except Exception as e:
             self.log(f"Update error: {e}", "MANAGER", "ERROR")
