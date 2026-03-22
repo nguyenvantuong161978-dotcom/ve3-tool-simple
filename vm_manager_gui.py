@@ -2389,8 +2389,11 @@ class SimpleGUI(tk.Tk):
             # v1.0.335: Start watchdog để báo status cho master
             self.manager.start_watchdog()
 
-            # 5. Auto-arrange tat ca cua so sau khi workers da mo (doi ~8s)
-            time.sleep(8)
+            # 5. Auto-arrange tat ca cua so sau khi workers da mo
+            # v1.0.366: Doi 15s (Chrome can thoi gian mo) + arrange 2 lan
+            time.sleep(15)
+            self.after(0, self._arrange_windows)
+            time.sleep(10)
             self.after(0, self._arrange_windows)
 
         threading.Thread(target=run, daemon=True).start()

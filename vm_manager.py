@@ -3353,12 +3353,24 @@ class VMManager:
             except Exception:
                 pass
 
-            # v1.0.364: Thêm tiến độ project cho master theo dõi
+            # v1.0.366: Thêm tiến độ project cho master theo dõi
             project_code = self.current_project_code or ""
             project_elapsed_min = 0
             images_done = 0
             total_scenes = 0
             excel_step = ""
+
+            # Nếu chưa có current_project_code → scan PROJECTS folder
+            if not project_code:
+                try:
+                    projects_dir = TOOL_DIR / "PROJECTS"
+                    if projects_dir.exists():
+                        for item in projects_dir.iterdir():
+                            if item.is_dir() and (item / "_CLAIMED").exists():
+                                project_code = item.name
+                                break
+                except Exception:
+                    pass
 
             if project_code:
                 # Thời gian chạy project hiện tại
@@ -3372,7 +3384,13 @@ class VMManager:
                     total_scenes = pstatus.total_scenes
                     excel_step = pstatus.current_step or ""
                 except Exception:
-                    pass
+                    # Fallback: đếm ảnh trực tiếp
+                    try:
+                        img_dir = TOOL_DIR / "PROJECTS" / project_code / "img"
+                        if img_dir.exists():
+                            images_done = len(list(img_dir.glob("scene_*.png")))
+                    except Exception:
+                        pass
 
             data = {
                 "channel": self._vm_id,
