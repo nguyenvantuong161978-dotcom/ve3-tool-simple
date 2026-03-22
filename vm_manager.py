@@ -2529,7 +2529,11 @@ class VMManager:
             return False
 
     def get_cmd_windows(self) -> List[int]:
-        """Lấy danh sách handle của TẤT CẢ cửa sổ CMD (Excel, Chrome 1, Chrome 2)."""
+        """Lấy danh sách handle của TẤT CẢ cửa sổ CMD (Excel, Chrome 1, Chrome 2).
+
+        v1.0.369: Tìm bằng PID (từ w.process) thay vì title.
+        Python có thể thay đổi title CMD → tìm bằng title không match.
+        """
         if sys.platform != "win32":
             return []
 
@@ -2538,29 +2542,53 @@ class VMManager:
             from ctypes import wintypes
 
             user32 = ctypes.windll.user32
+
+            # Collect PIDs from tracked workers
+            worker_pids = {}  # pid → worker_id
+            for wid, w in self.workers.items():
+                if w.process and w.process.poll() is None:
+                    worker_pids[w.process.pid] = wid
+
+            if not worker_pids:
+                return []
+
+            # Find console windows owned by worker PIDs
             cmd_windows = []
 
             def enum_windows_callback(hwnd, lParam):
                 if user32.IsWindowVisible(hwnd):
-                    length = user32.GetWindowTextLengthW(hwnd)
-                    if length > 0:
-                        title = ctypes.create_unicode_buffer(length + 1)
-                        user32.GetWindowTextW(hwnd, title, length + 1)
-                        title_upper = title.value.upper()
-                        # Tìm TẤT CẢ CMD windows: EXCEL, CHROME 1, CHROME 2
-                        if any(x in title_upper for x in ["EXCEL", "CHROME 1", "CHROME 2", "CHROME1", "CHROME2"]):
-                            cmd_windows.append((hwnd, title.value))
+                    pid = ctypes.c_ulong(0)
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    if pid.value in worker_pids:
+                        wid = worker_pids[pid.value]
+                        cmd_windows.append((hwnd, wid))
                 return True
 
             WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
             user32.EnumWindows(WNDENUMPROC(enum_windows_callback), 0)
 
-            # Sort: EXCEL first, then CHROME 1, then CHROME 2
+            # Fallback: Tìm bằng title nếu PID không match
+            # (PID có thể là cmd.exe → window thuộc child python.exe)
+            if not cmd_windows:
+                def enum_by_title(hwnd, lParam):
+                    if user32.IsWindowVisible(hwnd):
+                        length = user32.GetWindowTextLengthW(hwnd)
+                        if length > 0:
+                            title = ctypes.create_unicode_buffer(length + 1)
+                            user32.GetWindowTextW(hwnd, title, length + 1)
+                            title_upper = title.value.upper()
+                            if any(x in title_upper for x in ["EXCEL", "CHROME 1", "CHROME 2", "CHROME1", "CHROME2",
+                                                                "RUN_EXCEL", "_RUN_CHROME"]):
+                                cmd_windows.append((hwnd, title.value))
+                    return True
+                user32.EnumWindows(WNDENUMPROC(enum_by_title), 0)
+
+            # Sort: excel first, then chrome_1, then chrome_2
             def sort_key(x):
-                t = x[1].upper()
-                if "EXCEL" in t:
+                wid = x[1]
+                if "excel" in str(wid).lower():
                     return 0
-                if "CHROME 1" in t or "CHROME1" in t:
+                if "1" in str(wid):
                     return 1
                 return 2
             cmd_windows.sort(key=sort_key)
@@ -2879,12 +2907,8 @@ class VMManager:
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                 )
 
-                if gui_mode:
-                    # Move CMD windows off-screen after a short delay
-                    def move_cmd_offscreen():
-                        time.sleep(2)  # Wait for CMD to open
-                        self.hide_cmd_windows()
-                    threading.Thread(target=move_cmd_offscreen, daemon=True).start()
+                # v1.0.369: Bỏ hide_cmd_windows() - để _arrange_windows() sắp xếp
+                # hide trước rồi arrange sau gây mất CMD nếu title bị thay đổi
             else:
                 # Linux/Mac
                 worker_env = os.environ.copy()

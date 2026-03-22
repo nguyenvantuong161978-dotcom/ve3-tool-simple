@@ -1,6 +1,6 @@
-1.0.368
+1.0.369
 2026-03-22 (VN)
-Change: Fix CMD khong hien thi khi chay tu master control - bo shell=True
+Change: Fix CMD khong hien thi - bo hide_cmd + tim CMD bang PID thay vi title
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
