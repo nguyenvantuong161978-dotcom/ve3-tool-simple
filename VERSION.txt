@@ -1,6 +1,6 @@
-1.0.375
+1.0.376
 2026-03-23 (VN)
-Change: IPv6 them DNS + test bang HTTP thay vi ping
+Change: Fix IPv6 proxy getaddrinfo failed - fallback DNS resolution
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

@@ -210,8 +210,20 @@ class IPv6SocksProxy:
     def _connect_via_ipv6(self, host: str, port: int) -> Optional[socket.socket]:
         """Connect to target - CHỈ dùng IPv6 và BIND vào source IPv6 cụ thể."""
         try:
-            # CHỈ dùng IPv6 - ÉP BUỘC
-            addrinfo = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM)
+            # Thử resolve IPv6 trước (AF_INET6)
+            addrinfo = None
+            try:
+                addrinfo = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM)
+            except Exception:
+                pass
+
+            # Fallback: resolve bằng AF_UNSPEC (DNS qua IPv4 cũng được) rồi lọc IPv6
+            if not addrinfo:
+                try:
+                    all_addrs = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+                    addrinfo = [a for a in all_addrs if a[0] == socket.AF_INET6]
+                except Exception:
+                    pass
 
             if not addrinfo:
                 self.log(f"[IPv6-Proxy] No IPv6 address for {host}")
