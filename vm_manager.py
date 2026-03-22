@@ -2869,11 +2869,11 @@ class VMManager:
                 worker_env['PYTHONIOENCODING'] = 'utf-8'
                 worker_env['PYTHONUTF8'] = '1'
 
-                # cmd /k: set title + chcp + chạy script
-                cmd_str = f'cmd /k "title {title} && chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}"'
+                # v1.0.368: cmd /c "title ... && ..." KHÔNG dùng shell=True
+                # shell=True + CREATE_NEW_CONSOLE = cmd lồng cmd → cửa sổ không hiện
+                cmd_str = f'title {title} && chcp 65001 >nul && cd /d {TOOL_DIR} && {cmd_args}'
                 w.process = subprocess.Popen(
-                    cmd_str,
-                    shell=True,
+                    ['cmd', '/k', cmd_str],
                     cwd=str(TOOL_DIR),
                     env=worker_env,
                     creationflags=subprocess.CREATE_NEW_CONSOLE,

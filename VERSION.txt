@@ -1,6 +1,6 @@
-1.0.367
+1.0.368
 2026-03-22 (VN)
-Change: Fix STOP khong dung - kill process tree + goi stop_all truc tiep
+Change: Fix CMD khong hien thi khi chay tu master control - bo shell=True
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
