@@ -3429,6 +3429,14 @@ class VMManager:
                         self._ack_command(cmd_name, "STARTED")
                         self._do_git_update()
                         self._ack_command(cmd_name, "OK")
+                    elif cmd_name == "done":
+                        # v1.0.364: Master ấn DONE → ép hoàn thành project hiện tại
+                        if self.current_project_code:
+                            self._ack_command(cmd_name, f"STARTED: {self.current_project_code}")
+                            self._force_complete_current_project()
+                            self._ack_command(cmd_name, "OK")
+                        else:
+                            self._ack_command(cmd_name, "NO_PROJECT")
                     else:
                         self._ack_command(cmd_name, "UNKNOWN")
                 except Exception as e:
@@ -3442,6 +3450,60 @@ class VMManager:
                     pass
         except Exception:
             pass
+
+    def _force_complete_current_project(self):
+        """v1.0.364: Master ấn DONE → ép hoàn thành project hiện tại.
+        Copy kết quả về master VISUAL rồi chuyển sang mã mới."""
+        project_code = self.current_project_code
+        if not project_code:
+            return
+
+        self.log("=" * 60, "SYSTEM")
+        self.log(f"FORCE COMPLETE (Master): {project_code}", "SYSTEM", "WARN")
+        self.log("=" * 60, "SYSTEM")
+
+        import gc
+
+        # 1. Stop all workers + Kill Chrome
+        self.log("Step 1: Stopping all workers...", "SYSTEM")
+        for wid in list(self.workers.keys()):
+            self.stop_worker(wid)
+        self.kill_all_chrome()
+        self._clear_agent_status()
+        time.sleep(5)
+        gc.collect()
+
+        # 2. Copy to master
+        copy_ok = False
+        try:
+            self.log(f"Step 2: Copying {project_code} to master...", "SYSTEM")
+            self.copy_project_to_master(project_code, delete_after=False)
+            self.log(f"Copied {project_code} successfully", "SYSTEM", "SUCCESS")
+            copy_ok = True
+        except Exception as e:
+            self.log(f"Failed to copy {project_code}: {e}", "SYSTEM", "ERROR")
+
+        # 3. Delete local folder
+        if copy_ok:
+            self.log("Step 3: Deleting local folder...", "SYSTEM")
+            time.sleep(3)
+            gc.collect()
+            self._delete_project_folder(project_code)
+
+        # 4. Mark completed
+        if not hasattr(self, '_completed_projects'):
+            self._completed_projects = set()
+        self._completed_projects.add(project_code)
+        self.project_start_time = None
+        self.current_project_code = None
+
+        # 5. Restart workers
+        self.log("Step 4: Restarting workers...", "SYSTEM")
+        for wid in list(self.workers.keys()):
+            time.sleep(2)
+            self.start_worker(wid, gui_mode=self.gui_mode)
+
+        self.log("Ready for next project", "SYSTEM", "SUCCESS")
 
     def _ack_command(self, cmd_name: str, result: str):
         """Ghi ACK lên master để master biết lệnh đã được thực hiện."""

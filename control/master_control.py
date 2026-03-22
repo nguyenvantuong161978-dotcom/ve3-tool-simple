@@ -356,6 +356,7 @@ class MasterControlGUI:
         # Buttons (compact)
         for txt, clr, cmd in [("RUN", GREEN, "run"),
                                ("STOP", RED, "stop"),
+                               ("DONE", ORANGE, "done"),
                                ("UPD", BLUE, "update")]:
             tk.Button(row, text=txt, bg=clr, fg=BG, font=("Segoe UI", 8, "bold"),
                       activebackground=clr, relief=tk.FLAT, padx=8, pady=1,

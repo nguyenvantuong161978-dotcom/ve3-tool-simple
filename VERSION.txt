@@ -1,6 +1,6 @@
-1.0.364
+1.0.365
 2026-03-22 (VN)
-Change: Master theo doi tien do VM - ma dang lam, thoi gian, so anh, Excel step
+Change: Master kiem soat VM - theo doi tien do + nut DONE ep hoan thanh ma
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
