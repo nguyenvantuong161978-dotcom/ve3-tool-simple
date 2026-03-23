@@ -527,7 +527,25 @@ class PromptWorkbook:
         if self.path.exists():
             try:
                 self.logger.info(f"Loading existing Excel file: {self.path}")
-                self.workbook = load_workbook(self.path)
+                # v1.0.383: Retry khi file bị lock (PermissionError/WinError 32)
+                _load_ok = False
+                for _load_attempt in range(5):
+                    try:
+                        self.workbook = load_workbook(self.path)
+                        _load_ok = True
+                        break
+                    except PermissionError as pe:
+                        if _load_attempt < 4:
+                            import time
+                            _delay = 2 * (_load_attempt + 1)
+                            self.logger.warning(f"File locked khi load (attempt {_load_attempt+1}/5), retry sau {_delay}s...")
+                            time.sleep(_delay)
+                        else:
+                            raise  # Hết retry → raise để outer handler xử lý
+                if _load_ok:
+                    pass  # OK, tiếp tục
+                else:
+                    raise PermissionError(f"Cannot load {self.path} after 5 retries")
             except BadZipFile as e:
                 # v1.0.58: BadZipFile có thể do file đang được write bởi Chrome Worker
                 # KHÔNG XÓA NGAY - retry trước!
@@ -801,6 +819,7 @@ class PromptWorkbook:
 
         v1.0.325: Atomic save - ghi vào temp file trước, rename sau.
         v1.0.357: Retry 5 lần khi file bị lock (WinError 32).
+        v1.0.383: File lock (.xlsx.lock) để serialize access giữa các process.
         Giữ .bak backup để recovery nếu cần.
         """
         if self.workbook is None:
@@ -813,6 +832,32 @@ class PromptWorkbook:
         import time
         temp_path = self.path.with_suffix('.xlsx.tmp')
         bak_path = self.path.with_suffix('.xlsx.bak')
+
+        # v1.0.383: File lock để tránh 2 process ghi cùng lúc
+        lock_path = self.path.with_suffix('.xlsx.lock')
+        lock_acquired = False
+        lock_fd = None
+        for _lock_attempt in range(10):  # Đợi tối đa 10 x 1s = 10s
+            try:
+                # O_CREAT | O_EXCL: chỉ thành công nếu file CHƯA tồn tại
+                lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(lock_fd, str(os.getpid()).encode())
+                lock_acquired = True
+                break
+            except FileExistsError:
+                # Lock đã tồn tại - kiểm tra có stale không (> 30s)
+                try:
+                    lock_age = time.time() - os.path.getmtime(str(lock_path))
+                    if lock_age > 30:
+                        # Stale lock - xóa
+                        os.unlink(str(lock_path))
+                        self.logger.warning(f"Removed stale lock ({lock_age:.0f}s old)")
+                        continue
+                except Exception:
+                    pass
+                time.sleep(1)
+            except Exception:
+                break  # Lỗi khác → bỏ qua lock, tiếp tục save
 
         max_save_retries = 5
         save_retry_delay = 2  # seconds
@@ -863,6 +908,8 @@ class PromptWorkbook:
                 # Bước 4: Rename temp → chính thức (atomic trên cùng filesystem)
                 os.rename(str(temp_path), str(self.path))
                 self.logger.debug(f"Saved Excel file: {self.path}")
+                # Release lock
+                self._release_lock(lock_fd, lock_path)
                 return  # SUCCESS!
 
             except PermissionError as e:
@@ -900,6 +947,7 @@ class PromptWorkbook:
                             self.logger.warning(f"Restored file gốc từ backup sau lỗi save")
                         except Exception:
                             pass
+                    self._release_lock(lock_fd, lock_path)
                     raise
 
             except Exception as e:
@@ -915,7 +963,22 @@ class PromptWorkbook:
                         self.logger.warning(f"Restored file gốc từ backup sau lỗi save")
                     except Exception:
                         pass
+                self._release_lock(lock_fd, lock_path)
                 raise
+
+    def _release_lock(self, lock_fd, lock_path):
+        """Release file lock."""
+        import os
+        try:
+            if lock_fd is not None:
+                os.close(lock_fd)
+        except Exception:
+            pass
+        try:
+            if lock_path and os.path.exists(str(lock_path)):
+                os.unlink(str(lock_path))
+        except Exception:
+            pass
     
     # ========================================================================
     # CHARACTERS METHODS
