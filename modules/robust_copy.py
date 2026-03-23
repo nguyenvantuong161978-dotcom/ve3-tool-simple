@@ -515,6 +515,26 @@ class TaskQueue:
                         self._remove_claimed(claimed_file)
                     else:
                         continue
+                # v1.0.387: Skip nếu có VM khác đang claim (lock file _CLAIMING_*)
+                # Cleanup stale _CLAIMING_ files (>5 phút = VM crash mid-claim)
+                has_claiming = False
+                try:
+                    for f in item.iterdir():
+                        if f.name.startswith("_CLAIMING_"):
+                            try:
+                                age_sec = time.time() - f.stat().st_mtime
+                                if age_sec > 300:  # 5 phút
+                                    f.unlink()
+                                    self.log(f"[QUEUE] {code}: xóa stale {f.name} ({age_sec:.0f}s)")
+                                    continue
+                            except Exception:
+                                pass
+                            has_claiming = True
+                            break
+                except Exception:
+                    pass
+                if has_claiming:
+                    continue
                 available.append(code)
         except Exception as e:
             self.log(f"[QUEUE] Lỗi scan: {e}", "ERROR")
@@ -541,26 +561,113 @@ class TaskQueue:
     def claim(self, code: str) -> bool:
         """
         Claim 1 project cụ thể.
-        Flow: ghi _CLAIMED → đợi random 2-4s → đọc lại verify
+
+        v1.0.387: Atomic claim - dùng O_CREAT|O_EXCL để tránh race condition.
+        Flow:
+          1. Xóa _CLAIMED cũ nếu hết hạn
+          2. Tạo _CLAIMING_{VM_ID} bằng O_CREAT|O_EXCL (atomic, không ghi đè được)
+          3. Ghi nội dung claim
+          4. Rename _CLAIMING_{VM_ID} → _CLAIMED
+          5. Đợi 3s NFS sync → đọc lại verify
         """
         project_dir = self.master_projects / code
         claimed_file = project_dir / CLAIMED_FILE
+        claiming_file = project_dir / f"_CLAIMING_{self.vm_id}"
         if not project_dir.exists():
             return False
-        if claimed_file.exists() and not self._is_claim_expired(claimed_file):
-            return False
+
+        # Bước 1: Check _CLAIMED hiện có
+        if claimed_file.exists():
+            if self._is_claim_expired(claimed_file):
+                self.log(f"[QUEUE] {code}: claim cũ đã hết hạn → xóa", "WARN")
+                self._remove_claimed(claimed_file)
+            else:
+                # Đã có claim hợp lệ - check có phải của mình không
+                try:
+                    first_line = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
+                    if first_line == self.vm_id:
+                        return True  # Đã claim rồi
+                except Exception:
+                    pass
+                return False
+
         try:
             account_str = self._get_account_from_sheet(code)
             claim_content = self._make_claim_content(account=account_str)
-            claimed_file.write_text(claim_content, encoding='utf-8')
-            wait_time = 2 + random.random() * 2
-            time.sleep(wait_time)
+
+            # Bước 2: Tạo file _CLAIMING_{VM_ID} bằng O_CREAT|O_EXCL (atomic)
+            # Nếu file đã tồn tại → FileExistsError → VM khác đang claim
+            try:
+                fd = os.open(str(claiming_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, claim_content.encode('utf-8'))
+                os.close(fd)
+            except FileExistsError:
+                self.log(f"[QUEUE] {code}: VM khác đang claim (lock file exists)", "INFO")
+                return False
+
+            # Bước 3: Check xem có VM khác cũng đang _CLAIMING không
+            time.sleep(1)  # Đợi NFS sync các _CLAIMING files
+            other_claimers = []
+            try:
+                for f in project_dir.iterdir():
+                    if f.name.startswith("_CLAIMING_") and f.name != f"_CLAIMING_{self.vm_id}":
+                        other_claimers.append(f.name)
+            except Exception:
+                pass
+
+            if other_claimers:
+                # Có VM khác cũng đang claim → dùng tên VM sort để quyết định ai thắng
+                all_claimers = sorted([self.vm_id] + [c.replace("_CLAIMING_", "") for c in other_claimers])
+                winner = all_claimers[0]  # VM có tên nhỏ nhất thắng
+                if winner != self.vm_id:
+                    self.log(f"[QUEUE] {code}: thua {winner} (sort order)", "INFO")
+                    try:
+                        claiming_file.unlink()
+                    except Exception:
+                        pass
+                    return False
+
+            # Bước 4: Rename → _CLAIMED (ta là người duy nhất hoặc thắng sort)
+            try:
+                # Xóa _CLAIMED cũ (nếu xuất hiện do race)
+                if claimed_file.exists():
+                    try:
+                        first_line = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
+                    except Exception:
+                        first_line = ""
+                    if first_line and first_line != self.vm_id:
+                        self.log(f"[QUEUE] {code}: _CLAIMED xuất hiện bởi {first_line} → thua", "INFO")
+                        try:
+                            claiming_file.unlink()
+                        except Exception:
+                            pass
+                        return False
+
+                # Ghi trực tiếp vào _CLAIMED (rename trên NFS không reliable bằng write)
+                claimed_file.write_text(claim_content, encoding='utf-8')
+            except Exception as e:
+                self.log(f"[QUEUE] {code}: lỗi ghi _CLAIMED: {e}", "ERROR")
+                try:
+                    claiming_file.unlink()
+                except Exception:
+                    pass
+                return False
+
+            # Cleanup _CLAIMING file
+            try:
+                claiming_file.unlink()
+            except Exception:
+                pass
+
+            # Bước 5: Đợi NFS sync → đọc lại verify
+            time.sleep(3)
             try:
                 read_back = claimed_file.read_text(encoding='utf-8').strip()
                 first_line = read_back.split('\n')[0].strip()
             except Exception:
                 self.log(f"[QUEUE] {code}: không đọc lại được _CLAIMED", "WARN")
                 return False
+
             if first_line == self.vm_id:
                 self.log(f"[QUEUE] CLAIMED: {code} → {self.vm_id}")
                 if account_str:
@@ -568,10 +675,15 @@ class TaskQueue:
                     self.log(f"[QUEUE] Account: {email}")
                 return True
             else:
-                self.log(f"[QUEUE] {code}: đã bị {first_line} claim trước", "INFO")
+                self.log(f"[QUEUE] {code}: đã bị {first_line} claim trước (verify fail)", "INFO")
                 return False
         except Exception as e:
             self.log(f"[QUEUE] Lỗi claim {code}: {e}", "ERROR")
+            # Cleanup
+            try:
+                claiming_file.unlink()
+            except Exception:
+                pass
             return False
 
     def release(self, code: str) -> bool:

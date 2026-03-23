@@ -1,6 +1,6 @@
-1.0.386
-2026-03-23 (VN)
-Change: 3 fix - DNS timeout, Chrome 2 proxy check, Chrome 2 doi NV xong moi lam thumb
+1.0.387
+2026-03-24 (VN)
+Change: Atomic claim O_CREAT|O_EXCL chong race condition 2 VM lay trung 1 ma + debug logging scan
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

@@ -880,9 +880,11 @@ def scan_incomplete_local_projects() -> list:
 
         # v1.0.276: Skip neu co marker _COPIED_TO_VISUAL (xoa local that bai nhung da copy xong)
         if (item / "_COPIED_TO_VISUAL").exists():
+            log(f"    [{code}] SKIP: _COPIED_TO_VISUAL marker exists")
             continue
 
         if is_project_complete_on_master(code):
+            log(f"    [{code}] SKIP: already complete on master VISUAL")
             continue
 
         if is_local_pic_complete(item, code):
@@ -980,6 +982,7 @@ def scan_master_projects() -> list:
                     pass
 
             if is_project_complete_on_master(code):
+                log(f"    [{code}] SKIP: already complete on master VISUAL")
                 continue
 
             local_dir = LOCAL_PROJECTS / code

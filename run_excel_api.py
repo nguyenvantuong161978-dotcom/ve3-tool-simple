@@ -261,26 +261,30 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path, alread
             except Exception as e:
                 log(f"[IMPORT] TaskQueue.claim() error: {e}", "WARN")
 
-        # v1.0.382: Chỉ fallback khi lỗi kỹ thuật, KHÔNG fallback khi máy khác đã claim
+        # v1.0.387: Fallback dùng O_CREAT|O_EXCL (atomic) thay vì write_text (race condition)
         if not claimed_ok and not _claim_rejected:
             try:
                 claimed_file = master_dir / "_CLAIMED"
-                # Fallback cũng cần verify: ghi → đợi → đọc lại
                 claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{_hostname}\n"
-                claimed_file.write_text(claim_content, encoding='utf-8')
-                import time as _t
-                _t.sleep(3)  # Đợi NFS sync
-                # Đọc lại verify
                 try:
-                    read_back = claimed_file.read_text(encoding='utf-8').strip()
-                    first_line = read_back.split('\n')[0].strip()
-                    if first_line == vm_id:
-                        log(f"[IMPORT] Claimed (fallback+verify): {name} → {vm_id}")
-                        claimed_ok = True
-                    else:
-                        log(f"[IMPORT] Fallback claim bị ghi đè bởi {first_line} - SKIP!", "WARN")
-                except Exception:
-                    log(f"[IMPORT] Fallback verify failed - SKIP!", "WARN")
+                    fd = os.open(str(claimed_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.write(fd, claim_content.encode('utf-8'))
+                    os.close(fd)
+                    import time as _t
+                    _t.sleep(3)  # Đợi NFS sync
+                    # Đọc lại verify
+                    try:
+                        read_back = claimed_file.read_text(encoding='utf-8').strip()
+                        first_line = read_back.split('\n')[0].strip()
+                        if first_line == vm_id:
+                            log(f"[IMPORT] Claimed (fallback+atomic): {name} → {vm_id}")
+                            claimed_ok = True
+                        else:
+                            log(f"[IMPORT] Fallback claim bị ghi đè bởi {first_line} - SKIP!", "WARN")
+                    except Exception:
+                        log(f"[IMPORT] Fallback verify failed - SKIP!", "WARN")
+                except FileExistsError:
+                    log(f"[IMPORT] _CLAIMED đã tồn tại (máy khác claim trước) - SKIP!", "WARN")
             except Exception as e:
                 log(f"[IMPORT] Fallback claim FAILED: {e}", "ERROR")
 
