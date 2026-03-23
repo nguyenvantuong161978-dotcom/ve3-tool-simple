@@ -11,11 +11,16 @@ import sys
 
 
 def kill_pid(pid):
-    """Kill 1 process bằng PID - không dùng taskkill.exe."""
+    """Kill 1 process bằng PID - không dùng taskkill.exe.
+
+    Windows: os.kill(SIGTERM) gọi TerminateProcess (force kill).
+    Fallback: ctypes TerminateProcess nếu os.kill không đủ quyền.
+    """
     try:
         pid_int = int(pid)
         os.kill(pid_int, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError):
+    except (ProcessLookupError, OSError):
+        # Process không tồn tại hoặc access denied
         if sys.platform == "win32":
             try:
                 import ctypes
@@ -27,12 +32,15 @@ def kill_pid(pid):
                     kernel32.CloseHandle(handle)
             except Exception:
                 pass
-    except Exception:
-        pass
+    except (ValueError, TypeError):
+        pass  # PID không hợp lệ
 
 
 def kill_pid_tree(pid):
-    """Kill process VÀ tất cả child processes."""
+    """Kill process VÀ tất cả child processes.
+
+    QUAN TRỌNG: Phải kill cả tree, nếu chỉ kill parent → child thành orphan.
+    """
     try:
         import psutil
         parent = psutil.Process(int(pid))
@@ -42,10 +50,24 @@ def kill_pid_tree(pid):
                 child.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-        parent.kill()
+        try:
+            parent.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
     except ImportError:
-        # Không có psutil → kill PID đơn lẻ
-        kill_pid(pid)
+        # Không có psutil → dùng taskkill /T /F nhưng suppress dialog
+        if sys.platform == "win32":
+            import subprocess
+            try:
+                subprocess.run(
+                    f'taskkill /PID {int(pid)} /T /F',
+                    shell=True, capture_output=True, timeout=10,
+                    creationflags=0x08000000  # CREATE_NO_WINDOW - suppress dialog
+                )
+            except Exception:
+                kill_pid(pid)  # Last resort
+        else:
+            kill_pid(pid)
     except Exception:
         kill_pid(pid)
 
