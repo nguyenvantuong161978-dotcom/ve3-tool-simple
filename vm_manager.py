@@ -2208,19 +2208,17 @@ class VMManager:
                     if parts:
                         pid = parts[-1]
                         if pid.isdigit():
-                            subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
+                            from modules.process_killer import kill_pid
+                            kill_pid(pid)
                             killed_count += 1
 
             self.log(f"Killed {killed_count} Chrome for {worker_id}", worker_id, "SUCCESS")
 
         except subprocess.TimeoutExpired:
-            # v1.0.174: wmic timeout - fallback kill tất cả Chrome
             self.log(f"wmic timeout, killing ALL Chrome...", worker_id, "WARN")
-            try:
-                subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True, timeout=10)
-                self.log(f"Killed all Chrome (fallback)", worker_id, "WARN")
-            except:
-                pass
+            from modules.process_killer import kill_all_by_name
+            kill_all_by_name("chrome.exe")
+            self.log(f"Killed all Chrome (fallback)", worker_id, "WARN")
         except Exception as e:
             self.log(f"Error killing Chrome: {e}", worker_id, "WARN")
 
@@ -2290,8 +2288,9 @@ class VMManager:
         self.log("Killing all Chrome + CMD processes...", "SYSTEM")
         if sys.platform == "win32":
             # 1. Kill Chrome browsers
-            subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True)
-            subprocess.run(["taskkill", "/F", "/IM", "GoogleChromePortable.exe"], capture_output=True)
+            from modules.process_killer import kill_all_by_name, kill_pid
+            kill_all_by_name("chrome.exe")
+            kill_all_by_name("GoogleChromePortable.exe")
             self.log("Killed Chrome processes", "SYSTEM")
 
             # 2. Force kill Python worker processes bằng WMIC
@@ -2308,7 +2307,7 @@ class VMManager:
                         if parts:
                             pid = parts[-1]
                             if pid.isdigit():
-                                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+                                kill_pid(pid)
                                 killed_count += 1
                 self.log(f"Killed {killed_count} Python worker processes", "SYSTEM")
             except Exception as e:
@@ -2357,8 +2356,8 @@ class VMManager:
             time.sleep(0.5)
             try:
                 # Kill cmd.exe spawned by our tool
-                subprocess.run(["taskkill", "/F", "/FI", "WINDOWTITLE eq *EXCEL*"], capture_output=True)
-                subprocess.run(["taskkill", "/F", "/FI", "WINDOWTITLE eq *CHROME*"], capture_output=True)
+                # v1.0.386: Bỏ taskkill by WINDOWTITLE - không cần thiết và hay crash
+                pass
             except:
                 pass
 
@@ -2946,11 +2945,8 @@ class VMManager:
                 # v1.0.367: Kill TOÀN BỘ process tree (cmd.exe + python con)
                 # terminate() chỉ kill cmd.exe, python con chạy tiếp thành orphan
                 if sys.platform == "win32":
-                    # taskkill /T = kill process tree, /F = force
-                    subprocess.run(
-                        f'taskkill /PID {pid} /T /F',
-                        shell=True, capture_output=True, timeout=10
-                    )
+                    from modules.process_killer import kill_pid_tree
+                    kill_pid_tree(pid)
                 else:
                     w.process.terminate()
                 w.process.wait(timeout=5)

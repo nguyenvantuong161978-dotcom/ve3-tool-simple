@@ -1806,6 +1806,18 @@ class DrissionFlowAPI:
             self.log(f"[WARMUP] Error: {e}", "ERROR")
             return False
 
+    @staticmethod
+    def _kill_all_chrome_by_name():
+        """Kill tất cả Chrome processes - dùng module process_killer."""
+        from modules.process_killer import kill_all_by_name
+        kill_all_by_name("chrome.exe")
+
+    @staticmethod
+    def _kill_pid(pid: str):
+        """Kill process bằng PID - dùng module process_killer (không dùng taskkill.exe)."""
+        from modules.process_killer import kill_pid
+        kill_pid(pid)
+
     def _kill_chrome(self):
         """
         Close Chrome của tool này (không kill tất cả Chrome).
@@ -2121,24 +2133,19 @@ class DrissionFlowAPI:
                                 if parts:
                                     pid = parts[-1]
                                     if pid.isdigit():
-                                        subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
+                                        self._kill_pid(pid)
                                         killed_count += 1
 
                         self.log(f"  [v] Killed {killed_count} Chrome processes")
                     except subprocess.TimeoutExpired:
-                        # Fallback: kill all Chrome
+                        # Fallback: kill all Chrome by name
                         self.log(f"  [WARN] wmic timeout, killing ALL Chrome...")
-                        subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True, timeout=10)
+                        self._kill_all_chrome_by_name()
                         self.log(f"  [v] Killed all Chrome (fallback)")
                 else:
                     # Fallback: kill all Chrome (không có chrome_portable)
                     self.log("  [KILL] Force killing ALL Chrome processes (no chrome_portable)...")
-                    for _ in range(3):
-                        subprocess.run(
-                            ['taskkill', '/F', '/IM', 'chrome.exe'],
-                            capture_output=True, timeout=10
-                        )
-                        time.sleep(1)
+                    self._kill_all_chrome_by_name()
                     self.log("  [v] Killed all Chrome processes")
             else:
                 # Linux/Mac: killall (không hỗ trợ kill by path)
@@ -7372,9 +7379,7 @@ class DrissionFlowAPI:
                             if parts:
                                 pid = parts[-1]
                                 if pid.isdigit():
-                                    subprocess.run(['taskkill', '/F', '/PID', pid],
-                                                 capture_output=True, timeout=5)
-                                    # v1.0.172: Bỏ log kill PIDs (đã kill theo thư mục)
+                                    self._kill_pid(pid)
                                     killed_any = True
 
                 # Backup: Kill Chrome trên port này
@@ -7425,12 +7430,7 @@ class DrissionFlowAPI:
                             if parts:
                                 pid = parts[-1]
                                 if pid.isdigit():
-                                    # Force kill vì đây là Chrome zombie
-                                    subprocess.run(
-                                        ['taskkill', '/F', '/PID', pid],
-                                        capture_output=True, timeout=5
-                                    )
-                                    # v1.0.172: Bỏ log kill PIDs
+                                    self._kill_pid(pid)
                                     return True
             else:
                 # Linux/Mac
@@ -7505,8 +7505,7 @@ class DrissionFlowAPI:
                             if parts:
                                 pid = parts[-1]
                                 if pid.isdigit():
-                                    subprocess.run(['taskkill', '/F', '/PID', pid],
-                                                 capture_output=True, timeout=5)
+                                    self._kill_pid(pid)
                                     self.log(f"  Killed Chrome (PID: {pid})")
             else:
                 # Linux/Mac: dùng SIGTERM trước (graceful), sau đó mới SIGKILL
