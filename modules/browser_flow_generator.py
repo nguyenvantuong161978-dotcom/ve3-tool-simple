@@ -3667,12 +3667,16 @@ class BrowserFlowGenerator:
             except Exception as e:
                 self._log(f"Warning: Cannot load media_ids from Excel: {e}", "warn")
 
-        # Fallback to cache file nếu Excel không có data
-        cached_media_names = {}
-        if not excel_media_ids:
-            cached_media_names = self._load_media_cache()
-            if cached_media_names:
-                self._log(f"[CACHE] Fallback: Loaded {len(cached_media_names)} media references from cache")
+        # v1.0.383: LUÔN load cache, merge với Excel (Excel ưu tiên)
+        # Trước: chỉ load cache khi Excel rỗng → mất media_id đã save vào cache khi Excel bị lock
+        cached_media_names = self._load_media_cache()
+        if cached_media_names:
+            # Tìm IDs trong cache mà Excel không có
+            cache_only = set(k.lower() for k in cached_media_names) - set(k.lower() for k in excel_media_ids)
+            if cache_only:
+                self._log(f"[CACHE] Bổ sung {len(cache_only)} media_ids từ cache: {sorted(cache_only)}")
+            else:
+                self._log(f"[CACHE] Loaded {len(cached_media_names)} cached media refs (all in Excel already)")
 
         # Ensure output dir exists
         output_dir = Path(output_dir)
@@ -3926,28 +3930,41 @@ class BrowserFlowGenerator:
                     if images[0].media_name and is_reference_image:
                         media_id_saved = False
                         if workbook:
-                            try:
-                                # v1.0.210: Thêm status="done" khi có media_id
-                                # Tất cả tham chiếu (nv* + loc*) đều trong characters sheet
-                                if workbook.update_character(pid, media_id=images[0].media_name, status="done"):
-                                    workbook.save()
-                                    self._log(f"   [EXCEL] Saved media_id + status=done for {pid}: {images[0].media_name[:40]}...")
-                                    excel_media_ids[pid] = images[0].media_name
-                                    media_id_saved = True
-                                else:
-                                    self._log(f"   [EXCEL] {pid} not found in characters sheet", "warn")
-                            except Exception as e:
-                                self._log(f"   [EXCEL] Cannot save media_id: {e}", "warn")
+                            # v1.0.383: Retry 3 lần khi Excel bị lock (WinError 32)
+                            for _save_attempt in range(3):
+                                try:
+                                    # v1.0.210: Thêm status="done" khi có media_id
+                                    if workbook.update_character(pid, media_id=images[0].media_name, status="done"):
+                                        workbook.save()
+                                        self._log(f"   [EXCEL] Saved media_id + status=done for {pid}: {images[0].media_name[:40]}...")
+                                        excel_media_ids[pid] = images[0].media_name
+                                        media_id_saved = True
+                                        break
+                                    else:
+                                        self._log(f"   [EXCEL] {pid} not found in characters sheet", "warn")
+                                        break  # Không retry nếu character không tồn tại
+                                except Exception as e:
+                                    if _save_attempt < 2:
+                                        self._log(f"   [EXCEL] Save retry {_save_attempt+1}/3: {e}", "warn")
+                                        time.sleep(2)  # Đợi file unlock
+                                        # Reload workbook để lấy file handle mới
+                                        try:
+                                            workbook = PromptWorkbook(excel_path)
+                                            workbook.load_or_create()
+                                        except:
+                                            pass
+                                    else:
+                                        self._log(f"   [EXCEL] Cannot save media_id sau 3 lần: {e}", "warn")
 
-                        # Fallback: save to cache file if Excel update fails
-                        if not media_id_saved:
-                            try:
-                                cached_media_names[pid] = {'mediaName': images[0].media_name}
-                                self._save_media_cache(cached_media_names)
+                        # LUÔN save vào cache (backup) - không chỉ khi Excel fail
+                        try:
+                            cached_media_names[pid] = {'mediaName': images[0].media_name}
+                            self._save_media_cache(cached_media_names)
+                            if not media_id_saved:
                                 self._log(f"   [CACHE] Fallback - saved media_id for {pid}")
                                 excel_media_ids[pid] = images[0].media_name
-                            except Exception as e:
-                                self._log(f"   [CACHE] Cannot save media_id: {e}", "warn")
+                        except Exception as e:
+                            self._log(f"   [CACHE] Cannot save media_id: {e}", "warn")
                     elif images[0].media_name:
                         self._log(f"   Media name: {images[0].media_name[:40]}...")
                 else:
