@@ -908,6 +908,12 @@ class PromptWorkbook:
                 # Bước 4: Rename temp → chính thức (atomic trên cùng filesystem)
                 os.rename(str(temp_path), str(self.path))
                 self.logger.debug(f"Saved Excel file: {self.path}")
+                # Bước 5: Xóa .bak (file mới đã verify OK, không cần backup nữa)
+                try:
+                    if bak_path.exists():
+                        os.unlink(str(bak_path))
+                except Exception:
+                    pass
                 # Release lock
                 self._release_lock(lock_fd, lock_path)
                 return  # SUCCESS!
