@@ -240,6 +240,7 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path, alread
         _hostname = socket.gethostname()
         claimed_ok = already_claimed  # True nếu scan đã claim rồi
 
+        _claim_rejected = False  # True nếu máy khác đã claim (không fallback)
         if not claimed_ok:
             try:
                 from modules.robust_copy import TaskQueue
@@ -255,17 +256,31 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path, alread
                     log(f"[IMPORT] Claimed on master: {name} → {vm_id}")
                     claimed_ok = True
                 else:
-                    log(f"[IMPORT] TaskQueue.claim() returned False for {name} (da bi may khac claim)", "WARN")
+                    log(f"[IMPORT] {name} đã bị máy khác claim - SKIP!", "WARN")
+                    _claim_rejected = True  # Máy khác đã claim → KHÔNG fallback
             except Exception as e:
                 log(f"[IMPORT] TaskQueue.claim() error: {e}", "WARN")
 
-        if not claimed_ok:
+        # v1.0.382: Chỉ fallback khi lỗi kỹ thuật, KHÔNG fallback khi máy khác đã claim
+        if not claimed_ok and not _claim_rejected:
             try:
                 claimed_file = master_dir / "_CLAIMED"
+                # Fallback cũng cần verify: ghi → đợi → đọc lại
                 claim_content = f"{vm_id}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{_hostname}\n"
                 claimed_file.write_text(claim_content, encoding='utf-8')
-                log(f"[IMPORT] Claimed (fallback): {name} → {vm_id}")
-                claimed_ok = True
+                import time as _t
+                _t.sleep(3)  # Đợi NFS sync
+                # Đọc lại verify
+                try:
+                    read_back = claimed_file.read_text(encoding='utf-8').strip()
+                    first_line = read_back.split('\n')[0].strip()
+                    if first_line == vm_id:
+                        log(f"[IMPORT] Claimed (fallback+verify): {name} → {vm_id}")
+                        claimed_ok = True
+                    else:
+                        log(f"[IMPORT] Fallback claim bị ghi đè bởi {first_line} - SKIP!", "WARN")
+                except Exception:
+                    log(f"[IMPORT] Fallback verify failed - SKIP!", "WARN")
             except Exception as e:
                 log(f"[IMPORT] Fallback claim FAILED: {e}", "ERROR")
 
