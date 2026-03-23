@@ -5599,12 +5599,12 @@ if (btn) {
                 # DrissionFlowAPI luu vao save_dir/filename.png
                 img_rel = f"thumbnail/{fname}"
                 wb.update_thumbnail(thumb.thumb_id, status_img="done", img_path=img_rel)
-                wb.save()
+                wb.safe_save()
                 success_count += 1
                 self.log(f"[THUMB] [v] {fname} OK")
             else:
                 wb.update_thumbnail(thumb.thumb_id, status_img="error")
-                wb.save()
+                wb.safe_save()
                 self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
 
         # ---- BATCH B: Portrait (chon doc 9:16) ----
@@ -5682,12 +5682,12 @@ if (btn) {
             if portrait_ok:
                 img_rel = f"thumbnail/{fname}"
                 wb.update_thumbnail(thumb.thumb_id, status_portrait="done", img_path_portrait=img_rel)
-                wb.save()
+                wb.safe_save()
                 success_count += 1
                 self.log(f"[THUMB] [v] {fname} OK (portrait)")
             else:
                 wb.update_thumbnail(thumb.thumb_id, status_portrait="error")
-                wb.save()
+                wb.safe_save()
                 self.log(f"[THUMB] [x] {fname} FAIL: khong tao duoc portrait sau {max_portrait_retries} lan", "WARN")
 
         # ---- Reset ve Landscape cho scene generation ----

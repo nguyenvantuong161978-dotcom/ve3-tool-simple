@@ -272,7 +272,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
         if success:
             # OK - Đánh dấu verified
             self.workbook.update_character(ref_id, status="verified")
-            self.workbook.save()
+            self.workbook.safe_save()
             self.stats['verified'] += 1
             return "VERIFIED"
 
@@ -287,7 +287,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
             # 3a. XÓA media_id cũ trong Excel
             self.log(f"[STEP 1/4] Clearing old violated media_id from Excel...")
             self.workbook.update_character(ref_id, media_id="", status="fixing")
-            self.workbook.save()
+            self.workbook.safe_save()
             self.log(f"  [v] Cleared old media_id")
 
             # 3b. Fix prompt với AI
@@ -296,7 +296,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
             if not fixed_prompt:
                 self.log(f"  [x] AI fix failed", "ERROR")
                 self.workbook.update_character(ref_id, status="violated")
-                self.workbook.save()
+                self.workbook.safe_save()
                 self.stats['failed'] += 1
                 return "FAILED"
             self.log(f"  [v] Fixed prompt: {fixed_prompt[:80]}...")
@@ -307,7 +307,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
             if not success:
                 self.log(f"  [x] Regenerate failed", "ERROR")
                 self.workbook.update_character(ref_id, status="violated")
-                self.workbook.save()
+                self.workbook.safe_save()
                 self.stats['failed'] += 1
                 return "FAILED"
             self.log(f"  [v] Generated new media_id: {new_media_id[:40]}...")
@@ -327,7 +327,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
                     media_id=new_media_id,
                     status="verified_fixed"
                 )
-                self.workbook.save()
+                self.workbook.safe_save()
                 self.log(f"")
                 self.log(f"{'='*60}")
                 self.log(f"  ✅ {ref_id} FIXED SUCCESSFULLY!")
@@ -343,7 +343,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
                 self.log(f"  [x] Test FAILED: {error2}", "ERROR")
                 self.log(f"{ref_id} - Still violated after fix", "ERROR")
                 self.workbook.update_character(ref_id, status="violated_unfixable")
-                self.workbook.save()
+                self.workbook.safe_save()
                 self.stats['failed'] += 1
                 return "FAILED"
 
@@ -354,7 +354,7 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
             # v1.0.209: Giữ status = "verified" vì có media_id = ảnh đã OK
             # Chỉ ghi "needs_retest" để user biết cần test lại sau
             self.workbook.update_character(ref_id, status="verified")
-            self.workbook.save()
+            self.workbook.safe_save()
             self.stats['verified'] += 1
             return "VERIFIED"
 

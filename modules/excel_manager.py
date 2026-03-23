@@ -986,6 +986,19 @@ class PromptWorkbook:
         except Exception:
             pass
     
+    def safe_save(self) -> bool:
+        """Save không bao giờ raise exception - trả True/False.
+
+        v1.0.385: Dùng thay save() ở các chỗ Chrome workers gọi,
+        tránh crash khi Excel bị lock bởi process khác.
+        """
+        try:
+            self.save()
+            return True
+        except Exception as e:
+            self.logger.warning(f"safe_save() failed (data vẫn ở memory, sẽ save lần sau): {e}")
+            return False
+
     # ========================================================================
     # CHARACTERS METHODS
     # ========================================================================

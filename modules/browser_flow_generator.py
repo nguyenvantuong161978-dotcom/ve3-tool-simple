@@ -1292,7 +1292,7 @@ class BrowserFlowGenerator:
                             img_path=relative_path,
                             status_img="done" if not needs_regen else "low_quality"
                         )
-                        workbook.save()
+                        workbook.safe_save()
 
                         if needs_regen:
                             self._log(f"Anh {scene_id} chua dat chuan (score={score:.1f}), can tao lai", "warn")
@@ -1302,13 +1302,13 @@ class BrowserFlowGenerator:
                         self.stats["success"] += 1
                     else:
                         workbook.update_scene(scene.scene_id, status_img="error")
-                        workbook.save()
+                        workbook.safe_save()
                         self.stats["failed"] += 1
                 else:
                     error = result.get("error", "Unknown") if result else "No response"
                     self._log(f"Loi: {error}", "error")
                     workbook.update_scene(scene.scene_id, status_img="error")
-                    workbook.save()
+                    workbook.safe_save()
                     self.stats["failed"] += 1
 
                 # Delay giua cac prompt
@@ -1318,7 +1318,7 @@ class BrowserFlowGenerator:
             except Exception as e:
                 self._log(f"Exception: {e}", "error")
                 workbook.update_scene(scene.scene_id, status_img="error")
-                workbook.save()
+                workbook.safe_save()
                 self.stats["failed"] += 1
 
         # Summary
@@ -1661,7 +1661,7 @@ class BrowserFlowGenerator:
                                 status_img="done" if score >= 50.0 else "low_quality",
                                 prompt_json=prompt_json
                             )
-                            workbook.save()
+                            workbook.safe_save()
                             self._log(f"[Excel] Updated scene {scene_id}: prompt_json saved")
                     except Exception as e:
                         self._log(f"[Excel] Warning: {e}", "warn")
@@ -1706,7 +1706,7 @@ class BrowserFlowGenerator:
                                 status_img="done" if score >= 50.0 else "low_quality",
                                 prompt_json=prompt_json
                             )
-                            workbook.save()
+                            workbook.safe_save()
                             self._log(f"[Excel] Updated scene {scene_id}: prompt_json saved")
                     except Exception as e:
                         self._log(f"[Excel] Warning: {e}", "warn")
@@ -1762,7 +1762,7 @@ class BrowserFlowGenerator:
                                     status_img="done" if score >= 50.0 else "low_quality",
                                     prompt_json=prompt_json
                                 )
-                                workbook.save()
+                                workbook.safe_save()
                                 self._log(f"[Excel] Updated scene {scene_id}: prompt_json saved (retry)")
                         except Exception as e:
                             self._log(f"[Excel] Warning: {e}", "warn")
@@ -1906,13 +1906,13 @@ class BrowserFlowGenerator:
                         shutil.move(str(files[0]), str(dst_file))
 
                         workbook.update_character(char_id, status="done", image_file=f"{char_id}.png")
-                        workbook.save()
+                        workbook.safe_save()
 
                         self._log(f"Da luu: {dst_file}", "success")
                         success_count += 1
                     else:
                         workbook.update_character(char_id, status="error")
-                        workbook.save()
+                        workbook.safe_save()
                         failed_count += 1
                 else:
                     failed_count += 1
@@ -2723,7 +2723,7 @@ class BrowserFlowGenerator:
                             img_path=relative_path,
                             status_img="done"
                         )
-                        workbook.save()
+                        workbook.safe_save()
 
                         # Save media_name to cache
                         if images[0].media_name:
@@ -2737,12 +2737,12 @@ class BrowserFlowGenerator:
                     else:
                         self._log("Loi download anh", "error")
                         workbook.update_scene(scene.scene_id, status_img="error")
-                        workbook.save()
+                        workbook.safe_save()
                         self.stats["failed"] += 1
                 else:
                     self._log(f"Loi: {error}", "error")
                     workbook.update_scene(scene.scene_id, status_img="error")
-                    workbook.save()
+                    workbook.safe_save()
                     self.stats["failed"] += 1
 
                 # Delay giua cac prompt
@@ -2755,7 +2755,7 @@ class BrowserFlowGenerator:
                 import traceback
                 traceback.print_exc()
                 workbook.update_scene(scene.scene_id, status_img="error")
-                workbook.save()
+                workbook.safe_save()
                 self.stats["failed"] += 1
 
         # Save updated media cache
@@ -2933,19 +2933,19 @@ class BrowserFlowGenerator:
                             video_path=relative_path,
                             status_vid="done"
                         )
-                        workbook.save()
+                        workbook.safe_save()
 
                         self._log(f"OK - Da tao va luu video: {downloaded}", "success")
                         self.stats["success"] += 1
                     else:
                         self._log("Loi download video", "error")
                         workbook.update_scene(scene.scene_id, status_vid="error")
-                        workbook.save()
+                        workbook.safe_save()
                         self.stats["failed"] += 1
                 else:
                     self._log(f"Loi: {error}", "error")
                     workbook.update_scene(scene.scene_id, status_vid="error")
-                    workbook.save()
+                    workbook.safe_save()
                     self.stats["failed"] += 1
 
                 # Delay giua cac video (video mat nhieu thoi gian hon)
@@ -2958,7 +2958,7 @@ class BrowserFlowGenerator:
                 import traceback
                 traceback.print_exc()
                 workbook.update_scene(scene.scene_id, status_vid="error")
-                workbook.save()
+                workbook.safe_save()
                 self.stats["failed"] += 1
 
         # Summary
@@ -3188,7 +3188,7 @@ class BrowserFlowGenerator:
 
                     # Update Excel
                     workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
-                    workbook.save()
+                    workbook.safe_save()
                 else:
                     self._log(f"   [x] Failed: {error}", "warn")
                     video_failed += 1
@@ -3916,7 +3916,7 @@ class BrowserFlowGenerator:
                                 status_img="done",
                                 media_id=images[0].media_name if images[0].media_name else None
                             )
-                            workbook.save()
+                            workbook.safe_save()
                             if images[0].media_name:
                                 self._log(f"   [EXCEL] Saved scene {pid}: media_id={images[0].media_name[:40]}...")
                             elif pid.isdigit():
@@ -3935,7 +3935,7 @@ class BrowserFlowGenerator:
                                 try:
                                     # v1.0.210: Thêm status="done" khi có media_id
                                     if workbook.update_character(pid, media_id=images[0].media_name, status="done"):
-                                        workbook.save()
+                                        workbook.safe_save()
                                         self._log(f"   [EXCEL] Saved media_id + status=done for {pid}: {images[0].media_name[:40]}...")
                                         excel_media_ids[pid] = images[0].media_name
                                         media_id_saved = True
@@ -4059,7 +4059,7 @@ class BrowserFlowGenerator:
                         if not is_reference_image and workbook:
                             try:
                                 workbook.update_scene(int(pid), status_img="skip")
-                                workbook.save()
+                                workbook.safe_save()
                                 self._log(f"   [EXCEL] Đánh dấu scene {pid} SKIP (policy violation)", "info")
                             except Exception as e:
                                 self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
@@ -4124,7 +4124,7 @@ class BrowserFlowGenerator:
                                         try:
                                             if workbook:
                                                 workbook.update_scene(int(pid), media_id=images2[0].media_name)
-                                                workbook.save()
+                                                workbook.safe_save()
                                                 self._log(f"   [EXCEL] Saved media_id for scene {pid}")
                                         except:
                                             pass
@@ -4135,7 +4135,7 @@ class BrowserFlowGenerator:
                                             try:
                                                 # v1.0.210: Thêm status="done" khi có media_id
                                                 if workbook.update_character(pid, media_id=images2[0].media_name, status="done"):
-                                                    workbook.save()
+                                                    workbook.safe_save()
                                                     self._log(f"   [EXCEL] Saved media_id + status=done for {pid}")
                                                     excel_media_ids[pid] = images2[0].media_name
                                                     media_id_saved = True
@@ -4159,7 +4159,7 @@ class BrowserFlowGenerator:
                                     if not is_reference_image and workbook:
                                         try:
                                             workbook.update_scene(int(pid), status_img="error_403")
-                                            workbook.save()
+                                            workbook.safe_save()
                                             self._log(f"   [EXCEL] Đánh dấu scene {pid} ERROR_403 (403 retry failed)", "info")
                                         except Exception as e:
                                             self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
@@ -4171,7 +4171,7 @@ class BrowserFlowGenerator:
                                 if not is_reference_image and workbook:
                                     try:
                                         workbook.update_scene(int(pid), status_img="error_403")
-                                        workbook.save()
+                                        workbook.safe_save()
                                         self._log(f"   [EXCEL] Đánh dấu scene {pid} ERROR_403 (Chrome restart failed)", "info")
                                     except Exception as e:
                                         self._log(f"   [EXCEL] Lỗi update Excel: {e}", "warn")
@@ -4183,7 +4183,7 @@ class BrowserFlowGenerator:
                             if not is_reference_image and workbook:
                                 try:
                                     workbook.update_scene(int(pid), status_img="error_403")
-                                    workbook.save()
+                                    workbook.safe_save()
                                     self._log(f"   [EXCEL] Đánh dấu scene {pid} ERROR_403 (restart exception)", "info")
                                 except Exception as e2:
                                     self._log(f"   [EXCEL] Lỗi update Excel: {e2}", "warn")
@@ -4216,7 +4216,7 @@ class BrowserFlowGenerator:
         # Save workbook (trước retry phase)
         if workbook:
             try:
-                workbook.save()
+                workbook.safe_save()
             except:
                 pass
 
@@ -4401,7 +4401,7 @@ class BrowserFlowGenerator:
                                             if images[0].media_name and is_reference:
                                                 try:
                                                     if workbook and workbook.update_character(pid, media_id=images[0].media_name, status="done"):
-                                                        workbook.save()
+                                                        workbook.safe_save()
                                                         excel_media_ids[pid] = images[0].media_name
                                                 except:
                                                     pass
@@ -4681,7 +4681,7 @@ class BrowserFlowGenerator:
                             # Update Excel
                             if workbook:
                                 workbook.update_scene(int(scene_id), video_path=video_file.name, status_vid='done')
-                                workbook.save()
+                                workbook.safe_save()
                         else:
                             self._log(f"   [x] Failed: {error}", "warn")
                             video_failed += 1
@@ -4711,7 +4711,7 @@ class BrowserFlowGenerator:
         # Save workbook final
         if workbook:
             try:
-                workbook.save()
+                workbook.safe_save()
             except:
                 pass
 
