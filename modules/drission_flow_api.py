@@ -5394,7 +5394,25 @@ class DrissionFlowAPI:
                 else:
                     self.log(f"[CHROME] [x] Không chọn được: {ref_name}", "WARN")
 
-        # 3. Type prompt
+        # 3. Đếm ảnh TRƯỚC khi gửi prompt (để so sánh sau)
+        existing_urls = self.driver.run_js("""
+            var urls = [];
+            var imgs = document.querySelectorAll('img');
+            for (var i = 0; i < imgs.length; i++) {
+                var src = imgs[i].src || '';
+                if (src.indexOf('storage.googleapis.com') > -1 && src.indexOf('image/') > -1) {
+                    urls.push(src);
+                }
+            }
+            return JSON.stringify(urls);
+        """)
+        try:
+            before_urls = set(json.loads(existing_urls)) if existing_urls else set()
+        except:
+            before_urls = set()
+        self.log(f"[CHROME] Ảnh hiện có trên page: {len(before_urls)}")
+
+        # 4. Type prompt
         self.log(f"[CHROME] Prompt: {prompt[:60]}...")
         textarea = self._find_textarea()
         if not textarea:
@@ -5404,7 +5422,7 @@ class DrissionFlowAPI:
         if not paste_ok:
             return False, [], "Paste prompt failed"
 
-        # 4. Đợi recaptcha + gửi
+        # 5. Đợi recaptcha + gửi
         time.sleep(4)
 
         generate_sent = False
@@ -5421,7 +5439,7 @@ class DrissionFlowAPI:
         if not generate_sent:
             return False, [], "Failed to send prompt"
 
-        # 5. Đợi kết quả trên UI (không dùng interceptor)
+        # 6. Đợi ảnh MỚI xuất hiện trên UI (so sánh với before_urls)
         self.log("[CHROME] Đợi kết quả...")
         start_time = time.time()
         result_url = None
@@ -5429,65 +5447,103 @@ class DrissionFlowAPI:
         while time.time() - start_time < timeout:
             elapsed = time.time() - start_time
 
-            # Tìm ảnh kết quả mới xuất hiện trên page
+            # v1.0.406: Check ảnh MỚI (không có trong before_urls)
             check = self.driver.run_js("""
-                var result = {status: 'waiting', urls: [], error: null};
+                var result = {status: 'waiting', urls: [], newUrls: [], error: null};
+                var beforeUrls = %s;
 
-                // Check lỗi trên UI
-                var errorEls = document.querySelectorAll('[class*="error"], [class*="warning"]');
-                for (var i = 0; i < errorEls.length; i++) {
-                    var text = (errorEls[i].textContent || '').trim();
-                    if (text.indexOf('429') > -1 || text.indexOf('limit') > -1 || text.indexOf('quota') > -1) {
-                        result.status = 'error';
-                        result.error = '429_QUOTA';
-                        return JSON.stringify(result);
-                    }
-                    if (text.indexOf('policy') > -1 || text.indexOf('violation') > -1) {
-                        result.status = 'error';
-                        result.error = 'POLICY_VIOLATION';
-                        return JSON.stringify(result);
-                    }
+                // Check lỗi trên UI - tìm text trong toàn page
+                var allText = document.body ? document.body.innerText : '';
+                if (allText.indexOf('violates') > -1 || allText.indexOf('policy') > -1 || allText.indexOf('POLICY') > -1) {
+                    result.status = 'error';
+                    result.error = 'POLICY_VIOLATION';
+                    return JSON.stringify(result);
+                }
+                if (allText.indexOf('429') > -1 || allText.indexOf('rate limit') > -1 || allText.indexOf('quota') > -1) {
+                    result.status = 'error';
+                    result.error = '429_QUOTA';
+                    return JSON.stringify(result);
                 }
 
-                // Check ảnh kết quả (storage.googleapis.com)
+                // Check TẤT CẢ ảnh trên page (nhiều pattern URL)
                 var imgs = document.querySelectorAll('img');
                 for (var i = 0; i < imgs.length; i++) {
                     var src = imgs[i].src || '';
-                    if (src.indexOf('storage.googleapis.com/ai-sandbox') > -1) {
+                    // Pattern 1: storage.googleapis.com với image/
+                    // Pattern 2: lh3.googleusercontent.com
+                    // Pattern 3: bất kỳ URL nào có ai-sandbox hoặc videofx
+                    if ((src.indexOf('storage.googleapis.com') > -1 && src.indexOf('image/') > -1) ||
+                        (src.indexOf('ai-sandbox') > -1) ||
+                        (src.indexOf('videofx') > -1)) {
                         var rect = imgs[i].getBoundingClientRect();
-                        if (rect.width > 100 && rect.height > 100) {
+                        if (rect.width > 50 && rect.height > 50) {
                             result.urls.push(src);
+                            if (beforeUrls.indexOf(src) === -1) {
+                                result.newUrls.push(src);
+                            }
                         }
                     }
                 }
 
-                // Check loading indicator
-                var loading = document.querySelector('[class*="loading"], [class*="spinner"], [class*="progress"]');
-                if (loading && loading.getBoundingClientRect().width > 0) {
+                // Check loading/generating indicator
+                // Google Flow dùng progress bar hoặc animation khi đang tạo
+                var generating = false;
+                var progressEls = document.querySelectorAll('progress, [role="progressbar"], [class*="progress"], [class*="loading"], [class*="generating"], [class*="spinner"]');
+                for (var i = 0; i < progressEls.length; i++) {
+                    var el = progressEls[i];
+                    var rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        generating = true;
+                        break;
+                    }
+                }
+                // Thêm: check animation (shimmer/pulse) - dấu hiệu đang generate
+                if (!generating) {
+                    var animEls = document.querySelectorAll('[class*="shimmer"], [class*="pulse"], [class*="skeleton"]');
+                    for (var i = 0; i < animEls.length; i++) {
+                        var rect = animEls[i].getBoundingClientRect();
+                        if (rect.width > 50 && rect.height > 50) {
+                            generating = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (result.newUrls.length > 0) {
+                    result.status = 'done';
+                } else if (generating) {
                     result.status = 'generating';
                 }
 
-                if (result.urls.length > 0) {
-                    result.status = 'done';
-                }
-
                 return JSON.stringify(result);
-            """)
+            """ % json.dumps(list(before_urls)))
 
             if check:
-                data = json.loads(check)
+                try:
+                    data = json.loads(check)
+                except:
+                    time.sleep(3)
+                    continue
+
                 status = data.get('status', 'waiting')
 
                 if status == 'done':
-                    result_url = data['urls'][0] if data['urls'] else None
-                    self.log(f"[CHROME] [v] Ảnh xuất hiện sau {elapsed:.1f}s!")
+                    new_urls = data.get('newUrls', [])
+                    result_url = new_urls[0] if new_urls else None
+                    self.log(f"[CHROME] [v] Ảnh MỚI xuất hiện sau {elapsed:.1f}s! ({len(new_urls)} ảnh)")
                     break
                 elif status == 'error':
                     error = data.get('error', 'unknown')
                     self.log(f"[CHROME] [x] Lỗi: {error}", "WARN")
                     return False, [], error
-                elif status == 'generating' and int(elapsed) % 15 == 0:
-                    self.log(f"[CHROME] Đang tạo... ({elapsed:.0f}s)")
+                elif status == 'generating':
+                    if int(elapsed) % 15 == 0 and elapsed > 1:
+                        self.log(f"[CHROME] Đang tạo... ({elapsed:.0f}s)")
+                else:
+                    # waiting - chưa thấy loading
+                    if int(elapsed) % 30 == 0 and elapsed > 1:
+                        total_imgs = len(data.get('urls', []))
+                        self.log(f"[CHROME] Đợi... ({elapsed:.0f}s, {total_imgs} ảnh trên page)")
 
             time.sleep(3)
 

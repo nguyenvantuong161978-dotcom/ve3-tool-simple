@@ -1,13 +1,14 @@
-1.0.405
+1.0.406
 2026-03-24 (VN)
-Change: Bo parallel video (Chrome 2 mo moi) - video tao SAU khi xong anh
+Change: Fix Chrome mode detect anh moi - dem truoc/sau de phan biet
 
 Thay doi:
-- v1.0.405: BO PARALLEL VIDEO MO CHROME 2 MOI
-  * Van de: Chrome 1 mo Chrome 2 cho video NGAY TU DAU
-  * Chrome 2 bi chiem → _run_chrome2.py khong dung duoc → khong tao anh le
-  * Fix: Bo _start_parallel_video_chrome() (2 cho)
-  * Video se tao SAU khi xong anh, dung chinh Chrome hien tai
-  * Chrome nao xong anh truoc → chuyen sang tao video luon
-  * Chrome 1: scenes chan + refs → xong → video
-  * Chrome 2: scenes le → xong → video
+- v1.0.406: FIX CHROME MODE KHONG DETECT ANH MOI
+  * Van de: JS tim tat ca img tren page → tim thay anh CU → hoac khong tim thay gi
+  * Fix: Dem tat ca image URLs TRUOC khi gui prompt (before_urls)
+  * Sau khi gui: chi tim anh MOI (khong co trong before_urls)
+  * Them nhieu pattern URL: storage.googleapis.com, ai-sandbox, videofx
+  * Giam min size tu 100px xuong 50px (anh nho cung detect)
+  * Them detect generating: progress, progressbar, shimmer, pulse, skeleton
+  * Them detect error: tim text "violates", "policy", "429", "rate limit" trong body
+  * Log chi tiet: so anh tren page, trang thai generating/waiting
