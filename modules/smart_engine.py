@@ -5800,6 +5800,7 @@ class SmartEngine:
             cfg = {}
 
         headless = cfg.get('browser_headless', False)
+        generation_mode = cfg.get('generation_mode', 'api')
 
         # Thumbnail luon dung mang may mac dinh (khong proxy/webshare)
         drission = DrissionFlowAPI(
@@ -5887,13 +5888,23 @@ class SmartEngine:
             image_inputs = _build_image_inputs(thumb)
             self.log(f"[THUMB] Tao {fname}: {thumb.img_prompt[:60]}...")
 
-            ok, images, err = drission.generate_image(
-                prompt=thumb.img_prompt,
-                save_dir=thumb_dir,
-                filename=f"thumb_{i+1:03d}",
-                max_retries=3,
-                image_inputs=image_inputs if image_inputs else None,
-            )
+            # v1.0.415: Route theo generation_mode
+            if generation_mode == 'chrome':
+                ok, images, err = drission.generate_image_chrome(
+                    prompt=thumb.img_prompt,
+                    save_dir=str(thumb_dir),
+                    filename=f"thumb_{i+1:03d}",
+                    timeout=120,
+                    skip_restart=True,  # Giữ Chrome cho các thumb tiếp theo
+                )
+            else:
+                ok, images, err = drission.generate_image(
+                    prompt=thumb.img_prompt,
+                    save_dir=thumb_dir,
+                    filename=f"thumb_{i+1:03d}",
+                    max_retries=3,
+                    image_inputs=image_inputs if image_inputs else None,
+                )
 
             if ok and images:
                 # DrissionFlowAPI luu vao save_dir/filename.png
@@ -5956,13 +5967,23 @@ class SmartEngine:
                 image_inputs = _build_image_inputs(thumb)
                 self.log(f"[THUMB] Tao {fname} (portrait){retry_label}: {thumb.img_prompt[:60]}...")
 
-                ok, images, err = drission.generate_image(
-                    prompt=thumb.img_prompt,
-                    save_dir=thumb_dir,
-                    filename=f"thumb_{i+4:03d}",
-                    max_retries=3,
-                    image_inputs=image_inputs if image_inputs else None,
-                )
+                # v1.0.415: Route theo generation_mode
+                if generation_mode == 'chrome':
+                    ok, images, err = drission.generate_image_chrome(
+                        prompt=thumb.img_prompt,
+                        save_dir=str(thumb_dir),
+                        filename=f"thumb_{i+4:03d}",
+                        timeout=120,
+                        skip_restart=True,  # Giữ Chrome cho retry/thumb tiếp
+                    )
+                else:
+                    ok, images, err = drission.generate_image(
+                        prompt=thumb.img_prompt,
+                        save_dir=thumb_dir,
+                        filename=f"thumb_{i+4:03d}",
+                        max_retries=3,
+                        image_inputs=image_inputs if image_inputs else None,
+                    )
 
                 if ok and images:
                     # Kiem tra kich thuoc anh
