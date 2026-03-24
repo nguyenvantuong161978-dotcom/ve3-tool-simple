@@ -2480,14 +2480,63 @@ class SmartEngine:
 
     def generate_images_chrome(self, prompts: List[Dict], proj_dir: Path) -> Dict:
         """
-        v1.0.395: Tạo ảnh bằng CHROME MODE (không dùng API interceptor).
-        Flow:
-        1. Sort prompts: nv/loc trước, scene sau
-        2. Tạo reference images (nv/loc) bằng DrissionFlowAPI.generate_image_chrome
-        3. Upload TẤT CẢ reference images lên gallery 1 lần
-        4. Cho mỗi scene: chọn refs từ gallery → type prompt → đợi kết quả → download
+        v1.0.402: Tạo ảnh bằng CHROME MODE (không dùng API interceptor).
+        Flow giống API mode nhưng tương tác trực tiếp với Chrome UI:
+        1. Mở Chrome vào project (đọc URL từ Excel)
+        2. Setup image settings (model, 16:9, x1)
+        3. Tạo reference images (nv/loc) - không cần ref
+        4. Upload TẤT CẢ refs lên gallery 1 lần
+        5. Cho mỗi scene: chọn refs từ gallery → type prompt → đợi kết quả → download
+        6. Parallel video (Chrome 2) chạy song song nếu video_mode=full
         """
         self.log("=== TẠO ẢNH BẰNG CHROME MODE (KHÔNG API) ===")
+
+        # Tim Excel file
+        excel_files = list(proj_dir.glob("*_prompts.xlsx"))
+        if not excel_files:
+            excel_files = list((proj_dir / "prompts").glob("*_prompts.xlsx"))
+        if not excel_files:
+            self.log("Khong tim thay file Excel!", "ERROR")
+            return {"success": 0, "failed": len(prompts)}
+
+        excel_path = excel_files[0]
+
+        # Load settings
+        import yaml
+        headless = False
+        settings = {}
+        try:
+            config_path = self.config_dir / "settings.yaml"
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    settings = yaml.safe_load(f) or {}
+                headless = settings.get('browser_headless', False)
+        except:
+            pass
+
+        ws_cfg = settings.get('webshare_proxy', {})
+        machine_id = ws_cfg.get('machine_id', 1)
+
+        # Đọc project URL từ Excel config sheet
+        project_url = None
+        try:
+            wb_config = self._load_excel_with_retry(excel_path, read_only=True)
+            if 'config' in wb_config.sheetnames:
+                ws = wb_config['config']
+                for row in ws.iter_rows(min_row=1, max_row=10, values_only=True):
+                    if row and len(row) >= 2:
+                        key = str(row[0] or '').strip().lower()
+                        if key == 'flow_project_url' and row[1]:
+                            project_url = str(row[1]).strip()
+                            break
+            wb_config.close()
+        except Exception as e:
+            self.log(f"[CHROME] Lỗi đọc project URL: {e}", "WARN")
+
+        if project_url:
+            self.log(f"[CHROME] Project URL: {project_url[:60]}...")
+        else:
+            self.log("[CHROME] Không có project URL - sẽ đợi user mở project")
 
         # Sort prompts: nv/loc trước, scenes sau
         def sort_key(p):
@@ -2512,22 +2561,34 @@ class SmartEngine:
         nv_dir.mkdir(parents=True, exist_ok=True)
         img_dir.mkdir(parents=True, exist_ok=True)
 
+        # Chrome mode: KHÔNG dùng parallel video (vì không có media_id/interceptor)
+        # Video trong Chrome mode sẽ dùng Chrome UI trực tiếp (chọn ảnh + T2V mode)
+        # TODO: Thêm Chrome mode video sau khi image mode ổn định
+
         # Khởi tạo DrissionFlowAPI
         from modules.drission_flow_api import DrissionFlowAPI
 
-        # Parallel video layout
-        video_parallel_enabled = not getattr(self, '_skip_video', False)
-        total_w = 2 if video_parallel_enabled else self.total_workers
-        worker_w = 0 if video_parallel_enabled else self.worker_id
+        total_w = self.total_workers
+        worker_w = self.worker_id
 
         api = DrissionFlowAPI(
             chrome_portable=self.chrome_portable if self._chrome_portable_override else None,
-            headless=False,
+            headless=headless,
             worker_id=worker_w,
             total_workers=total_w,
+            machine_id=machine_id,
+            log_callback=lambda msg, lvl="INFO": self.log(msg, lvl),
+            verbose=True,
         )
 
-        ok = api.setup(wait_for_project=True, timeout=120)
+        # Setup: vào project URL hoặc đợi user mở
+        setup_kwargs = {"timeout": 120}
+        if project_url:
+            setup_kwargs["project_url"] = project_url
+        else:
+            setup_kwargs["wait_for_project"] = True
+
+        ok = api.setup(**setup_kwargs)
         if not ok:
             self.log("[CHROME] Setup failed!", "ERROR")
             return {"success": 0, "failed": len(prompts)}
@@ -2540,6 +2601,9 @@ class SmartEngine:
         if ref_prompts:
             self.log(f"\n[PHASE 1] Tạo {len(ref_prompts)} reference images...")
             for i, p in enumerate(ref_prompts):
+                if self.stop_flag:
+                    break
+
                 pid = p.get('id', '')
                 prompt = p.get('prompt', '')
                 output_path = p.get('output_path', str(nv_dir / f"{pid}.png"))
@@ -2562,7 +2626,7 @@ class SmartEngine:
 
                 success, images, error = api.generate_image_chrome(
                     prompt=prompt,
-                    reference_filenames=None,  # Ref images không cần ref
+                    reference_filenames=None,
                     save_dir=save_dir_ref,
                     filename=fname,
                     timeout=120
@@ -2575,14 +2639,10 @@ class SmartEngine:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1
 
-                if self.stop_flag:
-                    break
-
         # ============================================================
         # PHASE 2: Upload TẤT CẢ reference images lên gallery
         # ============================================================
         if scene_prompts and not self.stop_flag:
-            # Collect all ref files from nv/
             ref_files = []
             if nv_dir.exists():
                 for ext in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
@@ -2601,11 +2661,6 @@ class SmartEngine:
         # ============================================================
         if scene_prompts and not self.stop_flag:
             self.log(f"\n[PHASE 3] Tạo {len(scene_prompts)} scene images...")
-
-            # Load Excel để lấy reference_files cho từng scene
-            excel_files = list(proj_dir.glob("*_prompts.xlsx"))
-            if not excel_files:
-                excel_files = list((proj_dir / "prompts").glob("*_prompts.xlsx"))
 
             for i, p in enumerate(scene_prompts):
                 if self.stop_flag:
@@ -2660,16 +2715,15 @@ class SmartEngine:
                     results["success"] += 1
 
                     # Update Excel status
-                    if excel_files:
-                        try:
-                            from modules.excel_manager import PromptWorkbook
-                            wb = PromptWorkbook(excel_files[0])
-                            wb.load_or_create()
-                            if pid.isdigit():
-                                wb.update_scene(int(pid), img_path=f"img/{pid}.png", status_img="done")
-                                wb.safe_save()
-                        except Exception as e:
-                            self.log(f"  [Excel] Warning: {e}", "WARN")
+                    try:
+                        from modules.excel_manager import PromptWorkbook
+                        wb = PromptWorkbook(excel_path)
+                        wb.load_or_create()
+                        if pid.isdigit():
+                            wb.update_scene(int(pid), img_path=f"img/{pid}.png", status_img="done")
+                            wb.safe_save()
+                    except Exception as e:
+                        self.log(f"  [Excel] Warning: {e}", "WARN")
                 else:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1

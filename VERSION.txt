@@ -1,12 +1,12 @@
-1.0.401
+1.0.402
 2026-03-24 (VN)
-Change: Revert kill Chrome ve v387 - chi giu JS mode select moi
+Change: Chrome mode - hoan thien generate_images_chrome()
 
 Thay doi:
-- v1.0.401: REVERT KILL CHROME VE V387
-  * Xoa _kill_chrome_by_marker() (PowerShell)
-  * _force_kill_all_chrome(): Quay lai wmic + fallback kill_all
-  * _kill_chrome_using_profile(): Quay lai wmic goc
-  * GIU LAI: JS_SELECT_MODEL_BY_INDEX + JS_SWITCH_TO_T2V_MODE (v398)
-  * GIU LAI: switch_to_t2v_mode() thay JS cu trong parallel video
-  * GIU LAI: select_model_by_index() wait 6s
+- v1.0.402: CHROME MODE HOÀN THIỆN
+  * generate_images_chrome(): Doc project_url tu Excel config
+  * Them log_callback, settings load (headless, machine_id)
+  * KHONG dung parallel video (Chrome mode khong co media_id)
+  * Chrome mode dung Chrome UI truc tiep: chon ref tu gallery + type prompt
+  * setup_image_settings() chi goi 1 lan dau (khong lap lai moi scene)
+  * Flow: Setup → Tao ref images → Upload refs → Chon refs + Type prompt → Download

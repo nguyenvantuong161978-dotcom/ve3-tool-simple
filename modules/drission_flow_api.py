@@ -5378,9 +5378,11 @@ class DrissionFlowAPI:
         if not self._ready:
             return False, [], "API chưa setup!"
 
-        # 1. Setup image settings (model, aspect ratio, x1)
-        current_model_idx = getattr(self, '_current_model_index', 0)
-        self.setup_image_settings(current_model_idx)
+        # 1. Setup image settings (model, aspect ratio, x1) - chỉ lần đầu
+        if not getattr(self, '_chrome_mode_settings_done', False):
+            current_model_idx = getattr(self, '_current_model_index', 0)
+            self.setup_image_settings(current_model_idx)
+            self._chrome_mode_settings_done = True
 
         # 2. Chọn reference images từ gallery
         if reference_filenames:
