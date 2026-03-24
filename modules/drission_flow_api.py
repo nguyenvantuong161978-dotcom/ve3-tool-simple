@@ -5394,23 +5394,15 @@ class DrissionFlowAPI:
                 else:
                     self.log(f"[CHROME] [x] Không chọn được: {ref_name}", "WARN")
 
-        # 3. Đếm ảnh TRƯỚC khi gửi prompt (để so sánh sau)
-        existing_urls = self.driver.run_js("""
-            var urls = [];
-            var imgs = document.querySelectorAll('img');
-            for (var i = 0; i < imgs.length; i++) {
-                var src = imgs[i].src || '';
-                if (src.indexOf('storage.googleapis.com') > -1 && src.indexOf('image/') > -1) {
-                    urls.push(src);
-                }
-            }
-            return JSON.stringify(urls);
-        """)
-        try:
-            before_urls = set(json.loads(existing_urls)) if existing_urls else set()
-        except:
-            before_urls = set()
-        self.log(f"[CHROME] Ảnh hiện có trên page: {len(before_urls)}")
+        # 3. Inject interceptor (giống API mode) để bắt response
+        # Reset state trước khi gửi prompt
+        self.driver.run_js("window._response=null;window._responseError=null;window._requestPending=false;")
+
+        # Inject interceptor nếu chưa có
+        interceptor_ready = self.driver.run_js("return window.__interceptReady || false;")
+        if not interceptor_ready:
+            self.driver.run_js(JS_INTERCEPTOR)
+            self.log("[CHROME] Injected interceptor")
 
         # 4. Type prompt
         self.log(f"[CHROME] Prompt: {prompt[:60]}...")
@@ -5439,84 +5431,27 @@ class DrissionFlowAPI:
         if not generate_sent:
             return False, [], "Failed to send prompt"
 
-        # 6. Đợi ảnh MỚI xuất hiện trên UI (so sánh với before_urls)
-        self.log("[CHROME] Đợi kết quả...")
+        # 6. Đợi response qua interceptor (GIỐNG API MODE)
+        self.log("[CHROME] Đợi kết quả (interceptor)...")
         start_time = time.time()
-        result_url = None
+        result_images = None
 
         while time.time() - start_time < timeout:
             elapsed = time.time() - start_time
 
-            # v1.0.406: Check ảnh MỚI (không có trong before_urls)
-            check = self.driver.run_js("""
-                var result = {status: 'waiting', urls: [], newUrls: [], error: null};
-                var beforeUrls = %s;
-
-                // Check lỗi trên UI - tìm text trong toàn page
-                var allText = document.body ? document.body.innerText : '';
-                if (allText.indexOf('violates') > -1 || allText.indexOf('policy') > -1 || allText.indexOf('POLICY') > -1) {
-                    result.status = 'error';
-                    result.error = 'POLICY_VIOLATION';
-                    return JSON.stringify(result);
-                }
-                if (allText.indexOf('429') > -1 || allText.indexOf('rate limit') > -1 || allText.indexOf('quota') > -1) {
-                    result.status = 'error';
-                    result.error = '429_QUOTA';
-                    return JSON.stringify(result);
-                }
-
-                // Check TẤT CẢ ảnh trên page (nhiều pattern URL)
-                var imgs = document.querySelectorAll('img');
-                for (var i = 0; i < imgs.length; i++) {
-                    var src = imgs[i].src || '';
-                    // Pattern 1: storage.googleapis.com với image/
-                    // Pattern 2: lh3.googleusercontent.com
-                    // Pattern 3: bất kỳ URL nào có ai-sandbox hoặc videofx
-                    if ((src.indexOf('storage.googleapis.com') > -1 && src.indexOf('image/') > -1) ||
-                        (src.indexOf('ai-sandbox') > -1) ||
-                        (src.indexOf('videofx') > -1)) {
-                        var rect = imgs[i].getBoundingClientRect();
-                        if (rect.width > 50 && rect.height > 50) {
-                            result.urls.push(src);
-                            if (beforeUrls.indexOf(src) === -1) {
-                                result.newUrls.push(src);
-                            }
-                        }
-                    }
-                }
-
-                // Check loading/generating indicator
-                // Google Flow dùng progress bar hoặc animation khi đang tạo
-                var generating = false;
-                var progressEls = document.querySelectorAll('progress, [role="progressbar"], [class*="progress"], [class*="loading"], [class*="generating"], [class*="spinner"]');
-                for (var i = 0; i < progressEls.length; i++) {
-                    var el = progressEls[i];
-                    var rect = el.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        generating = true;
-                        break;
-                    }
-                }
-                // Thêm: check animation (shimmer/pulse) - dấu hiệu đang generate
-                if (!generating) {
-                    var animEls = document.querySelectorAll('[class*="shimmer"], [class*="pulse"], [class*="skeleton"]');
-                    for (var i = 0; i < animEls.length; i++) {
-                        var rect = animEls[i].getBoundingClientRect();
-                        if (rect.width > 50 && rect.height > 50) {
-                            generating = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (result.newUrls.length > 0) {
-                    result.status = 'done';
-                } else if (generating) {
-                    result.status = 'generating';
-                }
-
-                return JSON.stringify(result);
-            """ % json.dumps(list(before_urls)))
+            # Check window._response giống API mode
+            try:
+                check = self.driver.run_js("""
+                    return JSON.stringify({
+                        pending: window._requestPending,
+                        response: window._response,
+                        error: window._responseError
+                    });
+                """)
+            except Exception as e:
+                self.log(f"[CHROME] JS error: {e}", "WARN")
+                time.sleep(3)
+                continue
 
             if check:
                 try:
@@ -5525,54 +5460,80 @@ class DrissionFlowAPI:
                     time.sleep(3)
                     continue
 
-                status = data.get('status', 'waiting')
+                response = data.get('response')
+                error = data.get('error')
+                pending = data.get('pending', False)
 
-                if status == 'done':
-                    new_urls = data.get('newUrls', [])
-                    result_url = new_urls[0] if new_urls else None
-                    self.log(f"[CHROME] [v] Ảnh MỚI xuất hiện sau {elapsed:.1f}s! ({len(new_urls)} ảnh)")
-                    break
-                elif status == 'error':
-                    error = data.get('error', 'unknown')
-                    self.log(f"[CHROME] [x] Lỗi: {error}", "WARN")
-                    return False, [], error
-                elif status == 'generating':
+                if error:
+                    self.log(f"[CHROME] [x] Error: {error}", "WARN")
+                    # Check 403/429/400
+                    if '403' in str(error):
+                        return False, [], "403"
+                    elif '429' in str(error):
+                        return False, [], "429_QUOTA"
+                    elif '400' in str(error):
+                        return False, [], "POLICY_VIOLATION"
+                    return False, [], str(error)
+
+                if response and not pending:
+                    # Có response! Parse images giống API mode
+                    if isinstance(response, dict) and response.get('error'):
+                        err = response['error']
+                        code = err.get('code', 0)
+                        msg = err.get('message', 'unknown')
+                        self.log(f"[CHROME] [x] Response error {code}: {msg}", "WARN")
+                        return False, [], f"{code}: {msg}"
+
+                    # Parse images
+                    result_images = self._parse_images(response)
+                    if result_images:
+                        self.log(f"[CHROME] [v] Got {len(result_images)} images sau {elapsed:.1f}s!")
+                        break
+                    else:
+                        self.log(f"[CHROME] Response nhưng chưa có images, đợi tiếp...")
+
+                elif pending:
                     if int(elapsed) % 15 == 0 and elapsed > 1:
                         self.log(f"[CHROME] Đang tạo... ({elapsed:.0f}s)")
-                else:
-                    # waiting - chưa thấy loading
-                    if int(elapsed) % 30 == 0 and elapsed > 1:
-                        total_imgs = len(data.get('urls', []))
-                        self.log(f"[CHROME] Đợi... ({elapsed:.0f}s, {total_imgs} ảnh trên page)")
 
             time.sleep(3)
 
-        if not result_url:
+        if not result_images:
             return False, [], f"Timeout sau {timeout}s"
 
-        # 6. Download ảnh kết quả
-        images = []
-        img = GeneratedImage()
-        img.url = result_url
+        # Lấy URL từ image đầu tiên
+        result_url = None
+        if result_images:
+            img0 = result_images[0]
+            result_url = img0.url if hasattr(img0, 'url') else None
 
-        if save_dir:
+        # 7. Download ảnh kết quả (giống API mode)
+        images = result_images  # Đã có từ _parse_images()
+
+        if save_dir and images:
             save_path = Path(save_dir)
             save_path.mkdir(parents=True, exist_ok=True)
             fname = filename or f"image_{int(time.time())}"
+            img = images[0]
 
-            # Download qua requests
-            try:
-                resp = requests.get(result_url, timeout=60)
-                if resp.status_code == 200:
-                    img_path = save_path / f"{fname}.png"
-                    img_path.write_bytes(resp.content)
-                    img.local_path = img_path
-                    img.base64_data = base64.b64encode(resp.content).decode()
-                    self.log(f"[CHROME] [v] Downloaded: {img_path.name} ({len(resp.content)} bytes)")
-            except Exception as e:
-                self.log(f"[CHROME] Download error: {e}", "WARN")
-
-        images.append(img)
+            # Ưu tiên base64, fallback URL
+            if img.base64_data:
+                img_data = base64.b64decode(img.base64_data)
+                img_path = save_path / f"{fname}.png"
+                img_path.write_bytes(img_data)
+                img.local_path = img_path
+                self.log(f"[CHROME] [v] Saved (base64): {img_path.name} ({len(img_data)} bytes)")
+            elif result_url:
+                try:
+                    resp = requests.get(result_url, timeout=60)
+                    if resp.status_code == 200:
+                        img_path = save_path / f"{fname}.png"
+                        img_path.write_bytes(resp.content)
+                        img.local_path = img_path
+                        img.base64_data = base64.b64encode(resp.content).decode()
+                        self.log(f"[CHROME] [v] Downloaded: {img_path.name} ({len(resp.content)} bytes)")
+                except Exception as e:
+                    self.log(f"[CHROME] Download error: {e}", "WARN")
 
         # Cleanup + restart (anti-403)
         if not getattr(self, '_validator_mode', False):

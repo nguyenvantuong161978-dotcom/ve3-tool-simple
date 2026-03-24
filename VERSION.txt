@@ -1,14 +1,13 @@
-1.0.406
+1.0.407
 2026-03-24 (VN)
-Change: Fix Chrome mode detect anh moi - dem truoc/sau de phan biet
+Change: Chrome mode dung interceptor bat response - giong API mode
 
 Thay doi:
-- v1.0.406: FIX CHROME MODE KHONG DETECT ANH MOI
-  * Van de: JS tim tat ca img tren page → tim thay anh CU → hoac khong tim thay gi
-  * Fix: Dem tat ca image URLs TRUOC khi gui prompt (before_urls)
-  * Sau khi gui: chi tim anh MOI (khong co trong before_urls)
-  * Them nhieu pattern URL: storage.googleapis.com, ai-sandbox, videofx
-  * Giam min size tu 100px xuong 50px (anh nho cung detect)
-  * Them detect generating: progress, progressbar, shimmer, pulse, skeleton
-  * Them detect error: tim text "violates", "policy", "429", "rate limit" trong body
-  * Log chi tiet: so anh tren page, trang thai generating/waiting
+- v1.0.407: CHROME MODE DUNG INTERCEPTOR (GIONG API MODE)
+  * Van de v406: Detect anh bang DOM phuc tap, khong chinh xac
+  * Fix: Inject JS_INTERCEPTOR vao Chrome mode (cung interceptor voi API mode)
+  * Chrome gui prompt → interceptor bat fetch response → lay anh tu JSON
+  * Check window._response giong het API mode (403, 429, 400, media data)
+  * Parse images bang _parse_images() (co san base64 + fifeUrl)
+  * Download: uu tien base64, fallback URL
+  * Don gian, chinh xac, giong API mode 100%
