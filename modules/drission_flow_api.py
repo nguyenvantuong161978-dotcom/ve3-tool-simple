@@ -5320,14 +5320,13 @@ class DrissionFlowAPI:
         self.log(f"[CHROME] Gallery search: '{keyword[:50]}'")
         time.sleep(2)  # Đợi filter
 
-        # v1.0.422: Click kết quả search - search box đã lọc, click item đầu tiên có img
+        # v1.0.420: Click kết quả search - tìm item có img + text match keyword, dùng .click()
         result = self.driver.run_js("""
             var dialog = document.querySelector('[role="dialog"]');
             if (!dialog) return JSON.stringify({ok: false, reason: 'no_dialog'});
 
             var keyword = """ + json.dumps(keyword.lower()) + """;
             var allEls = dialog.querySelectorAll('*');
-            var firstImgItem = null;
 
             for (var i = 0; i < allEls.length; i++) {
                 var el = allEls[i];
@@ -5335,26 +5334,13 @@ class DrissionFlowAPI:
                 if (el.tagName === 'INPUT' || el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'LABEL') continue;
                 if (el.querySelector('input[type="file"]')) continue;
                 if (el.getBoundingClientRect().height < 30) continue;
-                if (!el.querySelector('img')) continue;
 
                 var text = (el.textContent || '').trim();
-
-                // Ưu tiên 1: text match keyword (chính xác)
-                if (text.toLowerCase().indexOf(keyword) > -1) {
+                if (text.toLowerCase().indexOf(keyword) > -1 && el.querySelector('img')) {
                     el.click();
-                    return JSON.stringify({ok: true, text: text.substring(0, 50), method: 'text_match'});
+                    return JSON.stringify({ok: true, text: text.substring(0, 50)});
                 }
-
-                // Ghi nhớ item đầu tiên có img (để fallback)
-                if (!firstImgItem) firstImgItem = {el: el, text: text};
             }
-
-            // Ưu tiên 2: search box đã lọc → click item đầu tiên có img
-            if (firstImgItem) {
-                firstImgItem.el.click();
-                return JSON.stringify({ok: true, text: firstImgItem.text.substring(0, 50), method: 'first_img'});
-            }
-
             return JSON.stringify({ok: false, reason: 'no_match'});
         """)
 
@@ -5365,8 +5351,7 @@ class DrissionFlowAPI:
                 data = {}
             if data.get('ok'):
                 selected_text = data.get('text', '')
-                method = data.get('method', 'unknown')
-                self.log(f"[CHROME] [v] Selected: {selected_text} ({method})")
+                self.log(f"[CHROME] [v] Selected: {selected_text}")
                 time.sleep(1)
                 return True
 
