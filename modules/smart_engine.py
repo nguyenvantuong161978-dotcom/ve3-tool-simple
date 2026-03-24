@@ -2602,7 +2602,8 @@ class SmartEngine:
                     reference_filenames=None,
                     save_dir=save_dir_ref,
                     filename=fname,
-                    timeout=120
+                    timeout=120,
+                    skip_restart=True  # Giữ project + gallery cho PHASE 2 upload
                 )
 
                 if success and images:

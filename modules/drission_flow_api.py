@@ -5353,7 +5353,8 @@ class DrissionFlowAPI:
         reference_filenames: Optional[List[str]] = None,
         save_dir: Optional[str] = None,
         filename: Optional[str] = None,
-        timeout: int = 120
+        timeout: int = 120,
+        skip_restart: bool = False
     ) -> Tuple[bool, List, Optional[str]]:
         """
         v1.0.395: Tạo ảnh bằng Chrome trực tiếp (KHÔNG dùng API interceptor).
@@ -5485,8 +5486,8 @@ class DrissionFlowAPI:
                         self.log(f"[CHROME] [x] Response error {code}: {msg}", "WARN")
                         return False, [], f"{code}: {msg}"
 
-                    # Parse images
-                    result_images = self._parse_images(response)
+                    # Parse images (dùng _parse_response giống API mode)
+                    result_images = self._parse_response(response)
                     if result_images:
                         self.log(f"[CHROME] [v] Got {len(result_images)} images sau {elapsed:.1f}s!")
                         break
@@ -5509,7 +5510,7 @@ class DrissionFlowAPI:
             result_url = img0.url if hasattr(img0, 'url') else None
 
         # 7. Download ảnh kết quả (giống API mode)
-        images = result_images  # Đã có từ _parse_images()
+        images = result_images  # Đã có từ _parse_response()
 
         if save_dir and images:
             save_path = Path(save_dir)
@@ -5536,8 +5537,8 @@ class DrissionFlowAPI:
                 except Exception as e:
                     self.log(f"[CHROME] Download error: {e}", "WARN")
 
-        # Cleanup + restart (anti-403)
-        if not getattr(self, '_validator_mode', False):
+        # Cleanup + restart (anti-403) - skip khi tạo reference (giữ project + gallery)
+        if not skip_restart and not getattr(self, '_validator_mode', False):
             self.log("[CHROME] Cleanup + Restart...")
             self.cleanup_browser_data()
             saved_url = getattr(self, '_current_project_url', None)

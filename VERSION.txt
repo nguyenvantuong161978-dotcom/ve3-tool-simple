@@ -1,11 +1,11 @@
-1.0.409
+1.0.410
 2026-03-24 (VN)
-Change: Fix NameError video_parallel_enabled - ca 2 worker crash
+Change: Fix Chrome mode - _parse_images error + skip restart khi tao reference
 
 Thay doi:
-- v1.0.409: FIX NAMEERROR video_parallel_enabled
-  * Van de: v1.0.405 xoa bien video_parallel_enabled nhung con 2 cho dung
-  * Line 1987 va 2390: if video_parallel_enabled → NameError
-  * Ca Chrome 1 va Chrome 2 deu crash ngay khi bat dau
-  * Fix: Xoa 2 if block (code dieu chinh layout cho parallel video da bo)
-  * Dung truc tiep self.worker_id va self.total_workers
+- v1.0.410: FIX CHROME MODE
+  * Fix 1: _parse_images() khong ton tai → doi thanh _parse_response() (giong API mode)
+  * Fix 2: Tao reference images (PHASE 1) khong restart Chrome sau moi anh
+    - Truoc: Restart sau moi anh → mat project + gallery
+    - Sau: skip_restart=True cho PHASE 1 → giu project de upload refs len gallery
+  * Flow dung: PHASE 1 (tao refs) → PHASE 2 (upload refs len gallery) → PHASE 3 (tao scenes voi refs)
