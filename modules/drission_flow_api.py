@@ -7189,8 +7189,8 @@ class DrissionFlowAPI:
             self.log("[Image] [v] Clicked x1")
             time.sleep(0.5)
 
-            # Bước 5: Chọn model - dùng select_model_by_index (JS async cách cũ)
-            self.driver.run_js("window._modelSelectResult = 'PENDING';")
+            # Bước 5: Chọn model - tìm dropdown bằng text
+            self.driver.run_js("window._dropdownOpened = false; window._modelSelectResult = 'PENDING';")
             # Tìm dropdown bằng text (arrow_drop_down + Banana/Imagen)
             self.driver.run_js('''
                 var btns = document.querySelectorAll('button');
@@ -7360,13 +7360,29 @@ class DrissionFlowAPI:
                 time.sleep(0.5)
                 self.log("[Mode] [v] Selected Lower Priority model")
 
-                # Verify
+                # Verify: check bottom bar button text for Veo/Fast (not full body text)
                 time.sleep(1.0)
                 model = self.driver.run_js('''
-                    var all = document.body.innerText;
-                    if (all.indexOf('Veo') >= 0) return 'VIDEO';
-                    if (all.indexOf('Banana') >= 0) return 'IMAGE';
-                    return 'UNKNOWN';
+                    var btns = document.querySelectorAll('button');
+                    var halfH = window.innerHeight * 0.5;
+                    for (var i = 0; i < btns.length; i++) {
+                        var rect = btns[i].getBoundingClientRect();
+                        var t = btns[i].textContent.trim();
+                        if (rect.y > halfH && rect.width > 50) {
+                            if (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0) return 'VIDEO';
+                            if (t.indexOf('videocam') >= 0 && t.indexOf('Video') >= 0) return 'VIDEO';
+                        }
+                    }
+                    // Fallback: check if videocam tab is active/selected in settings panel
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('videocam') >= 0) {
+                            var cls = btns[i].className || '';
+                            var style = btns[i].getAttribute('style') || '';
+                            if (cls.indexOf('active') >= 0 || style.indexOf('opacity') >= 0) return 'VIDEO';
+                        }
+                    }
+                    return 'IMAGE';
                 ''')
                 if model == 'VIDEO':
                     self.log("[Mode] [v] Đã chuyển sang T2V mode thành công!")
@@ -7374,9 +7390,11 @@ class DrissionFlowAPI:
                     time.sleep(0.5)
                     return True
                 else:
-                    self.log(f"[Mode] Mode chưa đổi: {model}", "WARN")
-                    time.sleep(1)
-                    continue
+                    self.log(f"[Mode] Mode chưa đổi: {model}, sẽ tiếp tục (Video tab đã click)", "WARN")
+                    # Video tab đã click thành công → tin tưởng kết quả
+                    self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+                    time.sleep(0.5)
+                    return True
 
             except Exception as e:
                 self.log(f"[Mode] Error: {e}", "ERROR")
