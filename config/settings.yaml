@@ -26,6 +26,8 @@ gemini_models:
 - gemini-2.5-flash
 # generation_mode: api | browser | chrome (chrome = khong dung API, tuong tac truc tiep)
 generation_mode: api
+# chrome_model_index: 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+chrome_model_index: 0
 groq_api_keys:
 - ''
 ipv6_rotation:

@@ -135,6 +135,38 @@ class SettingsWindow(tk.Toplevel):
         tk.Label(mode_lf, text="(Ap dung cho lan chay tiep theo - luu khi bam LUU CAU HINH)",
                  bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 
+        # === CHE DO TAO ANH - Generation Mode ===
+        gen_lf = tk.LabelFrame(main_frame, text=" CHE DO GENERATION (API/Chrome) ", bg='#16213e', fg='#ff6b6b',
+                                font=("Arial", 10, "bold"), padx=10, pady=8)
+        gen_lf.pack(fill="x", pady=5)
+
+        # Generation mode
+        gen_row = tk.Frame(gen_lf, bg='#16213e')
+        gen_row.pack(fill="x", pady=4)
+        tk.Label(gen_row, text="Generation Mode:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(side="left", padx=(0, 10))
+        self.gen_mode_var = tk.StringVar(value="api")
+        gen_modes = [("API (mac dinh)", "api"), ("Browser", "browser"), ("Chrome UI", "chrome")]
+        for text, val in gen_modes:
+            tk.Radiobutton(gen_row, text=text, variable=self.gen_mode_var, value=val,
+                           bg='#16213e', fg='white', selectcolor='#0f3460',
+                           font=("Arial", 10)).pack(side="left", padx=10)
+
+        # Chrome model selection
+        chrome_model_row = tk.Frame(gen_lf, bg='#16213e')
+        chrome_model_row.pack(fill="x", pady=4)
+        tk.Label(chrome_model_row, text="Chrome Image Model:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(side="left", padx=(0, 10))
+        self.chrome_model_var = tk.StringVar(value="0")
+        chrome_models = [("Nano Banana Pro", "0"), ("Nano Banana 2", "1"), ("Imagen 4", "2")]
+        for text, val in chrome_models:
+            tk.Radiobutton(chrome_model_row, text=text, variable=self.chrome_model_var, value=val,
+                           bg='#16213e', fg='white', selectcolor='#0f3460',
+                           font=("Arial", 10)).pack(side="left", padx=10)
+
+        tk.Label(gen_lf, text="Chrome UI: Tao anh/video truc tiep qua Chrome (khong dung API). Model chi ap dung cho Chrome mode.",
+                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
+
         # === KIEM TRA TAI NGUYEN ===
         check_frame = tk.LabelFrame(main_frame, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
                                     font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -292,6 +324,8 @@ class SettingsWindow(tk.Toplevel):
                     config = yaml.safe_load(f) or {}
 
                 self.mode_var.set(config.get('excel_mode', 'small'))
+                self.gen_mode_var.set(config.get('generation_mode', 'api'))
+                self.chrome_model_var.set(str(config.get('chrome_model_index', 0)))
                 self.deepseek_var.set(config.get('deepseek_api_key', ''))
                 gemini_keys = config.get('gemini_api_keys', [''])
                 self.gemini_var.set(gemini_keys[0] if gemini_keys else '')
@@ -316,6 +350,8 @@ class SettingsWindow(tk.Toplevel):
             # Update
             config['excel_mode'] = self.mode_var.get()
             config['video_mode'] = self.mode_var.get()
+            config['generation_mode'] = self.gen_mode_var.get()
+            config['chrome_model_index'] = int(self.chrome_model_var.get())
             config['deepseek_api_key'] = self.deepseek_var.get().strip()
             gemini_key = self.gemini_var.get().strip()
             config['gemini_api_keys'] = [gemini_key] if gemini_key else ['']

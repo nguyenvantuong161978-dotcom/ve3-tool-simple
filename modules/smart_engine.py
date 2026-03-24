@@ -2581,6 +2581,11 @@ class SmartEngine:
             verbose=True,
         )
 
+        # v1.0.403: Đọc chrome_model_index từ settings (0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4)
+        chrome_model_idx = settings.get('chrome_model_index', 0)
+        api._current_model_index = chrome_model_idx
+        self.log(f"[CHROME] Model index: {chrome_model_idx}")
+
         # Setup: vào project URL hoặc đợi user mở
         setup_kwargs = {"timeout": 120}
         if project_url:

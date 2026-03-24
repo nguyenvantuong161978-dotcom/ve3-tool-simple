@@ -1,12 +1,12 @@
-1.0.402
+1.0.403
 2026-03-24 (VN)
-Change: Chrome mode - hoan thien generate_images_chrome()
+Change: GUI Settings - them generation_mode va chrome_model_index
 
 Thay doi:
-- v1.0.402: CHROME MODE HOÀN THIỆN
-  * generate_images_chrome(): Doc project_url tu Excel config
-  * Them log_callback, settings load (headless, machine_id)
-  * KHONG dung parallel video (Chrome mode khong co media_id)
-  * Chrome mode dung Chrome UI truc tiep: chon ref tu gallery + type prompt
-  * setup_image_settings() chi goi 1 lan dau (khong lap lai moi scene)
-  * Flow: Setup → Tao ref images → Upload refs → Chon refs + Type prompt → Download
+- v1.0.403: GUI SETTINGS CHO CHROME MODE
+  * Them "CHE DO GENERATION" section trong Settings window
+  * RadioButtons: API (mac dinh) / Browser / Chrome UI
+  * Them Chrome Image Model: Nano Banana Pro / Nano Banana 2 / Imagen 4
+  * Luu/Load generation_mode va chrome_model_index vao settings.yaml
+  * smart_engine.py doc chrome_model_index tu settings, truyen cho DrissionFlowAPI
+  * Chrome mode: TAT CA qua Chrome UI (anh, ref, video) - KHONG dung API
