@@ -1,13 +1,12 @@
-1.0.418
-2026-03-24 (VN)
-Change: Phuong an 3 - Paste anh tham chieu truc tiep khi gallery fail
+1.0.419
+2026-03-25 (VN)
+Change: Fix gallery click nhầm upload button
 
 Thay doi:
-- v1.0.418: FALLBACK PASTE ANH TRUC TIEP
-  * 3 phuong an chon anh tham chieu:
-    1. Search filename trong gallery (execCommand)
-    2. Search bang prompt goc cua anh
-    3. NEW: Paste anh truc tiep vao prompt qua CDP file input
-  * Khi gallery search fail → upload file anh truc tiep
-  * Doi 10s sau paste de anh load xong truoc khi gui prompt
-  * Truyen ref_dir tu smart_engine de biet duong dan file anh
+- v1.0.419: FIX CLICK NHAM NUT UPLOAD
+  * Bo qua element chua input[type=file] (upload area)
+  * Bo qua element co text "upload", "tải lên"
+  * Bo qua LABEL, SELECT tags
+  * Uu tien: element co img child + co text (gallery item = thumbnail + filename)
+  * Fallback: element co img child (thumbnail)
+  * Debug log: pointer/withImg/skipped count khi fail

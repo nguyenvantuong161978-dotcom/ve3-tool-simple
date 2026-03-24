@@ -5320,10 +5320,13 @@ class DrissionFlowAPI:
         self.log(f"[CHROME] Gallery search: '{keyword[:50]}'")
         time.sleep(2)  # Đợi filter
 
-        # Click item đầu tiên có cursor:pointer (kết quả filter)
+        # Click kết quả search - tìm gallery item (có img thumbnail), bỏ qua upload area
         result = self.driver.run_js("""
             var dialog = document.querySelector('[role="dialog"]');
             if (!dialog) return JSON.stringify({ok: false, reason: 'no_dialog'});
+
+            // Debug: đếm các loại element
+            var debugInfo = {pointer: 0, withImg: 0, withText: 0, skipped: 0};
 
             var allEls = dialog.querySelectorAll('*');
             var targetEl = null;
@@ -5332,19 +5335,64 @@ class DrissionFlowAPI:
                 var el = allEls[i];
                 var cursor = window.getComputedStyle(el).cursor;
                 if (cursor !== 'pointer') continue;
-                // Bỏ qua search input, buttons, links
-                if (el.tagName === 'INPUT' || el.tagName === 'BUTTON' || el.tagName === 'A') continue;
-                // Bỏ qua nếu là dropdown/filter button (ở trên cùng)
+                debugInfo.pointer++;
+
+                // Bỏ qua form elements
+                if (el.tagName === 'INPUT' || el.tagName === 'BUTTON' || el.tagName === 'A' ||
+                    el.tagName === 'LABEL' || el.tagName === 'SELECT') {
+                    debugInfo.skipped++;
+                    continue;
+                }
+
+                // Bỏ qua nếu chứa input[type=file] (upload area)
+                if (el.querySelector('input[type="file"]')) {
+                    debugInfo.skipped++;
+                    continue;
+                }
+
+                // Bỏ qua quá nhỏ
                 var rect = el.getBoundingClientRect();
-                if (rect.height < 20 || rect.width < 20) continue;
-                // Lấy item đầu tiên (kết quả search đầu tiên)
-                if (!targetEl) {
+                if (rect.height < 30 || rect.width < 30) continue;
+
+                // Bỏ qua nếu text chứa "upload", "tải lên", "tải"
+                var text = (el.textContent || '').trim().toLowerCase();
+                if (text.indexOf('upload') > -1 || text.indexOf('tải lên') > -1 ||
+                    text === 'tải' || text.indexOf('drop') > -1) {
+                    debugInfo.skipped++;
+                    continue;
+                }
+
+                // ƯU TIÊN: element có img child (thumbnail gallery item)
+                var hasImg = el.querySelector('img') !== null;
+                if (hasImg) debugInfo.withImg++;
+                if (text.length > 0) debugInfo.withText++;
+
+                // Gallery item = có img + có text (filename)
+                if (hasImg && text.length > 0 && text.length < 200) {
                     targetEl = el;
                     break;
                 }
             }
 
-            if (!targetEl) return JSON.stringify({ok: false, reason: 'no_results'});
+            // Fallback: nếu không tìm thấy item có img+text, thử item có img
+            if (!targetEl) {
+                for (var i = 0; i < allEls.length; i++) {
+                    var el = allEls[i];
+                    var cursor = window.getComputedStyle(el).cursor;
+                    if (cursor !== 'pointer') continue;
+                    if (el.tagName === 'INPUT' || el.tagName === 'BUTTON' || el.tagName === 'A' ||
+                        el.tagName === 'LABEL') continue;
+                    if (el.querySelector('input[type="file"]')) continue;
+                    var rect = el.getBoundingClientRect();
+                    if (rect.height < 30 || rect.width < 30) continue;
+                    if (el.querySelector('img')) {
+                        targetEl = el;
+                        break;
+                    }
+                }
+            }
+
+            if (!targetEl) return JSON.stringify({ok: false, reason: 'no_results', debug: debugInfo});
 
             // Scroll to + click
             targetEl.scrollIntoView({block: 'center', behavior: 'instant'});
@@ -5371,6 +5419,9 @@ class DrissionFlowAPI:
                 self.log(f"[CHROME] [v] Selected: {selected_text}")
                 time.sleep(1)
                 return True
+            else:
+                debug = data.get('debug', {})
+                self.log(f"[CHROME] Search no result: pointer={debug.get('pointer',0)}, withImg={debug.get('withImg',0)}, skipped={debug.get('skipped',0)}")
 
         return False
 
