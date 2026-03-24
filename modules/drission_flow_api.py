@@ -7125,9 +7125,8 @@ class DrissionFlowAPI:
 
     def setup_image_settings(self, model_index: int = 0) -> bool:
         """
-        v1.0.395: Setup Image mode bằng JS PointerEvent (giống cách cũ, tìm bằng text).
-        Thứ tự: Mở settings → Hình ảnh → 16:9 → x1 → chọn model theo index.
-        Model: 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+        v1.0.396: Setup Image mode - dùng cách cũ select_model_by_index (1 JS all-in-one).
+        JS_SELECT_MODEL_BY_INDEX tự mở menu → click x1 → click dropdown → chọn model → đóng.
         """
         if not self._ready:
             return False
@@ -7135,112 +7134,10 @@ class DrissionFlowAPI:
         model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
         model_name = model_names[model_index] if model_index < len(model_names) else f"Model {model_index}"
 
-        try:
-            self.log(f"[Image] Setup: Hình ảnh → 16:9 → x1 → {model_name}...")
+        self.log(f"[Image] Setup model: {model_name} (index {model_index})...")
 
-            # Bước 1: Mở settings panel
-            if not self._open_settings_panel():
-                self.log("[Image] Không mở được settings panel", "WARN")
-                return False
-
-            # Bước 2: Click tab "Hình ảnh" - dùng PointerEvent
-            self.driver.run_js('''
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = btns[i].textContent.trim();
-                    if (t.indexOf('image') >= 0 && t.indexOf('nh') >= 0) {
-                        btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                        btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                        btns[i].click();
-                        break;
-                    }
-                }
-            ''')
-            self.log("[Image] [v] Clicked Hình ảnh tab")
-            time.sleep(1.0)
-
-            # Bước 3: Click 16:9
-            self.driver.run_js('''
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = btns[i].textContent.trim();
-                    if (t.indexOf('16:9') >= 0) {
-                        btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                        btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                        btns[i].click();
-                        break;
-                    }
-                }
-            ''')
-            self.log("[Image] [v] Clicked 16:9")
-            time.sleep(0.5)
-
-            # Bước 4: Click x1
-            self.driver.run_js('''
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    if (btns[i].textContent.trim() === 'x1') {
-                        btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                        btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                        btns[i].click();
-                        break;
-                    }
-                }
-            ''')
-            self.log("[Image] [v] Clicked x1")
-            time.sleep(0.5)
-
-            # Bước 5: Chọn model - tìm dropdown bằng text
-            self.driver.run_js("window._dropdownOpened = false; window._modelSelectResult = 'PENDING';")
-            # Tìm dropdown bằng text (arrow_drop_down + Banana/Imagen)
-            self.driver.run_js('''
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = btns[i].textContent.trim();
-                    if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
-                        btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                        btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                        window._dropdownOpened = true;
-                        break;
-                    }
-                }
-            ''')
-            time.sleep(1.0)
-
-            dropdown_opened = self.driver.run_js("return window._dropdownOpened || false;")
-            if dropdown_opened:
-                # Chọn model theo index
-                self.driver.run_js('''
-                    var menuItems = document.querySelectorAll('[role="menuitem"]');
-                    if (menuItems.length > %d) {
-                        var item = menuItems[%d];
-                        item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                        item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                        item.click();
-                        window._modelSelectResult = 'SELECTED_%d';
-                    } else {
-                        window._modelSelectResult = 'INVALID_INDEX';
-                    }
-                ''' % (model_index, model_index, model_index))
-                time.sleep(0.5)
-                result = self.driver.run_js("return window._modelSelectResult;")
-                if result and result.startswith('SELECTED_'):
-                    self.log(f"[Image] [v] Selected model: {model_name}")
-                else:
-                    self.log(f"[Image] [WARN] Model select result: {result}", "WARN")
-            else:
-                self.log("[Image] [WARN] Model dropdown not found", "WARN")
-
-            # Đóng settings panel
-            self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
-            time.sleep(0.3)
-
-            self.log(f"[Image] [v] Setup hoàn tất: Hình ảnh → 16:9 → x1 → {model_name}")
-            return True
-
-        except Exception as e:
-            self.log(f"[Image] Error: {e}", "ERROR")
-            return False
+        # Dùng cách cũ: select_model_by_index() - 1 JS all-in-one với setTimeout
+        return self.select_model_by_index(model_index)
 
     def switch_to_t2v_mode(self) -> bool:
         """
