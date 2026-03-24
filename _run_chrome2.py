@@ -537,6 +537,8 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                     headless=False,
                     webshare_enabled=False
                 )
+                # v1.0.392: Validator mode - skip cleanup+restart sau mỗi ảnh
+                validator_api._validator_mode = True
 
                 log(f"  [VALIDATOR] Starting Chrome with project URL...")
                 if not validator_api.setup(project_url=project_url):

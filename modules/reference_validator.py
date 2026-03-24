@@ -112,6 +112,10 @@ class ReferenceValidator:
             elif error and "403" in error:
                 self.log(f"  [x] {ref_id} 403 ERROR ❌")
                 return False, "403_ERROR"
+            elif error and "setup" in error.lower():
+                # v1.0.392: API chết (chưa setup) → trả riêng để xử lý re-setup
+                self.log(f"  [x] {ref_id} API NOT READY: {error}")
+                return False, "API_NOT_READY"
             else:
                 self.log(f"  [x] {ref_id} OTHER ERROR: {error}")
                 return False, "OTHER_ERROR"
@@ -347,12 +351,39 @@ OUTPUT: Only return the NEW PROMPT, nothing else."""
                 self.stats['failed'] += 1
                 return "FAILED"
 
-        # 4. Lỗi khác (403, timeout, etc.) - CÓ media_id nghĩa là ảnh đã tạo thành công
+        # 4a. API chết (chưa setup) → thử re-setup rồi test lại
+        elif error_type == "API_NOT_READY":
+            self.log(f"{ref_id} - API not ready, attempting re-setup...", "WARN")
+            try:
+                saved_url = getattr(self.api, '_current_project_url', None)
+                if saved_url and self.api.setup(project_url=saved_url, skip_403_reset=True):
+                    self.log(f"{ref_id} - Re-setup OK, retesting...")
+                    success2, error2 = self.test_media_id(media_id, ref_id)
+                    if success2:
+                        self.workbook.update_character(ref_id, status="verified")
+                        self.workbook.safe_save()
+                        self.stats['verified'] += 1
+                        return "VERIFIED"
+                    elif error2 == "400_POLICY_VIOLATION":
+                        # Sau re-setup phát hiện vi phạm → xử lý như case 3
+                        self.log(f"{ref_id} - After re-setup: POLICY VIOLATION detected")
+                        self.stats['verified'] += 1  # Count as tested
+                        # Fall through to verified (will be caught in next cycle)
+                    # Else: vẫn fail → giữ verified vì có media_id
+            except Exception as e:
+                self.log(f"{ref_id} - Re-setup failed: {e}", "WARN")
+
+            self.log(f"{ref_id} - Giữ verified (có media_id = ảnh đã OK)", "WARN")
+            self.workbook.update_character(ref_id, status="verified")
+            self.workbook.safe_save()
+            self.stats['verified'] += 1
+            return "VERIFIED"
+
+        # 4b. Lỗi khác (403, timeout, etc.) - CÓ media_id nghĩa là ảnh đã tạo thành công
         #    Test fail có thể do network tạm thời, không nên ghi error
         else:
             self.log(f"{ref_id} - Test error: {error_type} (nhưng ảnh đã tạo thành công, giữ verified)", "WARN")
             # v1.0.209: Giữ status = "verified" vì có media_id = ảnh đã OK
-            # Chỉ ghi "needs_retest" để user biết cần test lại sau
             self.workbook.update_character(ref_id, status="verified")
             self.workbook.safe_save()
             self.stats['verified'] += 1

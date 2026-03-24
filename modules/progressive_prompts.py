@@ -3079,7 +3079,11 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                 except Exception as e:
                     self._log(f"     Batch {batch_num} error: {e}", "ERROR")
 
-        # Process and save results sequentially (Excel not thread-safe)
+        # v1.0.392: Thu thập TẤT CẢ scenes vào memory → sort theo scene_id → save 1 LẦN
+        # Tránh file lock contention khi Chrome workers đọc Excel cùng lúc
+        import re
+        all_scenes_to_add = []  # List of (scene_id_int, Scene) tuples
+
         for batch_num in sorted(batch_results.keys()):
             _, batch, api_scenes, error = batch_results[batch_num]
 
@@ -3098,7 +3102,6 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                 for original in batch:
                     orig_id = int(original.get("scene_id", 0))
                     if orig_id not in api_scene_ids:
-                        # Tạo fallback prompt
                         srt_text = original.get("srt_text") or ""
                         visual_moment = original.get("visual_moment") or ""
                         chars_used = original.get("characters_used") or ""
@@ -3107,7 +3110,6 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                         fallback_prompt = f"Cinematic scene: {visual_moment or srt_text[:200]}. "
                         fallback_prompt += "4K photorealistic, dramatic lighting, film quality."
 
-                        # Thêm character/location annotations
                         if chars_used:
                             for cid in chars_used.split(","):
                                 cid = cid.strip()
@@ -3139,14 +3141,12 @@ Return JSON only with EXACTLY {len(batch)} scenes:
             if len(api_scenes) > 0 and duplicate_count > len(api_scenes) * 0.8:
                 self._log(f"  Batch {batch_num}: >80% duplicates ({duplicate_count}/{len(api_scenes)}), creating UNIQUE fallbacks!", "WARN")
 
-                # Tạo unique fallback cho từng scene thay vì skip cả batch
                 seen_for_dedup = set()
                 for i, scene_data in enumerate(api_scenes):
                     prompt_key = scene_data.get("img_prompt", "")[:100]
                     scene_id = scene_data.get("scene_id", i)
 
                     if prompt_key in seen_for_dedup:
-                        # Prompt bị trùng - tạo unique fallback từ scene info
                         orig = next((s for s in batch if int(s.get("scene_id", 0)) == int(scene_id)), None)
                         if orig:
                             srt_text = (orig.get("srt_text") or "")[:150]
@@ -3154,11 +3154,9 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                             chars_used = orig.get("characters_used") or ""
                             loc_used = orig.get("location_used") or ""
 
-                            # Tạo unique prompt với scene_id và context
                             unique_prompt = f"Scene {scene_id}: {visual or srt_text}. "
                             unique_prompt += "Cinematic 4K, dramatic lighting, photorealistic, film quality."
 
-                            # Thêm character/location refs
                             if chars_used:
                                 for cid in chars_used.split(","):
                                     cid = cid.strip()
@@ -3174,96 +3172,94 @@ Return JSON only with EXACTLY {len(batch)} scenes:
                     else:
                         seen_for_dedup.add(prompt_key)
 
-                # KHÔNG continue - tiếp tục save scenes
+            # Build Scene objects in memory (NOT saving yet)
+            for scene_data in api_scenes:
+                scene_id = int(scene_data.get("scene_id", 0))
+                original = next((s for s in batch if int(s.get("scene_id", 0)) == scene_id), None)
+                if not original:
+                    continue
 
-            # Save scenes
+                img_prompt = scene_data.get("img_prompt", "")
+
+                # Post-process: ensure reference annotations
+                char_ids = [cid.strip() for cid in (original.get("characters_used") or "").split(",") if cid.strip()]
+                loc_id = original.get("location_used") or ""
+
+                for cid in char_ids:
+                    img_file = char_image_lookup.get(cid, f"{cid}.png")
+                    if img_file and f"({img_file})" not in img_prompt:
+                        img_prompt = img_prompt.rstrip(". ") + f" ({img_file})."
+
+                if loc_id:
+                    loc_img = loc_image_lookup.get(loc_id, f"{loc_id}.png")
+                    if loc_img and f"({loc_img})" not in img_prompt:
+                        img_prompt = img_prompt.rstrip(". ") + f" (reference: {loc_img})."
+
+                # Parse prompt to extract ACTUAL character/location IDs used
+                char_pattern = r'\(([nN][vV]_?\d+)\.png\)'
+                prompt_char_matches = re.findall(char_pattern, img_prompt)
+                if prompt_char_matches:
+                    char_ids = list(set(prompt_char_matches))
+
+                loc_pattern = r'\(([lL][oO][cC]_?\d+)\.png\)'
+                prompt_loc_matches = re.findall(loc_pattern, img_prompt)
+                if prompt_loc_matches:
+                    loc_id = prompt_loc_matches[0]
+
+                ref_files = [char_image_lookup.get(cid, f"{cid}.png") for cid in char_ids]
+                if loc_id:
+                    ref_files.append(loc_image_lookup.get(loc_id, f"{loc_id}.png"))
+
+                video_note = ""
+                excel_mode = self.config.get("excel_mode", "full").lower()
+                segment_id = original.get("segment_id", 1)
+                if excel_mode == "basic" and segment_id > 1:
+                    video_note = "SKIP"
+
+                chars_used_str = ",".join(char_ids) if char_ids else ""
+                loc_used_str = loc_id if loc_id else ""
+
+                srt_start = original.get("srt_start", "")
+                srt_end = original.get("srt_end", "")
+                planned_duration = calc_planned_duration(srt_start, srt_end)
+
+                scene = Scene(
+                    scene_id=scene_id,
+                    srt_start=srt_start,
+                    srt_end=srt_end,
+                    duration=original.get("duration", 0),
+                    planned_duration=planned_duration,
+                    srt_text=original.get("srt_text", ""),
+                    img_prompt=img_prompt,
+                    video_prompt=scene_data.get("video_prompt", ""),
+                    characters_used=chars_used_str,
+                    location_used=loc_used_str,
+                    reference_files=json.dumps(ref_files) if ref_files else "",
+                    status_img="pending",
+                    status_vid="pending",
+                    video_note=video_note,
+                    segment_id=segment_id
+                )
+                all_scenes_to_add.append((scene_id, scene))
+                total_created += 1
+
+        # v1.0.392: Sort theo scene_id rồi add vào workbook → save 1 LẦN DUY NHẤT
+        all_scenes_to_add.sort(key=lambda x: x[0])
+        self._log(f"\n  -> Collected {total_created} scenes, sorting by scene_id and saving...")
+
+        try:
+            for _, scene in all_scenes_to_add:
+                workbook.add_scene(scene)
+            workbook.save()
+            self._log(f"  -> [SAVED] {total_created} scenes to Excel (sorted by scene_id, 1 save)")
+        except Exception as e:
+            self._log(f"  [ERROR] Save failed: {e} - retrying...", "ERROR")
+            time.sleep(5)
             try:
-                for scene_data in api_scenes:
-                    scene_id = int(scene_data.get("scene_id", 0))
-                    original = next((s for s in batch if int(s.get("scene_id", 0)) == scene_id), None)
-                    if not original:
-                        continue
-
-                    img_prompt = scene_data.get("img_prompt", "")
-
-                    # Post-process: ensure reference annotations
-                    char_ids = [cid.strip() for cid in (original.get("characters_used") or "").split(",") if cid.strip()]
-                    loc_id = original.get("location_used") or ""
-
-                    for cid in char_ids:
-                        img_file = char_image_lookup.get(cid, f"{cid}.png")
-                        if img_file and f"({img_file})" not in img_prompt:
-                            img_prompt = img_prompt.rstrip(". ") + f" ({img_file})."
-
-                    if loc_id:
-                        loc_img = loc_image_lookup.get(loc_id, f"{loc_id}.png")
-                        if loc_img and f"({loc_img})" not in img_prompt:
-                            img_prompt = img_prompt.rstrip(". ") + f" (reference: {loc_img})."
-
-                    # CRITICAL FIX: Parse prompt to extract ACTUAL character/location IDs used
-                    # This ensures metadata matches prompt content exactly
-                    import re
-
-                    # Extract all character IDs from prompt (pattern: nvX.png or nv_X.png)
-                    char_pattern = r'\(([nN][vV]_?\d+)\.png\)'
-                    prompt_char_matches = re.findall(char_pattern, img_prompt)
-                    if prompt_char_matches:
-                        # Use IDs found in prompt instead of original metadata
-                        char_ids = list(set(prompt_char_matches))  # unique IDs
-
-                    # Extract location ID from prompt (pattern: locX.png or loc_X.png)
-                    loc_pattern = r'\(([lL][oO][cC]_?\d+)\.png\)'
-                    prompt_loc_matches = re.findall(loc_pattern, img_prompt)
-                    if prompt_loc_matches:
-                        # Use first location found in prompt
-                        loc_id = prompt_loc_matches[0]
-
-                    # Rebuild reference files from parsed IDs
-                    ref_files = [char_image_lookup.get(cid, f"{cid}.png") for cid in char_ids]
-                    if loc_id:
-                        ref_files.append(loc_image_lookup.get(loc_id, f"{loc_id}.png"))
-
-                    # Xác định video_note dựa trên mode và segment
-                    video_note = ""
-                    excel_mode = self.config.get("excel_mode", "full").lower()
-                    segment_id = original.get("segment_id", 1)  # Default segment 1 nếu không có
-                    if excel_mode == "basic" and segment_id > 1:
-                        video_note = "SKIP"  # BASIC mode: chỉ làm video cho Segment 1
-
-                    # Use parsed IDs (from prompt) for metadata accuracy
-                    chars_used_str = ",".join(char_ids) if char_ids else ""
-                    loc_used_str = loc_id if loc_id else ""
-
-                    # v1.0.48: Calculate planned_duration from srt_start/srt_end
-                    srt_start = original.get("srt_start", "")
-                    srt_end = original.get("srt_end", "")
-                    planned_duration = calc_planned_duration(srt_start, srt_end)
-
-                    scene = Scene(
-                        scene_id=scene_id,
-                        srt_start=srt_start,
-                        srt_end=srt_end,
-                        duration=original.get("duration", 0),
-                        planned_duration=planned_duration,  # v1.0.48: Calculated from SRT
-                        srt_text=original.get("srt_text", ""),
-                        img_prompt=img_prompt,
-                        video_prompt=scene_data.get("video_prompt", ""),
-                        characters_used=chars_used_str,  # Use parsed IDs from prompt
-                        location_used=loc_used_str,  # Use parsed ID from prompt
-                        reference_files=json.dumps(ref_files) if ref_files else "",
-                        status_img="pending",
-                        status_vid="pending",
-                        video_note=video_note,  # GHI CHÚ VIDEO: "SKIP" hoặc ""
-                        segment_id=segment_id  # SEGMENT ID từ director_plan
-                    )
-                    workbook.add_scene(scene)
-                    total_created += 1
-
                 workbook.save()
-            except Exception as e:
-                self._log(f"  Batch {batch_num} save error: {e}", "ERROR")
-
-        self._log(f"\n  -> Total: Created {total_created} scene prompts")
+                self._log(f"  -> [SAVED] Retry success!")
+            except Exception as e2:
+                self._log(f"  [CRITICAL] Save retry failed: {e2}", "ERROR")
 
         # v1.0.81: ĐƠN GIẢN - Sau Step 7 xong → update status → SAVE
         elapsed = int(time.time() - step_start)

@@ -1,6 +1,6 @@
-1.0.391
+1.0.392
 2026-03-24 (VN)
-Change: Video chi chay khi video_mode=full trong settings - basic van chi tao anh
+Change: 3 fixes - Step7 save 1 lan + Validator skip restart + Validator re-setup khi API chet
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

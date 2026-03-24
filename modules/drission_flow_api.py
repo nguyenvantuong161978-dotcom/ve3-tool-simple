@@ -5015,13 +5015,17 @@ class DrissionFlowAPI:
         # v1.0.198: Thêm lại reset sau mỗi ảnh thành công
         # Lý do: Gửi prompt liên tiếp bằng API sẽ bị 403
         # Flow: Cleanup (xóa localStorage/IndexedDB) → Restart Chrome → Sẵn sàng cho ảnh tiếp
-        self.log("[SYNC] Cleanup + Restart Chrome sau ảnh thành công...")
-        self.cleanup_browser_data()  # Xóa data bị flag
-        saved_url = getattr(self, '_current_project_url', None)
-        self._kill_chrome()
-        self.close()
-        time.sleep(1)
-        self.setup(project_url=saved_url, skip_403_reset=True)
+        # v1.0.392: Skip cleanup+restart khi validator mode (chỉ test, không cần anti-403)
+        if getattr(self, '_validator_mode', False):
+            self.log("[SYNC] Validator mode - skip cleanup+restart")
+        else:
+            self.log("[SYNC] Cleanup + Restart Chrome sau ảnh thành công...")
+            self.cleanup_browser_data()  # Xóa data bị flag
+            saved_url = getattr(self, '_current_project_url', None)
+            self._kill_chrome()
+            self.close()
+            time.sleep(1)
+            self.setup(project_url=saved_url, skip_403_reset=True)
 
         # Reset 403 counter khi thành công
         if self._consecutive_403 > 0 or getattr(self, '_cleared_data_for_403', False):
