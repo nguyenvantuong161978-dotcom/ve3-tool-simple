@@ -2506,7 +2506,7 @@ class SmartEngine:
         else:
             self.log("[CHROME] Không có project URL - sẽ đợi user mở project")
 
-        # Sort prompts: nv/loc trước, scenes sau
+        # Sort prompts: nv/loc trước, scenes sau (numeric sort cho scenes)
         def sort_key(p):
             pid = p.get('id', '')
             if pid.startswith('nv'):
@@ -2514,7 +2514,11 @@ class SmartEngine:
             elif pid.startswith('loc'):
                 return (1, pid)
             else:
-                return (2, pid)
+                # v1.0.416: Sort numeric, không phải string (1,2,3 thay vì 1,10,100)
+                try:
+                    return (2, int(pid))
+                except (ValueError, TypeError):
+                    return (2, 999999)
 
         prompts = sorted(prompts, key=sort_key)
 

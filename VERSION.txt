@@ -1,12 +1,15 @@
-1.0.415
+1.0.416
 2026-03-24 (VN)
-Change: Thumbnail generation - route theo generation_mode (chrome/api)
+Change: Fix scene ordering + Gallery search improvement
 
 Thay doi:
-- v1.0.415: FIX THUMBNAIL LUON DUNG API MODE
-  * Problem: generate_thumbnails() luon goi generate_image() (API mode)
-    - Chrome mode nhung thumbnail van dung API → bi 403
-  * Fix: Check generation_mode tu settings.yaml
-    - chrome mode → dung generate_image_chrome() voi skip_restart=True
-    - api mode → giu nguyen generate_image() nhu cu
-  * Ap dung cho ca Batch A (landscape) va Batch B (portrait)
+- v1.0.416: FIX 2 VAN DE CHROME MODE
+  1. SCENE ORDERING: Sort numeric thay vi string
+     - Truoc: 1, 10, 100, 101, 2, 20... (string sort)
+     - Sau: 1, 2, 3, 4, 5... (numeric sort)
+  2. GALLERY SEARCH: Cai thien tim ảnh tham chiếu
+     - Dong dialog cu truoc khi mo moi (fix "Gallery dialog khong mo")
+     - Tim nhieu attribute: text, alt, aria-label, title, img src
+     - Scroll qua scrollable container neu khong thay
+     - Ho tro search box trong gallery dialog
+     - Dong dialog bang Escape khi fail (khong block lan sau)
