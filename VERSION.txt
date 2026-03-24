@@ -1,9 +1,10 @@
-1.0.421
+1.0.422
 2026-03-25 (VN)
-Change: Model selection moi lan gui prompt - khong chi 1 lan
+Change: Gallery search fix - click first img item sau khi search loc
 
 Thay doi:
-- v1.0.421: FIX MODEL SELECTION
-  * Chon model truoc MOI prompt, khong chi lan dau
-  * Bo flag _chrome_mode_settings_done
-  * Dam bao model luon duoc set dung
+- v1.0.422: FIX GALLERY SEARCH CLICK
+  * Sau khi search box loc, click item dau tien co img (khong can text match)
+  * Uu tien 1: text match keyword (chinh xac)
+  * Uu tien 2: first img item (search box da loc roi)
+  * Fix loi nvc, nv2, nv3 khong tim duoc trong gallery
