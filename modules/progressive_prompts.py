@@ -2608,7 +2608,37 @@ Create exactly {image_count} scenes!"""
 
                     chunk_start = chunk_end
 
-            self._log(f"  [GAP-FILL] Added {scene_id_counter - len(all_scenes) + len(chunks)} fill scenes, total: {len(all_scenes)}")
+            self._log(f"  [GAP-FILL] Added fill scenes, total: {len(all_scenes)}")
+
+        # =====================================================================
+        # v1.0.413: SORT scenes theo timeline (srt_start) rồi reassign scene_id
+        # Fix: gap-fill scenes bị đặt cuối thay vì đúng vị trí timeline
+        # =====================================================================
+        def _parse_time_for_sort(ts):
+            """Parse timestamp string thành seconds để sort."""
+            if not ts:
+                return 999999  # Đẩy scenes không có timestamp xuống cuối
+            try:
+                ts_str = str(ts).replace(',', ':')
+                parts = ts_str.split(':')
+                if len(parts) >= 4:
+                    return int(parts[0])*3600 + int(parts[1])*60 + int(parts[2]) + int(parts[3])/1000
+                elif len(parts) == 3:
+                    # H:MM:SS or H:MM:SS.ffffff
+                    h, m, s = parts
+                    return int(h)*3600 + int(m)*60 + float(s)
+                else:
+                    return float(ts_str)
+            except:
+                return 999999
+
+        all_scenes.sort(key=lambda s: _parse_time_for_sort(s.get("srt_start", "")))
+
+        # Reassign scene_id theo thứ tự timeline mới
+        for new_id, scene in enumerate(all_scenes, 1):
+            scene["scene_id"] = new_id
+
+        self._log(f"  [SORT] Sorted {len(all_scenes)} scenes by srt_start, reassigned scene_ids 1-{len(all_scenes)}")
 
         # Save to Excel
         try:

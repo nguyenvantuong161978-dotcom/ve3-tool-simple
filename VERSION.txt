@@ -1,10 +1,11 @@
-1.0.413
+1.0.414
 2026-03-24 (VN)
-Change: Chrome mode PHASE 3 - skip_restart=True de giu gallery references
+Change: Fix scene ordering - Sort theo timeline + reassign scene_id
 
 Thay doi:
-- v1.0.413: FIX GALLERY BI MAT SAU MOI SCENE
-  * PHASE 3 (tao anh scenes): Them skip_restart=True
-    - Truoc: Sau moi scene → cleanup + restart Chrome → mat gallery
-    - Sau: Khong restart → gallery refs duoc giu nguyen
-    - Gallery duoc upload 1 lan o PHASE 2, dung cho tat ca scenes
+- v1.0.414: FIX SAP XEP SCENES SAI THU TU
+  * Problem: Gap-fill scenes bi dat o cuoi list thay vi dung vi tri timeline
+    - VD: Scene 133 (0:00:57) nam sau scene 132 (0:16:30)
+  * Fix: Sau GAP-FILL, sort ALL scenes theo srt_start timestamp
+  * Reassign scene_id 1->N theo thu tu timeline moi
+  * Dam bao scenes lien tuc theo dong thoi gian video
