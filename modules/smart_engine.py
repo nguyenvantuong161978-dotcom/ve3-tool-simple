@@ -2722,7 +2722,6 @@ class SmartEngine:
                     prompt=prompt,
                     reference_filenames=ref_filenames if ref_filenames else None,
                     reference_prompts=ref_prompt_map if ref_filenames else None,  # v1.0.417: prompt cho gallery search
-                    ref_dir=str(nv_dir),  # v1.0.418: thư mục chứa ảnh ref cho paste trực tiếp
                     save_dir=save_dir_scene,
                     filename=fname,
                     timeout=120,
