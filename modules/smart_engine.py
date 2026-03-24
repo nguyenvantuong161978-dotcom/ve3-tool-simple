@@ -5498,47 +5498,14 @@ class SmartEngine:
                 return
 
             # === CHUYỂN SANG T2V MODE (Từ văn bản sang video) ===
-            # UI: T2V mode, interceptor convert thành I2V API với media_id
-            # NOTE: _execute_video_t2v_mode() cũng sẽ switch mode mỗi lần, đây chỉ là lần đầu
+            # v1.0.399: Dùng switch_to_t2v_mode() thay vì JS cũ
             self.log("[PARALLEL-VIDEO] Chuyển sang mode 'Từ văn bản sang video'...")
             time.sleep(2)  # Đợi page ổn định
 
-            t2v_js = '''
-// Tìm "Từ văn bản sang video" (length 22)
-var btn = document.querySelector('button[role="combobox"]');
-if (btn) {
-    btn.click();
-    setTimeout(() => {
-        btn.click();
-        setTimeout(() => {
-            var spans = document.querySelectorAll('span');
-            for (var el of spans) {
-                var text = el.textContent.trim();
-                // Vietnamese: "Từ văn bản sang video" = 22 ký tự
-                // English: "Text to video" = 13 ký tự
-                if (text.includes('video') && (text.length === 22 || text.length === 13)) {
-                    console.log('[T2V] FOUND:', text);
-                    el.click();
-                    window._t2vResult = 'CLICKED';
-                    return;
-                }
-            }
-            console.log('[T2V] NOT FOUND');
-            window._t2vResult = 'NOT_FOUND';
-        }, 300);
-    }, 100);
-} else {
-    window._t2vResult = 'NO_DROPDOWN';
-}
-'''
-            drission_api.driver.run_js(t2v_js)
-            time.sleep(1.5)  # Đợi dropdown animation
-
-            result = drission_api.driver.run_js("return window._t2vResult || 'PENDING'")
-            if result == 'CLICKED':
+            if drission_api.switch_to_t2v_mode():
                 self.log("[PARALLEL-VIDEO] [v] Đã chuyển sang T2V mode!")
             else:
-                self.log(f"[PARALLEL-VIDEO] [WARN] T2V switch result: {result}", "WARN")
+                self.log("[PARALLEL-VIDEO] [WARN] T2V switch thất bại - video vẫn chạy tiếp", "WARN")
 
             self.log("[PARALLEL-VIDEO] Chrome 2 ready - Bắt đầu theo dõi Excel...")
 
@@ -5615,7 +5582,38 @@ if (btn) {
                         self.log(f"[PARALLEL-VIDEO] [x] Video FAILED: {scene_id} - {error}", "WARN")
 
             except Exception as e:
+                error_msg = str(e)
                 self.log(f"[PARALLEL-VIDEO] Error: {e}", "WARN")
+
+                # v1.0.399: Phát hiện Chrome bị disconnect → restart Chrome 2
+                if "disconnected" in error_msg.lower() or "connection" in error_msg.lower():
+                    self.log("[PARALLEL-VIDEO] [WARN] Chrome 2 bị disconnect - restart...", "WARN")
+                    try:
+                        if drission_api:
+                            drission_api.close()
+                        time.sleep(3)
+                        # Restart Chrome 2
+                        drission_api = DrissionFlowAPI(
+                            profile_dir="./chrome_profiles/video",
+                            verbose=True,
+                            log_callback=lambda msg, lvl="INFO": self.log(f"[PARALLEL-VIDEO] {msg}", lvl),
+                            webshare_enabled=use_webshare,
+                            worker_id=1,
+                            total_workers=2,
+                            headless=headless_mode,
+                            machine_id=machine_id + 100,
+                            chrome_portable=chrome2_portable
+                        )
+                        if drission_api.setup(project_url=project_url, skip_mode_selection=True):
+                            time.sleep(2)
+                            drission_api.switch_to_t2v_mode()
+                            self.log("[PARALLEL-VIDEO] [v] Chrome 2 restart thành công!")
+                        else:
+                            self.log("[PARALLEL-VIDEO] [x] Chrome 2 restart thất bại - đợi 30s...", "ERROR")
+                            time.sleep(30)
+                    except Exception as restart_err:
+                        self.log(f"[PARALLEL-VIDEO] [x] Restart error: {restart_err}", "ERROR")
+                        time.sleep(30)
 
             # Poll interval
             time.sleep(3)

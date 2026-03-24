@@ -2281,10 +2281,41 @@ class DrissionFlowAPI:
 
                         self.log(f"  [v] Killed {killed_count} Chrome processes")
                     except subprocess.TimeoutExpired:
-                        # Fallback: kill all Chrome by name
-                        self.log(f"  [WARN] wmic timeout, killing ALL Chrome...")
-                        self._kill_all_chrome_by_name()
-                        self.log(f"  [v] Killed all Chrome (fallback)")
+                        # v1.0.399: KHÔNG kill all Chrome khi wmic timeout
+                        # Vì sẽ kill nhầm Chrome của worker khác
+                        self.log(f"  [WARN] wmic timeout - thử taskkill từng PID...")
+                        try:
+                            # Retry với tasklist (nhanh hơn wmic)
+                            result2 = subprocess.run(
+                                ['tasklist', '/FI', 'IMAGENAME eq chrome.exe', '/FO', 'CSV', '/NH'],
+                                capture_output=True, text=True, timeout=10
+                            )
+                            if result2.returncode == 0:
+                                import csv, io
+                                reader = csv.reader(io.StringIO(result2.stdout))
+                                for row in reader:
+                                    if len(row) >= 2 and row[1].strip().isdigit():
+                                        pid = row[1].strip()
+                                        # Check commandline riêng cho từng PID
+                                        try:
+                                            cmd_result = subprocess.run(
+                                                ['wmic', 'process', 'where', f'processid={pid}', 'get', 'commandline'],
+                                                capture_output=True, text=True, timeout=5
+                                            )
+                                            cmdline = cmd_result.stdout
+                                            should_kill = False
+                                            if chrome_marker in cmdline:
+                                                if exclude_marker and exclude_marker in cmdline:
+                                                    pass  # Skip worker khác
+                                                else:
+                                                    should_kill = True
+                                            if should_kill:
+                                                self._kill_pid(pid)
+                                                self.log(f"  Killed Chrome (PID: {pid})")
+                                        except:
+                                            pass
+                        except Exception as e2:
+                            self.log(f"  [WARN] Fallback kill failed: {e2}")
                 else:
                     # Fallback: kill all Chrome (không có chrome_portable)
                     self.log("  [KILL] Force killing ALL Chrome processes (no chrome_portable)...")
