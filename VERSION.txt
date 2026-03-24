@@ -1,11 +1,13 @@
-1.0.410
+1.0.411
 2026-03-24 (VN)
-Change: Fix Chrome mode - _parse_images error + skip restart khi tao reference
+Change: Chrome mode - Luu project URL vao Excel + 403 handling
 
 Thay doi:
-- v1.0.410: FIX CHROME MODE
-  * Fix 1: _parse_images() khong ton tai → doi thanh _parse_response() (giong API mode)
-  * Fix 2: Tao reference images (PHASE 1) khong restart Chrome sau moi anh
-    - Truoc: Restart sau moi anh → mat project + gallery
-    - Sau: skip_restart=True cho PHASE 1 → giu project de upload refs len gallery
-  * Flow dung: PHASE 1 (tao refs) → PHASE 2 (upload refs len gallery) → PHASE 3 (tao scenes voi refs)
+- v1.0.411: FIX CHROME MODE - CHROME 2 KHONG CO PROJECT URL
+  * Van de: Chrome 1 tao project moi nhung KHONG luu URL vao Excel
+  * Chrome 2 doc Excel khong thay URL → doi mai
+  * Fix: Sau khi setup project → luu flow_project_url vao Excel config sheet
+  * Chrome 2 doc duoc URL va bat dau lam viec
+  * Them 403 handling cho PHASE 1 (tao reference images):
+    - Khi bi 403 → cleanup + restart Chrome → vao lai project cu
+    - Truoc day skip_restart=True nen bi 403 lien tuc khong xu ly

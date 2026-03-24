@@ -2566,6 +2566,19 @@ class SmartEngine:
             self.log("[CHROME] Setup failed!", "ERROR")
             return {"success": 0, "failed": len(prompts)}
 
+        # v1.0.411: Lưu project URL vào Excel để Chrome 2 đọc được
+        new_project_url = getattr(api, '_current_project_url', None)
+        if new_project_url:
+            try:
+                from modules.excel_manager import PromptWorkbook
+                wb = PromptWorkbook(excel_path)
+                wb.load_or_create()
+                wb.set_config_value('flow_project_url', new_project_url)
+                wb.safe_save()
+                self.log(f"[CHROME] Saved project URL to Excel: {new_project_url[:60]}...")
+            except Exception as e:
+                self.log(f"[CHROME] Warning: Cannot save URL to Excel: {e}", "WARN")
+
         results = {"success": 0, "failed": 0}
 
         # ============================================================
@@ -2612,6 +2625,20 @@ class SmartEngine:
                 else:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1
+
+                    # v1.0.411: 403 handling - cleanup + restart Chrome, vào lại project
+                    if error and '403' in str(error):
+                        self.log(f"  [403] Cleanup + Restart Chrome...")
+                        try:
+                            api.cleanup_browser_data()
+                            saved_url = getattr(api, '_current_project_url', None)
+                            api._kill_chrome()
+                            api.close()
+                            import time
+                            time.sleep(2)
+                            api.setup(project_url=saved_url, skip_403_reset=True)
+                        except Exception as e:
+                            self.log(f"  [403] Restart error: {e}", "WARN")
 
         # ============================================================
         # PHASE 2: Upload TẤT CẢ reference images lên gallery
