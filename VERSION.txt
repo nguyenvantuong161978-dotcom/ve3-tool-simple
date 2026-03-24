@@ -1,13 +1,13 @@
-1.0.411
+1.0.412
 2026-03-24 (VN)
-Change: Chrome mode - Luu project URL vao Excel + 403 handling
+Change: Chrome mode - Skip Reference Validator + Skip doi media_id cho Chrome 2
 
 Thay doi:
-- v1.0.411: FIX CHROME MODE - CHROME 2 KHONG CO PROJECT URL
-  * Van de: Chrome 1 tao project moi nhung KHONG luu URL vao Excel
-  * Chrome 2 doc Excel khong thay URL → doi mai
-  * Fix: Sau khi setup project → luu flow_project_url vao Excel config sheet
-  * Chrome 2 doc duoc URL va bat dau lam viec
-  * Them 403 handling cho PHASE 1 (tao reference images):
-    - Khi bi 403 → cleanup + restart Chrome → vao lai project cu
-    - Truoc day skip_restart=True nen bi 403 lien tuc khong xu ly
+- v1.0.412: CHROME 2 TUONG THICH CHROME MODE
+  * Reference Validator (Step 3.5): SKIP khi Chrome mode
+    - Validator dung API de validate → khong co media_id trong Chrome mode
+    - Chrome 1 tao references truc tiep, Chrome 2 chi tao scenes
+  * Thumbnail wait (Step 3.7): Skip doi media_id khi Chrome mode
+    - Chrome mode khong co media_id → skip doi → thumbnails dung Chrome UI giong scenes
+  * Step 3.6 (doi Chrome 1 tao scenes): Khong thay doi (doi file anh, OK)
+  * Step 4 (SmartEngine.run): Tu dong route theo generation_mode

@@ -427,7 +427,26 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
     log(f"  STEP 3.5: REFERENCE VALIDATOR")
     log(f"  ============================================================")
 
+    # v1.0.412: Skip validator khi Chrome mode (không dùng API)
+    _generation_mode = 'api'
     try:
+        import yaml as _yaml
+        _cfg_path = Path("config/settings.yaml")
+        if _cfg_path.exists():
+            with open(_cfg_path, 'r', encoding='utf-8') as _f:
+                _cfg = _yaml.safe_load(_f) or {}
+                _generation_mode = _cfg.get('generation_mode', 'api')
+    except:
+        pass
+
+    _skip_validator = (_generation_mode == 'chrome')
+    if _skip_validator:
+        log(f"  [SKIP] Chrome mode - không cần validator (không có media_id)")
+        log(f"  Chrome 1 tạo references trực tiếp, Chrome 2 chỉ tạo scenes")
+
+    try:
+        if _skip_validator:
+            raise Exception("SKIP_VALIDATOR")
         from modules.excel_manager import PromptWorkbook
 
         # BƯỚC 1: LẬP KẾ HOẠCH - Đọc Excel để biết có bao nhiêu references cần validate
@@ -633,15 +652,16 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                     pass
 
     except Exception as e:
-        log(f"  [ERROR] Validator error: {e}", "error")
-        import traceback
-        traceback.print_exc()
-        # Cleanup
-        if 'validator_api' in dir() and validator_api:
-            try:
-                validator_api.close()
-            except:
-                pass
+        if "SKIP_VALIDATOR" not in str(e):
+            log(f"  [ERROR] Validator error: {e}", "error")
+            import traceback
+            traceback.print_exc()
+            # Cleanup
+            if 'validator_api' in dir() and validator_api:
+                try:
+                    validator_api.close()
+                except:
+                    pass
 
     # Step 3.7: Generate thumbnails (sau khi validate references, trước khi tạo scenes)
     log(f"  ============================================================")
@@ -686,13 +706,17 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             log(f"  [WARN] step_8 not completed after {max_wait_step8}s, skip thumbnails", "WARN")
         else:
             # v1.0.322: Đợi Chrome 1 tạo xong NV references (có media_id) trước khi thumbnail
-            # Bug fix: get_characters() trả về [] khi file lock → nv_chars rỗng → break ngay
-            #          → Chrome 2 tạo thumbnail trước khi Chrome 1 tạo xong references
             max_wait_nv = 1800  # tối đa 30 phút
             waited_nv = 0
             wait_interval_nv = 15
             nv_ready = False
-            while waited_nv < max_wait_nv:
+
+            # v1.0.412: Chrome mode không có media_id → skip đợi media_id
+            if _skip_validator:
+                log(f"  [v] Chrome mode: skip đợi media_id → thumbnails dùng Chrome UI giống scenes")
+                nv_ready = True
+
+            while not nv_ready and waited_nv < max_wait_nv:
                 try:
                     wb_nv = PromptWorkbook(str(excel_path))
                     wb_nv.load_or_create()
