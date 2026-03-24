@@ -1923,22 +1923,14 @@ class SmartEngine:
             pass
 
         # =====================================================================
-        # PARALLEL VIDEO: Luôn mở Chrome 2 song song để tạo video
-        # Chrome 1 (bên trái): Tạo ảnh
-        # Chrome 2 (bên phải): Theo dõi Excel và tạo video
-        # Ảnh xong = project xong, video chạy nền được bao nhiêu thì được
+        # v1.0.405: BỎ parallel video (Chrome 2 mở mới cho video)
+        # Lý do: Chrome 2 cần cho _run_chrome2.py tạo ảnh scenes lẻ
+        # Video sẽ tạo SAU khi xong ảnh, dùng chính Chrome hiện tại
         # =====================================================================
-        video_parallel_enabled = not getattr(self, '_skip_video', False)  # Tắt nếu skip_video=True
-
         if getattr(self, '_skip_video', False):
             self.log("[MODE] IMAGE ONLY - Bỏ qua tạo video")
-        elif video_parallel_enabled:
-            self.log("[PARALLEL-VIDEO] Chrome 2 sẽ tạo video SONG SONG")
-            self.log("[PARALLEL-VIDEO] Ảnh xong = xong, video chạy nền")
-
-        # Start Chrome 2 song song
-        if video_parallel_enabled and not self._parallel_video_running:
-            self._start_parallel_video_chrome(proj_dir, excel_files[0])
+        else:
+            self.log("[VIDEO] Sẽ tạo video SAU khi xong ảnh (dùng Chrome hiện tại)")
 
         # Tim profile co san
         profile_name = "main"
@@ -2265,22 +2257,14 @@ class SmartEngine:
             return {"success": 0, "failed": len(prompts)}
 
         # =====================================================================
-        # PARALLEL VIDEO: Luôn mở Chrome 2 song song để tạo video
-        # Chrome 1 (bên trái): Tạo ảnh
-        # Chrome 2 (bên phải): Theo dõi Excel và tạo video
-        # Ảnh xong = project xong, video chạy nền được bao nhiêu thì được
+        # v1.0.405: BỎ parallel video (Chrome 2 mở mới cho video)
+        # Lý do: Chrome 2 cần cho _run_chrome2.py tạo ảnh scenes lẻ
+        # Video sẽ tạo SAU khi xong ảnh, dùng chính Chrome hiện tại
         # =====================================================================
-        video_parallel_enabled = not getattr(self, '_skip_video', False)  # Tắt nếu skip_video=True
-
         if getattr(self, '_skip_video', False):
             self.log("[MODE] IMAGE ONLY - Bỏ qua tạo video")
-        elif video_parallel_enabled:
-            self.log("[PARALLEL-VIDEO] Chrome 2 sẽ tạo video SONG SONG")
-            self.log("[PARALLEL-VIDEO] Ảnh xong = xong, video chạy nền")
-
-        # Start Chrome 2 song song
-        if video_parallel_enabled and not self._parallel_video_running:
-            self._start_parallel_video_chrome(proj_dir, excel_files[0])
+        else:
+            self.log("[VIDEO] Sẽ tạo video SAU khi xong ảnh (dùng Chrome hiện tại)")
 
         # =====================================================================
         # PARALLEL MODE: Nhieu browser song song

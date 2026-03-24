@@ -1,11 +1,13 @@
-1.0.404
+1.0.405
 2026-03-24 (VN)
-Change: Fix Chrome 2 infinite disconnect loop - them restart logic
+Change: Bo parallel video (Chrome 2 mo moi) - video tao SAU khi xong anh
 
 Thay doi:
-- v1.0.404: FIX CHROME 2 PARALLEL-VIDEO DISCONNECT LOOP
-  * Vấn đề: Chrome 1 restart sau mỗi ảnh → Chrome 2 mất connection → retry vô hạn
-  * Fix: Detect "disconnected" error → restart Chrome 2 tự động
-  * consecutive_disconnect >= 2 → close Chrome 2 → tạo DrissionFlowAPI mới → setup lại
-  * Disconnect error: KHÔNG mark as processed → retry scene sau khi restart
-  * Thêm stop_flag check trong for loop (tránh tiếp tục khi đã stop)
+- v1.0.405: BO PARALLEL VIDEO MO CHROME 2 MOI
+  * Van de: Chrome 1 mo Chrome 2 cho video NGAY TU DAU
+  * Chrome 2 bi chiem → _run_chrome2.py khong dung duoc → khong tao anh le
+  * Fix: Bo _start_parallel_video_chrome() (2 cho)
+  * Video se tao SAU khi xong anh, dung chinh Chrome hien tai
+  * Chrome nao xong anh truoc → chuyen sang tao video luon
+  * Chrome 1: scenes chan + refs → xong → video
+  * Chrome 2: scenes le → xong → video
