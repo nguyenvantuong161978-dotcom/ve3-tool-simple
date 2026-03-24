@@ -1,13 +1,11 @@
-1.0.408
+1.0.409
 2026-03-24 (VN)
-Change: Fix kill Chrome - KHONG kill all khi wmic timeout
+Change: Fix NameError video_parallel_enabled - ca 2 worker crash
 
 Thay doi:
-- v1.0.408: FIX KILL CHROME AN TOAN
-  * Van de: wmic timeout → fallback _kill_all_chrome_by_name() → kill TAT CA Chrome
-  * Chrome 2 bi chet theo khi Chrome 1 kill
-  * Fix: Khi wmic timeout → kill theo PORT thay vi kill all
-  * Khong co chrome_portable → cung kill theo port
-  * KHONG BAO GIO kill all Chrome nua - chi kill dung Chrome cua worker
-  * _kill_chrome() van dung wmic theo thu muc (giong v387)
-  * _kill_chrome_using_profile() khong thay doi
+- v1.0.409: FIX NAMEERROR video_parallel_enabled
+  * Van de: v1.0.405 xoa bien video_parallel_enabled nhung con 2 cho dung
+  * Line 1987 va 2390: if video_parallel_enabled → NameError
+  * Ca Chrome 1 va Chrome 2 deu crash ngay khi bat dau
+  * Fix: Xoa 2 if block (code dieu chinh layout cho parallel video da bo)
+  * Dung truc tiep self.worker_id va self.total_workers

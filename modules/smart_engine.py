@@ -1980,14 +1980,6 @@ class SmartEngine:
             self.log("va copy bearer token vao settings.yaml (flow_bearer_token)", "WARN")
 
         try:
-            # Điều chỉnh worker layout khi video parallel enabled
-            # Chrome 1 = bên trái (worker_id=0, total_workers=2)
-            chrome1_worker_id = self.worker_id
-            chrome1_total_workers = self.total_workers
-            if video_parallel_enabled and not headless:
-                chrome1_worker_id = 0  # Bên trái
-                chrome1_total_workers = 2  # Chia đôi màn hình
-
             # Tao BrowserFlowGenerator
             generator = BrowserFlowGenerator(
                 project_path=str(proj_dir),
@@ -1995,8 +1987,8 @@ class SmartEngine:
                 headless=headless,
                 verbose=True,
                 config_path=str(settings_path),
-                worker_id=chrome1_worker_id,  # For parallel processing
-                total_workers=chrome1_total_workers,  # For window layout
+                worker_id=self.worker_id,  # For parallel processing
+                total_workers=self.total_workers,  # For window layout
                 chrome_portable=self.chrome_portable if self._chrome_portable_override else None
             )
 
@@ -2383,21 +2375,13 @@ class SmartEngine:
                     self._browser_generator = None
 
             if need_new_generator:
-                # Điều chỉnh worker layout khi video parallel enabled
-                # Chrome 1 = bên trái (worker_id=0, total_workers=2)
-                chrome1_worker_id = self.worker_id
-                chrome1_total_workers = self.total_workers
-                if video_parallel_enabled and not headless:
-                    chrome1_worker_id = 0  # Bên trái
-                    chrome1_total_workers = 2  # Chia đôi màn hình
-
                 generator = BrowserFlowGenerator(
                     project_path=str(proj_dir),
                     profile_name=profile_name,
                     headless=headless,
                     verbose=True,
-                    worker_id=chrome1_worker_id,  # For parallel processing
-                    total_workers=chrome1_total_workers,  # For window layout
+                    worker_id=self.worker_id,  # For parallel processing
+                    total_workers=self.total_workers,  # For window layout
                     chrome_portable=self.chrome_portable if self._chrome_portable_override else None
                 )
                 self._browser_generator = generator
