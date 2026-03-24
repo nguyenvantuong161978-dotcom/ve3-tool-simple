@@ -1,12 +1,12 @@
-1.0.399
+1.0.400
 2026-03-24 (VN)
-Change: Fix Chrome kill fallback + Chrome 2 disconnect recovery
+Change: PowerShell kill Chrome thay wmic/tasklist (fix timeout tren VM)
 
 Thay doi:
-- v1.0.399: FIX CHROME KILL + VIDEO LOOP
-  * wmic timeout: KHONG kill all Chrome nua (tranh kill nham worker khac)
-    → Dung tasklist + wmic tung PID thay vi kill_all_chrome_by_name()
-  * Chrome 2 PARALLEL-VIDEO: Phat hien disconnect va tu restart
-    → Truoc day loop vo han khi Chrome 2 bi kill boi Chrome 1
-    → Bay gio: disconnect → close → restart Chrome 2 → tiep tuc
-  * T2V mode setup: Dung switch_to_t2v_mode() (JS moi) thay vi JS cu
+- v1.0.400: POWERSHELL KILL CHROME
+  * wmic va tasklist deu timeout tren VM → Chrome cu khong bi kill
+  * Thay bang PowerShell Get-CimInstance (nhanh hon nhieu)
+  * _kill_chrome_by_marker(): Method moi dung PowerShell + fallback wmic
+  * _force_kill_all_chrome(): Dung _kill_chrome_by_marker()
+  * _kill_chrome_by_folder(): Dung _kill_chrome_by_marker()
+  * Van phan biet Chrome 1 vs Chrome 2 (khong kill nham)
