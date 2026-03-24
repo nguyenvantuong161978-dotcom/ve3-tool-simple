@@ -2281,15 +2281,16 @@ class DrissionFlowAPI:
 
                         self.log(f"  [v] Killed {killed_count} Chrome processes")
                     except subprocess.TimeoutExpired:
-                        # Fallback: kill all Chrome by name
-                        self.log(f"  [WARN] wmic timeout, killing ALL Chrome...")
-                        self._kill_all_chrome_by_name()
-                        self.log(f"  [v] Killed all Chrome (fallback)")
+                        # v1.0.408: KHÔNG kill all Chrome khi timeout
+                        # Chỉ kill theo port (an toàn, không ảnh hưởng Chrome khác)
+                        self.log(f"  [WARN] wmic timeout, kill theo port thay vì kill all...")
+                        port = getattr(self, '_chrome_port', 9222)
+                        self._kill_chrome_on_port(port)
                 else:
-                    # Fallback: kill all Chrome (không có chrome_portable)
-                    self.log("  [KILL] Force killing ALL Chrome processes (no chrome_portable)...")
-                    self._kill_all_chrome_by_name()
-                    self.log("  [v] Killed all Chrome processes")
+                    # Không có chrome_portable → kill theo port
+                    self.log("  [KILL] Kill Chrome theo port (no chrome_portable)...")
+                    port = getattr(self, '_chrome_port', 9222)
+                    self._kill_chrome_on_port(port)
             else:
                 # Linux/Mac: killall (không hỗ trợ kill by path)
                 self.log("  [KILL] Force killing ALL Chrome processes (Linux/Mac)...")

@@ -1,13 +1,13 @@
-1.0.407
+1.0.408
 2026-03-24 (VN)
-Change: Chrome mode dung interceptor bat response - giong API mode
+Change: Fix kill Chrome - KHONG kill all khi wmic timeout
 
 Thay doi:
-- v1.0.407: CHROME MODE DUNG INTERCEPTOR (GIONG API MODE)
-  * Van de v406: Detect anh bang DOM phuc tap, khong chinh xac
-  * Fix: Inject JS_INTERCEPTOR vao Chrome mode (cung interceptor voi API mode)
-  * Chrome gui prompt → interceptor bat fetch response → lay anh tu JSON
-  * Check window._response giong het API mode (403, 429, 400, media data)
-  * Parse images bang _parse_images() (co san base64 + fifeUrl)
-  * Download: uu tien base64, fallback URL
-  * Don gian, chinh xac, giong API mode 100%
+- v1.0.408: FIX KILL CHROME AN TOAN
+  * Van de: wmic timeout → fallback _kill_all_chrome_by_name() → kill TAT CA Chrome
+  * Chrome 2 bi chet theo khi Chrome 1 kill
+  * Fix: Khi wmic timeout → kill theo PORT thay vi kill all
+  * Khong co chrome_portable → cung kill theo port
+  * KHONG BAO GIO kill all Chrome nua - chi kill dung Chrome cua worker
+  * _kill_chrome() van dung wmic theo thu muc (giong v387)
+  * _kill_chrome_using_profile() khong thay doi
