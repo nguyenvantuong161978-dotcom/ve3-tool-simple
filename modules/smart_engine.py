@@ -5577,6 +5577,7 @@ class SmartEngine:
         img_dir = proj_dir / "img"
         processed_scenes = set()  # Track scenes đã xử lý
         video_count_created = 0
+        consecutive_disconnect = 0  # v1.0.404: Track disconnect errors
 
         while self._parallel_video_running and not self.stop_flag:
             try:
@@ -5587,6 +5588,8 @@ class SmartEngine:
 
                 # Tìm scenes mới có media_id
                 for scene_id, media_id in scene_media_ids.items():
+                    if not self._parallel_video_running or self.stop_flag:
+                        break
                     if not media_id:
                         continue
                     if scene_id in processed_scenes:
@@ -5603,6 +5606,42 @@ class SmartEngine:
                         self.log(f"[PARALLEL-VIDEO] Đã đủ {video_count} video, dừng!", "OK")
                         self._parallel_video_running = False
                         break
+
+                    # v1.0.404: Check connection trước khi tạo video
+                    if consecutive_disconnect >= 2:
+                        self.log(f"[PARALLEL-VIDEO] Disconnect {consecutive_disconnect} lần → Restart Chrome 2...")
+                        try:
+                            drission_api.close()
+                        except:
+                            pass
+                        time.sleep(3)
+
+                        # Restart Chrome 2
+                        try:
+                            drission_api = DrissionFlowAPI(
+                                profile_dir="./chrome_profiles/video",
+                                verbose=True,
+                                log_callback=lambda msg, lvl="INFO": self.log(f"[PARALLEL-VIDEO] {msg}", lvl),
+                                webshare_enabled=use_webshare,
+                                worker_id=1,
+                                total_workers=2,
+                                headless=headless_mode,
+                                machine_id=machine_id + 100,
+                                chrome_portable=chrome2_portable
+                            )
+                            if drission_api.setup(project_url=project_url, skip_mode_selection=True):
+                                self.log("[PARALLEL-VIDEO] [v] Chrome 2 restart OK!")
+                                time.sleep(2)
+                                drission_api.switch_to_t2v_mode()
+                                consecutive_disconnect = 0
+                            else:
+                                self.log("[PARALLEL-VIDEO] [x] Chrome 2 restart FAIL - đợi 30s...", "WARN")
+                                time.sleep(30)
+                                continue
+                        except Exception as e:
+                            self.log(f"[PARALLEL-VIDEO] Restart error: {e}", "WARN")
+                            time.sleep(30)
+                            continue
 
                     # === TẠO VIDEO ===
                     self.log(f"[PARALLEL-VIDEO] Tạo video: {scene_id} (media_id: {media_id[:30]}...)")
@@ -5626,6 +5665,7 @@ class SmartEngine:
                     if ok:
                         video_count_created += 1
                         processed_scenes.add(scene_id)
+                        consecutive_disconnect = 0  # Reset on success
                         self.log(f"[PARALLEL-VIDEO] [v] Video OK: {scene_id} ({video_count_created} videos)")
 
                         # Xóa ảnh gốc nếu cần
@@ -5637,11 +5677,23 @@ class SmartEngine:
                                 except:
                                     pass
                     else:
-                        processed_scenes.add(scene_id)  # Đánh dấu đã xử lý (tránh retry liên tục)
-                        self.log(f"[PARALLEL-VIDEO] [x] Video FAILED: {scene_id} - {error}", "WARN")
+                        # v1.0.404: Detect disconnect error → KHÔNG mark as processed (sẽ retry)
+                        error_str = str(error or "")
+                        if "disconnected" in error_str.lower() or "connection" in error_str.lower():
+                            consecutive_disconnect += 1
+                            self.log(f"[PARALLEL-VIDEO] [x] Video DISCONNECT: {scene_id} (lần {consecutive_disconnect})", "WARN")
+                            # KHÔNG add vào processed_scenes → sẽ retry sau restart
+                        else:
+                            processed_scenes.add(scene_id)  # Lỗi khác → skip
+                            consecutive_disconnect = 0
+                            self.log(f"[PARALLEL-VIDEO] [x] Video FAILED: {scene_id} - {error}", "WARN")
 
             except Exception as e:
-                self.log(f"[PARALLEL-VIDEO] Error: {e}", "WARN")
+                error_str = str(e)
+                self.log(f"[PARALLEL-VIDEO] Error: {error_str}", "WARN")
+                # v1.0.404: Detect disconnect trong exception
+                if "disconnected" in error_str.lower() or "connection" in error_str.lower():
+                    consecutive_disconnect += 1
 
             # Poll interval
             time.sleep(3)
