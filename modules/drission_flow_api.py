@@ -4345,17 +4345,11 @@ class DrissionFlowAPI:
         if not self._ready:
             return [], "API chưa setup! Gọi setup() trước."
 
-        # v1.0.231: LUÔN chọn x1 + model trước MỖI lần generate
-        # Dùng _current_model_index để đúng model (0=Pro, 1=NB2, 2=Imagen4)
-        # x1 được chọn trong select_model_by_index()
-        model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+        # v1.0.388: Setup Image settings bằng CDP click
+        # Thứ tự: Hình ảnh → 16:9 → x1 → model
         current_model_idx = getattr(self, '_current_model_index', 0)
-        current_model_name = model_names[current_model_idx] if current_model_idx < len(model_names) else f"Model {current_model_idx}"
-        self.log(f"[Model] Chọn x1 + {current_model_name} (index {current_model_idx})...")
-        if self.select_model_by_index(current_model_idx):
-            self.log(f"[Model] [v] Đã chọn x1 + {current_model_name}")
-        else:
-            self.log("[Model] [WARN] Không chọn được model, tiếp tục...", "WARN")
+        if not self.setup_image_settings(current_model_idx):
+            self.log("[Model] [WARN] Setup image settings failed, tiếp tục...", "WARN")
 
         # 1. Reset state
         self.driver.run_js("""
@@ -4668,17 +4662,10 @@ class DrissionFlowAPI:
                         next_model = current_model + 1
                         self.log(f"[QUOTA] Hết hạn mức {model_names[current_model]} → SWITCH: {model_names[next_model]}", "WARN")
 
-                        if self.select_model_by_index(next_model):
-                            self._current_model_index = next_model
+                        # v1.0.388: Dùng setup_image_settings() thay select_model_by_index()
+                        self._current_model_index = next_model
+                        if self.setup_image_settings(next_model):
                             self.log(f"[QUOTA] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
-                            # v1.0.184: F5 refresh để clear UI error cũ trước khi retry
-                            self.log("[QUOTA] F5 refresh để clear UI cũ...")
-                            try:
-                                self.driver.refresh()
-                                time.sleep(5)  # Đợi page load
-                            except Exception as e:
-                                self.log(f"[QUOTA] Refresh error: {e}", "WARN")
-                                time.sleep(2)
                             attempt += 1
                             continue
                         else:
@@ -4687,8 +4674,7 @@ class DrissionFlowAPI:
                         # Đã hết 3 models → reset về model 0 và skip scene này
                         self.log(f"[QUOTA] Hết cả 3 models, skip scene này", "WARN")
                         self._current_model_index = 0
-                        # Thử switch về model 0 cho scene tiếp
-                        self.select_model_by_index(0)
+                        self.setup_image_settings(0)
                         return False, [], f"Quota exhausted all models"
 
                     # Fallback: refresh và retry
@@ -4791,8 +4777,9 @@ class DrissionFlowAPI:
                         self.log(f"[403] Đủ {model_threshold} lần → SWITCH: {model_names[current_model]} → {model_names[next_model]}", "WARN")
 
                         # Switch model trên UI
-                        if self.select_model_by_index(next_model):
-                            self._current_model_index = next_model
+                        # v1.0.388: Dùng setup_image_settings() thay select_model_by_index()
+                        self._current_model_index = next_model
+                        if self.setup_image_settings(next_model):
                             self._consecutive_403 = 0  # Reset counter
                             self.log(f"[403] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
                         else:
@@ -5811,7 +5798,10 @@ class DrissionFlowAPI:
             return False
 
     def switch_to_image_mode(self) -> bool:
-        """Chuyển Chrome về mode tạo ảnh. Dùng cách giống T2V: click dropdown 2 lần với setTimeout."""
+        """
+        v1.0.388: Chuyển Chrome về mode Image bằng CDP click.
+        Mở settings → click tab Image.
+        """
         if not self._ready:
             return False
 
@@ -5824,39 +5814,40 @@ class DrissionFlowAPI:
                     self.log("[Mode] [WARN] Phát hiện bị LOGOUT - auto login...")
                     if self._auto_login_google():
                         self.log("[Mode] [v] Đã login lại")
-                        # Re-setup sau khi login
                         time.sleep(2)
                         continue
                     else:
                         self.log("[Mode] [x] Login thất bại", "ERROR")
                         return False
 
-                # v1.0.138: Bỏ check combobox - giao diện mới không cần
                 self.log(f"[Mode] Chuyển sang Image mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
-                # v1.0.162: Dùng JS với PointerEvent
-                self.driver.run_js(JS_SELECT_IMAGE_MODE)
-
-                # Đợi JS async hoàn thành (500ms + buffer)
-                time.sleep(1.0)
-
-                # Kiểm tra kết quả
-                result = self.driver.run_js("return window._imageResult;")
-
-                if result == 'CLICKED':
-                    self.log("[Mode] [v] Đã chuyển sang Image mode")
-                    time.sleep(0.3)
+                # Mở settings panel
+                if not self._open_settings_panel():
+                    self.log("[Mode] [v] Không mở được settings - có thể project mode, skip")
                     return True
-                elif result == 'NO_COMBOBOX':
-                    # v1.0.156: Project đã tạo không có combobox, skip mode selection
-                    self.log("[Mode] [v] Không có combobox (project mode) - skip")
-                    return True
+
+                # CDP click tab Image (imageHình ảnh)
+                if self._cdp_click_button('image'):
+                    time.sleep(1.0)
+                    model = self.driver.run_js('''
+                        var all = document.body.innerText;
+                        if (all.indexOf('Banana') >= 0) return 'IMAGE';
+                        if (all.indexOf('Veo') >= 0) return 'VIDEO';
+                        return 'UNKNOWN';
+                    ''')
+                    if model in ('IMAGE', 'UNKNOWN'):
+                        self.log("[Mode] [v] Đã chuyển sang Image mode")
+                        self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+                        time.sleep(0.3)
+                        return True
+                    else:
+                        self.log(f"[Mode] Mode chưa đổi: {model}", "WARN")
+                        time.sleep(1)
+                        continue
                 else:
-                    self.log(f"[Mode] Không tìm thấy Image option: {result}", "WARN")
-                    # Click ra ngoài để đóng menu
-                    self.driver.run_js('document.body.click();')
-                    time.sleep(0.3)
-                    continue
+                    self.log("[Mode] [v] Không tìm thấy Image tab - skip")
+                    return True
 
             except Exception as e:
                 self.log(f"[Mode] Error: {e}", "ERROR")
@@ -5866,44 +5857,12 @@ class DrissionFlowAPI:
         return False
 
     def switch_to_video_mode(self) -> bool:
-        """Chuyển Chrome sang mode tạo video từ ảnh. Dùng cách cũ: click dropdown 2 lần với delay."""
-        if not self._ready:
-            return False
-
-        MAX_RETRIES = 3
-
-        for attempt in range(MAX_RETRIES):
-            try:
-                self.log(f"[Mode] Chuyển sang Video mode (attempt {attempt + 1}/{MAX_RETRIES})...")
-
-                # Bước 1: Click dropdown lần 1
-                self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP1)
-                time.sleep(0.5)
-
-                # Bước 2: Click dropdown lần 2 để mở menu
-                self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP2)
-                time.sleep(0.5)
-
-                # Bước 3: Tìm và click option "Tạo video từ các thành phần"
-                option_clicked = self.driver.run_js(JS_SELECT_VIDEO_MODE_STEP3)
-
-                if option_clicked == 'CLICKED':
-                    self.log("[Mode] [v] Đã chuyển sang Video mode")
-                    time.sleep(0.5)
-                    return True
-                else:
-                    self.log(f"[Mode] Không tìm thấy Video option: {option_clicked}", "WARN")
-                    # Click ra ngoài để đóng menu
-                    self.driver.run_js('document.body.click();')
-                    time.sleep(0.5)
-                    continue
-
-            except Exception as e:
-                self.log(f"[Mode] Error: {e}", "ERROR")
-                time.sleep(0.5)
-
-        self.log("[Mode] [x] Không thể chuyển sang Video mode sau nhiều lần thử", "ERROR")
-        return False
+        """
+        Chuyển Chrome sang mode tạo video.
+        v1.0.388: Giao diện mới - dùng CDP click trên tab 'videocamVideo'.
+        Giống switch_to_t2v_mode() nhưng dùng cho I2V flow.
+        """
+        return self.switch_to_t2v_mode()
 
     def generate_video_force_mode(
         self,
@@ -6576,20 +6535,11 @@ class DrissionFlowAPI:
 
         # 1. Chuyển sang T2V mode + Lower Priority model
         # CHỈ LÀM LẦN ĐẦU khi mới mở Chrome - sau F5 refresh không cần làm lại
-        if not self._t2v_mode_selected:
-            self.log("[T2V→I2V] Chuyển sang mode 'Từ văn bản sang video'...")
-            if not self.switch_to_t2v_mode():
-                self.log("[T2V→I2V] [WARN] Không chuyển được T2V mode, thử tiếp...", "WARN")
-
-            # 1.5. Chuyển sang Lower Priority model (tránh rate limit)
-            self.log("[T2V→I2V] Chuyển sang model Lower Priority...")
-            self.switch_to_lower_priority_model()
-
-            # Đánh dấu đã chọn mode/model - không cần chọn lại
-            self._t2v_mode_selected = True
-            self.log("[T2V→I2V] [v] Mode/Model đã chọn - các video sau sẽ không chọn lại")
-        else:
-            self.log("[T2V→I2V] Mode/Model đã sẵn sàng (giữ từ lần trước)")
+        # v1.0.388: LUÔN chọn lại mode trước MỖI lần generate video
+        # switch_to_t2v_mode() đã bao gồm: Video → Thành phần → 16:9 → x1 → Lower Priority
+        self.log("[T2V→I2V] Setup Video mode...")
+        if not self.switch_to_t2v_mode():
+            self.log("[T2V→I2V] [WARN] Không chuyển được T2V mode, thử tiếp...", "WARN")
 
         # 2. Reset video state
         self.driver.run_js("""
@@ -6683,13 +6633,179 @@ class DrissionFlowAPI:
         self.log("[T2V→I2V] [x] Timeout đợi video response", "ERROR")
         return False, None, "Timeout waiting for video response"
 
+    def _cdp_click_at(self, x: int, y: int):
+        """CDP click tại tọa độ (x, y) - hoạt động với React elements."""
+        self.driver.run_cdp('Input.dispatchMouseEvent',
+                            type='mousePressed', x=x, y=y, button='left', clickCount=1)
+        time.sleep(0.1)
+        self.driver.run_cdp('Input.dispatchMouseEvent',
+                            type='mouseReleased', x=x, y=y, button='left', clickCount=1)
+
+    def _cdp_click_button(self, search_text: str) -> bool:
+        """Tìm button chứa search_text rồi CDP click."""
+        import json as _json
+        coords_json = self.driver.run_js('''
+            var btns = document.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+                var t = btns[i].textContent.trim();
+                if (t.indexOf('%s') >= 0) {
+                    var rect = btns[i].getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                    }
+                }
+            }
+            return null;
+        ''' % search_text)
+
+        if not coords_json:
+            return False
+
+        coords = _json.loads(coords_json)
+        self._cdp_click_at(coords['x'], coords['y'])
+        return True
+
+    def _cdp_click_button_exact(self, exact_text: str) -> bool:
+        """Tìm button có text CHÍNH XÁC rồi CDP click."""
+        import json as _json
+        coords_json = self.driver.run_js('''
+            var btns = document.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.trim() === '%s') {
+                    var rect = btns[i].getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                    }
+                }
+            }
+            return null;
+        ''' % exact_text)
+
+        if not coords_json:
+            return False
+
+        coords = _json.loads(coords_json)
+        self._cdp_click_at(coords['x'], coords['y'])
+        return True
+
+    def _open_settings_panel(self) -> bool:
+        """Mở settings panel bằng PointerEvent trên menu button (giống bên ảnh)."""
+        result = self.driver.run_js('''
+            // Cách 1: Tìm bằng class menu button (giống JS_SELECT_MODEL_BY_INDEX)
+            var menuBtn = document.querySelector('button.sc-46973129-1');
+            if (menuBtn) {
+                menuBtn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                menuBtn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                return "OPENED_CLASS";
+            }
+            // Cách 2: Tìm bottom bar button
+            var btns = document.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+                var t = btns[i].textContent.trim();
+                var rect = btns[i].getBoundingClientRect();
+                if (rect.y > 500 && rect.width > 50 && (t.indexOf('crop_') >= 0 || t.indexOf('Banana') >= 0 || t.indexOf('Veo') >= 0 || t.indexOf('Video') >= 0)) {
+                    btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                    btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                    return "OPENED_BOTTOM";
+                }
+            }
+            return null;
+        ''')
+        if not result:
+            return False
+
+        time.sleep(1.5)
+        return True
+
+    def setup_image_settings(self, model_index: int = 0) -> bool:
+        """
+        v1.0.388: Setup Image mode bằng CDP click.
+        Thứ tự: Mở settings → Hình ảnh → 16:9 → x1 → chọn model theo index.
+        Model: 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+        """
+        if not self._ready:
+            return False
+
+        model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+        model_name = model_names[model_index] if model_index < len(model_names) else f"Model {model_index}"
+
+        try:
+            self.log(f"[Image] Setup: Hình ảnh → 16:9 → x1 → {model_name}...")
+
+            # Bước 1: Mở settings panel
+            if not self._open_settings_panel():
+                self.log("[Image] Không mở được settings panel", "WARN")
+                return False
+
+            # Bước 2: Click tab "Hình ảnh" (imageHình ảnh)
+            if self._cdp_click_button('image'):
+                self.log("[Image] [v] Clicked Hình ảnh tab")
+                time.sleep(1.0)
+            else:
+                self.log("[Image] [WARN] Không tìm thấy Hình ảnh tab", "WARN")
+
+            # Bước 3: Click 16:9
+            if self._cdp_click_button('16:9'):
+                self.log("[Image] [v] Clicked 16:9")
+                time.sleep(0.5)
+
+            # Bước 4: Click x1
+            if self._cdp_click_button_exact('x1'):
+                self.log("[Image] [v] Clicked x1")
+                time.sleep(0.5)
+
+            # Bước 5: Chọn model
+            import json as _json
+            dropdown_json = self.driver.run_js('''
+                var btns = document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    var t = btns[i].textContent.trim();
+                    if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
+                        var rect = btns[i].getBoundingClientRect();
+                        return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                    }
+                }
+                return null;
+            ''')
+            if dropdown_json:
+                coords = _json.loads(dropdown_json)
+                self._cdp_click_at(coords['x'], coords['y'])
+                time.sleep(1.0)
+
+                # Chọn model theo index trong menuitem list
+                item_json = self.driver.run_js('''
+                    var items = document.querySelectorAll('[role="menuitem"]');
+                    if (items.length > %d) {
+                        var rect = items[%d].getBoundingClientRect();
+                        return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2), t: items[%d].textContent.trim().substring(0,40)});
+                    }
+                    return null;
+                ''' % (model_index, model_index, model_index))
+                if item_json:
+                    item = _json.loads(item_json)
+                    self._cdp_click_at(item['x'], item['y'])
+                    self.log(f"[Image] [v] Selected model: {item.get('t', model_name)}")
+                    time.sleep(0.5)
+                else:
+                    self.log("[Image] [WARN] Model menuitem not found", "WARN")
+            else:
+                self.log("[Image] [WARN] Model dropdown not found", "WARN")
+
+            # Đóng settings panel
+            self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+            time.sleep(0.3)
+
+            self.log(f"[Image] [v] Setup hoàn tất: Hình ảnh → 16:9 → x1 → {model_name}")
+            return True
+
+        except Exception as e:
+            self.log(f"[Image] Error: {e}", "ERROR")
+            return False
+
     def switch_to_t2v_mode(self) -> bool:
         """
-        Chuyển Chrome sang mode "Từ văn bản sang video" (Text-to-Video).
-        Dùng cách cũ đã hoạt động: click dropdown 2 lần với delay, rồi tìm span.
-
-        Returns:
-            True nếu thành công
+        v1.0.388: Chuyển sang Video mode bằng CDP click.
+        Thứ tự: Mở settings → Video → Thành phần → 16:9 → x1 → Lower Priority model.
         """
         if not self._ready:
             return False
@@ -6700,27 +6816,92 @@ class DrissionFlowAPI:
             try:
                 self.log(f"[Mode] Chuyển sang T2V mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
-                # Dùng JS ALL-IN-ONE với setTimeout (đợi dropdown mở)
-                self.driver.run_js("window._t2vResult = 'PENDING';")
-                self.driver.run_js(JS_SELECT_T2V_MODE_ALL)
+                # Bước 1: Mở settings panel
+                if not self._open_settings_panel():
+                    self.log("[Mode] Không mở được settings panel", "WARN")
+                    time.sleep(1)
+                    continue
 
-                # Đợi JS async hoàn thành (setTimeout 100ms + 300ms = ~500ms)
-                time.sleep(0.8)
+                # Bước 2: Click tab "Video" (videocamVideo)
+                if not self._cdp_click_button('videocam'):
+                    self.log("[Mode] Không tìm thấy Video tab", "WARN")
+                    time.sleep(1)
+                    continue
+                time.sleep(1.5)
+                self.log("[Mode] [v] Clicked Video tab")
 
-                # Kiểm tra kết quả
-                result = self.driver.run_js("return window._t2vResult;")
+                # Bước 3: Click "Thành phần" (chrome_extensionThành phần)
+                if self._cdp_click_button('nh ph'):
+                    self.log("[Mode] [v] Clicked 'Thành phần'")
+                    time.sleep(0.5)
 
-                if result == 'CLICKED':
-                    self.log("[Mode] [v] Đã chuyển sang T2V mode")
-                    time.sleep(0.3)
+                # Bước 4: Click 16:9 (crop_16_916:9)
+                if self._cdp_click_button('16:9'):
+                    self.log("[Mode] [v] Clicked 16:9")
+                    time.sleep(0.5)
+
+                # Bước 5: Click x1 (exact match)
+                self._cdp_click_button_exact('x1')
+                self.log("[Mode] [v] Clicked x1")
+                time.sleep(0.5)
+
+                # Bước 6: Chọn model Lower Priority
+                # Click dropdown model → chọn Lower Priority
+                import json as _json
+                dropdown_json = self.driver.run_js('''
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
+                            var rect = btns[i].getBoundingClientRect();
+                            return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                        }
+                    }
+                    return null;
+                ''')
+                if dropdown_json:
+                    coords = _json.loads(dropdown_json)
+                    self._cdp_click_at(coords['x'], coords['y'])
+                    time.sleep(1.0)
+                    self.log("[Mode] [v] Model dropdown opened")
+
+                    # Tìm "Lower Priority" menuitem
+                    lp_json = self.driver.run_js('''
+                        var items = document.querySelectorAll('[role="menuitem"]');
+                        for (var i = 0; i < items.length; i++) {
+                            var t = items[i].textContent.trim();
+                            if (t.indexOf('Lower') >= 0 || t.indexOf('lower') >= 0) {
+                                var rect = items[i].getBoundingClientRect();
+                                return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                            }
+                        }
+                        return null;
+                    ''')
+                    if lp_json:
+                        lp = _json.loads(lp_json)
+                        self._cdp_click_at(lp['x'], lp['y'])
+                        time.sleep(0.5)
+                        self.log("[Mode] [v] Selected Lower Priority model")
+                    else:
+                        self.log("[Mode] [WARN] Lower Priority not found, using default", "WARN")
+
+                # Verify
+                time.sleep(1.0)
+                model = self.driver.run_js('''
+                    var all = document.body.innerText;
+                    if (all.indexOf('Veo') >= 0) return 'VIDEO';
+                    if (all.indexOf('Banana') >= 0) return 'IMAGE';
+                    return 'UNKNOWN';
+                ''')
+                if model == 'VIDEO':
+                    self.log("[Mode] [v] Đã chuyển sang T2V mode thành công!")
+                    # Đóng settings panel (click ra ngoài hoặc Escape)
+                    self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+                    time.sleep(0.5)
                     return True
-                elif result == 'NO_DROPDOWN':
-                    self.log("[Mode] Không tìm thấy dropdown button", "WARN")
                 else:
-                    self.log(f"[Mode] Không tìm thấy T2V option: {result}", "WARN")
-                    # Click ra ngoài để đóng menu
-                    self.driver.run_js('document.body.click();')
-                    time.sleep(0.3)
+                    self.log(f"[Mode] Mode chưa đổi: {model}", "WARN")
+                    time.sleep(1)
                     continue
 
             except Exception as e:
@@ -7601,14 +7782,17 @@ class DrissionFlowAPI:
             except Exception as e:
                 self.log(f"[WARN] IPv6 rotation error: {e}")
 
-        if self._use_webshare:
+        if self._use_webshare and WEBSHARE_AVAILABLE:
             # Lấy proxy mới để log
-            from webshare_proxy import get_proxy_manager
-            manager = get_proxy_manager()
-            new_proxy = manager.get_proxy_for_worker(self.worker_id)
-            if new_proxy:
-                self.log(f"[SYNC] Restart Chrome [Worker {self.worker_id}] với proxy mới: {new_proxy.endpoint}")
-            else:
+            try:
+                from webshare_proxy import get_proxy_manager
+                manager = get_proxy_manager()
+                new_proxy = manager.get_proxy_for_worker(self.worker_id)
+                if new_proxy:
+                    self.log(f"[SYNC] Restart Chrome [Worker {self.worker_id}] với proxy mới: {new_proxy.endpoint}")
+                else:
+                    self.log(f"[SYNC] Restart Chrome [Worker {self.worker_id}]...")
+            except Exception:
                 self.log(f"[SYNC] Restart Chrome [Worker {self.worker_id}]...")
         else:
             self.log("[SYNC] Restart Chrome...")
