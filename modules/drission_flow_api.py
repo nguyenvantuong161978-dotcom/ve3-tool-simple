@@ -2212,71 +2212,6 @@ class DrissionFlowAPI:
             self.log(f"[x] Clear Chrome data failed: {e}", "ERROR")
             return False
 
-    def _kill_chrome_by_marker(self, chrome_marker: str, exclude_marker: str = None):
-        """
-        v1.0.400: Kill Chrome processes theo marker trong commandline.
-        Dùng PowerShell Get-CimInstance (nhanh hơn wmic/tasklist trên VM).
-        Fallback: wmic nếu PowerShell fail.
-        """
-        import subprocess
-        killed_count = 0
-
-        try:
-            # PowerShell: nhanh hơn wmic/tasklist rất nhiều trên VM
-            ps_cmd = (
-                "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" "
-                "| Select-Object ProcessId, CommandLine "
-                "| ForEach-Object { $_.ProcessId.ToString() + '|' + $_.CommandLine }"
-            )
-            result = subprocess.run(
-                ['powershell', '-NoProfile', '-Command', ps_cmd],
-                capture_output=True, text=True, timeout=10
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                for line in result.stdout.strip().split('\n'):
-                    line = line.strip()
-                    if '|' not in line:
-                        continue
-                    pid_str, cmdline = line.split('|', 1)
-                    pid_str = pid_str.strip()
-                    if not pid_str.isdigit():
-                        continue
-
-                    if chrome_marker in cmdline:
-                        if exclude_marker and exclude_marker in cmdline:
-                            continue  # Skip worker khác
-                        self._kill_pid(pid_str)
-                        killed_count += 1
-                        self.log(f"  Killed Chrome (PID: {pid_str})")
-
-                self.log(f"  [v] Killed {killed_count} Chrome processes (PowerShell)")
-                return
-        except Exception as e:
-            self.log(f"  [WARN] PowerShell failed: {e}")
-
-        # Fallback: wmic (chậm hơn nhưng vẫn thử)
-        try:
-            result = subprocess.run(
-                ["wmic", "process", "where", "name='chrome.exe'", "get", "processid,commandline"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    if chrome_marker in line:
-                        if exclude_marker and exclude_marker in line:
-                            continue
-                        parts = line.strip().split()
-                        if parts:
-                            pid = parts[-1]
-                            if pid.isdigit():
-                                self._kill_pid(pid)
-                                killed_count += 1
-                                self.log(f"  Killed Chrome (PID: {pid})")
-            self.log(f"  [v] Killed {killed_count} Chrome processes (wmic)")
-        except Exception as e:
-            self.log(f"  [WARN] wmic also failed: {e}")
-
     def _force_kill_all_chrome(self):
         """
         Kill CHỈ Chrome của worker này (dựa vào chrome_portable path).
@@ -2321,7 +2256,35 @@ class DrissionFlowAPI:
                         worker_name = "Chrome 1"
 
                     self.log(f"  [KILL] Killing {worker_name} processes only...")
-                    self._kill_chrome_by_marker(chrome_marker, exclude_marker)
+
+                    try:
+                        # v1.0.174: Tăng timeout từ 5s lên 15s
+                        result = subprocess.run(
+                            ["wmic", "process", "where", "name='chrome.exe'", "get", "processid,commandline"],
+                            capture_output=True, text=True, timeout=15
+                        )
+
+                        killed_count = 0
+                        for line in result.stdout.split('\n'):
+                            if chrome_marker in line:
+                                # Nếu là Chrome 1, phải đảm bảo KHÔNG chứa "- Copy"
+                                if exclude_marker and exclude_marker in line:
+                                    continue  # Skip Chrome 2
+
+                                # Extract PID
+                                parts = line.strip().split()
+                                if parts:
+                                    pid = parts[-1]
+                                    if pid.isdigit():
+                                        self._kill_pid(pid)
+                                        killed_count += 1
+
+                        self.log(f"  [v] Killed {killed_count} Chrome processes")
+                    except subprocess.TimeoutExpired:
+                        # Fallback: kill all Chrome by name
+                        self.log(f"  [WARN] wmic timeout, killing ALL Chrome...")
+                        self._kill_all_chrome_by_name()
+                        self.log(f"  [v] Killed all Chrome (fallback)")
                 else:
                     # Fallback: kill all Chrome (không có chrome_portable)
                     self.log("  [KILL] Force killing ALL Chrome processes (no chrome_portable)...")
@@ -8070,14 +8033,31 @@ class DrissionFlowAPI:
 
         try:
             if platform.system() == 'Windows':
-                # v1.0.400: Dùng _kill_chrome_by_marker (PowerShell) thay vì wmic
-                if search_path == "GoogleChromePortable":
-                    chrome_marker = "GoogleChromePortable\\App"
-                    exclude_marker = "GoogleChromePortable - Copy"
-                else:
-                    chrome_marker = search_path + "\\App"
-                    exclude_marker = None
-                self._kill_chrome_by_marker(chrome_marker, exclude_marker)
+                # Windows: tìm và kill Chrome process theo thư mục Chrome Portable
+                result = subprocess.run(
+                    ['wmic', 'process', 'where', "name='chrome.exe'", 'get', 'commandline,processid'],
+                    capture_output=True, text=True, timeout=10
+                )
+
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines:
+                        # v1.0.192: Phân biệt GoogleChromePortable vs GoogleChromePortable - Copy
+                        should_kill = False
+                        if search_path == "GoogleChromePortable":
+                            if "GoogleChromePortable\\" in line and "GoogleChromePortable - Copy" not in line:
+                                should_kill = True
+                        else:
+                            if search_path in line:
+                                should_kill = True
+
+                        if should_kill:
+                            parts = line.strip().split()
+                            if parts:
+                                pid = parts[-1]
+                                if pid.isdigit():
+                                    self._kill_pid(pid)
+                                    self.log(f"  Killed Chrome (PID: {pid})")
             else:
                 # Linux/Mac: dùng SIGTERM trước (graceful), sau đó mới SIGKILL
                 result = subprocess.run(
@@ -8093,10 +8073,11 @@ class DrissionFlowAPI:
                             subprocess.run(['kill', '-9', pid], capture_output=True, timeout=5)
                             self.log(f"  Đã tắt Chrome cũ (PID: {pid})")
 
+            # Đợi Chrome tắt hẳn
             time.sleep(1)
 
         except Exception as e:
-            pass
+            pass  # Không quan trọng nếu không kill được
 
     def _setup_proxy_auth(self):
         """

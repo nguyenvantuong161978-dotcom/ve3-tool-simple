@@ -1,12 +1,12 @@
-1.0.400
+1.0.401
 2026-03-24 (VN)
-Change: PowerShell kill Chrome thay wmic/tasklist (fix timeout tren VM)
+Change: Revert kill Chrome ve v387 - chi giu JS mode select moi
 
 Thay doi:
-- v1.0.400: POWERSHELL KILL CHROME
-  * wmic va tasklist deu timeout tren VM → Chrome cu khong bi kill
-  * Thay bang PowerShell Get-CimInstance (nhanh hon nhieu)
-  * _kill_chrome_by_marker(): Method moi dung PowerShell + fallback wmic
-  * _force_kill_all_chrome(): Dung _kill_chrome_by_marker()
-  * _kill_chrome_by_folder(): Dung _kill_chrome_by_marker()
-  * Van phan biet Chrome 1 vs Chrome 2 (khong kill nham)
+- v1.0.401: REVERT KILL CHROME VE V387
+  * Xoa _kill_chrome_by_marker() (PowerShell)
+  * _force_kill_all_chrome(): Quay lai wmic + fallback kill_all
+  * _kill_chrome_using_profile(): Quay lai wmic goc
+  * GIU LAI: JS_SELECT_MODEL_BY_INDEX + JS_SWITCH_TO_T2V_MODE (v398)
+  * GIU LAI: switch_to_t2v_mode() thay JS cu trong parallel video
+  * GIU LAI: select_model_by_index() wait 6s

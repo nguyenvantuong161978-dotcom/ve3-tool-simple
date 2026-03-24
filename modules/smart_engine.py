@@ -5582,38 +5582,7 @@ class SmartEngine:
                         self.log(f"[PARALLEL-VIDEO] [x] Video FAILED: {scene_id} - {error}", "WARN")
 
             except Exception as e:
-                error_msg = str(e)
                 self.log(f"[PARALLEL-VIDEO] Error: {e}", "WARN")
-
-                # v1.0.399: Phát hiện Chrome bị disconnect → restart Chrome 2
-                if "disconnected" in error_msg.lower() or "connection" in error_msg.lower():
-                    self.log("[PARALLEL-VIDEO] [WARN] Chrome 2 bị disconnect - restart...", "WARN")
-                    try:
-                        if drission_api:
-                            drission_api.close()
-                        time.sleep(3)
-                        # Restart Chrome 2
-                        drission_api = DrissionFlowAPI(
-                            profile_dir="./chrome_profiles/video",
-                            verbose=True,
-                            log_callback=lambda msg, lvl="INFO": self.log(f"[PARALLEL-VIDEO] {msg}", lvl),
-                            webshare_enabled=use_webshare,
-                            worker_id=1,
-                            total_workers=2,
-                            headless=headless_mode,
-                            machine_id=machine_id + 100,
-                            chrome_portable=chrome2_portable
-                        )
-                        if drission_api.setup(project_url=project_url, skip_mode_selection=True):
-                            time.sleep(2)
-                            drission_api.switch_to_t2v_mode()
-                            self.log("[PARALLEL-VIDEO] [v] Chrome 2 restart thành công!")
-                        else:
-                            self.log("[PARALLEL-VIDEO] [x] Chrome 2 restart thất bại - đợi 30s...", "ERROR")
-                            time.sleep(30)
-                    except Exception as restart_err:
-                        self.log(f"[PARALLEL-VIDEO] [x] Restart error: {restart_err}", "ERROR")
-                        time.sleep(30)
 
             # Poll interval
             time.sleep(3)
