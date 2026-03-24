@@ -801,12 +801,14 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         log(f"  Excel: {excel_path.name}")
         log(f"  Mode: CHROME 2 (scenes lẻ: 1,3,5,...)")
 
-        # Run engine - images only, skip video, skip references (Chrome 1 tạo)
+        # v1.0.389: Run engine với skip_video=False
+        # Engine sẽ tạo ảnh lẻ xong → tạo video lẻ ngay (không đợi Chrome 1)
+        # browser_flow_generator chỉ check ảnh của worker này trước khi tạo video
         result = engine.run(
             str(excel_path),
             callback=callback,
             skip_compose=True,
-            skip_video=True,
+            skip_video=False,
             skip_references=True
         )
 
@@ -821,66 +823,13 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
         return False
 
     # Step 5: Check completion
-    # v1.0.98: Chrome 2 CHỈ kiểm tra scenes LẺ của nó
-    # Nếu tất cả scenes lẻ xong → Chrome 2 xong việc
-    # Scenes chẵn thiếu là việc của Chrome 1
-
-    # Trường hợp 1: Tất cả images đều xong (cả chẵn lẫn lẻ)
-    all_done = is_local_pic_complete(local_dir, code)
-    if all_done:
+    if is_local_pic_complete(local_dir, code):
         log(f"  ALL images complete!")
-
-    # Trường hợp 2: Chrome 2 đã xong hết scenes LẺ của nó
     elif is_chrome2_odd_scenes_complete(local_dir, code):
-        log(f"  Chrome2 ODD scenes complete! Đợi Chrome 1 xong ảnh chẵn trước khi tạo video...")
-        # Đợi Chrome 1 xong ảnh (marker _IMAGES_DONE)
-        max_wait_images = 3600 * 24  # 24h
-        waited = 0
-        while waited < max_wait_images:
-            if (local_dir / "_IMAGES_DONE").exists():
-                log(f"  _IMAGES_DONE detected! Tất cả ảnh đã xong.")
-                all_done = True
-                break
-            if is_local_pic_complete(local_dir, code):
-                all_done = True
-                break
-            time.sleep(30)
-            waited += 30
-            if waited % 300 == 0:
-                log(f"  [WAIT] Đợi Chrome 1 xong ảnh... ({waited}s)")
+        log(f"  Chrome2 ODD scenes + videos complete!")
     else:
-        # Trường hợp 3: Còn scenes lẻ chưa xong → cần retry
         log(f"  Chrome2 has pending odd scenes", "WARN")
         return False
-
-    # Step 6: v1.0.388 - Tạo VIDEO cho scenes LẺ (1,3,5,...) sau khi tất cả ảnh xong
-    if all_done:
-        log(f"\n[STEP 6] Creating VIDEOS (scenes lẻ)...")
-        try:
-            from modules.smart_engine import SmartEngine
-
-            engine = SmartEngine(
-                worker_id=1,
-                total_workers=2,
-                chrome_portable=chrome2_path
-            )
-
-            result = engine.run(
-                str(excel_path),
-                callback=callback,
-                skip_compose=True,
-                skip_video=False,  # Tạo video
-                skip_references=True
-            )
-
-            if result.get('error'):
-                log(f"  Video error: {result.get('error')}", "WARN")
-            else:
-                log(f"  [OK] Videos created!")
-        except Exception as e:
-            log(f"  Video creation error: {e}", "WARN")
-            import traceback
-            traceback.print_exc()
 
     return True
 

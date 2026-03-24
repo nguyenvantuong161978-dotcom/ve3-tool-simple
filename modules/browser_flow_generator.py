@@ -4534,7 +4534,8 @@ class BrowserFlowGenerator:
         except:
             video_count = 0
 
-        # === KIỂM TRA: Tất cả scene images đã xong chưa? ===
+        # === KIỂM TRA: Ảnh của WORKER NÀY đã xong chưa? ===
+        # v1.0.389: Chỉ check scenes thuộc worker này (không đợi Chrome kia)
         all_images_done = True
         pending_scenes = []
         if video_count > 0 and workbook:
@@ -4544,6 +4545,14 @@ class BrowserFlowGenerator:
                     scene_id = str(int(float(scene.scene_id))) if hasattr(scene, 'scene_id') and scene.scene_id else ''
                     if not scene_id or not scene_id.isdigit():
                         continue  # Bỏ qua nv/loc
+
+                    # v1.0.389: Chỉ check scenes của worker này
+                    try:
+                        scene_num = int(scene_id)
+                        if total_workers > 1 and (scene_num % total_workers) != (worker_id % total_workers):
+                            continue  # Scene của Chrome kia, bỏ qua
+                    except ValueError:
+                        continue
 
                     # Kiểm tra status_img
                     status_img = getattr(scene, 'status_img', '') or ''
@@ -4565,8 +4574,8 @@ class BrowserFlowGenerator:
                 all_images_done = False  # Nếu lỗi, coi như chưa xong → KHÔNG tạo video
 
         if not all_images_done:
-            self._log(f"[I2V] [WAIT] SKIP - Còn {len(pending_scenes)} scene chưa có ảnh: {pending_scenes[:10]}...")
-            self._log(f"[I2V] Video sẽ được tạo sau khi tất cả ảnh scene hoàn thành")
+            self._log(f"[I2V] [WAIT] SKIP - Còn {len(pending_scenes)} scene (worker {worker_id}) chưa có ảnh: {pending_scenes[:10]}...")
+            self._log(f"[I2V] Video sẽ được tạo sau khi ảnh của worker này hoàn thành")
         elif video_count > 0 and drission_api._ready:
             self._log("")
             self._log("=" * 60)
@@ -4586,6 +4595,14 @@ class BrowserFlowGenerator:
                         # Normalize: 1.0 -> "1"
                         scene_id = str(int(float(scene.scene_id))) if hasattr(scene, 'scene_id') and scene.scene_id else ''
                         if not scene_id or not scene_id.isdigit():
+                            continue
+
+                        # v1.0.389: Chỉ tạo video cho scenes của worker này
+                        try:
+                            scene_num = int(scene_id)
+                            if total_workers > 1 and (scene_num % total_workers) != (worker_id % total_workers):
+                                continue
+                        except ValueError:
                             continue
 
                         # Lấy media_id từ CACHE trước (giống tạo ảnh), fallback Excel

@@ -505,8 +505,10 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
         log(f"  Excel: {excel_path.name}")
         log(f"  Mode: CHROME 1 (scenes chẵn: 2,4,6,... + nv/loc)")
 
-        # Run engine - images only, skip video generation
-        result = engine.run(str(excel_path), callback=callback, skip_compose=True, skip_video=True)
+        # v1.0.389: Run engine với skip_video=False
+        # Engine sẽ tạo ảnh chẵn xong → tạo video chẵn ngay (không đợi Chrome 2)
+        # browser_flow_generator chỉ check ảnh của worker này trước khi tạo video
+        result = engine.run(str(excel_path), callback=callback, skip_compose=True, skip_video=False)
 
         if result.get('error'):
             log(f"  Error: {result.get('error')}", "ERROR")
@@ -518,33 +520,17 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
         traceback.print_exc()
         return False
 
-    # Step 5: Đợi tất cả ảnh hoàn thành (Chrome 2 có thể chưa xong)
-    log(f"\n[STEP 5] Checking all images...")
-    if not is_local_pic_complete(local_dir, code):
-        log(f"  Chrome 2 chưa xong, đợi (tối đa 24h hoặc 30 phút không có tiến triển)...")
-        if not wait_for_all_images(local_dir, code):
-            log(f"  Chrome 2 stuck - tiếp tục với ảnh hiện có...", "WARN")
-            # Không return False, để có thể retry sau
+    # Step 5: Tạo marker _IMAGES_DONE nếu tất cả ảnh xong
+    log(f"\n[STEP 5] Checking images...")
+    if is_local_pic_complete(local_dir, code):
+        try:
+            (local_dir / "_IMAGES_DONE").touch()
+            log(f"  [MARKER] Created _IMAGES_DONE marker")
+        except Exception as e:
+            log(f"  [WARN] Cannot create _IMAGES_DONE marker: {e}")
 
-    # v1.0.293: Tạo marker _IMAGES_DONE khi tất cả ảnh hoàn thành
-    # Giúp scan functions skip project này kể cả khi Excel bị lock tạm thời
-    try:
-        (local_dir / "_IMAGES_DONE").touch()
-        log(f"  [MARKER] Created _IMAGES_DONE marker")
-    except Exception as e:
-        log(f"  [WARN] Cannot create _IMAGES_DONE marker: {e}")
-
-    # Step 6: v1.0.388 - Tạo VIDEO cho scenes CHẴN (2,4,6,...) sau khi tất cả ảnh xong
-    log(f"\n[STEP 6] Creating VIDEOS (scenes chẵn)...")
-    try:
-        create_videos_for_project(local_dir, code, callback=callback)
-    except Exception as e:
-        log(f"  Video creation error: {e}", "WARN")
-        import traceback
-        traceback.print_exc()
-
-    # Step 7: Done
-    log(f"\n[STEP 7] All done - GUI manager will handle copy to VISUAL + restart")
+    # Step 6: Done
+    log(f"\n[STEP 6] Done - GUI manager will handle copy to VISUAL + restart")
     return True
 
 
