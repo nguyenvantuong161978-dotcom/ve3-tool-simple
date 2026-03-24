@@ -1,80 +1,16 @@
-1.0.394
+1.0.395
 2026-03-24 (VN)
-Change: Fix Chrome tab download loi js parsing - CDP returnByValue + Fix model dropdown
+Change: Fix model dropdown - quay ve cach cu PointerEvent + tim button bang text (khong CSS class, khong Y threshold)
 
 Thay doi:
-- v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:
-  * import_from_master(): Sau khi claim tren master → copy _CLAIMED ve local
-  * Chrome worker: Doc _CLAIMED dong 4 (email|pass|totp) → set account index
-  * Flow: Trang tinh NGUON → TaskQueue.claim() → _CLAIMED → Chrome dung dung account
-  * Fallback: Neu _CLAIMED khong co account → dung rotation cu
+- v1.0.395: Fix model dropdown not found tren VM:
+  * ROOT CAUSE: v1.0.393 dung CDP click + rect.y > 400 threshold
+    → VM co man hinh nho (1594x676) → button o vi tri khac → khong tim thay
+  * FIX: Quay ve cach cu dung PointerEvent (React tuong thich)
+  * Thay CSS class selector (sc-46973129-1, sc-a0dcecfb-1) bang TEXT search
+    → Tim button bang text content (Banana, Imagen, Veo, etc.)
+    → Dung window.innerHeight * 0.5 thay vi hardcode 400
+  * Ap dung cho: JS_SELECT_MODEL_BY_INDEX, JS_SELECT_ORIENTATION,
+    _open_settings_panel(), setup_image_settings(), switch_to_t2v_mode()
 
-- v1.0.335: 3 fix:
-  * GUI _start() them start_watchdog() → master thay VM status
-  * _CLAIMED dung TaskQueue.claim() → doc account tu trang tinh NGUON
-  * Reset chrome_last_restart khi BAT DAU → tranh auto-restart mo Chrome 2 lan
-
-
-- v1.0.334: Tao _CLAIMED tren master thay vi xoa folder:
-  * Truoc: import xong → XOA folder tren master → may chu khong biet ai dang lam gi
-  * Sau: import xong → tao _CLAIMED (VM_ID + timestamp + hostname)
-  * May khac scan master → thay _CLAIMED → skip (khong lay trung)
-  * _CLAIMED cua minh → van lay duoc (resume)
-  * Master control hien thi ai dang lam ma nao
-
-- v1.0.333: Excel Worker chi import 1 ma tu master moi lan:
-  * Truoc: import TAT CA projects tu master cung luc → VM bi qua tai
-  * Sau: import 1 ma → xu ly xong → cycle sau lay ma tiep
-  * Chi import khi local PROJECTS khong co gi dang lam (results empty)
-
-- v1.0.332: distributed_mode default True trong code:
-  * ZIP update khong copy settings.yaml (giu API keys cua VM)
-  * VM khong co key distributed_mode trong settings → truoc day default=False → khong chay
-  * Fix: Doi default tu False → True trong run_worker.py, run_excel_api.py, vm_manager.py
-  * VM chi can UPDATE la tu dong chay distributed mode, khong can sua settings
-
-
-- v1.0.331: Fix UPDATE tren VM bi ve version cu (v229):
-  * ROOT CAUSE: VM co git remote "origin" tro sang repo CU (truoc khi doi ten)
-    → git fetch origin main lay version cu → reset --hard ve v229
-  * FIX: vm_manager_gui.py _run_update(): Kiem tra URL cua origin
-    Neu URL khong phai ve3-tool-simple.git → git remote set-url origin <URL_moi>
-    Truoc day chi "add" origin khi chua co, khong sua khi URL sai
-  * distributed_mode: true mac dinh trong settings.yaml
-    Cac VM pull code moi → tu dong chay distributed mode
-
-- v1.0.330: distributed_mode = true by default
-  * settings.yaml: distributed_mode doi tu false → true
-
-- v1.0.329: Watchdog cho VM ↔ Master communication:
-  * vm_manager.py: start_watchdog() chay thread nen moi 10s:
-    - _report_status_to_master(): Ghi AUTO/status/{VM_ID}.json
-      (state, version, uptime, project, workers)
-    - _check_master_commands(): Doc AUTO/commands/{VM_ID}.{cmd}
-      Lenh: run (start workers), stop (stop all), update (git pull + restart)
-    - _do_git_update(): git pull origin main → restart workers
-  * start_all(): Tu dong start watchdog khi chay workers
-  * Master Control hien thi trang thai VM + gui lenh dieu khien
-
-- v1.0.328: Gop task_queue.py vao robust_copy.py + to chuc thu muc:
-  * TaskQueue class chuyen vao modules/robust_copy.py
-  * Xoa modules/task_queue.py (khong can nua)
-  * Tat ca import doi sang: from modules.robust_copy import TaskQueue
-  * master_control.py chuyen vao control/ cho de quan ly
-  * control/master_control.py: Tu tao thu muc PROJECTS, visual, commands, status
-  * config/settings.yaml: Them distributed_mode: false (mac dinh tat)
-  * Cac VM khac chi can: git pull → doi distributed_mode: true → chay
-
-- v1.0.327: Account doc tu Google Sheet NGUON + cache trong _CLAIMED:
-  * task_queue.py: Khi claim → doc sheet NGUON (col G=code, col R=account)
-    → Ghi account vao dong 4 cua _CLAIMED (email|pass|totp)
-    → get_account(code): Doc account tu _CLAIMED cache (khong can doc sheet lai)
-    → Sheet chi doc 1 LAN duy nhat (cache _sheet_cache)
-  * _CLAIMED format moi: VM_ID / timestamp / hostname / account
-  * run_worker.py: Pass tool_dir vao TaskQueue de doc config/creds.json
-  * master_control.py: GUI Tkinter tren may chu de quan ly VM
-    - Hien thi trang thai tat ca VM (running/stopped/updating)
-    - Queue status: available, claimed, expired
-    - Nut RUN/STOP/UPDATE per VM va ALL
-    - File-based IPC: commands/{VM_ID}.{cmd} va status/{VM_ID}.json
-    - Tham khao kien truc D:\upload\control.py
+- v1.0.394: Fix Chrome tab download loi js parsing - CDP returnByValue

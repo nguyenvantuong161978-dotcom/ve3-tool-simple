@@ -877,8 +877,21 @@ JS_SELECT_ORIENTATION = '''
 (function(orientation) {
     window._orientationResult = 'PENDING';
 
-    // Buoc 1: Mo menu chinh (giong JS_SELECT_MODEL_BY_INDEX)
-    var btn1 = document.querySelector('button.sc-46973129-1');
+    // Buoc 1: Mo menu chinh - tim bang TEXT (khong dung CSS class)
+    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+    var btns = document.querySelectorAll('button');
+    var btn1 = null;
+    var halfH = window.innerHeight * 0.5;
+    for (var i = 0; i < btns.length; i++) {
+        var t = btns[i].textContent.trim();
+        var rect = btns[i].getBoundingClientRect();
+        if (rect.width > 50 && rect.y > halfH) {
+            for (var k = 0; k < keywords.length; k++) {
+                if (t.indexOf(keywords[k]) >= 0) { btn1 = btns[i]; break; }
+            }
+            if (btn1) break;
+        }
+    }
     if (!btn1) { window._orientationResult = 'NO_MENU_BUTTON'; return; }
     btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
     btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
@@ -921,8 +934,24 @@ JS_SELECT_MODEL_BY_INDEX = '''
 (function(modelIndex) {
     window._modelSelectResult = 'PENDING';
 
-    // Buoc 1: Mo menu chinh
-    var btn1 = document.querySelector('button.sc-46973129-1');
+    // Buoc 1: Mo menu chinh - tim bang TEXT (khong dung CSS class vi Google hay doi)
+    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+    var btns = document.querySelectorAll('button');
+    var btn1 = null;
+    for (var i = 0; i < btns.length; i++) {
+        var t = btns[i].textContent.trim();
+        var rect = btns[i].getBoundingClientRect();
+        // Bottom bar button: nam o nua duoi man hinh, width > 50
+        if (rect.width > 50 && rect.y > (window.innerHeight * 0.5)) {
+            for (var k = 0; k < keywords.length; k++) {
+                if (t.indexOf(keywords[k]) >= 0) {
+                    btn1 = btns[i];
+                    break;
+                }
+            }
+            if (btn1) break;
+        }
+    }
     if (!btn1) {
         window._modelSelectResult = 'NO_MENU_BUTTON';
         return;
@@ -950,9 +979,20 @@ JS_SELECT_MODEL_BY_INDEX = '''
             console.log('[MODEL] Step 2: x1 button not found, continuing...');
         }
 
-        // Buoc 3: Click dropdown model
+        // Buoc 3: Click dropdown model - tim bang TEXT (arrow_drop_down + model name)
         setTimeout(function() {
-            var btn2 = document.querySelector('button.sc-a0dcecfb-1');
+            var btns2 = document.querySelectorAll('button');
+            var btn2 = null;
+            for (var i = 0; i < btns2.length; i++) {
+                var t = btns2[i].textContent.trim();
+                if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
+                    var rect = btns2[i].getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        btn2 = btns2[i];
+                        break;
+                    }
+                }
+            }
             if (!btn2) {
                 window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
                 return;
@@ -5057,6 +5097,333 @@ class DrissionFlowAPI:
 
         return True, images, None
 
+    # =========================================================================
+    # CHROME MODE: Tạo ảnh bằng Chrome trực tiếp (không dùng API interceptor)
+    # =========================================================================
+
+    def upload_reference_images_chrome(self, ref_files: List[str]) -> Dict[str, bool]:
+        """
+        v1.0.395: Upload TẤT CẢ ảnh tham chiếu lên Flow qua CDP file input.
+        Chỉ cần upload 1 lần duy nhất khi bắt đầu project.
+        Về sau mỗi scene chỉ cần chọn từ gallery.
+
+        Args:
+            ref_files: List đường dẫn tuyệt đối đến ảnh (nv1.png, nv2.png, loc1.png...)
+
+        Returns:
+            Dict {filename: True/False} - kết quả upload từng ảnh
+        """
+        results = {}
+        if not self._ready or not self.driver:
+            self.log("[CHROME] API chưa ready!", "ERROR")
+            return results
+
+        self.log(f"[CHROME] Upload {len(ref_files)} ảnh tham chiếu...")
+
+        for i, img_path in enumerate(ref_files):
+            fname = os.path.basename(img_path)
+            self.log(f"[CHROME] [{i+1}/{len(ref_files)}] {fname}...")
+
+            try:
+                # Tìm file input element
+                result = self.driver.run_cdp('Runtime.evaluate',
+                    expression='document.querySelector("input[type=\\"file\\"]")',
+                    returnByValue=False
+                )
+                object_id = result.get('result', {}).get('objectId')
+                if not object_id:
+                    self.log(f"[CHROME] [x] No file input found for {fname}", "WARN")
+                    results[fname] = False
+                    continue
+
+                # Upload qua CDP
+                file_path = img_path.replace('\\', '/')
+                self.driver.run_cdp('DOM.setFileInputFiles',
+                    files=[file_path],
+                    objectId=object_id
+                )
+
+                # Đợi Flow xử lý upload
+                time.sleep(4)
+                results[fname] = True
+                self.log(f"[CHROME] [v] {fname} uploaded")
+
+            except Exception as e:
+                self.log(f"[CHROME] [x] Upload {fname} error: {e}", "WARN")
+                results[fname] = False
+
+        # Đợi thêm để tất cả ảnh được xử lý
+        if ref_files:
+            time.sleep(2)
+
+        success_count = sum(1 for v in results.values() if v)
+        self.log(f"[CHROME] Upload xong: {success_count}/{len(ref_files)} thành công")
+        return results
+
+    def _select_reference_from_gallery(self, filename: str) -> bool:
+        """
+        Click "+" mở gallery → tìm ảnh theo tên file → click chọn.
+        Gallery item có cursor:pointer, click bằng mouse events.
+
+        Args:
+            filename: Tên file cần chọn (vd: "nv1.png")
+
+        Returns:
+            True nếu chọn thành công (dialog đóng)
+        """
+        # Bước 1: Click nút "+" (add_2) để mở gallery
+        clicked = self.driver.run_js("""
+            var btns = document.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+                var text = btns[i].textContent || '';
+                if (text.indexOf('add_2') > -1) {
+                    var rect = btns[i].getBoundingClientRect();
+                    if (rect.y > 300) { btns[i].click(); return true; }
+                }
+            }
+            return false;
+        """)
+        if not clicked:
+            self.log(f"[CHROME] Không tìm thấy nút '+'", "WARN")
+            return False
+
+        time.sleep(2)
+
+        # Bước 2: Verify dialog mở
+        dialog_open = self.driver.run_js(
+            "return document.querySelector('[role=\"dialog\"]') ? true : false;"
+        )
+        if not dialog_open:
+            self.log(f"[CHROME] Gallery dialog không mở", "WARN")
+            return False
+
+        # Bước 3: Tìm và click ảnh theo tên file (mouse events)
+        result = self.driver.run_js("""
+            var dialog = document.querySelector('[role="dialog"]');
+            if (!dialog) return JSON.stringify({ok: false, reason: 'no_dialog'});
+
+            var allEls = dialog.querySelectorAll('*');
+            var targetEl = null;
+
+            for (var i = 0; i < allEls.length; i++) {
+                var el = allEls[i];
+                var cursor = window.getComputedStyle(el).cursor;
+                if (cursor !== 'pointer') continue;
+                var text = (el.textContent || '').trim();
+                if (text === '""" + filename + """' || text.indexOf('""" + filename + """') > -1) {
+                    if (!targetEl || el.innerHTML.length < targetEl.innerHTML.length) {
+                        targetEl = el;
+                    }
+                }
+            }
+
+            if (!targetEl) return JSON.stringify({ok: false, reason: 'not_found'});
+
+            var rect = targetEl.getBoundingClientRect();
+            var cx = rect.x + rect.width / 2;
+            var cy = rect.y + rect.height / 2;
+            var opts = {bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0};
+            targetEl.dispatchEvent(new MouseEvent('mouseenter', opts));
+            targetEl.dispatchEvent(new MouseEvent('mouseover', opts));
+            targetEl.dispatchEvent(new MouseEvent('mousedown', opts));
+            targetEl.dispatchEvent(new MouseEvent('mouseup', opts));
+            targetEl.dispatchEvent(new MouseEvent('click', opts));
+
+            return JSON.stringify({ok: true});
+        """)
+
+        if result:
+            data = json.loads(result)
+            if data.get('ok'):
+                time.sleep(1)
+                return True
+            else:
+                self.log(f"[CHROME] Không tìm thấy {filename} trong gallery: {data.get('reason')}", "WARN")
+
+        return False
+
+    def generate_image_chrome(
+        self,
+        prompt: str,
+        reference_filenames: Optional[List[str]] = None,
+        save_dir: Optional[str] = None,
+        filename: Optional[str] = None,
+        timeout: int = 120
+    ) -> Tuple[bool, List, Optional[str]]:
+        """
+        v1.0.395: Tạo ảnh bằng Chrome trực tiếp (KHÔNG dùng API interceptor).
+
+        Flow:
+        1. Setup image settings (model, aspect ratio)
+        2. Chọn reference images từ gallery (nếu có)
+        3. Type prompt vào textarea
+        4. Press Enter / click send
+        5. Đợi kết quả xuất hiện trên UI
+        6. Download ảnh kết quả
+
+        Args:
+            prompt: Prompt mô tả ảnh
+            reference_filenames: List tên file reference (vd: ["nv1.png", "loc1.png"])
+            save_dir: Thư mục lưu ảnh
+            filename: Tên file output (không có extension)
+            timeout: Timeout đợi kết quả (giây)
+
+        Returns:
+            Tuple[success, list of GeneratedImage, error]
+        """
+        if not self._ready:
+            return False, [], "API chưa setup!"
+
+        # 1. Setup image settings (model, aspect ratio, x1)
+        current_model_idx = getattr(self, '_current_model_index', 0)
+        self.setup_image_settings(current_model_idx)
+
+        # 2. Chọn reference images từ gallery
+        if reference_filenames:
+            self.log(f"[CHROME] Chọn {len(reference_filenames)} ảnh tham chiếu...")
+            for ref_name in reference_filenames:
+                ok = self._select_reference_from_gallery(ref_name)
+                if ok:
+                    self.log(f"[CHROME] [v] Selected: {ref_name}")
+                else:
+                    self.log(f"[CHROME] [x] Không chọn được: {ref_name}", "WARN")
+
+        # 3. Type prompt
+        self.log(f"[CHROME] Prompt: {prompt[:60]}...")
+        textarea = self._find_textarea()
+        if not textarea:
+            return False, [], "Không tìm thấy textarea"
+
+        paste_ok = self._paste_prompt_ctrlv(textarea, prompt)
+        if not paste_ok:
+            return False, [], "Paste prompt failed"
+
+        # 4. Đợi recaptcha + gửi
+        time.sleep(4)
+
+        generate_sent = False
+        try:
+            from DrissionPage.common import Keys
+            self.driver.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+            self.log("[CHROME] Pressed Enter to send")
+            generate_sent = True
+        except Exception as e:
+            self.log(f"[CHROME] Enter failed: {e}", "WARN")
+            if self._click_generate_button():
+                generate_sent = True
+
+        if not generate_sent:
+            return False, [], "Failed to send prompt"
+
+        # 5. Đợi kết quả trên UI (không dùng interceptor)
+        self.log("[CHROME] Đợi kết quả...")
+        start_time = time.time()
+        result_url = None
+
+        while time.time() - start_time < timeout:
+            elapsed = time.time() - start_time
+
+            # Tìm ảnh kết quả mới xuất hiện trên page
+            check = self.driver.run_js("""
+                var result = {status: 'waiting', urls: [], error: null};
+
+                // Check lỗi trên UI
+                var errorEls = document.querySelectorAll('[class*="error"], [class*="warning"]');
+                for (var i = 0; i < errorEls.length; i++) {
+                    var text = (errorEls[i].textContent || '').trim();
+                    if (text.indexOf('429') > -1 || text.indexOf('limit') > -1 || text.indexOf('quota') > -1) {
+                        result.status = 'error';
+                        result.error = '429_QUOTA';
+                        return JSON.stringify(result);
+                    }
+                    if (text.indexOf('policy') > -1 || text.indexOf('violation') > -1) {
+                        result.status = 'error';
+                        result.error = 'POLICY_VIOLATION';
+                        return JSON.stringify(result);
+                    }
+                }
+
+                // Check ảnh kết quả (storage.googleapis.com)
+                var imgs = document.querySelectorAll('img');
+                for (var i = 0; i < imgs.length; i++) {
+                    var src = imgs[i].src || '';
+                    if (src.indexOf('storage.googleapis.com/ai-sandbox') > -1) {
+                        var rect = imgs[i].getBoundingClientRect();
+                        if (rect.width > 100 && rect.height > 100) {
+                            result.urls.push(src);
+                        }
+                    }
+                }
+
+                // Check loading indicator
+                var loading = document.querySelector('[class*="loading"], [class*="spinner"], [class*="progress"]');
+                if (loading && loading.getBoundingClientRect().width > 0) {
+                    result.status = 'generating';
+                }
+
+                if (result.urls.length > 0) {
+                    result.status = 'done';
+                }
+
+                return JSON.stringify(result);
+            """)
+
+            if check:
+                data = json.loads(check)
+                status = data.get('status', 'waiting')
+
+                if status == 'done':
+                    result_url = data['urls'][0] if data['urls'] else None
+                    self.log(f"[CHROME] [v] Ảnh xuất hiện sau {elapsed:.1f}s!")
+                    break
+                elif status == 'error':
+                    error = data.get('error', 'unknown')
+                    self.log(f"[CHROME] [x] Lỗi: {error}", "WARN")
+                    return False, [], error
+                elif status == 'generating' and int(elapsed) % 15 == 0:
+                    self.log(f"[CHROME] Đang tạo... ({elapsed:.0f}s)")
+
+            time.sleep(3)
+
+        if not result_url:
+            return False, [], f"Timeout sau {timeout}s"
+
+        # 6. Download ảnh kết quả
+        images = []
+        img = GeneratedImage()
+        img.url = result_url
+
+        if save_dir:
+            save_path = Path(save_dir)
+            save_path.mkdir(parents=True, exist_ok=True)
+            fname = filename or f"image_{int(time.time())}"
+
+            # Download qua requests
+            try:
+                resp = requests.get(result_url, timeout=60)
+                if resp.status_code == 200:
+                    img_path = save_path / f"{fname}.png"
+                    img_path.write_bytes(resp.content)
+                    img.local_path = img_path
+                    img.base64_data = base64.b64encode(resp.content).decode()
+                    self.log(f"[CHROME] [v] Downloaded: {img_path.name} ({len(resp.content)} bytes)")
+            except Exception as e:
+                self.log(f"[CHROME] Download error: {e}", "WARN")
+
+        images.append(img)
+
+        # Cleanup + restart (anti-403)
+        if not getattr(self, '_validator_mode', False):
+            self.log("[CHROME] Cleanup + Restart...")
+            self.cleanup_browser_data()
+            saved_url = getattr(self, '_current_project_url', None)
+            self._kill_chrome()
+            self.close()
+            time.sleep(1)
+            self.setup(project_url=saved_url, skip_403_reset=True)
+
+        return True, images, None
+
     def generate_batch(
         self,
         prompts: List[str],
@@ -6704,28 +7071,44 @@ class DrissionFlowAPI:
         return True
 
     def _open_settings_panel(self) -> bool:
-        """v1.0.393: Mở settings panel bằng CDP click vào bottom bar button."""
-        import json as _json
+        """v1.0.395: Mở settings panel bằng PointerEvent vào bottom bar button.
+        Tìm button bằng TEXT (không dùng CSS class hay Y threshold cố định)."""
 
-        # Tìm bottom bar button (chứa model name + aspect ratio)
-        coords_json = self.driver.run_js('''
+        # Cách 1: PointerEvent (giống cách cũ nhưng tìm bằng text)
+        result = self.driver.run_js('''
+            var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
             var btns = document.querySelectorAll('button');
+            var halfH = window.innerHeight * 0.5;
             for (var i = 0; i < btns.length; i++) {
                 var t = btns[i].textContent.trim();
                 var rect = btns[i].getBoundingClientRect();
-                if (rect.y > 400 && rect.width > 50 && (t.indexOf('crop_') >= 0 || t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0 || t.indexOf('Veo') >= 0 || t.indexOf('Video') >= 0 || t.indexOf('Fast') >= 0)) {
-                    return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                if (rect.width > 50 && rect.y > halfH) {
+                    for (var k = 0; k < keywords.length; k++) {
+                        if (t.indexOf(keywords[k]) >= 0) {
+                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            return "OPENED";
+                        }
+                    }
+                }
+            }
+            // Cách 2: crop_ icon (aspect ratio button cũng ở bottom bar)
+            for (var i = 0; i < btns.length; i++) {
+                var t = btns[i].textContent.trim();
+                var rect = btns[i].getBoundingClientRect();
+                if (rect.width > 50 && rect.y > halfH && t.indexOf('crop_') >= 0) {
+                    btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                    btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                    return "OPENED_CROP";
                 }
             }
             return null;
         ''')
 
-        if not coords_json:
+        if not result:
             return False
 
-        coords = _json.loads(coords_json)
-        self._cdp_click_at(coords['x'], coords['y'])
-        time.sleep(2.0)
+        time.sleep(1.5)
 
         # Verify: settings panel mở (có tab Hình ảnh hoặc Video)
         panel_ok = self.driver.run_js('''
@@ -6741,7 +7124,7 @@ class DrissionFlowAPI:
 
     def setup_image_settings(self, model_index: int = 0) -> bool:
         """
-        v1.0.393: Setup Image mode bằng CDP click.
+        v1.0.395: Setup Image mode bằng JS PointerEvent (giống cách cũ, tìm bằng text).
         Thứ tự: Mở settings → Hình ảnh → 16:9 → x1 → chọn model theo index.
         Model: 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
         """
@@ -6753,75 +7136,99 @@ class DrissionFlowAPI:
 
         try:
             self.log(f"[Image] Setup: Hình ảnh → 16:9 → x1 → {model_name}...")
-            import json as _json
 
             # Bước 1: Mở settings panel
             if not self._open_settings_panel():
                 self.log("[Image] Không mở được settings panel", "WARN")
                 return False
 
-            # Bước 2: Click tab "Hình ảnh" (imageHình ảnh)
-            if self._cdp_click_button('image'):
-                self.log("[Image] [v] Clicked Hình ảnh tab")
-                time.sleep(1.5)
-            else:
-                self.log("[Image] [WARN] Không tìm thấy Hình ảnh tab", "WARN")
+            # Bước 2: Click tab "Hình ảnh" - dùng PointerEvent
+            self.driver.run_js('''
+                var btns = document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    var t = btns[i].textContent.trim();
+                    if (t.indexOf('image') >= 0 && t.indexOf('nh') >= 0) {
+                        btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                        btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                        btns[i].click();
+                        break;
+                    }
+                }
+            ''')
+            self.log("[Image] [v] Clicked Hình ảnh tab")
+            time.sleep(1.0)
 
             # Bước 3: Click 16:9
-            if self._cdp_click_button('16:9'):
-                self.log("[Image] [v] Clicked 16:9")
-                time.sleep(0.5)
+            self.driver.run_js('''
+                var btns = document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    var t = btns[i].textContent.trim();
+                    if (t.indexOf('16:9') >= 0) {
+                        btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                        btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                        btns[i].click();
+                        break;
+                    }
+                }
+            ''')
+            self.log("[Image] [v] Clicked 16:9")
+            time.sleep(0.5)
 
             # Bước 4: Click x1
-            if self._cdp_click_button_exact('x1'):
-                self.log("[Image] [v] Clicked x1")
-                time.sleep(0.5)
-
-            # Bước 5: Chọn model - retry tìm dropdown
-            dropdown_found = False
-            for retry in range(3):
-                dropdown_json = self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = btns[i].textContent.trim();
-                        if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
-                            var rect = btns[i].getBoundingClientRect();
-                            if (rect.width > 0 && rect.height > 0) {
-                                return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
-                            }
-                        }
+            self.driver.run_js('''
+                var btns = document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].textContent.trim() === 'x1') {
+                        btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                        btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                        btns[i].click();
+                        break;
                     }
-                    return null;
-                ''')
-                if dropdown_json:
-                    coords = _json.loads(dropdown_json)
-                    self._cdp_click_at(coords['x'], coords['y'])
-                    time.sleep(1.0)
+                }
+            ''')
+            self.log("[Image] [v] Clicked x1")
+            time.sleep(0.5)
 
-                    # Chọn model theo index trong menuitem list
-                    item_json = self.driver.run_js('''
-                        var items = document.querySelectorAll('[role="menuitem"]');
-                        if (items.length > %d) {
-                            var rect = items[%d].getBoundingClientRect();
-                            return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2), t: items[%d].textContent.trim().substring(0,40)});
-                        }
-                        return null;
-                    ''' % (model_index, model_index, model_index))
-                    if item_json:
-                        item = _json.loads(item_json)
-                        self._cdp_click_at(item['x'], item['y'])
-                        self.log(f"[Image] [v] Selected model: {item.get('t', model_name)}")
-                        dropdown_found = True
-                    else:
-                        self.log("[Image] [WARN] Model menuitem not found", "WARN")
-                        dropdown_found = True  # Dropdown found but no items
-                    break
+            # Bước 5: Chọn model - dùng select_model_by_index (JS async cách cũ)
+            self.driver.run_js("window._modelSelectResult = 'PENDING';")
+            # Tìm dropdown bằng text (arrow_drop_down + Banana/Imagen)
+            self.driver.run_js('''
+                var btns = document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    var t = btns[i].textContent.trim();
+                    if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
+                        btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                        btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                        window._dropdownOpened = true;
+                        break;
+                    }
+                }
+            ''')
+            time.sleep(1.0)
+
+            dropdown_opened = self.driver.run_js("return window._dropdownOpened || false;")
+            if dropdown_opened:
+                # Chọn model theo index
+                self.driver.run_js('''
+                    var menuItems = document.querySelectorAll('[role="menuitem"]');
+                    if (menuItems.length > %d) {
+                        var item = menuItems[%d];
+                        item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                        item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                        item.click();
+                        window._modelSelectResult = 'SELECTED_%d';
+                    } else {
+                        window._modelSelectResult = 'INVALID_INDEX';
+                    }
+                ''' % (model_index, model_index, model_index))
+                time.sleep(0.5)
+                result = self.driver.run_js("return window._modelSelectResult;")
+                if result and result.startswith('SELECTED_'):
+                    self.log(f"[Image] [v] Selected model: {model_name}")
                 else:
-                    if retry < 2:
-                        time.sleep(1.0)  # Chờ thêm cho panel render
-
-            if not dropdown_found:
-                self.log("[Image] [WARN] Model dropdown not found after retries", "WARN")
+                    self.log(f"[Image] [WARN] Model select result: {result}", "WARN")
+            else:
+                self.log("[Image] [WARN] Model dropdown not found", "WARN")
 
             # Đóng settings panel
             self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
@@ -6836,7 +7243,7 @@ class DrissionFlowAPI:
 
     def switch_to_t2v_mode(self) -> bool:
         """
-        v1.0.388: Chuyển sang Video mode bằng CDP click.
+        v1.0.395: Chuyển sang Video mode bằng JS PointerEvent (tìm bằng text).
         Thứ tự: Mở settings → Video → Thành phần → 16:9 → x1 → Lower Priority model.
         """
         if not self._ready:
@@ -6854,68 +7261,104 @@ class DrissionFlowAPI:
                     time.sleep(1)
                     continue
 
-                # Bước 2: Click tab "Video" (videocamVideo)
-                if not self._cdp_click_button('videocam'):
+                # Bước 2: Click tab "Video" (videocamVideo) - PointerEvent
+                video_clicked = self.driver.run_js('''
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('videocam') >= 0) {
+                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            btns[i].click();
+                            return true;
+                        }
+                    }
+                    return false;
+                ''')
+                if not video_clicked:
                     self.log("[Mode] Không tìm thấy Video tab", "WARN")
                     time.sleep(1)
                     continue
                 time.sleep(1.5)
                 self.log("[Mode] [v] Clicked Video tab")
 
-                # Bước 3: Click "Thành phần" (chrome_extensionThành phần)
-                if self._cdp_click_button('nh ph'):
-                    self.log("[Mode] [v] Clicked 'Thành phần'")
-                    time.sleep(0.5)
+                # Bước 3: Click "Thành phần" - PointerEvent
+                self.driver.run_js('''
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('nh ph') >= 0) {
+                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            btns[i].click();
+                            break;
+                        }
+                    }
+                ''')
+                self.log("[Mode] [v] Clicked 'Thành phần'")
+                time.sleep(0.5)
 
-                # Bước 4: Click 16:9 (crop_16_916:9)
-                if self._cdp_click_button('16:9'):
-                    self.log("[Mode] [v] Clicked 16:9")
-                    time.sleep(0.5)
+                # Bước 4: Click 16:9
+                self.driver.run_js('''
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('16:9') >= 0) {
+                            btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                            btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                            btns[i].click();
+                            break;
+                        }
+                    }
+                ''')
+                self.log("[Mode] [v] Clicked 16:9")
+                time.sleep(0.5)
 
-                # Bước 5: Click x1 (exact match)
-                self._cdp_click_button_exact('x1')
+                # Bước 5: Click x1
+                self.driver.run_js('''
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        if (btns[i].textContent.trim() === 'x1') {
+                            btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                            btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                            btns[i].click();
+                            break;
+                        }
+                    }
+                ''')
                 self.log("[Mode] [v] Clicked x1")
                 time.sleep(0.5)
 
-                # Bước 6: Chọn model Lower Priority
-                # Click dropdown model → chọn Lower Priority
-                import json as _json
-                dropdown_json = self.driver.run_js('''
+                # Bước 6: Chọn model Lower Priority - PointerEvent
+                self.driver.run_js('''
                     var btns = document.querySelectorAll('button');
                     for (var i = 0; i < btns.length; i++) {
                         var t = btns[i].textContent.trim();
                         if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
-                            var rect = btns[i].getBoundingClientRect();
-                            return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            break;
                         }
                     }
-                    return null;
                 ''')
-                if dropdown_json:
-                    coords = _json.loads(dropdown_json)
-                    self._cdp_click_at(coords['x'], coords['y'])
-                    time.sleep(1.0)
-                    self.log("[Mode] [v] Model dropdown opened")
+                time.sleep(1.0)
+                self.log("[Mode] [v] Model dropdown opened")
 
-                    # Tìm "Lower Priority" menuitem
-                    lp_json = self.driver.run_js('''
-                        var items = document.querySelectorAll('[role="menuitem"]');
-                        for (var i = 0; i < items.length; i++) {
-                            var t = items[i].textContent.trim();
-                            if (t.indexOf('Lower') >= 0 || t.indexOf('lower') >= 0) {
-                                var rect = items[i].getBoundingClientRect();
-                                return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
-                            }
+                # Tìm "Lower Priority" menuitem
+                self.driver.run_js('''
+                    var items = document.querySelectorAll('[role="menuitem"]');
+                    for (var i = 0; i < items.length; i++) {
+                        var t = items[i].textContent.trim();
+                        if (t.indexOf('Lower') >= 0 || t.indexOf('lower') >= 0) {
+                            items[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            items[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            items[i].click();
+                            break;
                         }
-                        return null;
-                    ''')
-                    if lp_json:
-                        lp = _json.loads(lp_json)
-                        self._cdp_click_at(lp['x'], lp['y'])
-                        time.sleep(0.5)
-                        self.log("[Mode] [v] Selected Lower Priority model")
-                    else:
-                        self.log("[Mode] [WARN] Lower Priority not found, using default", "WARN")
+                    }
+                ''')
+                time.sleep(0.5)
+                self.log("[Mode] [v] Selected Lower Priority model")
 
                 # Verify
                 time.sleep(1.0)
@@ -6927,7 +7370,6 @@ class DrissionFlowAPI:
                 ''')
                 if model == 'VIDEO':
                     self.log("[Mode] [v] Đã chuyển sang T2V mode thành công!")
-                    # Đóng settings panel (click ra ngoài hoặc Escape)
                     self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
                     time.sleep(0.5)
                     return True
