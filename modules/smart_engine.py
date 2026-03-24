@@ -2527,6 +2527,16 @@ class SmartEngine:
         scene_prompts = [p for p in prompts if not p.get('id', '').startswith(('nv', 'loc'))]
         self.log(f"References: {len(ref_prompts)}, Scenes: {len(scene_prompts)}")
 
+        # v1.0.417: Build map {filename: prompt} cho gallery search fallback
+        # VD: {"nv1.png": "A beautiful woman with...", "loc1.png": "A cozy room..."}
+        ref_prompt_map = {}
+        for rp in ref_prompts:
+            rid = rp.get('id', '')
+            rprompt = rp.get('prompt', '')
+            if rid and rprompt:
+                ref_fname = rid + '.png' if '.' not in rid else rid
+                ref_prompt_map[ref_fname] = rprompt
+
         # Tìm thư mục nv/ và img/
         nv_dir = proj_dir / "nv"
         img_dir = proj_dir / "img"
@@ -2699,8 +2709,9 @@ class SmartEngine:
                     except:
                         ref_filenames = [f.strip() for f in str(ref_raw).split(',') if f.strip()]
 
-                # Đảm bảo có extension .png
+                # Đảm bảo có extension .png + extract basename (nv/nv1.png → nv1.png)
                 ref_filenames = [f if '.' in f else f + '.png' for f in ref_filenames]
+                ref_filenames = [Path(f).name for f in ref_filenames]
 
                 self.log(f"  [{i+1}/{len(scene_prompts)}] {pid}: refs={ref_filenames}, prompt={prompt[:50]}...")
 
@@ -2710,6 +2721,7 @@ class SmartEngine:
                 success, images, error = api.generate_image_chrome(
                     prompt=prompt,
                     reference_filenames=ref_filenames if ref_filenames else None,
+                    reference_prompts=ref_prompt_map if ref_filenames else None,  # v1.0.417: prompt cho gallery search
                     save_dir=save_dir_scene,
                     filename=fname,
                     timeout=120,

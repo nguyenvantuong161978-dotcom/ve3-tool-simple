@@ -1,15 +1,14 @@
-1.0.416
+1.0.417
 2026-03-24 (VN)
-Change: Fix scene ordering + Gallery search improvement
+Change: Gallery search bang execCommand + fallback search bang prompt
 
 Thay doi:
-- v1.0.416: FIX 2 VAN DE CHROME MODE
-  1. SCENE ORDERING: Sort numeric thay vi string
-     - Truoc: 1, 10, 100, 101, 2, 20... (string sort)
-     - Sau: 1, 2, 3, 4, 5... (numeric sort)
-  2. GALLERY SEARCH: Cai thien tim ảnh tham chiếu
-     - Dong dialog cu truoc khi mo moi (fix "Gallery dialog khong mo")
-     - Tim nhieu attribute: text, alt, aria-label, title, img src
-     - Scroll qua scrollable container neu khong thay
-     - Ho tro search box trong gallery dialog
-     - Dong dialog bang Escape khi fail (khong block lan sau)
+- v1.0.417: FIX GALLERY REFERENCE SELECTION
+  * Dung execCommand de go text vao search box (React compatible)
+  * Flow: Mo gallery → search filename → click ket qua
+  * Fallback: Neu khong tim duoc → search bang prompt goc cua anh
+  * Dong dialog cu truoc khi mo moi (fix "dialog khong mo")
+  * Dong dialog bang Escape khi fail
+  * Build ref_prompt_map tu characters/locations prompts
+  * Extract basename tu ref paths (nv/nv1.png → nv1.png)
+  * Scene sort numeric (fix 1,10,100 → 1,2,3)

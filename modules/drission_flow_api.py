@@ -5264,20 +5264,151 @@ class DrissionFlowAPI:
         self.log(f"[CHROME] Upload xong: {success_count}/{len(ref_files)} thành công")
         return results
 
+    def _gallery_search_and_click(self, keyword: str) -> bool:
+        """
+        Helper: Tìm search box trong gallery dialog, nhập keyword bằng execCommand,
+        đợi filter, rồi click item đầu tiên có cursor:pointer.
+
+        Returns:
+            True nếu tìm và click được
+        """
+        # Tìm search box "Tìm kiếm các thành phần"
+        has_search = self.driver.run_js("""
+            var dialog = document.querySelector('[role="dialog"]');
+            if (!dialog) return false;
+            var inputs = dialog.querySelectorAll('input');
+            for (var i = 0; i < inputs.length; i++) {
+                var ph = (inputs[i].placeholder || '').toLowerCase();
+                if (ph.indexOf('tìm kiếm') > -1 || ph.indexOf('search') > -1 || ph.indexOf('tim kiem') > -1) {
+                    // Click + Focus giống user thật
+                    inputs[i].click();
+                    inputs[i].focus();
+                    inputs[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                    inputs[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                    inputs[i].dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                    inputs[i].dispatchEvent(new FocusEvent('focus', {bubbles: true}));
+                    // Xóa text cũ
+                    inputs[i].value = '';
+                    inputs[i].dispatchEvent(new Event('input', {bubbles: true}));
+                    return true;
+                }
+            }
+            return false;
+        """)
+
+        if not has_search:
+            return False
+
+        # Dùng execCommand để "gõ" text (React nhận được)
+        escaped_keyword = keyword.replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"').replace('\n', ' ')
+        self.driver.run_js(f"""
+            var dialog = document.querySelector('[role="dialog"]');
+            var inputs = dialog.querySelectorAll('input');
+            for (var i = 0; i < inputs.length; i++) {{
+                var ph = (inputs[i].placeholder || '').toLowerCase();
+                if (ph.indexOf('tìm kiếm') > -1 || ph.indexOf('search') > -1 || ph.indexOf('tim kiem') > -1) {{
+                    inputs[i].click();
+                    inputs[i].focus();
+                    inputs[i].value = '';
+                    inputs[i].dispatchEvent(new Event('input', {{bubbles: true}}));
+                    document.execCommand('insertText', false, {json.dumps(keyword)});
+                    break;
+                }}
+            }}
+        """)
+
+        self.log(f"[CHROME] Gallery search: '{keyword[:50]}'")
+        time.sleep(2)  # Đợi filter
+
+        # Click item đầu tiên có cursor:pointer (kết quả filter)
+        result = self.driver.run_js("""
+            var dialog = document.querySelector('[role="dialog"]');
+            if (!dialog) return JSON.stringify({ok: false, reason: 'no_dialog'});
+
+            var allEls = dialog.querySelectorAll('*');
+            var targetEl = null;
+
+            for (var i = 0; i < allEls.length; i++) {
+                var el = allEls[i];
+                var cursor = window.getComputedStyle(el).cursor;
+                if (cursor !== 'pointer') continue;
+                // Bỏ qua search input, buttons, links
+                if (el.tagName === 'INPUT' || el.tagName === 'BUTTON' || el.tagName === 'A') continue;
+                // Bỏ qua nếu là dropdown/filter button (ở trên cùng)
+                var rect = el.getBoundingClientRect();
+                if (rect.height < 20 || rect.width < 20) continue;
+                // Lấy item đầu tiên (kết quả search đầu tiên)
+                if (!targetEl) {
+                    targetEl = el;
+                    break;
+                }
+            }
+
+            if (!targetEl) return JSON.stringify({ok: false, reason: 'no_results'});
+
+            // Scroll to + click
+            targetEl.scrollIntoView({block: 'center', behavior: 'instant'});
+            var rect = targetEl.getBoundingClientRect();
+            var cx = rect.x + rect.width / 2;
+            var cy = rect.y + rect.height / 2;
+            var opts = {bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0};
+            targetEl.dispatchEvent(new MouseEvent('mouseenter', opts));
+            targetEl.dispatchEvent(new MouseEvent('mouseover', opts));
+            targetEl.dispatchEvent(new MouseEvent('mousedown', opts));
+            targetEl.dispatchEvent(new MouseEvent('mouseup', opts));
+            targetEl.dispatchEvent(new MouseEvent('click', opts));
+
+            return JSON.stringify({ok: true, text: (targetEl.textContent || '').trim().substring(0, 50)});
+        """)
+
+        if result:
+            try:
+                data = json.loads(result)
+            except:
+                data = {}
+            if data.get('ok'):
+                selected_text = data.get('text', '')
+                self.log(f"[CHROME] [v] Selected: {selected_text}")
+                time.sleep(1)
+                return True
+
+        return False
+
+    def _gallery_clear_search(self):
+        """Helper: Xóa search text trong gallery dialog."""
+        self.driver.run_js("""
+            var dialog = document.querySelector('[role="dialog"]');
+            if (!dialog) return;
+            var inputs = dialog.querySelectorAll('input');
+            for (var i = 0; i < inputs.length; i++) {
+                var ph = (inputs[i].placeholder || '').toLowerCase();
+                if (ph.indexOf('tìm kiếm') > -1 || ph.indexOf('search') > -1 || ph.indexOf('tim kiem') > -1) {
+                    inputs[i].click();
+                    inputs[i].focus();
+                    // Select all + delete
+                    document.execCommand('selectAll', false, null);
+                    document.execCommand('delete', false, null);
+                    break;
+                }
+            }
+        """)
+        time.sleep(1)
+
     def _select_reference_from_gallery(self, filename: str, search_prompt: str = None) -> bool:
         """
-        v1.0.416: Click "+" mở gallery → tìm kiếm bằng prompt → click chọn.
+        v1.0.417: Click "+" mở gallery → search bằng tên file → click chọn.
+        Nếu không tìm được bằng tên → search bằng prompt gốc.
 
-        Strategy:
-          1. Mở gallery dialog
-          2. Tìm search box → nhập keyword (filename hoặc prompt)
-          3. Nếu không có search box → scroll qua tất cả items
-          4. Click ảnh phù hợp
-          5. Đóng dialog nếu fail (tránh block lần sau)
+        Flow:
+          1. Đóng dialog cũ (nếu có)
+          2. Click "+" mở gallery
+          3. Search bằng filename (vd: "nv1.png") → click kết quả
+          4. Nếu fail → xóa search → search bằng prompt → click kết quả
+          5. Đóng dialog nếu tất cả fail
 
         Args:
             filename: Tên file cần chọn (vd: "nv1.png")
-            search_prompt: Prompt đã tạo ảnh này (tìm kiếm chính xác hơn)
+            search_prompt: Prompt đã tạo ảnh này (fallback search)
 
         Returns:
             True nếu chọn thành công
@@ -5318,165 +5449,26 @@ class DrissionFlowAPI:
             self.log(f"[CHROME] Gallery dialog không mở", "WARN")
             return False
 
-        # Bước 3: Tìm search box trong dialog và nhập keyword
-        # Keyword: dùng filename không extension (vd: "nv1")
+        # Bước 3: Search bằng filename trước
         fname_no_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
-        # Lấy keyword ngắn từ prompt (20 ký tự đầu) nếu có
-        search_keyword = fname_no_ext
+        if self._gallery_search_and_click(filename):
+            return True
+
+        # Bước 4: Xóa search, thử bằng tên không extension
+        self._gallery_clear_search()
+        if self._gallery_search_and_click(fname_no_ext):
+            return True
+
+        # Bước 5: Nếu có prompt, thử search bằng prompt (30 ký tự đầu)
         if search_prompt:
-            # Lấy 30 ký tự đầu của prompt để search
-            search_keyword = search_prompt[:30].strip()
-
-        has_search = self.driver.run_js("""
-            var dialog = document.querySelector('[role="dialog"]');
-            if (!dialog) return false;
-            var inputs = dialog.querySelectorAll('input[type="text"], input[type="search"], input:not([type])');
-            for (var i = 0; i < inputs.length; i++) {
-                var ph = (inputs[i].placeholder || '').toLowerCase();
-                if (ph.indexOf('search') > -1 || ph.indexOf('tìm') > -1 || ph.indexOf('filter') > -1 || ph.indexOf('tim') > -1 || inputs[i].getAttribute('aria-label')?.toLowerCase().indexOf('search') > -1) {
-                    inputs[i].focus();
-                    inputs[i].value = '';
-                    inputs[i].dispatchEvent(new Event('input', {bubbles: true}));
-                    return true;
-                }
-            }
-            // Thử input đầu tiên trong dialog
-            if (inputs.length > 0) {
-                inputs[0].focus();
-                inputs[0].value = '';
-                inputs[0].dispatchEvent(new Event('input', {bubbles: true}));
-                return true;
-            }
-            return false;
-        """)
-
-        if has_search:
-            self.log(f"[CHROME] Gallery search: '{search_keyword[:40]}'")
-            # Nhập keyword vào search box
-            self.driver.run_js(f"""
-                var dialog = document.querySelector('[role="dialog"]');
-                var inputs = dialog.querySelectorAll('input[type="text"], input[type="search"], input:not([type])');
-                if (inputs.length > 0) {{
-                    var inp = inputs[0];
-                    inp.focus();
-                    inp.value = {json.dumps(search_keyword)};
-                    inp.dispatchEvent(new Event('input', {{bubbles: true}}));
-                    inp.dispatchEvent(new Event('change', {{bubbles: true}}));
-                }}
-            """)
-            time.sleep(2)  # Đợi filter
-
-        # Bước 4: Tìm và click ảnh - tìm nhiều cách
-        # Cách 1: text match (filename)
-        # Cách 2: img src/alt match
-        # Cách 3: aria-label match
-        # Cách 4: scrollable container - scroll qua tất cả
-        result = self.driver.run_js("""
-            var dialog = document.querySelector('[role="dialog"]');
-            if (!dialog) return JSON.stringify({ok: false, reason: 'no_dialog'});
-
-            var fname = """ + json.dumps(filename) + """;
-            var fnameNoExt = """ + json.dumps(fname_no_ext) + """;
-
-            // Tìm scrollable container trong dialog
-            var scrollContainers = [];
-            var allDivs = dialog.querySelectorAll('div');
-            for (var d = 0; d < allDivs.length; d++) {
-                var style = window.getComputedStyle(allDivs[d]);
-                if (style.overflow === 'auto' || style.overflow === 'scroll' ||
-                    style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                    scrollContainers.push(allDivs[d]);
-                }
-            }
-
-            function findAndClick() {
-                var allEls = dialog.querySelectorAll('*');
-                var targetEl = null;
-                var bestScore = 0;
-
-                for (var i = 0; i < allEls.length; i++) {
-                    var el = allEls[i];
-                    var cursor = window.getComputedStyle(el).cursor;
-                    if (cursor !== 'pointer') continue;
-
-                    var text = (el.textContent || '').trim().toLowerCase();
-                    var alt = (el.getAttribute('alt') || '').toLowerCase();
-                    var ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-                    var title = (el.getAttribute('title') || '').toLowerCase();
-
-                    // Check img children for src
-                    var imgs = el.querySelectorAll('img');
-                    var imgSrc = '';
-                    for (var j = 0; j < imgs.length; j++) {
-                        imgSrc += (imgs[j].src || '') + ' ' + (imgs[j].alt || '');
-                    }
-                    imgSrc = imgSrc.toLowerCase();
-
-                    var searchFields = text + ' ' + alt + ' ' + ariaLabel + ' ' + title + ' ' + imgSrc;
-                    var fnameLower = fname.toLowerCase();
-                    var fnameNoExtLower = fnameNoExt.toLowerCase();
-
-                    var score = 0;
-                    if (searchFields.indexOf(fnameLower) > -1) score = 3;
-                    else if (searchFields.indexOf(fnameNoExtLower) > -1) score = 2;
-
-                    if (score > bestScore || (score === bestScore && targetEl && el.innerHTML.length < targetEl.innerHTML.length)) {
-                        targetEl = el;
-                        bestScore = score;
-                    }
-                }
-
-                if (!targetEl) return false;
-
-                // Scroll to element before clicking
-                targetEl.scrollIntoView({block: 'center', behavior: 'instant'});
-
-                var rect = targetEl.getBoundingClientRect();
-                var cx = rect.x + rect.width / 2;
-                var cy = rect.y + rect.height / 2;
-                var opts = {bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: 0};
-                targetEl.dispatchEvent(new MouseEvent('mouseenter', opts));
-                targetEl.dispatchEvent(new MouseEvent('mouseover', opts));
-                targetEl.dispatchEvent(new MouseEvent('mousedown', opts));
-                targetEl.dispatchEvent(new MouseEvent('mouseup', opts));
-                targetEl.dispatchEvent(new MouseEvent('click', opts));
-                return true;
-            }
-
-            // Thử tìm ngay
-            if (findAndClick()) return JSON.stringify({ok: true});
-
-            // Nếu không tìm thấy, scroll qua từng phần của container
-            for (var sc = 0; sc < scrollContainers.length; sc++) {
-                var container = scrollContainers[sc];
-                var maxScroll = container.scrollHeight;
-                var step = container.clientHeight * 0.8;
-                for (var pos = 0; pos < maxScroll; pos += step) {
-                    container.scrollTop = pos;
-                    // Sync check after scroll
-                    if (findAndClick()) return JSON.stringify({ok: true});
-                }
-                // Reset scroll
-                container.scrollTop = 0;
-            }
-
-            return JSON.stringify({ok: false, reason: 'not_found_after_scroll'});
-        """)
-
-        if result:
-            try:
-                data = json.loads(result)
-            except:
-                data = {}
-            if data.get('ok'):
-                time.sleep(1)
-                # Đóng dialog (nếu chọn ảnh tự đóng thì ok, nếu không thì escape)
+            self._gallery_clear_search()
+            prompt_keyword = search_prompt[:50].strip()
+            self.log(f"[CHROME] Fallback search bằng prompt: '{prompt_keyword[:40]}...'")
+            if self._gallery_search_and_click(prompt_keyword):
                 return True
-            else:
-                reason = data.get('reason', 'unknown')
-                self.log(f"[CHROME] Không tìm thấy {filename} trong gallery: {reason}", "WARN")
 
-        # Bước 5: Đóng dialog để không block lần sau
+        # Bước 6: Đóng dialog để không block lần sau
+        self.log(f"[CHROME] [x] Không tìm thấy {filename} trong gallery", "WARN")
         self.driver.run_js("""
             document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', keyCode: 27, bubbles: true}));
         """)
@@ -5488,6 +5480,7 @@ class DrissionFlowAPI:
         self,
         prompt: str,
         reference_filenames: Optional[List[str]] = None,
+        reference_prompts: Optional[Dict[str, str]] = None,
         save_dir: Optional[str] = None,
         filename: Optional[str] = None,
         timeout: int = 120,
@@ -5523,14 +5516,14 @@ class DrissionFlowAPI:
             self.setup_image_settings(current_model_idx)
             self._chrome_mode_settings_done = True
 
-        # 2. Chọn reference images từ gallery
+        # 2. Chọn reference images từ gallery (search bằng tên hoặc prompt)
         if reference_filenames:
+            ref_prompt_map = reference_prompts or {}
             self.log(f"[CHROME] Chọn {len(reference_filenames)} ảnh tham chiếu...")
             for ref_name in reference_filenames:
-                ok = self._select_reference_from_gallery(ref_name)
-                if ok:
-                    self.log(f"[CHROME] [v] Selected: {ref_name}")
-                else:
+                ref_prompt = ref_prompt_map.get(ref_name, None)
+                ok = self._select_reference_from_gallery(ref_name, search_prompt=ref_prompt)
+                if not ok:
                     self.log(f"[CHROME] [x] Không chọn được: {ref_name}", "WARN")
 
         # 3. Inject interceptor (giống API mode) để bắt response
