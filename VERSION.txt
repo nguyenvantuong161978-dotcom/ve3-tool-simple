@@ -1,14 +1,13 @@
-1.0.417
+1.0.418
 2026-03-24 (VN)
-Change: Gallery search bang execCommand + fallback search bang prompt
+Change: Phuong an 3 - Paste anh tham chieu truc tiep khi gallery fail
 
 Thay doi:
-- v1.0.417: FIX GALLERY REFERENCE SELECTION
-  * Dung execCommand de go text vao search box (React compatible)
-  * Flow: Mo gallery → search filename → click ket qua
-  * Fallback: Neu khong tim duoc → search bang prompt goc cua anh
-  * Dong dialog cu truoc khi mo moi (fix "dialog khong mo")
-  * Dong dialog bang Escape khi fail
-  * Build ref_prompt_map tu characters/locations prompts
-  * Extract basename tu ref paths (nv/nv1.png → nv1.png)
-  * Scene sort numeric (fix 1,10,100 → 1,2,3)
+- v1.0.418: FALLBACK PASTE ANH TRUC TIEP
+  * 3 phuong an chon anh tham chieu:
+    1. Search filename trong gallery (execCommand)
+    2. Search bang prompt goc cua anh
+    3. NEW: Paste anh truc tiep vao prompt qua CDP file input
+  * Khi gallery search fail → upload file anh truc tiep
+  * Doi 10s sau paste de anh load xong truoc khi gui prompt
+  * Truyen ref_dir tu smart_engine de biet duong dan file anh

@@ -5481,6 +5481,7 @@ class DrissionFlowAPI:
         prompt: str,
         reference_filenames: Optional[List[str]] = None,
         reference_prompts: Optional[Dict[str, str]] = None,
+        ref_dir: Optional[str] = None,
         save_dir: Optional[str] = None,
         filename: Optional[str] = None,
         timeout: int = 120,
@@ -5517,6 +5518,10 @@ class DrissionFlowAPI:
             self._chrome_mode_settings_done = True
 
         # 2. Chọn reference images từ gallery (search bằng tên hoặc prompt)
+        #    Phương án 1: Search filename trong gallery
+        #    Phương án 2: Search bằng prompt gốc
+        #    Phương án 3: Paste ảnh trực tiếp vào prompt qua CDP file input
+        failed_refs = []
         if reference_filenames:
             ref_prompt_map = reference_prompts or {}
             self.log(f"[CHROME] Chọn {len(reference_filenames)} ảnh tham chiếu...")
@@ -5524,7 +5529,40 @@ class DrissionFlowAPI:
                 ref_prompt = ref_prompt_map.get(ref_name, None)
                 ok = self._select_reference_from_gallery(ref_name, search_prompt=ref_prompt)
                 if not ok:
-                    self.log(f"[CHROME] [x] Không chọn được: {ref_name}", "WARN")
+                    failed_refs.append(ref_name)
+                    self.log(f"[CHROME] [x] Gallery fail: {ref_name} → thử paste trực tiếp", "WARN")
+
+        # Phương án 3: Paste ảnh trực tiếp cho refs không tìm được trong gallery
+        if failed_refs and ref_dir:
+            for ref_name in failed_refs:
+                ref_path = os.path.join(ref_dir, ref_name)
+                if not os.path.exists(ref_path):
+                    # Thử tìm trong thư mục cha (nv/ hoặc loc/)
+                    parent_dir = os.path.dirname(ref_dir)
+                    ref_path = os.path.join(parent_dir, "nv", ref_name)
+                    if not os.path.exists(ref_path):
+                        self.log(f"[CHROME] [x] File không tồn tại: {ref_name}", "WARN")
+                        continue
+
+                try:
+                    # Upload ảnh trực tiếp qua CDP file input
+                    result = self.driver.run_cdp('Runtime.evaluate',
+                        expression='document.querySelector("input[type=\\"file\\"]")',
+                        returnByValue=False
+                    )
+                    object_id = result.get('result', {}).get('objectId')
+                    if object_id:
+                        file_path_cdp = ref_path.replace('\\', '/')
+                        self.driver.run_cdp('DOM.setFileInputFiles',
+                            files=[file_path_cdp],
+                            objectId=object_id
+                        )
+                        self.log(f"[CHROME] [v] Paste trực tiếp: {ref_name}")
+                        time.sleep(10)  # Đợi ảnh load xong trước khi gửi prompt
+                    else:
+                        self.log(f"[CHROME] [x] Không tìm thấy file input cho paste", "WARN")
+                except Exception as e:
+                    self.log(f"[CHROME] [x] Paste {ref_name} error: {e}", "WARN")
 
         # 3. Inject interceptor (giống API mode) để bắt response
         # Reset state trước khi gửi prompt
