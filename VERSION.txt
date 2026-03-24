@@ -1,6 +1,6 @@
-1.0.388
+1.0.389
 2026-03-24 (VN)
-Change: CDP click mode switch - Hinh anh/Video/model settings truoc MOI lan generate (fix giao dien moi)
+Change: Full mode - Ca 2 Chrome tao video sau khi tat ca anh xong (Chrome1 chan, Chrome2 le)
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

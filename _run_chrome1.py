@@ -534,8 +534,17 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
     except Exception as e:
         log(f"  [WARN] Cannot create _IMAGES_DONE marker: {e}")
 
-    # Step 6: Ảnh xong - GUI manager sẽ detect "done" và tự copy + restart workers
-    log(f"\n[STEP 6] Images complete - GUI manager will handle copy to VISUAL + restart")
+    # Step 6: v1.0.388 - Tạo VIDEO cho scenes CHẴN (2,4,6,...) sau khi tất cả ảnh xong
+    log(f"\n[STEP 6] Creating VIDEOS (scenes chẵn)...")
+    try:
+        create_videos_for_project(local_dir, code, callback=callback)
+    except Exception as e:
+        log(f"  Video creation error: {e}", "WARN")
+        import traceback
+        traceback.print_exc()
+
+    # Step 7: Done
+    log(f"\n[STEP 7] All done - GUI manager will handle copy to VISUAL + restart")
     return True
 
 
