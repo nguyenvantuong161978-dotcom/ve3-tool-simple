@@ -2708,7 +2708,8 @@ class SmartEngine:
                     reference_filenames=ref_filenames if ref_filenames else None,
                     save_dir=save_dir_scene,
                     filename=fname,
-                    timeout=120
+                    timeout=120,
+                    skip_restart=True  # v1.0.413: KHÔNG restart - giữ gallery refs
                 )
 
                 if success and images:

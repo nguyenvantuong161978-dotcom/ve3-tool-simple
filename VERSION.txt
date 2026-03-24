@@ -1,13 +1,10 @@
-1.0.412
+1.0.413
 2026-03-24 (VN)
-Change: Chrome mode - Skip Reference Validator + Skip doi media_id cho Chrome 2
+Change: Chrome mode PHASE 3 - skip_restart=True de giu gallery references
 
 Thay doi:
-- v1.0.412: CHROME 2 TUONG THICH CHROME MODE
-  * Reference Validator (Step 3.5): SKIP khi Chrome mode
-    - Validator dung API de validate → khong co media_id trong Chrome mode
-    - Chrome 1 tao references truc tiep, Chrome 2 chi tao scenes
-  * Thumbnail wait (Step 3.7): Skip doi media_id khi Chrome mode
-    - Chrome mode khong co media_id → skip doi → thumbnails dung Chrome UI giong scenes
-  * Step 3.6 (doi Chrome 1 tao scenes): Khong thay doi (doi file anh, OK)
-  * Step 4 (SmartEngine.run): Tu dong route theo generation_mode
+- v1.0.413: FIX GALLERY BI MAT SAU MOI SCENE
+  * PHASE 3 (tao anh scenes): Them skip_restart=True
+    - Truoc: Sau moi scene → cleanup + restart Chrome → mat gallery
+    - Sau: Khong restart → gallery refs duoc giu nguyen
+    - Gallery duoc upload 1 lan o PHASE 2, dung cho tat ca scenes
