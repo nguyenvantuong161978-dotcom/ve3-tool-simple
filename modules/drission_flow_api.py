@@ -6693,37 +6693,44 @@ class DrissionFlowAPI:
         return True
 
     def _open_settings_panel(self) -> bool:
-        """Mở settings panel bằng PointerEvent trên menu button (giống bên ảnh)."""
-        result = self.driver.run_js('''
-            // Cách 1: Tìm bằng class menu button (giống JS_SELECT_MODEL_BY_INDEX)
-            var menuBtn = document.querySelector('button.sc-46973129-1');
-            if (menuBtn) {
-                menuBtn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                menuBtn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                return "OPENED_CLASS";
-            }
-            // Cách 2: Tìm bottom bar button
+        """v1.0.393: Mở settings panel bằng CDP click vào bottom bar button."""
+        import json as _json
+
+        # Tìm bottom bar button (chứa model name + aspect ratio)
+        coords_json = self.driver.run_js('''
             var btns = document.querySelectorAll('button');
             for (var i = 0; i < btns.length; i++) {
                 var t = btns[i].textContent.trim();
                 var rect = btns[i].getBoundingClientRect();
-                if (rect.y > 500 && rect.width > 50 && (t.indexOf('crop_') >= 0 || t.indexOf('Banana') >= 0 || t.indexOf('Veo') >= 0 || t.indexOf('Video') >= 0)) {
-                    btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                    btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                    return "OPENED_BOTTOM";
+                if (rect.y > 400 && rect.width > 50 && (t.indexOf('crop_') >= 0 || t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0 || t.indexOf('Veo') >= 0 || t.indexOf('Video') >= 0 || t.indexOf('Fast') >= 0)) {
+                    return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
                 }
             }
             return null;
         ''')
-        if not result:
+
+        if not coords_json:
             return False
 
-        time.sleep(1.5)
-        return True
+        coords = _json.loads(coords_json)
+        self._cdp_click_at(coords['x'], coords['y'])
+        time.sleep(2.0)
+
+        # Verify: settings panel mở (có tab Hình ảnh hoặc Video)
+        panel_ok = self.driver.run_js('''
+            var btns = document.querySelectorAll('button');
+            for (var i = 0; i < btns.length; i++) {
+                var t = btns[i].textContent.trim();
+                if (t.indexOf('image') >= 0 && t.indexOf('nh') >= 0) return true;
+                if (t.indexOf('videocam') >= 0) return true;
+            }
+            return false;
+        ''')
+        return bool(panel_ok)
 
     def setup_image_settings(self, model_index: int = 0) -> bool:
         """
-        v1.0.388: Setup Image mode bằng CDP click.
+        v1.0.393: Setup Image mode bằng CDP click.
         Thứ tự: Mở settings → Hình ảnh → 16:9 → x1 → chọn model theo index.
         Model: 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
         """
@@ -6735,6 +6742,7 @@ class DrissionFlowAPI:
 
         try:
             self.log(f"[Image] Setup: Hình ảnh → 16:9 → x1 → {model_name}...")
+            import json as _json
 
             # Bước 1: Mở settings panel
             if not self._open_settings_panel():
@@ -6744,7 +6752,7 @@ class DrissionFlowAPI:
             # Bước 2: Click tab "Hình ảnh" (imageHình ảnh)
             if self._cdp_click_button('image'):
                 self.log("[Image] [v] Clicked Hình ảnh tab")
-                time.sleep(1.0)
+                time.sleep(1.5)
             else:
                 self.log("[Image] [WARN] Không tìm thấy Hình ảnh tab", "WARN")
 
@@ -6758,42 +6766,51 @@ class DrissionFlowAPI:
                 self.log("[Image] [v] Clicked x1")
                 time.sleep(0.5)
 
-            # Bước 5: Chọn model
-            import json as _json
-            dropdown_json = self.driver.run_js('''
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = btns[i].textContent.trim();
-                    if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
-                        var rect = btns[i].getBoundingClientRect();
-                        return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
-                    }
-                }
-                return null;
-            ''')
-            if dropdown_json:
-                coords = _json.loads(dropdown_json)
-                self._cdp_click_at(coords['x'], coords['y'])
-                time.sleep(1.0)
-
-                # Chọn model theo index trong menuitem list
-                item_json = self.driver.run_js('''
-                    var items = document.querySelectorAll('[role="menuitem"]');
-                    if (items.length > %d) {
-                        var rect = items[%d].getBoundingClientRect();
-                        return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2), t: items[%d].textContent.trim().substring(0,40)});
+            # Bước 5: Chọn model - retry tìm dropdown
+            dropdown_found = False
+            for retry in range(3):
+                dropdown_json = self.driver.run_js('''
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
+                            var rect = btns[i].getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {
+                                return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2)});
+                            }
+                        }
                     }
                     return null;
-                ''' % (model_index, model_index, model_index))
-                if item_json:
-                    item = _json.loads(item_json)
-                    self._cdp_click_at(item['x'], item['y'])
-                    self.log(f"[Image] [v] Selected model: {item.get('t', model_name)}")
-                    time.sleep(0.5)
+                ''')
+                if dropdown_json:
+                    coords = _json.loads(dropdown_json)
+                    self._cdp_click_at(coords['x'], coords['y'])
+                    time.sleep(1.0)
+
+                    # Chọn model theo index trong menuitem list
+                    item_json = self.driver.run_js('''
+                        var items = document.querySelectorAll('[role="menuitem"]');
+                        if (items.length > %d) {
+                            var rect = items[%d].getBoundingClientRect();
+                            return JSON.stringify({x: Math.round(rect.x + rect.width/2), y: Math.round(rect.y + rect.height/2), t: items[%d].textContent.trim().substring(0,40)});
+                        }
+                        return null;
+                    ''' % (model_index, model_index, model_index))
+                    if item_json:
+                        item = _json.loads(item_json)
+                        self._cdp_click_at(item['x'], item['y'])
+                        self.log(f"[Image] [v] Selected model: {item.get('t', model_name)}")
+                        dropdown_found = True
+                    else:
+                        self.log("[Image] [WARN] Model menuitem not found", "WARN")
+                        dropdown_found = True  # Dropdown found but no items
+                    break
                 else:
-                    self.log("[Image] [WARN] Model menuitem not found", "WARN")
-            else:
-                self.log("[Image] [WARN] Model dropdown not found", "WARN")
+                    if retry < 2:
+                        time.sleep(1.0)  # Chờ thêm cho panel render
+
+            if not dropdown_found:
+                self.log("[Image] [WARN] Model dropdown not found after retries", "WARN")
 
             # Đóng settings panel
             self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
