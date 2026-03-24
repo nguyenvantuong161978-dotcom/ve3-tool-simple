@@ -1,16 +1,18 @@
 1.0.395
 2026-03-24 (VN)
-Change: Fix model dropdown - quay ve cach cu PointerEvent + tim button bang text (khong CSS class, khong Y threshold)
+Change: Chrome mode - tao anh truc tiep khong can API interceptor
 
 Thay doi:
-- v1.0.395: Fix model dropdown not found tren VM:
-  * ROOT CAUSE: v1.0.393 dung CDP click + rect.y > 400 threshold
-    → VM co man hinh nho (1594x676) → button o vi tri khac → khong tim thay
-  * FIX: Quay ve cach cu dung PointerEvent (React tuong thich)
-  * Thay CSS class selector (sc-46973129-1, sc-a0dcecfb-1) bang TEXT search
-    → Tim button bang text content (Banana, Imagen, Veo, etc.)
-    → Dung window.innerHeight * 0.5 thay vi hardcode 400
-  * Ap dung cho: JS_SELECT_MODEL_BY_INDEX, JS_SELECT_ORIENTATION,
-    _open_settings_panel(), setup_image_settings(), switch_to_t2v_mode()
-
-- v1.0.394: Fix Chrome tab download loi js parsing - CDP returnByValue
+- v1.0.395: CHROME MODE - generation_mode: chrome
+  * smart_engine.py: Them generate_images_chrome() method
+    → Phase 1: Tao reference images (nv/loc) truoc
+    → Phase 2: Upload TAT CA refs len gallery 1 lan (CDP setFileInputFiles)
+    → Phase 3: Moi scene chon refs tu gallery → type prompt → doi ket qua → download
+  * Routing: api | browser | chrome trong run() va _generate_characters_async()
+  * drission_flow_api.py: 3 methods moi
+    → upload_reference_images_chrome(): Upload refs qua CDP
+    → _select_reference_from_gallery(): Click "+" → tim anh → mouse events click
+    → generate_image_chrome(): Full flow khong can API interceptor
+  * Fix model dropdown: PointerEvent + text search (khong CSS class/Y threshold)
+  * Fix _dropdownOpened reset + Video mode verify
+  * config/settings.yaml: Them comment cho chrome option

@@ -1425,6 +1425,8 @@ class SmartEngine:
                     # Generate using correct mode
                     if generation_mode == 'api':
                         results = self.generate_images_api(char_prompts, proj_dir)
+                    elif generation_mode == 'chrome':
+                        results = self.generate_images_chrome(char_prompts, proj_dir)
                     else:
                         results = self.generate_images_browser(char_prompts, proj_dir)
 
@@ -2476,6 +2478,212 @@ class SmartEngine:
             traceback.print_exc()
             return {"success": 0, "failed": len(prompts)}
 
+    def generate_images_chrome(self, prompts: List[Dict], proj_dir: Path) -> Dict:
+        """
+        v1.0.395: Tạo ảnh bằng CHROME MODE (không dùng API interceptor).
+        Flow:
+        1. Sort prompts: nv/loc trước, scene sau
+        2. Tạo reference images (nv/loc) bằng DrissionFlowAPI.generate_image_chrome
+        3. Upload TẤT CẢ reference images lên gallery 1 lần
+        4. Cho mỗi scene: chọn refs từ gallery → type prompt → đợi kết quả → download
+        """
+        self.log("=== TẠO ẢNH BẰNG CHROME MODE (KHÔNG API) ===")
+
+        # Sort prompts: nv/loc trước, scenes sau
+        def sort_key(p):
+            pid = p.get('id', '')
+            if pid.startswith('nv'):
+                return (0, pid)
+            elif pid.startswith('loc'):
+                return (1, pid)
+            else:
+                return (2, pid)
+
+        prompts = sorted(prompts, key=sort_key)
+
+        # Tách reference prompts và scene prompts
+        ref_prompts = [p for p in prompts if p.get('id', '').startswith(('nv', 'loc'))]
+        scene_prompts = [p for p in prompts if not p.get('id', '').startswith(('nv', 'loc'))]
+        self.log(f"References: {len(ref_prompts)}, Scenes: {len(scene_prompts)}")
+
+        # Tìm thư mục nv/ và img/
+        nv_dir = proj_dir / "nv"
+        img_dir = proj_dir / "img"
+        nv_dir.mkdir(parents=True, exist_ok=True)
+        img_dir.mkdir(parents=True, exist_ok=True)
+
+        # Khởi tạo DrissionFlowAPI
+        from modules.drission_flow_api import DrissionFlowAPI
+
+        # Parallel video layout
+        video_parallel_enabled = not getattr(self, '_skip_video', False)
+        total_w = 2 if video_parallel_enabled else self.total_workers
+        worker_w = 0 if video_parallel_enabled else self.worker_id
+
+        api = DrissionFlowAPI(
+            chrome_portable=self.chrome_portable if self._chrome_portable_override else None,
+            headless=False,
+            worker_id=worker_w,
+            total_workers=total_w,
+        )
+
+        ok = api.setup(wait_for_project=True, timeout=120)
+        if not ok:
+            self.log("[CHROME] Setup failed!", "ERROR")
+            return {"success": 0, "failed": len(prompts)}
+
+        results = {"success": 0, "failed": 0}
+
+        # ============================================================
+        # PHASE 1: Tạo reference images (nv/loc)
+        # ============================================================
+        if ref_prompts:
+            self.log(f"\n[PHASE 1] Tạo {len(ref_prompts)} reference images...")
+            for i, p in enumerate(ref_prompts):
+                pid = p.get('id', '')
+                prompt = p.get('prompt', '')
+                output_path = p.get('output_path', str(nv_dir / f"{pid}.png"))
+
+                # Skip nếu đã có
+                if Path(output_path).exists():
+                    self.log(f"  [{i+1}/{len(ref_prompts)}] {pid} - đã có, skip")
+                    results["success"] += 1
+                    continue
+
+                if not prompt:
+                    self.log(f"  [{i+1}/{len(ref_prompts)}] {pid} - prompt rỗng, skip")
+                    results["failed"] += 1
+                    continue
+
+                self.log(f"  [{i+1}/{len(ref_prompts)}] {pid}: {prompt[:60]}...")
+
+                save_dir_ref = str(Path(output_path).parent)
+                fname = Path(output_path).stem
+
+                success, images, error = api.generate_image_chrome(
+                    prompt=prompt,
+                    reference_filenames=None,  # Ref images không cần ref
+                    save_dir=save_dir_ref,
+                    filename=fname,
+                    timeout=120
+                )
+
+                if success and images:
+                    self.log(f"  [v] {pid} OK")
+                    results["success"] += 1
+                else:
+                    self.log(f"  [x] {pid} FAIL: {error}", "WARN")
+                    results["failed"] += 1
+
+                if self.stop_flag:
+                    break
+
+        # ============================================================
+        # PHASE 2: Upload TẤT CẢ reference images lên gallery
+        # ============================================================
+        if scene_prompts and not self.stop_flag:
+            # Collect all ref files from nv/
+            ref_files = []
+            if nv_dir.exists():
+                for ext in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
+                    ref_files.extend([str(f) for f in sorted(nv_dir.glob(ext))])
+
+            if ref_files:
+                self.log(f"\n[PHASE 2] Upload {len(ref_files)} reference images lên gallery...")
+                upload_results = api.upload_reference_images_chrome(ref_files)
+                success_count = sum(1 for v in upload_results.values() if v)
+                self.log(f"  Upload: {success_count}/{len(ref_files)} OK")
+            else:
+                self.log("[PHASE 2] Không có reference images để upload")
+
+        # ============================================================
+        # PHASE 3: Tạo scene images (chọn refs từ gallery)
+        # ============================================================
+        if scene_prompts and not self.stop_flag:
+            self.log(f"\n[PHASE 3] Tạo {len(scene_prompts)} scene images...")
+
+            # Load Excel để lấy reference_files cho từng scene
+            excel_files = list(proj_dir.glob("*_prompts.xlsx"))
+            if not excel_files:
+                excel_files = list((proj_dir / "prompts").glob("*_prompts.xlsx"))
+
+            for i, p in enumerate(scene_prompts):
+                if self.stop_flag:
+                    break
+
+                pid = p.get('id', '')
+                prompt = p.get('prompt', '')
+                output_path = p.get('output_path', str(img_dir / f"{pid}.png"))
+
+                # Skip nếu đã có
+                if Path(output_path).exists():
+                    self.log(f"  [{i+1}/{len(scene_prompts)}] {pid} - đã có, skip")
+                    results["success"] += 1
+                    continue
+
+                if not prompt:
+                    self.log(f"  [{i+1}/{len(scene_prompts)}] {pid} - prompt rỗng, skip")
+                    results["failed"] += 1
+                    continue
+
+                # Lấy reference_files từ prompt data
+                ref_filenames = []
+                ref_raw = p.get('reference_files', '')
+                if ref_raw:
+                    try:
+                        parsed = json.loads(ref_raw) if isinstance(ref_raw, str) else ref_raw
+                        if isinstance(parsed, list):
+                            ref_filenames = parsed
+                        elif isinstance(parsed, str):
+                            ref_filenames = [f.strip() for f in parsed.split(',') if f.strip()]
+                    except:
+                        ref_filenames = [f.strip() for f in str(ref_raw).split(',') if f.strip()]
+
+                # Đảm bảo có extension .png
+                ref_filenames = [f if '.' in f else f + '.png' for f in ref_filenames]
+
+                self.log(f"  [{i+1}/{len(scene_prompts)}] {pid}: refs={ref_filenames}, prompt={prompt[:50]}...")
+
+                save_dir_scene = str(Path(output_path).parent)
+                fname = Path(output_path).stem
+
+                success, images, error = api.generate_image_chrome(
+                    prompt=prompt,
+                    reference_filenames=ref_filenames if ref_filenames else None,
+                    save_dir=save_dir_scene,
+                    filename=fname,
+                    timeout=120
+                )
+
+                if success and images:
+                    self.log(f"  [v] {pid} OK")
+                    results["success"] += 1
+
+                    # Update Excel status
+                    if excel_files:
+                        try:
+                            from modules.excel_manager import PromptWorkbook
+                            wb = PromptWorkbook(excel_files[0])
+                            wb.load_or_create()
+                            if pid.isdigit():
+                                wb.update_scene(int(pid), img_path=f"img/{pid}.png", status_img="done")
+                                wb.safe_save()
+                        except Exception as e:
+                            self.log(f"  [Excel] Warning: {e}", "WARN")
+                else:
+                    self.log(f"  [x] {pid} FAIL: {error}", "WARN")
+                    results["failed"] += 1
+
+        # Cleanup
+        try:
+            api.close()
+        except:
+            pass
+
+        total = results["success"] + results["failed"]
+        self.log(f"\n=== CHROME MODE XONG: {results['success']}/{total} OK ===")
+        return results
+
     def generate_images_parallel(self, prompts: List[Dict]) -> Dict:
         """
         Tao anh - DUNG 1 PROFILE DUY NHAT.
@@ -2690,7 +2898,7 @@ class SmartEngine:
         except:
             pass
 
-        mode_display = "API MODE" if generation_mode == 'api' else "BROWSER JS MODE"
+        mode_display = {"api": "API MODE", "browser": "BROWSER JS MODE", "chrome": "CHROME MODE"}.get(generation_mode, "BROWSER JS MODE")
 
         self.log("="*50)
         self.log(f"VE3 TOOL v{__version__} - {mode_display}")
@@ -3091,6 +3299,9 @@ class SmartEngine:
             if generation_mode == 'api':
                 self.log("[STEP 5] Tao images bang API MODE...")
                 scene_results = self.generate_images_api(prompts, proj_dir)
+            elif generation_mode == 'chrome':
+                self.log("[STEP 5] Tao images bang CHROME MODE (khong API)...")
+                scene_results = self.generate_images_chrome(prompts, proj_dir)
             else:
                 self.log("[STEP 5] Tao images bang BROWSER MODE...")
                 scene_results = self.generate_images_browser(prompts, proj_dir)

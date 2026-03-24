@@ -5174,11 +5174,12 @@ class DrissionFlowAPI:
         # Bước 1: Click nút "+" (add_2) để mở gallery
         clicked = self.driver.run_js("""
             var btns = document.querySelectorAll('button');
+            var halfH = window.innerHeight * 0.4;
             for (var i = 0; i < btns.length; i++) {
                 var text = btns[i].textContent || '';
                 if (text.indexOf('add_2') > -1) {
                     var rect = btns[i].getBoundingClientRect();
-                    if (rect.y > 300) { btns[i].click(); return true; }
+                    if (rect.y > halfH) { btns[i].click(); return true; }
                 }
             }
             return false;
