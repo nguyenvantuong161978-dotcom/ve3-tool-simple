@@ -1,10 +1,9 @@
-1.0.420
+1.0.421
 2026-03-25 (VN)
-Change: Gallery click don gian - .click() + match text keyword
+Change: Model selection moi lan gui prompt - khong chi 1 lan
 
 Thay doi:
-- v1.0.420: DON GIAN HOA GALLERY CLICK
-  * Dung .click() thay vi mouse events phuc tap
-  * Chi click item co text match keyword + co img child
-  * Bo qua upload area (input[type=file]), form elements
-  * Da test thanh cong tren VM
+- v1.0.421: FIX MODEL SELECTION
+  * Chon model truoc MOI prompt, khong chi lan dau
+  * Bo flag _chrome_mode_settings_done
+  * Dam bao model luon duoc set dung
