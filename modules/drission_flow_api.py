@@ -4929,6 +4929,7 @@ class DrissionFlowAPI:
                     image_tab = None
 
                     if self.driver and not downloaded:
+                        image_tab = None
                         try:
                             # Lưu tab hiện tại (tab chính) - dùng get_tab()
                             original_tab = self.driver.get_tab()
@@ -4941,52 +4942,62 @@ class DrissionFlowAPI:
                             # Đợi ảnh load xong (tối đa 10s)
                             for _ in range(20):
                                 img_loaded = image_tab.run_js('''
-                                    const img = document.querySelector('img');
+                                    var img = document.querySelector('img');
                                     return img && img.complete && img.naturalWidth > 0;
                                 ''')
                                 if img_loaded:
                                     break
                                 time.sleep(0.5)
 
-                            # Convert ảnh sang base64 qua canvas
-                            result = image_tab.run_js('''
-                                const img = document.querySelector('img');
-                                if (!img || !img.complete) return { error: "Image not found or not loaded" };
-
-                                const canvas = document.createElement('canvas');
-                                canvas.width = img.naturalWidth;
-                                canvas.height = img.naturalHeight;
-                                const ctx = canvas.getContext('2d');
-                                ctx.drawImage(img, 0, 0);
-
-                                try {
-                                    const dataUrl = canvas.toDataURL('image/png');
-                                    return {
-                                        base64: dataUrl.split(',')[1],
-                                        width: img.naturalWidth,
-                                        height: img.naturalHeight
-                                    };
-                                } catch(e) {
-                                    return { error: e.toString() };
-                                }
-                            ''')
+                            # v1.0.393: Dùng CDP Runtime.evaluate với returnByValue=True
+                            # DrissionPage run_js() không serialize được object lớn (base64)
+                            cdp_result = image_tab.run_cdp('Runtime.evaluate',
+                                expression='''
+                                    (function() {
+                                        var img = document.querySelector('img');
+                                        if (!img || !img.complete) return JSON.stringify({error: "not_loaded"});
+                                        var canvas = document.createElement('canvas');
+                                        canvas.width = img.naturalWidth;
+                                        canvas.height = img.naturalHeight;
+                                        var ctx = canvas.getContext('2d');
+                                        ctx.drawImage(img, 0, 0);
+                                        try {
+                                            var dataUrl = canvas.toDataURL('image/png');
+                                            return JSON.stringify({
+                                                b64: dataUrl.split(',')[1],
+                                                w: img.naturalWidth,
+                                                h: img.naturalHeight
+                                            });
+                                        } catch(e) {
+                                            return JSON.stringify({error: e.toString()});
+                                        }
+                                    })()
+                                ''',
+                                returnByValue=True
+                            )
 
                             chrome_time = time.time() - dl_start
 
                             # Đóng tab ảnh, quay về tab chính
-                            image_tab.close()  # Đóng tab ảnh
-                            original_tab.set.activate()  # Về tab chính
+                            image_tab.close()
+                            image_tab = None
+                            original_tab.set.activate()
 
-                            if result and result.get('base64'):
-                                img.base64_data = result['base64']
-                                img_path = save_dir / f"{fname}.png"
-                                img_path.write_bytes(base64.b64decode(img.base64_data))
-                                img.local_path = img_path
-                                w, h = result.get('width', 0), result.get('height', 0)
-                                self.log(f"[v] Downloaded: {img_path.name} ({w}x{h}, {chrome_time:.2f}s)")
-                                downloaded = True
-                            elif result and result.get('error'):
-                                self.log(f"   [DEBUG] Chrome tab error: {result['error']}")
+                            # Parse CDP result
+                            import json as _json
+                            result_str = cdp_result.get('result', {}).get('value', '')
+                            if result_str:
+                                result = _json.loads(result_str)
+                                if result.get('b64'):
+                                    img.base64_data = result['b64']
+                                    img_path = save_dir / f"{fname}.png"
+                                    img_path.write_bytes(base64.b64decode(img.base64_data))
+                                    img.local_path = img_path
+                                    w, h = result.get('w', 0), result.get('h', 0)
+                                    self.log(f"[v] Downloaded: {img_path.name} ({w}x{h}, {chrome_time:.2f}s)")
+                                    downloaded = True
+                                elif result.get('error'):
+                                    self.log(f"   [DEBUG] Chrome tab error: {result['error']}")
                         except Exception as e:
                             self.log(f"   [DEBUG] Chrome tab exception: {e}")
                             # Đảm bảo đóng tab ảnh nếu có lỗi
