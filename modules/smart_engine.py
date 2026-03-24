@@ -2729,6 +2729,20 @@ class SmartEngine:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1
 
+                    # v1.0.411: 403 handling - cleanup + restart Chrome
+                    if error and '403' in str(error):
+                        self.log(f"  [403] Cleanup + Restart Chrome...")
+                        try:
+                            api.cleanup_browser_data()
+                            saved_url = getattr(api, '_current_project_url', None)
+                            api._kill_chrome()
+                            api.close()
+                            import time
+                            time.sleep(2)
+                            api.setup(project_url=saved_url, skip_403_reset=True)
+                        except Exception as e:
+                            self.log(f"  [403] Restart error: {e}", "WARN")
+
         # Cleanup
         try:
             api.close()
