@@ -927,107 +927,210 @@ JS_SELECT_ORIENTATION = '''
 })('%s');
 '''
 
-# v1.0.231: JS để chọn model theo index + chọn x1 (1 ảnh)
-# Index 0: Nano Banana Pro, Index 1: Nano Banana 2 (NARWHAL), Index 2: Imagen 4
-# FIX 403: Chọn x1 thay vì modify request body để cut số ảnh
+# v1.0.398: JS chọn Image mode + model theo index
+# PointerEvent cho bottom bar/dropdown, MouseEvent cho Radix tabs
+# Check panel đã mở → tránh toggle đóng
 JS_SELECT_MODEL_BY_INDEX = '''
 (function(modelIndex) {
     window._modelSelectResult = 'PENDING';
 
-    // Buoc 1: Mo menu chinh - tim bang TEXT (khong dung CSS class vi Google hay doi)
-    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
-    var btns = document.querySelectorAll('button');
-    var btn1 = null;
-    for (var i = 0; i < btns.length; i++) {
-        var t = btns[i].textContent.trim();
-        var rect = btns[i].getBoundingClientRect();
-        // Bottom bar button: nam o nua duoi man hinh, width > 50
-        if (rect.width > 50 && rect.y > (window.innerHeight * 0.5)) {
-            for (var k = 0; k < keywords.length; k++) {
-                if (t.indexOf(keywords[k]) >= 0) {
-                    btn1 = btns[i];
-                    break;
-                }
-            }
-            if (btn1) break;
-        }
-    }
-    if (!btn1) {
-        window._modelSelectResult = 'NO_MENU_BUTTON';
-        return;
-    }
-    btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-    btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-    console.log('[MODEL] Step 1: Menu opened');
-
-    // Buoc 2: Click x1 (chon 1 anh) - FIX 403
-    setTimeout(function() {
-        var allBtns = document.querySelectorAll('button');
-        var clickedX1 = false;
-        for (var i = 0; i < allBtns.length; i++) {
-            var b = allBtns[i];
-            if (b.textContent.trim() === 'x1') {
-                b.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                b.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                b.dispatchEvent(new MouseEvent('click', {bubbles: true}));
-                console.log('[MODEL] Step 2: Clicked x1 (1 anh)');
-                clickedX1 = true;
+    // 1. Check panel da mo chua (tim Radix tab IMAGE)
+    var imgTab = document.querySelector('[id*="trigger-IMAGE"]');
+    if (!imgTab || imgTab.getBoundingClientRect().width === 0) {
+        // Panel chua mo -> click bottom bar (PointerEvent)
+        var btns = document.querySelectorAll('button');
+        var halfH = window.innerHeight * 0.5;
+        for (var i = 0; i < btns.length; i++) {
+            var rect = btns[i].getBoundingClientRect();
+            var t = btns[i].textContent.trim();
+            if (rect.y > halfH && rect.width > 50 && t.indexOf('add_2') < 0 && t.indexOf('arrow_forward') < 0) {
+                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                console.log('[MODEL] 1. Opened settings: ' + t.substring(0, 40));
                 break;
             }
         }
-        if (!clickedX1) {
-            console.log('[MODEL] Step 2: x1 button not found, continuing...');
+    } else {
+        console.log('[MODEL] 1. Panel already open');
+    }
+
+    setTimeout(function() {
+        // 2. Click tab Hinh anh (MouseEvent cho Radix tab)
+        var tab = document.querySelector('[id*="trigger-IMAGE"]');
+        if (tab) {
+            tab.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            tab.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+            tab.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+            console.log('[MODEL] 2. Image tab: ' + tab.getAttribute('data-state'));
         }
 
-        // Buoc 3: Click dropdown model - tim bang TEXT (arrow_drop_down + model name)
         setTimeout(function() {
-            var btns2 = document.querySelectorAll('button');
-            var btn2 = null;
-            for (var i = 0; i < btns2.length; i++) {
-                var t = btns2[i].textContent.trim();
-                if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Banana') >= 0 || t.indexOf('Imagen') >= 0)) {
-                    var rect = btns2[i].getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        btn2 = btns2[i];
-                        break;
-                    }
-                }
+            // 3. Click 16:9
+            var t169 = document.querySelector('[id*="trigger-LANDSCAPE"]');
+            if (t169) {
+                t169.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                t169.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                t169.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[MODEL] 3. 16:9');
             }
-            if (!btn2) {
-                window._modelSelectResult = 'NO_DROPDOWN_BUTTON';
-                return;
-            }
-            btn2.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-            btn2.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-            console.log('[MODEL] Step 3: Model dropdown opened');
 
-            // Buoc 4: Chon model theo index
+            // 4. Click x1
             setTimeout(function() {
-                var menuItems = document.querySelectorAll('[role="menuitem"]');
-                if (menuItems.length > modelIndex) {
-                    var item = menuItems[modelIndex];
-                    var modelName = item.textContent || 'Unknown';
-                    item.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                    item.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                    item.click();
-                    console.log('[MODEL] Step 4: Selected ' + modelName);
+                var x1 = document.querySelector('[id*="trigger-1"]');
+                if (x1) {
+                    x1.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                    x1.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                    x1.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                    console.log('[MODEL] 4. x1');
+                }
 
-                    // Buoc 5: Dong menu
+                // 5. Click model dropdown (PointerEvent)
+                setTimeout(function() {
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('arrow_drop_down') >= 0 && btns[i].getBoundingClientRect().width > 0) {
+                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            console.log('[MODEL] 5. Dropdown: ' + t.substring(0, 40));
+                            break;
+                        }
+                    }
+
+                    // 6. Chon model theo index (PointerEvent)
                     setTimeout(function() {
-                        document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                        var items = document.querySelectorAll('[role="menuitem"]');
+                        if (items.length > modelIndex) {
+                            items[modelIndex].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            items[modelIndex].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            items[modelIndex].click();
+                            console.log('[MODEL] 6. Selected: ' + items[modelIndex].textContent.substring(0, 40));
+                            window._modelSelectResult = 'SELECTED_' + modelIndex;
+                        } else {
+                            window._modelSelectResult = 'INVALID_INDEX';
+                        }
+                        // 7. Dong menu
                         setTimeout(function() {
                             document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                            console.log('[MODEL] Step 5: Menu closed');
-                            window._modelSelectResult = 'SELECTED_' + modelIndex;
-                        }, 300);
-                    }, 300);
-                } else {
-                    window._modelSelectResult = 'INVALID_INDEX';
-                }
-            }, 800);
-        }, 500);
-    }, 800);
+                            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                            console.log('[MODEL] 7. Done! ' + window._modelSelectResult);
+                        }, 500);
+                    }, 800);
+                }, 500);
+            }, 300);
+        }, 300);
+    }, 1500);
 })(%d);
+'''
+
+# v1.0.398: JS chọn Video mode (T2V) + Lower Priority
+# PointerEvent cho bottom bar/dropdown, MouseEvent cho Radix tabs
+JS_SWITCH_TO_T2V_MODE = '''
+(function() {
+    window._t2vResult = 'PENDING';
+
+    // 1. Check panel da mo chua
+    var vidTab = document.querySelector('[id*="trigger-IMAGE"]');
+    if (!vidTab) vidTab = document.querySelector('[id*="trigger-VIDEO"]:not([id*="FRAMES"]):not([id*="REFERENCES"])');
+    if (!vidTab || vidTab.getBoundingClientRect().width === 0) {
+        var btns = document.querySelectorAll('button');
+        var halfH = window.innerHeight * 0.5;
+        for (var i = 0; i < btns.length; i++) {
+            var rect = btns[i].getBoundingClientRect();
+            var t = btns[i].textContent.trim();
+            if (rect.y > halfH && rect.width > 50 && t.indexOf('add_2') < 0 && t.indexOf('arrow_forward') < 0) {
+                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                console.log('[T2V] 1. Opened settings: ' + t.substring(0, 40));
+                break;
+            }
+        }
+    } else {
+        console.log('[T2V] 1. Panel already open');
+    }
+
+    setTimeout(function() {
+        // 2. Click tab Video (MouseEvent cho Radix)
+        var tabs = document.querySelectorAll('[role="tab"]');
+        for (var i = 0; i < tabs.length; i++) {
+            if ((tabs[i].id || '').indexOf('trigger-VIDEO') >= 0 && (tabs[i].id || '').indexOf('FRAMES') < 0 && (tabs[i].id || '').indexOf('REFERENCES') < 0) {
+                tabs[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                tabs[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                tabs[i].dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[T2V] 2. Video tab: ' + tabs[i].getAttribute('data-state'));
+                break;
+            }
+        }
+
+        // 3. Click Thanh phan (VIDEO_REFERENCES)
+        setTimeout(function() {
+            var tp = document.querySelector('[id*="trigger-VIDEO_REFERENCES"]');
+            if (tp) {
+                tp.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                tp.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                tp.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[T2V] 3. Thanh phan: ' + tp.getAttribute('data-state'));
+            }
+
+            setTimeout(function() {
+                // 4. Click 16:9
+                var t169 = document.querySelector('[id*="trigger-LANDSCAPE"]');
+                if (t169) {
+                    t169.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                    t169.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                    t169.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                    console.log('[T2V] 4. 16:9');
+                }
+
+                // 5. Click x1
+                setTimeout(function() {
+                    var x1 = document.querySelector('[id*="trigger-1"]');
+                    if (x1) {
+                        x1.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                        x1.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                        x1.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                        console.log('[T2V] 5. x1');
+                    }
+
+                    // 6. Mo model dropdown (PointerEvent)
+                    setTimeout(function() {
+                        var btns = document.querySelectorAll('button');
+                        for (var i = 0; i < btns.length; i++) {
+                            var t = btns[i].textContent.trim();
+                            if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
+                                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                console.log('[T2V] 6. Dropdown: ' + t.substring(0, 40));
+                                break;
+                            }
+                        }
+
+                        // 7. Chon Lower Priority
+                        setTimeout(function() {
+                            var items = document.querySelectorAll('[role="menuitem"]');
+                            for (var i = 0; i < items.length; i++) {
+                                if (items[i].textContent.indexOf('Lower') >= 0) {
+                                    items[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                    items[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                    items[i].click();
+                                    console.log('[T2V] 7. Selected: ' + items[i].textContent.substring(0, 40));
+                                    window._t2vResult = 'SUCCESS';
+                                    break;
+                                }
+                            }
+                            // 8. Dong menu
+                            setTimeout(function() {
+                                document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                                document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                                console.log('[T2V] 8. Done! ' + window._t2vResult);
+                            }, 500);
+                        }, 800);
+                    }, 500);
+                }, 300);
+            }, 300);
+        }, 500);
+    }, 1500);
+})();
 '''
 
 
@@ -6130,8 +6233,8 @@ class DrissionFlowAPI:
             js_code = JS_SELECT_MODEL_BY_INDEX % model_index
             self.driver.run_js(js_code)
 
-            # Đợi JS async hoàn thành
-            time.sleep(3.0)
+            # Đợi JS async hoàn thành (tổng setTimeout: ~4.4s + buffer)
+            time.sleep(6.0)
 
             # Kiểm tra kết quả
             result = self.driver.run_js("return window._modelSelectResult;")
@@ -7141,8 +7244,9 @@ class DrissionFlowAPI:
 
     def switch_to_t2v_mode(self) -> bool:
         """
-        v1.0.395: Chuyển sang Video mode bằng JS PointerEvent (tìm bằng text).
-        Thứ tự: Mở settings → Video → Thành phần → 16:9 → x1 → Lower Priority model.
+        v1.0.397: Chuyển sang Video mode - all-in-one JS với setTimeout.
+        Flow: Mở settings → Video tab → Thành phần → 16:9 → x1 → Model dropdown → Lower Priority.
+        Cùng pattern như JS_SELECT_MODEL_BY_INDEX - chạy 1 lần JS, đợi kết quả.
         """
         if not self._ready:
             return False
@@ -7153,146 +7257,27 @@ class DrissionFlowAPI:
             try:
                 self.log(f"[Mode] Chuyển sang T2V mode (attempt {attempt + 1}/{MAX_RETRIES})...")
 
-                # Bước 1: Mở settings panel
-                if not self._open_settings_panel():
-                    self.log("[Mode] Không mở được settings panel", "WARN")
-                    time.sleep(1)
-                    continue
+                # Reset result
+                self.driver.run_js("window._t2vResult = 'PENDING';")
 
-                # Bước 2: Click tab "Video" (videocamVideo) - PointerEvent
-                video_clicked = self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = btns[i].textContent.trim();
-                        if (t.indexOf('videocam') >= 0) {
-                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                            btns[i].click();
-                            return true;
-                        }
-                    }
-                    return false;
-                ''')
-                if not video_clicked:
-                    self.log("[Mode] Không tìm thấy Video tab", "WARN")
-                    time.sleep(1)
-                    continue
-                time.sleep(1.5)
-                self.log("[Mode] [v] Clicked Video tab")
+                # Chạy all-in-one JS
+                self.driver.run_js(JS_SWITCH_TO_T2V_MODE)
 
-                # Bước 3: Click "Thành phần" - PointerEvent
-                self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = btns[i].textContent.trim();
-                        if (t.indexOf('nh ph') >= 0) {
-                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                            btns[i].click();
-                            break;
-                        }
-                    }
-                ''')
-                self.log("[Mode] [v] Clicked 'Thành phần'")
-                time.sleep(0.5)
+                # Đợi JS async hoàn thành (tổng setTimeout: 1.5 + 1.0 + 0.5 + 0.5 + 0.5 + 0.8 + 0.5 + 0.3 = ~5.6s)
+                time.sleep(7)
 
-                # Bước 4: Click 16:9
-                self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = btns[i].textContent.trim();
-                        if (t.indexOf('16:9') >= 0) {
-                            btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                            btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                            btns[i].click();
-                            break;
-                        }
-                    }
-                ''')
-                self.log("[Mode] [v] Clicked 16:9")
-                time.sleep(0.5)
+                # Kiểm tra kết quả
+                result = self.driver.run_js("return window._t2vResult;")
+                self.log(f"[Mode] T2V result: {result}")
 
-                # Bước 5: Click x1
-                self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        if (btns[i].textContent.trim() === 'x1') {
-                            btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
-                            btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
-                            btns[i].click();
-                            break;
-                        }
-                    }
-                ''')
-                self.log("[Mode] [v] Clicked x1")
-                time.sleep(0.5)
-
-                # Bước 6: Chọn model Lower Priority - PointerEvent
-                self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = btns[i].textContent.trim();
-                        if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
-                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                            break;
-                        }
-                    }
-                ''')
-                time.sleep(1.0)
-                self.log("[Mode] [v] Model dropdown opened")
-
-                # Tìm "Lower Priority" menuitem
-                self.driver.run_js('''
-                    var items = document.querySelectorAll('[role="menuitem"]');
-                    for (var i = 0; i < items.length; i++) {
-                        var t = items[i].textContent.trim();
-                        if (t.indexOf('Lower') >= 0 || t.indexOf('lower') >= 0) {
-                            items[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                            items[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                            items[i].click();
-                            break;
-                        }
-                    }
-                ''')
-                time.sleep(0.5)
-                self.log("[Mode] [v] Selected Lower Priority model")
-
-                # Verify: check bottom bar button text for Veo/Fast (not full body text)
-                time.sleep(1.0)
-                model = self.driver.run_js('''
-                    var btns = document.querySelectorAll('button');
-                    var halfH = window.innerHeight * 0.5;
-                    for (var i = 0; i < btns.length; i++) {
-                        var rect = btns[i].getBoundingClientRect();
-                        var t = btns[i].textContent.trim();
-                        if (rect.y > halfH && rect.width > 50) {
-                            if (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0) return 'VIDEO';
-                            if (t.indexOf('videocam') >= 0 && t.indexOf('Video') >= 0) return 'VIDEO';
-                        }
-                    }
-                    // Fallback: check if videocam tab is active/selected in settings panel
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = btns[i].textContent.trim();
-                        if (t.indexOf('videocam') >= 0) {
-                            var cls = btns[i].className || '';
-                            var style = btns[i].getAttribute('style') || '';
-                            if (cls.indexOf('active') >= 0 || style.indexOf('opacity') >= 0) return 'VIDEO';
-                        }
-                    }
-                    return 'IMAGE';
-                ''')
-                if model == 'VIDEO':
+                if result == 'SUCCESS':
                     self.log("[Mode] [v] Đã chuyển sang T2V mode thành công!")
-                    self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
-                    time.sleep(0.5)
                     return True
                 else:
-                    self.log(f"[Mode] Mode chưa đổi: {model}, sẽ tiếp tục (Video tab đã click)", "WARN")
-                    # Video tab đã click thành công → tin tưởng kết quả
+                    self.log(f"[Mode] T2V chưa thành công: {result}", "WARN")
+                    # Đóng menu nếu đang mở
                     self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
-                    time.sleep(0.5)
-                    return True
+                    time.sleep(1)
 
             except Exception as e:
                 self.log(f"[Mode] Error: {e}", "ERROR")

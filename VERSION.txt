@@ -1,18 +1,16 @@
-1.0.395
+1.0.398
 2026-03-24 (VN)
-Change: Chrome mode - tao anh truc tiep khong can API interceptor
+Change: Fix JS mode select - MouseEvent cho Radix tabs, PointerEvent cho bottom bar
 
 Thay doi:
-- v1.0.395: CHROME MODE - generation_mode: chrome
-  * smart_engine.py: Them generate_images_chrome() method
-    → Phase 1: Tao reference images (nv/loc) truoc
-    → Phase 2: Upload TAT CA refs len gallery 1 lan (CDP setFileInputFiles)
-    → Phase 3: Moi scene chon refs tu gallery → type prompt → doi ket qua → download
-  * Routing: api | browser | chrome trong run() va _generate_characters_async()
-  * drission_flow_api.py: 3 methods moi
-    → upload_reference_images_chrome(): Upload refs qua CDP
-    → _select_reference_from_gallery(): Click "+" → tim anh → mouse events click
-    → generate_image_chrome(): Full flow khong can API interceptor
-  * Fix model dropdown: PointerEvent + text search (khong CSS class/Y threshold)
-  * Fix _dropdownOpened reset + Video mode verify
-  * config/settings.yaml: Them comment cho chrome option
+- v1.0.398: FIX JS MODE SELECT (Image + Video)
+  * JS_SELECT_MODEL_BY_INDEX: Dung MouseEvent cho Radix tabs (Image/16:9/x1)
+    → PointerEvent cho bottom bar button va model dropdown
+    → Check panel open truoc khi click bottom bar (tranh toggle close)
+    → Radix ID selectors (trigger-IMAGE, trigger-LANDSCAPE, trigger-1)
+  * JS_SWITCH_TO_T2V_MODE: Tuong tu - MouseEvent cho tabs, PointerEvent cho buttons
+    → trigger-VIDEO (exclude FRAMES/REFERENCES)
+    → trigger-VIDEO_REFERENCES (Thanh phan)
+    → trigger-LANDSCAPE, trigger-1
+  * select_model_by_index(): Tang wait time 3s -> 6s (JS chain ~4.4s)
+  * Tested: Image mode (3 models) + Video mode - all working
