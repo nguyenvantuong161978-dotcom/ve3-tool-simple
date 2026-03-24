@@ -1,6 +1,6 @@
-1.0.390
+1.0.391
 2026-03-24 (VN)
-Change: Chrome xong anh cua no thi lam video luon - khong doi Chrome kia
+Change: Video chi chay khi video_mode=full trong settings - basic van chi tao anh
 
 Thay doi:
 - v1.0.336: Account tu trang tinh NGUON qua _CLAIMED:

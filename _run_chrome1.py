@@ -502,13 +502,25 @@ def process_project_pic_basic(code: str, callback=None) -> bool:
             total_workers=2  # Chia scenes chẵn/lẻ với Chrome 2
         )
 
-        log(f"  Excel: {excel_path.name}")
-        log(f"  Mode: CHROME 1 (scenes chẵn: 2,4,6,... + nv/loc)")
+        # v1.0.390: Đọc video_mode từ settings.yaml
+        # basic/small = chỉ tạo ảnh, full = tạo ảnh + video
+        import yaml
+        _skip_video = True  # Default: basic mode
+        try:
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    _cfg = yaml.safe_load(f) or {}
+                _video_mode = _cfg.get('video_mode', 'basic')
+                _skip_video = _video_mode not in ('full',)
+                log(f"  video_mode={_video_mode} → skip_video={_skip_video}")
+        except Exception as e:
+            log(f"  [WARN] Cannot read video_mode: {e}")
 
-        # v1.0.389: Run engine với skip_video=False
-        # Engine sẽ tạo ảnh chẵn xong → tạo video chẵn ngay (không đợi Chrome 2)
-        # browser_flow_generator chỉ check ảnh của worker này trước khi tạo video
-        result = engine.run(str(excel_path), callback=callback, skip_compose=True, skip_video=False)
+        log(f"  Excel: {excel_path.name}")
+        log(f"  Mode: CHROME 1 (scenes chẵn: 2,4,6,... + nv/loc) {'+ VIDEO' if not _skip_video else ''}")
+
+        result = engine.run(str(excel_path), callback=callback, skip_compose=True, skip_video=_skip_video)
 
         if result.get('error'):
             log(f"  Error: {result.get('error')}", "ERROR")

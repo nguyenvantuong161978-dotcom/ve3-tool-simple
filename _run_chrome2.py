@@ -798,17 +798,28 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
             chrome_portable=chrome2_path
         )
 
-        log(f"  Excel: {excel_path.name}")
-        log(f"  Mode: CHROME 2 (scenes lẻ: 1,3,5,...)")
+        # v1.0.390: Đọc video_mode từ settings.yaml
+        import yaml
+        _skip_video = True  # Default: basic mode
+        try:
+            settings_path = TOOL_DIR / "config" / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    _cfg = yaml.safe_load(f) or {}
+                _video_mode = _cfg.get('video_mode', 'basic')
+                _skip_video = _video_mode not in ('full',)
+                log(f"  video_mode={_video_mode} → skip_video={_skip_video}")
+        except Exception as e:
+            log(f"  [WARN] Cannot read video_mode: {e}")
 
-        # v1.0.389: Run engine với skip_video=False
-        # Engine sẽ tạo ảnh lẻ xong → tạo video lẻ ngay (không đợi Chrome 1)
-        # browser_flow_generator chỉ check ảnh của worker này trước khi tạo video
+        log(f"  Excel: {excel_path.name}")
+        log(f"  Mode: CHROME 2 (scenes lẻ: 1,3,5,...) {'+ VIDEO' if not _skip_video else ''}")
+
         result = engine.run(
             str(excel_path),
             callback=callback,
             skip_compose=True,
-            skip_video=False,
+            skip_video=_skip_video,
             skip_references=True
         )
 
