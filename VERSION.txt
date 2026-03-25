@@ -1,11 +1,9 @@
-1.0.425
+1.0.426
 2026-03-25 (VN)
-Change: Drop tat ca refs cung luc + detect loading chinh xac
+Change: Bo PHASE 2 gallery upload + xu ly 429 quota
 
 Thay doi:
-- v1.0.425: DROP ALL REFS + LOADING DETECTION
-  * Drop TAT CA anh tham chieu cung luc (khong tung anh mot)
-  * Detect loading: "dang tai cac thanh phan" xuat hien roi bien mat = xong
-  * Cho 5s sau khi loading bien mat cho an toan
-  * Click "Toi dong y" dialog lien tuc (moi giay) khong chi 1 lan
-  * Bo cach dem img cu (khong chinh xac)
+- v1.0.426: BO GALLERY UPLOAD + 429 HANDLING
+  * Bo PHASE 2 upload gallery - khong can nua vi drag-drop truc tiep
+  * Them xu ly 429 quota exhausted: nghi 60s truoc khi lam tiep
+  * Truoc day 429 bi bo qua, tool cu gui prompt lien tuc khong nghi

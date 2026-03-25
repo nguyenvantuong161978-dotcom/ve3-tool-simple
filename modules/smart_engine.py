@@ -2654,25 +2654,10 @@ class SmartEngine:
                         except Exception as e:
                             self.log(f"  [403] Restart error: {e}", "WARN")
 
-        # ============================================================
-        # PHASE 2: Upload TẤT CẢ reference images lên gallery
-        # ============================================================
-        if scene_prompts and not self.stop_flag:
-            ref_files = []
-            if nv_dir.exists():
-                for ext in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
-                    ref_files.extend([str(f) for f in sorted(nv_dir.glob(ext))])
-
-            if ref_files:
-                self.log(f"\n[PHASE 2] Upload {len(ref_files)} reference images lên gallery...")
-                upload_results = api.upload_reference_images_chrome(ref_files)
-                success_count = sum(1 for v in upload_results.values() if v)
-                self.log(f"  Upload: {success_count}/{len(ref_files)} OK")
-            else:
-                self.log("[PHASE 2] Không có reference images để upload")
+        # v1.0.425: Bỏ PHASE 2 (upload gallery) - dùng drag-drop trực tiếp trong PHASE 3
 
         # ============================================================
-        # PHASE 3: Tạo scene images (chọn refs từ gallery)
+        # PHASE 3: Tạo scene images (drag-drop refs trực tiếp)
         # ============================================================
         if scene_prompts and not self.stop_flag:
             self.log(f"\n[PHASE 3] Tạo {len(scene_prompts)} scene images...")
@@ -2755,8 +2740,14 @@ class SmartEngine:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1
 
+                    # v1.0.426: 429 handling - quota exhausted → nghỉ 60s
+                    if error and ('429' in str(error) or 'quota' in str(error).lower()):
+                        self.log(f"  [429] Quota exhausted - nghỉ 60s...")
+                        import time
+                        time.sleep(60)
+
                     # v1.0.411: 403 handling - cleanup + restart Chrome
-                    if error and '403' in str(error):
+                    elif error and '403' in str(error):
                         self.log(f"  [403] Cleanup + Restart Chrome...")
                         try:
                             api.cleanup_browser_data()
