@@ -1,8 +1,12 @@
-1.0.427
-2026-03-25 (VN)
-Change: Tang claim timeout 8h → 12h + 429 retry doi model
+1.0.428
+2026-03-26 (VN)
+Change: Fix claim bi cuop - khong xoa claim khi doc file NFS loi
 
 Thay doi:
+- v1.0.428: FIX CLAIM BI CUOP
+  * _is_claim_expired() tra ve True khi doc file loi → VM khac xoa claim hop le
+  * Fix: return False khi exception (giu nguyen claim, khong xoa)
+  * Day la nguyen nhan VM B cuop project cua VM A sau vai phut
 - v1.0.427: CLAIM TIMEOUT 12H
   * Tang CLAIM_TIMEOUT_HOURS tu 8 len 12 gio
   * Tranh VM khac ghi de _CLAIMED khi project chay lau

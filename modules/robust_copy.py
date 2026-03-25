@@ -780,8 +780,11 @@ class TaskQueue:
             claim_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
             elapsed_hours = (datetime.now() - claim_time).total_seconds() / 3600
             return elapsed_hours > self.timeout_hours
-        except Exception:
-            return True
+        except Exception as e:
+            # v1.0.428: KHÔNG coi là expired khi đọc file lỗi (NFS glitch)
+            # Trước đây return True → VM khác xóa claim hợp lệ và cướp project
+            self.log(f"[QUEUE] Lỗi đọc _CLAIMED: {e} → giữ nguyên (không expired)", "WARN")
+            return False
 
     def _read_claim_vm_id(self, claimed_file: Path) -> Optional[str]:
         try:
