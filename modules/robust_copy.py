@@ -469,7 +469,7 @@ from datetime import datetime
 from typing import List
 
 CLAIMED_FILE = "_CLAIMED"
-CLAIM_TIMEOUT_HOURS = 8  # VM chết → giải phóng sau 8 giờ
+CLAIM_TIMEOUT_HOURS = 12  # VM chết → giải phóng sau 12 giờ
 
 
 class TaskQueue:

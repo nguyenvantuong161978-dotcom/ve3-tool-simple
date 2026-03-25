@@ -2758,6 +2758,7 @@ class SmartEngine:
                             wb.safe_save()
                     except Exception as e:
                         self.log(f"  [Excel] Warning: {e}", "WARN")
+
                 else:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1
