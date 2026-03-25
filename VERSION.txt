@@ -1,11 +1,12 @@
-1.0.423
+1.0.424
 2026-03-25 (VN)
-Change: Fix references sai - khong ep them refs, API tu quyet dinh
+Change: Drag-drop reference images - thay gallery search bang CDP drag-drop
 
 Thay doi:
-- v1.0.423: FIX SCENE REFERENCES ACCURACY
-  * Bo post-processing ep them refs tu Step 5 vao prompt
-  * API Step 7 tu quyet dinh character/location nao xuat hien
-  * Step 5 prompt: chi gan character thuc su xuat hien, 1 location/scene
-  * Step 7 prompt: chi include refs cho chars/locs thuc su co trong scene
-  * Fix regex: match ca ID co chu (nvc, nvp1...) khong chi so
+- v1.0.424: DRAG-DROP REFERENCE IMAGES
+  * Them _drop_reference_to_prompt() - CDP drag-drop vao zone "Them thanh phan"
+  * Flow: dragEnter → tim zone → dragOver → drop → handle "Toi dong y" dialog
+  * Doi anh tai xong (dem img truoc/sau, max 15s)
+  * generate_image_chrome() them reference_paths param (uu tien drag-drop)
+  * smart_engine.py: build ref_paths tu nv_dir cho drag-drop
+  * 100% tin cay - khong phu thuoc gallery search

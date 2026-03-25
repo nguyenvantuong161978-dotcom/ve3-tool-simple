@@ -5462,9 +5462,14 @@ class DrissionFlowAPI:
     def _drop_reference_to_prompt(self, filepath: str) -> bool:
         """
         v1.0.424: Drop ảnh tham chiếu trực tiếp vào ô "Thêm thành phần" trong khung chat.
-        Kéo vào đúng ô → ảnh trở thành tham chiếu cho prompt đó (chắc chắn 100%).
+        CDP drag-drop → zone xuất hiện → drop vào zone → ảnh thành tham chiếu cho prompt.
 
-        Dùng CDP Input.dispatchDragEvent để simulate drag-drop file.
+        Flow:
+        1. Đếm ảnh TRƯỚC
+        2. dragEnter prompt area → zone "Thêm thành phần" xuất hiện
+        3. dragOver + drop vào zone
+        4. Handle dialog "Tôi đồng ý" (nếu có)
+        5. Đợi ảnh tải xong (đếm ảnh SAU > TRƯỚC)
 
         Args:
             filepath: Đường dẫn tuyệt đối đến ảnh tham chiếu
@@ -5479,7 +5484,7 @@ class DrissionFlowAPI:
         fname = os.path.basename(filepath)
         file_path_abs = os.path.abspath(filepath).replace('\\', '/')
 
-        # Tìm tọa độ prompt area (contenteditable)
+        # Tìm tọa độ prompt area
         coords = self.driver.run_js("""
             var el = document.querySelector('[contenteditable="true"]');
             if (!el) return null;
@@ -5496,35 +5501,42 @@ class DrissionFlowAPI:
 
         pos = json.loads(coords)
 
-        # Drag data cho CDP
         drag_data = {
             'items': [{'mimeType': 'image/png', 'data': ''}],
             'files': [file_path_abs],
-            'dragOperationsMask': 19  # copy | move | link
+            'dragOperationsMask': 19
         }
 
-        try:
-            # Step 1: dragEnter vào prompt area → trigger "Thêm thành phần" zone
-            self.driver.run_cdp('Input.dispatchDragEvent',
-                type='dragEnter',
-                x=pos['x'], y=pos['y'],
-                data=drag_data
-            )
-            time.sleep(1)
+        # Đếm ảnh TRƯỚC
+        before_imgs = self.driver.run_js("""
+            var ce = document.querySelector('[contenteditable="true"]');
+            if (!ce) return 0;
+            var container = ce;
+            for (var i = 0; i < 5; i++) {
+                if (container.parentElement) container = container.parentElement;
+            }
+            return container.querySelectorAll('img').length;
+        """) or 0
 
-            # Step 2: Tìm ô "Thêm thành phần" đã xuất hiện
+        try:
+            # Step 1: dragEnter → trigger zone "Thêm thành phần"
+            self.driver.run_cdp('Input.dispatchDragEvent',
+                type='dragEnter', x=pos['x'], y=pos['y'], data=drag_data
+            )
+            time.sleep(1.5)
+
+            # Step 2: Tìm zone "Thêm thành phần"
             zone = self.driver.run_js("""
                 var all = document.querySelectorAll('*');
                 for (var i = 0; i < all.length; i++) {
                     var text = (all[i].textContent || '').trim();
-                    if ((text.indexOf('Thêm thành phần') > -1 || text.indexOf('Add component') > -1 || text.indexOf('Add element') > -1)
-                        && text.length < 30) {
+                    if ((text.indexOf('Thêm thành phần') > -1 || text.indexOf('Add component') > -1
+                         || text.indexOf('Add element') > -1) && text.length < 30) {
                         var rect = all[i].getBoundingClientRect();
-                        if (rect.width > 20 && rect.height > 20) {
+                        if (rect.width > 50 && rect.height > 15) {
                             return JSON.stringify({
                                 x: Math.round(rect.x + rect.width / 2),
-                                y: Math.round(rect.y + rect.height / 2),
-                                text: text
+                                y: Math.round(rect.y + rect.height / 2)
                             });
                         }
                     }
@@ -5534,39 +5546,63 @@ class DrissionFlowAPI:
 
             if zone:
                 drop_pos = json.loads(zone)
-                self.log(f"[DROP] Found '{drop_pos.get('text', '')}' zone")
             else:
-                # Fallback: drop vào giữa prompt area
                 drop_pos = pos
-                self.log(f"[DROP] Zone không thấy, drop vào prompt area")
+                self.log(f"[DROP] Zone không thấy, thử drop vào prompt area")
 
-            # Step 3: dragOver trên ô "Thêm thành phần"
+            # Step 3: dragOver + drop
             self.driver.run_cdp('Input.dispatchDragEvent',
-                type='dragOver',
-                x=drop_pos['x'], y=drop_pos['y'],
-                data=drag_data
+                type='dragOver', x=drop_pos['x'], y=drop_pos['y'], data=drag_data
             )
             time.sleep(0.5)
-
-            # Step 4: drop
             self.driver.run_cdp('Input.dispatchDragEvent',
-                type='drop',
-                x=drop_pos['x'], y=drop_pos['y'],
-                data=drag_data
+                type='drop', x=drop_pos['x'], y=drop_pos['y'], data=drag_data
             )
-            time.sleep(3)  # Đợi ảnh load
+            time.sleep(2)
 
-            self.log(f"[DROP] [v] Dropped {fname}")
-            return True
+            # Step 4: Handle dialog "Tôi đồng ý" (một số TK cần accept lần đầu)
+            self.driver.run_js("""
+                var dialog = document.querySelector('[role="dialog"]');
+                if (dialog) {
+                    var btns = dialog.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var text = btns[i].textContent.trim();
+                        if (text.indexOf('đồng ý') > -1 || text.indexOf('Agree') > -1 ||
+                            text.indexOf('Accept') > -1) {
+                            btns[i].click();
+                            break;
+                        }
+                    }
+                }
+            """)
+            time.sleep(2)
+
+            # Step 5: Đợi ảnh tải xong (max 15s)
+            for wait in range(15):
+                after_imgs = self.driver.run_js("""
+                    var ce = document.querySelector('[contenteditable="true"]');
+                    if (!ce) return 0;
+                    var container = ce;
+                    for (var i = 0; i < 5; i++) {
+                        if (container.parentElement) container = container.parentElement;
+                    }
+                    return container.querySelectorAll('img').length;
+                """) or 0
+
+                if after_imgs > before_imgs:
+                    self.log(f"[DROP] [v] {fname} - ảnh đã tải ({after_imgs - before_imgs} mới, {wait}s)")
+                    return True
+                time.sleep(1)
+
+            # Timeout nhưng drop có thể đã thành công
+            self.log(f"[DROP] [?] {fname} - không thấy ảnh mới sau 15s", "WARN")
+            return False
 
         except Exception as e:
-            self.log(f"[DROP] [x] Error drop {fname}: {e}", "WARN")
-            # Fallback: cancel drag nếu lỗi
+            self.log(f"[DROP] [x] Error {fname}: {e}", "WARN")
             try:
                 self.driver.run_cdp('Input.dispatchDragEvent',
-                    type='dragCancel',
-                    x=pos['x'], y=pos['y'],
-                    data=drag_data
+                    type='dragCancel', x=pos['x'], y=pos['y'], data=drag_data
                 )
             except:
                 pass
@@ -5577,17 +5613,18 @@ class DrissionFlowAPI:
         prompt: str,
         reference_filenames: Optional[List[str]] = None,
         reference_prompts: Optional[Dict[str, str]] = None,
+        reference_paths: Optional[List[str]] = None,
         save_dir: Optional[str] = None,
         filename: Optional[str] = None,
         timeout: int = 120,
         skip_restart: bool = False
     ) -> Tuple[bool, List, Optional[str]]:
         """
-        v1.0.395: Tạo ảnh bằng Chrome trực tiếp (KHÔNG dùng API interceptor).
+        v1.0.424: Tạo ảnh bằng Chrome trực tiếp (KHÔNG dùng API interceptor).
 
         Flow:
         1. Setup image settings (model, aspect ratio)
-        2. Chọn reference images từ gallery (nếu có)
+        2. Drop reference images vào prompt (drag-drop "Thêm thành phần")
         3. Type prompt vào textarea
         4. Press Enter / click send
         5. Đợi kết quả xuất hiện trên UI
@@ -5595,7 +5632,9 @@ class DrissionFlowAPI:
 
         Args:
             prompt: Prompt mô tả ảnh
-            reference_filenames: List tên file reference (vd: ["nv1.png", "loc1.png"])
+            reference_filenames: List tên file reference (vd: ["nv1.png", "loc1.png"]) - dùng cho gallery search fallback
+            reference_prompts: Dict {filename: prompt} - dùng cho gallery search fallback
+            reference_paths: List đường dẫn tuyệt đối đến ảnh tham chiếu - dùng cho drag-drop
             save_dir: Thư mục lưu ảnh
             filename: Tên file output (không có extension)
             timeout: Timeout đợi kết quả (giây)
@@ -5610,12 +5649,18 @@ class DrissionFlowAPI:
         current_model_idx = getattr(self, '_current_model_index', 0)
         self.setup_image_settings(current_model_idx)
 
-        # 2. Chọn reference images từ gallery (search bằng tên hoặc prompt)
-        #    Phương án 1: Search filename trong gallery
-        #    Phương án 2: Search bằng prompt gốc
-        if reference_filenames:
+        # 2. Drop reference images vào prompt (drag-drop "Thêm thành phần")
+        #    v1.0.424: Ưu tiên drag-drop (chắc chắn 100%), fallback gallery search
+        if reference_paths:
+            self.log(f"[CHROME] Drop {len(reference_paths)} ảnh tham chiếu vào prompt...")
+            for ref_path in reference_paths:
+                ok = self._drop_reference_to_prompt(ref_path)
+                if not ok:
+                    self.log(f"[CHROME] [x] Drop thất bại: {os.path.basename(ref_path)}", "WARN")
+        elif reference_filenames:
+            # Fallback: gallery search (nếu không có paths)
             ref_prompt_map = reference_prompts or {}
-            self.log(f"[CHROME] Chọn {len(reference_filenames)} ảnh tham chiếu...")
+            self.log(f"[CHROME] Chọn {len(reference_filenames)} ảnh tham chiếu (gallery)...")
             for ref_name in reference_filenames:
                 ref_prompt = ref_prompt_map.get(ref_name, None)
                 ok = self._select_reference_from_gallery(ref_name, search_prompt=ref_prompt)

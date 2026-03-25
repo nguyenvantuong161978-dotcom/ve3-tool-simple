@@ -2713,6 +2713,14 @@ class SmartEngine:
                 ref_filenames = [f if '.' in f else f + '.png' for f in ref_filenames]
                 ref_filenames = [Path(f).name for f in ref_filenames]
 
+                # v1.0.424: Build đường dẫn thực đến ảnh tham chiếu (cho drag-drop)
+                ref_paths = []
+                if ref_filenames:
+                    for rf in ref_filenames:
+                        ref_path = nv_dir / rf
+                        if ref_path.exists():
+                            ref_paths.append(str(ref_path))
+
                 self.log(f"  [{i+1}/{len(scene_prompts)}] {pid}: refs={ref_filenames}, prompt={prompt[:50]}...")
 
                 save_dir_scene = str(Path(output_path).parent)
@@ -2721,11 +2729,12 @@ class SmartEngine:
                 success, images, error = api.generate_image_chrome(
                     prompt=prompt,
                     reference_filenames=ref_filenames if ref_filenames else None,
-                    reference_prompts=ref_prompt_map if ref_filenames else None,  # v1.0.417: prompt cho gallery search
+                    reference_prompts=ref_prompt_map if ref_filenames else None,
+                    reference_paths=ref_paths if ref_paths else None,  # v1.0.424: drag-drop paths
                     save_dir=save_dir_scene,
                     filename=fname,
                     timeout=120,
-                    skip_restart=True  # v1.0.413: KHÔNG restart - giữ gallery refs
+                    skip_restart=True
                 )
 
                 if success and images:
