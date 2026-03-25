@@ -1,9 +1,9 @@
-1.0.421
+1.0.422
 2026-03-25 (VN)
-Change: Model selection moi lan gui prompt - khong chi 1 lan
+Change: Xoa local project khi da co o VISUAL - khong bi chet cung
 
 Thay doi:
-- v1.0.421: FIX MODEL SELECTION
-  * Chon model truoc MOI prompt, khong chi lan dau
-  * Bo flag _chrome_mode_settings_done
-  * Dam bao model luon duoc set dung
+- v1.0.422: XOA LOCAL KHI DA CO O VISUAL
+  * Project da co o master VISUAL → xoa local de lam ma khac
+  * Project co _COPIED_TO_VISUAL marker → xoa local de lam ma khac
+  * Ap dung cho ca chrome1 va chrome2

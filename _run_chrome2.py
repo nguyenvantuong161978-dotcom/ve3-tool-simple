@@ -909,13 +909,21 @@ def scan_incomplete_local_projects() -> list:
         if not matches_channel(code):
             continue
 
-        # v1.0.276: Skip neu co marker _COPIED_TO_VISUAL (xoa local that bai nhung da copy xong)
+        # Đã copy xong → xóa local để làm mã khác
         if (item / "_COPIED_TO_VISUAL").exists():
-            log(f"    [{code}] SKIP: _COPIED_TO_VISUAL marker exists")
+            log(f"    [{code}] _COPIED_TO_VISUAL → xóa local để làm mã khác")
+            try:
+                shutil.rmtree(item, ignore_errors=True)
+            except:
+                pass
             continue
 
         if is_project_complete_on_master(code):
-            log(f"    [{code}] SKIP: already complete on master VISUAL")
+            log(f"    [{code}] Đã có ở VISUAL → xóa local để làm mã khác")
+            try:
+                shutil.rmtree(item, ignore_errors=True)
+            except:
+                pass
             continue
 
         if is_local_pic_complete(item, code):
@@ -1013,7 +1021,13 @@ def scan_master_projects() -> list:
                     pass
 
             if is_project_complete_on_master(code):
-                log(f"    [{code}] SKIP: already complete on master VISUAL")
+                log(f"    [{code}] Đã có ở VISUAL → xóa local để làm mã khác")
+                local_del = LOCAL_PROJECTS / code
+                if local_del.exists():
+                    try:
+                        shutil.rmtree(local_del, ignore_errors=True)
+                    except:
+                        pass
                 continue
 
             local_dir = LOCAL_PROJECTS / code
