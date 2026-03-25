@@ -5459,6 +5459,119 @@ class DrissionFlowAPI:
 
         return False
 
+    def _drop_reference_to_prompt(self, filepath: str) -> bool:
+        """
+        v1.0.424: Drop ảnh tham chiếu trực tiếp vào ô "Thêm thành phần" trong khung chat.
+        Kéo vào đúng ô → ảnh trở thành tham chiếu cho prompt đó (chắc chắn 100%).
+
+        Dùng CDP Input.dispatchDragEvent để simulate drag-drop file.
+
+        Args:
+            filepath: Đường dẫn tuyệt đối đến ảnh tham chiếu
+
+        Returns:
+            True nếu drop thành công
+        """
+        if not os.path.exists(filepath):
+            self.log(f"[DROP] File không tồn tại: {filepath}", "WARN")
+            return False
+
+        fname = os.path.basename(filepath)
+        file_path_abs = os.path.abspath(filepath).replace('\\', '/')
+
+        # Tìm tọa độ prompt area (contenteditable)
+        coords = self.driver.run_js("""
+            var el = document.querySelector('[contenteditable="true"]');
+            if (!el) return null;
+            var rect = el.getBoundingClientRect();
+            return JSON.stringify({
+                x: Math.round(rect.x + rect.width / 2),
+                y: Math.round(rect.y + rect.height / 2)
+            });
+        """)
+
+        if not coords:
+            self.log("[DROP] Không tìm thấy prompt area", "WARN")
+            return False
+
+        pos = json.loads(coords)
+
+        # Drag data cho CDP
+        drag_data = {
+            'items': [{'mimeType': 'image/png', 'data': ''}],
+            'files': [file_path_abs],
+            'dragOperationsMask': 19  # copy | move | link
+        }
+
+        try:
+            # Step 1: dragEnter vào prompt area → trigger "Thêm thành phần" zone
+            self.driver.run_cdp('Input.dispatchDragEvent',
+                type='dragEnter',
+                x=pos['x'], y=pos['y'],
+                data=drag_data
+            )
+            time.sleep(1)
+
+            # Step 2: Tìm ô "Thêm thành phần" đã xuất hiện
+            zone = self.driver.run_js("""
+                var all = document.querySelectorAll('*');
+                for (var i = 0; i < all.length; i++) {
+                    var text = (all[i].textContent || '').trim();
+                    if ((text.indexOf('Thêm thành phần') > -1 || text.indexOf('Add component') > -1 || text.indexOf('Add element') > -1)
+                        && text.length < 30) {
+                        var rect = all[i].getBoundingClientRect();
+                        if (rect.width > 20 && rect.height > 20) {
+                            return JSON.stringify({
+                                x: Math.round(rect.x + rect.width / 2),
+                                y: Math.round(rect.y + rect.height / 2),
+                                text: text
+                            });
+                        }
+                    }
+                }
+                return null;
+            """)
+
+            if zone:
+                drop_pos = json.loads(zone)
+                self.log(f"[DROP] Found '{drop_pos.get('text', '')}' zone")
+            else:
+                # Fallback: drop vào giữa prompt area
+                drop_pos = pos
+                self.log(f"[DROP] Zone không thấy, drop vào prompt area")
+
+            # Step 3: dragOver trên ô "Thêm thành phần"
+            self.driver.run_cdp('Input.dispatchDragEvent',
+                type='dragOver',
+                x=drop_pos['x'], y=drop_pos['y'],
+                data=drag_data
+            )
+            time.sleep(0.5)
+
+            # Step 4: drop
+            self.driver.run_cdp('Input.dispatchDragEvent',
+                type='drop',
+                x=drop_pos['x'], y=drop_pos['y'],
+                data=drag_data
+            )
+            time.sleep(3)  # Đợi ảnh load
+
+            self.log(f"[DROP] [v] Dropped {fname}")
+            return True
+
+        except Exception as e:
+            self.log(f"[DROP] [x] Error drop {fname}: {e}", "WARN")
+            # Fallback: cancel drag nếu lỗi
+            try:
+                self.driver.run_cdp('Input.dispatchDragEvent',
+                    type='dragCancel',
+                    x=pos['x'], y=pos['y'],
+                    data=drag_data
+                )
+            except:
+                pass
+            return False
+
     def generate_image_chrome(
         self,
         prompt: str,
