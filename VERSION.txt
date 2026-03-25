@@ -1,12 +1,11 @@
-1.0.424
+1.0.425
 2026-03-25 (VN)
-Change: Drag-drop reference images - thay gallery search bang CDP drag-drop
+Change: Drop tat ca refs cung luc + detect loading chinh xac
 
 Thay doi:
-- v1.0.424: DRAG-DROP REFERENCE IMAGES
-  * Them _drop_reference_to_prompt() - CDP drag-drop vao zone "Them thanh phan"
-  * Flow: dragEnter → tim zone → dragOver → drop → handle "Toi dong y" dialog
-  * Doi anh tai xong (dem img truoc/sau, max 15s)
-  * generate_image_chrome() them reference_paths param (uu tien drag-drop)
-  * smart_engine.py: build ref_paths tu nv_dir cho drag-drop
-  * 100% tin cay - khong phu thuoc gallery search
+- v1.0.425: DROP ALL REFS + LOADING DETECTION
+  * Drop TAT CA anh tham chieu cung luc (khong tung anh mot)
+  * Detect loading: "dang tai cac thanh phan" xuat hien roi bien mat = xong
+  * Cho 5s sau khi loading bien mat cho an toan
+  * Click "Toi dong y" dialog lien tuc (moi giay) khong chi 1 lan
+  * Bo cach dem img cu (khong chinh xac)

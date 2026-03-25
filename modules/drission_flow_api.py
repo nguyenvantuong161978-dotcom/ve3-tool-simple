@@ -5459,30 +5459,37 @@ class DrissionFlowAPI:
 
         return False
 
-    def _drop_reference_to_prompt(self, filepath: str) -> bool:
+    def _drop_references_to_prompt(self, filepaths: list) -> bool:
         """
-        v1.0.424: Drop ảnh tham chiếu trực tiếp vào ô "Thêm thành phần" trong khung chat.
-        CDP drag-drop → zone xuất hiện → drop vào zone → ảnh thành tham chiếu cho prompt.
+        v1.0.425: Drop TẤT CẢ ảnh tham chiếu cùng lúc vào zone "Thêm thành phần".
+        CDP drag-drop với nhiều files trong 1 lần drop.
 
         Flow:
-        1. Đếm ảnh TRƯỚC
-        2. dragEnter prompt area → zone "Thêm thành phần" xuất hiện
-        3. dragOver + drop vào zone
-        4. Handle dialog "Tôi đồng ý" (nếu có)
-        5. Đợi ảnh tải xong (đếm ảnh SAU > TRƯỚC)
+        1. dragEnter prompt area → zone "Thêm thành phần" xuất hiện
+        2. dragOver + drop (tất cả files) vào zone
+        3. Handle dialog "Tôi đồng ý" (nếu có)
+        4. Đợi tải xong: text "đang tải các thành phần" xuất hiện rồi biến mất = xong
 
         Args:
-            filepath: Đường dẫn tuyệt đối đến ảnh tham chiếu
+            filepaths: List đường dẫn tuyệt đối đến các ảnh tham chiếu
 
         Returns:
             True nếu drop thành công
         """
-        if not os.path.exists(filepath):
-            self.log(f"[DROP] File không tồn tại: {filepath}", "WARN")
+        # Filter files tồn tại
+        valid_files = []
+        for fp in filepaths:
+            if os.path.exists(fp):
+                valid_files.append(os.path.abspath(fp).replace('\\', '/'))
+            else:
+                self.log(f"[DROP] File không tồn tại: {fp}", "WARN")
+
+        if not valid_files:
+            self.log("[DROP] Không có file nào hợp lệ", "WARN")
             return False
 
-        fname = os.path.basename(filepath)
-        file_path_abs = os.path.abspath(filepath).replace('\\', '/')
+        fnames = [os.path.basename(f) for f in valid_files]
+        self.log(f"[DROP] Drop {len(valid_files)} ảnh: {', '.join(fnames)}")
 
         # Tìm tọa độ prompt area
         coords = self.driver.run_js("""
@@ -5501,22 +5508,12 @@ class DrissionFlowAPI:
 
         pos = json.loads(coords)
 
+        # Tạo drag_data với TẤT CẢ files
         drag_data = {
-            'items': [{'mimeType': 'image/png', 'data': ''}],
-            'files': [file_path_abs],
+            'items': [{'mimeType': 'image/png', 'data': ''} for _ in valid_files],
+            'files': valid_files,
             'dragOperationsMask': 19
         }
-
-        # Đếm ảnh TRƯỚC
-        before_imgs = self.driver.run_js("""
-            var ce = document.querySelector('[contenteditable="true"]');
-            if (!ce) return 0;
-            var container = ce;
-            for (var i = 0; i < 5; i++) {
-                if (container.parentElement) container = container.parentElement;
-            }
-            return container.querySelectorAll('img').length;
-        """) or 0
 
         try:
             # Step 1: dragEnter → trigger zone "Thêm thành phần"
@@ -5550,7 +5547,7 @@ class DrissionFlowAPI:
                 drop_pos = pos
                 self.log(f"[DROP] Zone không thấy, thử drop vào prompt area")
 
-            # Step 3: dragOver + drop
+            # Step 3: dragOver + drop (TẤT CẢ files cùng lúc)
             self.driver.run_cdp('Input.dispatchDragEvent',
                 type='dragOver', x=drop_pos['x'], y=drop_pos['y'], data=drag_data
             )
@@ -5558,48 +5555,75 @@ class DrissionFlowAPI:
             self.driver.run_cdp('Input.dispatchDragEvent',
                 type='drop', x=drop_pos['x'], y=drop_pos['y'], data=drag_data
             )
-            time.sleep(2)
+            time.sleep(1)
 
-            # Step 4: Handle dialog "Tôi đồng ý" (một số TK cần accept lần đầu)
-            self.driver.run_js("""
-                var dialog = document.querySelector('[role="dialog"]');
-                if (dialog) {
-                    var btns = dialog.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
-                        var text = btns[i].textContent.trim();
-                        if (text.indexOf('đồng ý') > -1 || text.indexOf('Agree') > -1 ||
-                            text.indexOf('Accept') > -1) {
-                            btns[i].click();
-                            break;
+            # Step 4 + 5: Đợi tải xong + handle dialog "Tôi đồng ý" nếu xuất hiện
+            # Nút gửi prompt hiển thị "đang tải các thành phần" khi ảnh đang upload
+            # Khi text đó biến mất = ảnh đã tải xong
+            # Dialog "Tôi đồng ý" có thể xuất hiện bất kỳ lúc nào trong quá trình
+            max_wait = 30 + (len(valid_files) * 5)
+            saw_loading = False
+
+            for wait in range(max_wait):
+                # Check + click dialog "Tôi đồng ý" mỗi vòng lặp
+                self.driver.run_js("""
+                    var dialog = document.querySelector('[role="dialog"]');
+                    if (dialog) {
+                        var btns = dialog.querySelectorAll('button');
+                        for (var i = 0; i < btns.length; i++) {
+                            var text = btns[i].textContent.trim();
+                            if (text.indexOf('đồng ý') > -1 || text.indexOf('Agree') > -1 ||
+                                text.indexOf('Accept') > -1) {
+                                btns[i].click();
+                                break;
+                            }
                         }
                     }
-                }
-            """)
-            time.sleep(2)
+                """)
 
-            # Step 5: Đợi ảnh tải xong (max 15s)
-            for wait in range(15):
-                after_imgs = self.driver.run_js("""
-                    var ce = document.querySelector('[contenteditable="true"]');
-                    if (!ce) return 0;
-                    var container = ce;
-                    for (var i = 0; i < 5; i++) {
-                        if (container.parentElement) container = container.parentElement;
+                # Check loading state
+                is_loading = self.driver.run_js("""
+                    var all = document.querySelectorAll('*');
+                    for (var i = 0; i < all.length; i++) {
+                        var text = (all[i].textContent || '').trim();
+                        if (text.indexOf('đang tải các thành phần') > -1 ||
+                            text.indexOf('loading component') > -1 ||
+                            text.indexOf('Loading component') > -1) {
+                            var rect = all[i].getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {
+                                return true;
+                            }
+                        }
                     }
-                    return container.querySelectorAll('img').length;
-                """) or 0
+                    return false;
+                """)
 
-                if after_imgs > before_imgs:
-                    self.log(f"[DROP] [v] {fname} - ảnh đã tải ({after_imgs - before_imgs} mới, {wait}s)")
+                if is_loading:
+                    if not saw_loading:
+                        self.log(f"[DROP] Đang tải ảnh...")
+                        saw_loading = True
+                elif saw_loading:
+                    # Loading biến mất → chờ thêm 5s cho an toàn
+                    self.log(f"[DROP] Loading biến mất, chờ 5s...")
+                    time.sleep(5)
+                    self.log(f"[DROP] [v] Ảnh đã tải xong! ({wait + 5}s)")
                     return True
+                elif wait >= 5 and not saw_loading:
+                    # 5s mà không thấy loading → tải quá nhanh, chờ thêm 5s
+                    self.log(f"[DROP] Không thấy loading, chờ 5s cho an toàn...")
+                    time.sleep(5)
+                    self.log(f"[DROP] [v] Xong ({wait + 5}s)")
+                    return True
+
                 time.sleep(1)
 
-            # Timeout nhưng drop có thể đã thành công
-            self.log(f"[DROP] [?] {fname} - không thấy ảnh mới sau 15s", "WARN")
-            return False
+            # Timeout - vẫn return True vì drop đã thực hiện
+            self.log(f"[DROP] [?] Timeout {max_wait}s", "WARN")
+            time.sleep(5)
+            return True
 
         except Exception as e:
-            self.log(f"[DROP] [x] Error {fname}: {e}", "WARN")
+            self.log(f"[DROP] [x] Error: {e}", "WARN")
             try:
                 self.driver.run_cdp('Input.dispatchDragEvent',
                     type='dragCancel', x=pos['x'], y=pos['y'], data=drag_data
@@ -5650,22 +5674,11 @@ class DrissionFlowAPI:
         self.setup_image_settings(current_model_idx)
 
         # 2. Drop reference images vào prompt (drag-drop "Thêm thành phần")
-        #    v1.0.424: Ưu tiên drag-drop (chắc chắn 100%), fallback gallery search
+        #    v1.0.425: Drop TẤT CẢ files cùng lúc, đợi đủ ảnh tải xong
         if reference_paths:
-            self.log(f"[CHROME] Drop {len(reference_paths)} ảnh tham chiếu vào prompt...")
-            for ref_path in reference_paths:
-                ok = self._drop_reference_to_prompt(ref_path)
-                if not ok:
-                    self.log(f"[CHROME] [x] Drop thất bại: {os.path.basename(ref_path)}", "WARN")
-        elif reference_filenames:
-            # Fallback: gallery search (nếu không có paths)
-            ref_prompt_map = reference_prompts or {}
-            self.log(f"[CHROME] Chọn {len(reference_filenames)} ảnh tham chiếu (gallery)...")
-            for ref_name in reference_filenames:
-                ref_prompt = ref_prompt_map.get(ref_name, None)
-                ok = self._select_reference_from_gallery(ref_name, search_prompt=ref_prompt)
-                if not ok:
-                    self.log(f"[CHROME] [x] Không chọn được: {ref_name}", "WARN")
+            ok = self._drop_references_to_prompt(reference_paths)
+            if not ok:
+                self.log(f"[CHROME] [x] Drop tham chiếu thất bại", "WARN")
 
         # 3. Inject interceptor (giống API mode) để bắt response
         # Reset state trước khi gửi prompt
