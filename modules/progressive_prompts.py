@@ -2348,6 +2348,10 @@ INSTRUCTIONS:
 4. Each scene = one cinematic shot that supports the narration
 5. Use EXACT character/location IDs from the lists above
 6. scene_id: just use 1, 2, 3... (will be renumbered later)
+7. IMPORTANT - REFERENCES ACCURACY:
+   - characters_used: ONLY characters who ACTUALLY APPEAR in that specific scene's narration/action. Do NOT add characters just because they exist in the story. If a scene shows only scenery or has no character, leave characters_used EMPTY ""
+   - location_used: ONLY ONE location per scene (the main setting). Do NOT list multiple locations. If unclear, use the most relevant one
+   - Analyze the srt_text carefully to determine which characters are speaking or being described
 
 Return JSON only:
 {{
@@ -3049,10 +3053,13 @@ VISUAL CONTEXT (use as prefix):
 {context_lock}
 
 IMPORTANT - REFERENCE FILE ANNOTATIONS:
-- Each character MUST have their reference file in parentheses: "a man (nv_john.png)"
-- Location MUST have reference file: "in the room (loc_office.png)"
+- ONLY include references for characters/locations that ACTUALLY APPEAR in the scene
+- Each character who appears MUST have their reference file in parentheses: "a man (nv1.png)"
+- Location where scene takes place MUST have reference file: "in the room (loc1.png)"
 - Format: "Description of person (nv_xxx.png) doing action in location (loc_xxx.png)"
-- Character files always start with "nv_", location files always start with "loc_"
+- Character files always start with "nv_" or "nv", location files always start with "loc_" or "loc"
+- Do NOT add references for characters who are NOT in the scene
+- Use ONLY ONE location per scene (the main setting)
 
 SCENES TO PROCESS ({len(batch)} scenes - create EXACTLY {len(batch)} prompts):
 {scenes_text}
@@ -3211,30 +3218,24 @@ Return JSON only with EXACTLY {len(batch)} scenes:
 
                 img_prompt = scene_data.get("img_prompt", "")
 
-                # Post-process: ensure reference annotations
+                # v1.0.423: Không ép thêm refs từ Step 5 nữa
+                # Để API Step 7 tự quyết định refs dựa trên nội dung scene
+                # Chỉ lấy từ original làm fallback nếu prompt không có refs
                 char_ids = [cid.strip() for cid in (original.get("characters_used") or "").split(",") if cid.strip()]
                 loc_id = original.get("location_used") or ""
 
-                for cid in char_ids:
-                    img_file = char_image_lookup.get(cid, f"{cid}.png")
-                    if img_file and f"({img_file})" not in img_prompt:
-                        img_prompt = img_prompt.rstrip(". ") + f" ({img_file})."
-
-                if loc_id:
-                    loc_img = loc_image_lookup.get(loc_id, f"{loc_id}.png")
-                    if loc_img and f"({loc_img})" not in img_prompt:
-                        img_prompt = img_prompt.rstrip(". ") + f" (reference: {loc_img})."
-
                 # Parse prompt to extract ACTUAL character/location IDs used
-                char_pattern = r'\(([nN][vV]_?\d+)\.png\)'
+                # v1.0.423: Regex match cả ID có chữ (nvc, nvp1, loc_office...)
+                char_pattern = r'\(([nN][vV][_a-zA-Z0-9]+)\.png\)'
                 prompt_char_matches = re.findall(char_pattern, img_prompt)
                 if prompt_char_matches:
-                    char_ids = list(set(prompt_char_matches))
+                    # Lọc bỏ những match có "loc" (tránh nhầm)
+                    char_ids = list(set(m for m in prompt_char_matches if not m.lower().startswith('loc')))
 
-                loc_pattern = r'\(([lL][oO][cC]_?\d+)\.png\)'
+                loc_pattern = r'\(([lL][oO][cC][_a-zA-Z0-9]+)\.png\)'
                 prompt_loc_matches = re.findall(loc_pattern, img_prompt)
                 if prompt_loc_matches:
-                    loc_id = prompt_loc_matches[0]
+                    loc_id = prompt_loc_matches[0]  # Chỉ 1 location
 
                 ref_files = [char_image_lookup.get(cid, f"{cid}.png") for cid in char_ids]
                 if loc_id:
