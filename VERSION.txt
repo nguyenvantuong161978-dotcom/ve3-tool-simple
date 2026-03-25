@@ -1,15 +1,18 @@
-1.0.428
+1.0.429
 2026-03-26 (VN)
-Change: Fix claim bi cuop - khong xoa claim khi doc file NFS loi
+Change: Xoa logic expired - co CLAIMED la KHONG lay, tuyet doi an toan
 
 Thay doi:
+- v1.0.429: XOA LOGIC CLAIM EXPIRED
+  * Khong tu dong xoa _CLAIMED bat ke thoi gian
+  * Co _CLAIMED = skip project, KHONG cuop
+  * Xoa cleanup_stale_claims() - khong can nua
+  * Fix ca master_control.py
 - v1.0.428: FIX CLAIM BI CUOP
   * _is_claim_expired() tra ve True khi doc file loi → VM khac xoa claim hop le
   * Fix: return False khi exception (giu nguyen claim, khong xoa)
-  * Day la nguyen nhan VM B cuop project cua VM A sau vai phut
 - v1.0.427: CLAIM TIMEOUT 12H
   * Tang CLAIM_TIMEOUT_HOURS tu 8 len 12 gio
-  * Tranh VM khac ghi de _CLAIMED khi project chay lau
 - v1.0.426: 429 RETRY + MODEL SWITCH
   * 429 quota: nghi 60s + doi model (Pro → Banana 2 → Imagen 4) roi retry
   * Max 3 lan retry moi scene khi 429

@@ -510,11 +510,8 @@ class TaskQueue:
                 if self._is_in_visual(code):
                     continue
                 if claimed_file.exists():
-                    if self._is_claim_expired(claimed_file):
-                        self.log(f"[QUEUE] {code}: claim expired, giải phóng", "WARN")
-                        self._remove_claimed(claimed_file)
-                    else:
-                        continue
+                    # v1.0.429: Có _CLAIMED = skip, KHÔNG xóa bất kể thời gian
+                    continue
                 # v1.0.387: Skip nếu có VM khác đang claim (lock file _CLAIMING_*)
                 # Cleanup stale _CLAIMING_ files (>5 phút = VM crash mid-claim)
                 has_claiming = False
@@ -577,19 +574,15 @@ class TaskQueue:
             return False
 
         # Bước 1: Check _CLAIMED hiện có
+        # v1.0.429: Có _CLAIMED = KHÔNG claim, bất kể thời gian
         if claimed_file.exists():
-            if self._is_claim_expired(claimed_file):
-                self.log(f"[QUEUE] {code}: claim cũ đã hết hạn → xóa", "WARN")
-                self._remove_claimed(claimed_file)
-            else:
-                # Đã có claim hợp lệ - check có phải của mình không
-                try:
-                    first_line = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
-                    if first_line == self.vm_id:
-                        return True  # Đã claim rồi
-                except Exception:
-                    pass
-                return False
+            try:
+                first_line = claimed_file.read_text(encoding='utf-8').split('\n')[0].strip()
+                if first_line == self.vm_id:
+                    return True  # Đã claim rồi
+            except Exception:
+                pass
+            return False
 
         try:
             account_str = self._get_account_from_sheet(code)
@@ -717,22 +710,8 @@ class TaskQueue:
         return sorted(claims)
 
     def cleanup_stale_claims(self) -> List[str]:
-        """Dọn dẹp claims quá hạn (VM chết)."""
-        released = []
-        if not self.master_projects.exists():
-            return released
-        try:
-            for item in self.master_projects.iterdir():
-                if not item.is_dir():
-                    continue
-                claimed_file = item / CLAIMED_FILE
-                if claimed_file.exists() and self._is_claim_expired(claimed_file):
-                    self.log(f"[QUEUE] Timeout: {item.name} → giải phóng", "WARN")
-                    self._remove_claimed(claimed_file)
-                    released.append(item.name)
-        except Exception as e:
-            self.log(f"[QUEUE] Lỗi cleanup: {e}", "ERROR")
-        return released
+        """v1.0.429: Không tự động xóa claim nữa - an toàn tuyệt đối."""
+        return []
 
     def get_status(self) -> dict:
         """Lấy trạng thái tổng quan của queue."""
@@ -752,8 +731,6 @@ class TaskQueue:
                 claimed_file = item / CLAIMED_FILE
                 if not claimed_file.exists():
                     status["available"] += 1
-                elif self._is_claim_expired(claimed_file):
-                    status["expired"] += 1
                 else:
                     vm_id = self._read_claim_vm_id(claimed_file)
                     if vm_id:

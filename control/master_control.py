@@ -83,14 +83,8 @@ BORDER_WARN = "#5a3a1d"
 # ============================================================================
 
 def _is_claim_expired(claimed_file: Path) -> bool:
-    try:
-        lines = claimed_file.read_text(encoding='utf-8').strip().split('\n')
-        if len(lines) < 2:
-            return True
-        ct = datetime.strptime(lines[1].strip(), "%Y-%m-%d %H:%M:%S")
-        return (datetime.now() - ct).total_seconds() / 3600 > CLAIM_TIMEOUT_HOURS
-    except Exception:
-        return True
+    """v1.0.429: Luôn trả về False - không tự động xóa claim."""
+    return False
 
 
 def _read_claim_vm_id(claimed_file: Path):
