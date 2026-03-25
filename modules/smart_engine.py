@@ -2711,16 +2711,38 @@ class SmartEngine:
                 save_dir_scene = str(Path(output_path).parent)
                 fname = Path(output_path).stem
 
-                success, images, error = api.generate_image_chrome(
-                    prompt=prompt,
-                    reference_filenames=ref_filenames if ref_filenames else None,
-                    reference_prompts=ref_prompt_map if ref_filenames else None,
-                    reference_paths=ref_paths if ref_paths else None,  # v1.0.424: drag-drop paths
-                    save_dir=save_dir_scene,
-                    filename=fname,
-                    timeout=120,
-                    skip_restart=True
-                )
+                # v1.0.426: Retry loop cho 429 - nghỉ 60s + đổi model
+                max_retries_429 = 3
+                for retry_429 in range(max_retries_429):
+                    success, images, error = api.generate_image_chrome(
+                        prompt=prompt,
+                        reference_filenames=ref_filenames if ref_filenames else None,
+                        reference_prompts=ref_prompt_map if ref_filenames else None,
+                        reference_paths=ref_paths if ref_paths else None,
+                        save_dir=save_dir_scene,
+                        filename=fname,
+                        timeout=120,
+                        skip_restart=True
+                    )
+
+                    if success and images:
+                        break  # Thành công → thoát retry loop
+
+                    # Check 429 → nghỉ 60s + đổi model rồi retry
+                    if error and ('429' in str(error) or 'quota' in str(error).lower()):
+                        if retry_429 < max_retries_429 - 1:
+                            # Đổi model
+                            current_model = getattr(api, '_current_model_index', 0)
+                            next_model = (current_model + 1) % 3
+                            api._current_model_index = next_model
+                            model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+                            self.log(f"  [429] Quota exhausted {model_names[current_model]} → "
+                                     f"đổi sang {model_names[next_model]}, nghỉ 60s... "
+                                     f"(retry {retry_429+1}/{max_retries_429})")
+                            import time
+                            time.sleep(60)
+                            continue
+                    break  # Lỗi khác (không phải 429) → không retry
 
                 if success and images:
                     self.log(f"  [v] {pid} OK")
@@ -2740,14 +2762,8 @@ class SmartEngine:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
                     results["failed"] += 1
 
-                    # v1.0.426: 429 handling - quota exhausted → nghỉ 60s
-                    if error and ('429' in str(error) or 'quota' in str(error).lower()):
-                        self.log(f"  [429] Quota exhausted - nghỉ 60s...")
-                        import time
-                        time.sleep(60)
-
                     # v1.0.411: 403 handling - cleanup + restart Chrome
-                    elif error and '403' in str(error):
+                    if error and '403' in str(error):
                         self.log(f"  [403] Cleanup + Restart Chrome...")
                         try:
                             api.cleanup_browser_data()
