@@ -3907,23 +3907,48 @@ class BrowserFlowGenerator:
                         pass
 
                     # Update Excel if available - SAVE MEDIA_ID for SCENE images
+                    # v1.0.441: Retry 3 lần đảm bảo ghi được Excel
                     if workbook and not is_reference_image:
-                        try:
-                            # Dùng update_scene với tất cả fields cần update
-                            workbook.update_scene(
-                                int(pid),
-                                img_path=str(images[0].local_path) if images[0].local_path else None,
-                                status_img="done",
-                                media_id=images[0].media_name if images[0].media_name else None
-                            )
-                            workbook.safe_save()
-                            if images[0].media_name:
-                                self._log(f"   [EXCEL] Saved scene {pid}: media_id={images[0].media_name[:40]}...")
-                            elif pid.isdigit():
-                                # Scene image but no media_name - this will cause I2V to skip
-                                self._log(f"   [WARN] Scene {pid}: API không trả về media_name (I2V sẽ không hoạt động)", "warn")
-                        except Exception as e:
-                            self._log(f"   [EXCEL] Cannot update scene {pid}: {e}", "warn")
+                        _scene_saved = False
+                        for _sa in range(3):
+                            try:
+                                workbook.update_scene(
+                                    int(pid),
+                                    img_path=str(images[0].local_path) if images[0].local_path else None,
+                                    status_img="done",
+                                    media_id=images[0].media_name if images[0].media_name else None
+                                )
+                                if workbook.safe_save():
+                                    _scene_saved = True
+                                    if images[0].media_name:
+                                        self._log(f"   [EXCEL] Saved scene {pid}: media_id={images[0].media_name[:40]}...")
+                                    elif pid.isdigit():
+                                        self._log(f"   [WARN] Scene {pid}: API không trả về media_name (I2V sẽ không hoạt động)", "warn")
+                                    break
+                            except Exception as e:
+                                if _sa < 2:
+                                    self._log(f"   [EXCEL] Save scene {pid} retry {_sa+1}/3: {e}", "warn")
+                                    time.sleep(3)
+                                    try:
+                                        workbook = PromptWorkbook(excel_path)
+                                        workbook.load_or_create()
+                                    except:
+                                        pass
+                                else:
+                                    self._log(f"   [EXCEL] FAILED save scene {pid} after 3 attempts: {e}", "error")
+                        # v1.0.441: Fallback - lưu pending write nếu save thất bại
+                        if not _scene_saved:
+                            try:
+                                workbook._save_pending_write(
+                                    'scene',
+                                    scene_id=pid,
+                                    img_path=str(images[0].local_path) if images[0].local_path else None,
+                                    status_img="done",
+                                    media_id=images[0].media_name if images[0].media_name else None
+                                )
+                                self._log(f"   [PENDING] Saved pending write for scene {pid}")
+                            except Exception as pe:
+                                self._log(f"   [PENDING] Cannot save pending: {pe}", "error")
 
                     # === SAVE MEDIA_ID to Excel for nv/loc images ===
                     # Cả nv* và loc* đều nằm trong sheet "characters"
@@ -3955,6 +3980,18 @@ class BrowserFlowGenerator:
                                             pass
                                     else:
                                         self._log(f"   [EXCEL] Cannot save media_id sau 3 lần: {e}", "warn")
+                            # v1.0.441: Pending write fallback cho character/location
+                            if not media_id_saved:
+                                try:
+                                    workbook._save_pending_write(
+                                        'character',
+                                        char_id=pid,
+                                        media_id=images[0].media_name,
+                                        status="done"
+                                    )
+                                    self._log(f"   [PENDING] Saved pending write for {pid}")
+                                except:
+                                    pass
 
                         # LUÔN save vào cache (backup) - không chỉ khi Excel fail
                         try:
@@ -4119,15 +4156,25 @@ class BrowserFlowGenerator:
                                     self._log(f"   [v] Retry thành công! Saved {len(images2)} image(s)")
                                     self.stats["success"] += 1
                                     self.stats["failed"] -= 1  # Undo the fail count
-                                    # Save media_id for scene images
+                                    # Save media_id for scene images (v1.0.441: retry)
                                     if images2[0].media_name and not is_reference_image:
-                                        try:
-                                            if workbook:
-                                                workbook.update_scene(int(pid), media_id=images2[0].media_name)
-                                                workbook.safe_save()
-                                                self._log(f"   [EXCEL] Saved media_id for scene {pid}")
-                                        except:
-                                            pass
+                                        for _sa in range(3):
+                                            try:
+                                                if workbook:
+                                                    workbook.update_scene(int(pid), media_id=images2[0].media_name)
+                                                    if workbook.safe_save():
+                                                        self._log(f"   [EXCEL] Saved media_id for scene {pid}")
+                                                        break
+                                                else:
+                                                    break
+                                            except Exception as _se:
+                                                if _sa < 2:
+                                                    time.sleep(2)
+                                                    try:
+                                                        workbook = PromptWorkbook(excel_path)
+                                                        workbook.load_or_create()
+                                                    except:
+                                                        pass
                                     # Save media_id for nv/loc images (all in characters sheet)
                                     if images2[0].media_name and is_reference_image:
                                         media_id_saved = False
@@ -4566,9 +4613,24 @@ class BrowserFlowGenerator:
                         elif status_img in ['skip', 'error_403', 'error']:
                             pass  # Bỏ qua, không cần chờ
                         else:
-                            # pending hoặc trống → chưa xong
-                            all_images_done = False
-                            pending_scenes.append(scene_id)
+                            # v1.0.441: RECONCILIATION - check file ảnh thực trên disk
+                            # Excel có thể bị lock nên status chưa ghi, nhưng ảnh đã có
+                            img_path = Path(excel_path).parent / "img" / f"scene_{scene_id.zfill(3)}.png"
+                            img_path2 = Path(excel_path).parent / "img" / f"{scene_id}.png"
+                            if img_path.exists() or img_path2.exists():
+                                # Ảnh đã có trên disk, chỉ Excel chưa ghi → coi như done
+                                # Thử ghi lại vào Excel
+                                try:
+                                    actual_path = img_path if img_path.exists() else img_path2
+                                    workbook.update_scene(int(scene_id), img_path=f"img/{actual_path.name}", status_img="done")
+                                    workbook.safe_save()
+                                    self._log(f"   [RECONCILE] Scene {scene_id}: ảnh có trên disk, đã sync Excel")
+                                except:
+                                    pass  # Không ghi được cũng OK, vẫn coi là done
+                            else:
+                                # Thật sự chưa có ảnh
+                                all_images_done = False
+                                pending_scenes.append(scene_id)
             except Exception as e:
                 self._log(f"[I2V] Warning: Cannot check pending scenes: {e}", "warn")
                 all_images_done = False  # Nếu lỗi, coi như chưa xong → KHÔNG tạo video

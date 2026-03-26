@@ -1,8 +1,18 @@
-1.0.440
+1.0.441
 2026-03-26 (VN)
-Change: Finance History quality fix + min 4s duration all topics
+Change: MERGE SHORT SCENES - gop scenes duoi 4s dua vao noi dung SRT
 
 Thay doi:
+- v1.0.441: DURATION + VIDEO MODE + EXCEL WRITE RELIABILITY
+  * SPLIT scenes qua dai (>8s) thanh nhieu scenes nho
+  * MERGE scenes qua ngan (<4s) voi scene ke ben (multi-pass)
+  * Duration tinh tu SRT timestamps thuc te (content-based)
+  * FIX video_mode=full: doi video xong moi "done" (truoc: copy master khi chi co anh)
+  * EXCEL WRITE RELIABILITY: safe_save() retry 5 lan, pending writes queue
+  * Khi Excel bi lock (2 Chrome ghi cung luc): luu .pending_writes.json
+  * Load Excel se tu dong flush pending writes
+  * RECONCILIATION: check file anh tren disk khi Excel status bi mat
+  * Fix save_scene_planning filter None values
 - v1.0.440: FINANCE HISTORY QUALITY FIX + MIN DURATION
   * NO TEXT rule manh hon: them ABSOLUTE RULE, nhieu BAD examples cu the
   * Chi 1 narrator (khong tao nhieu narrator gay nham lan)

@@ -653,6 +653,12 @@ class PromptWorkbook:
             self.logger.info(f"Creating new Excel file: {self.path}")
             self._create_new_workbook()
 
+        # v1.0.441: Flush pending writes từ lần trước (nếu có)
+        try:
+            self._flush_pending_writes()
+        except Exception as e:
+            self.logger.warning(f"Flush pending writes error: {e}")
+
         return self
 
     def _ensure_workbook(self) -> None:
@@ -986,18 +992,114 @@ class PromptWorkbook:
         except Exception:
             pass
     
-    def safe_save(self) -> bool:
-        """Save không bao giờ raise exception - trả True/False.
+    def safe_save(self, max_retries: int = 5) -> bool:
+        """Save với retry + pending queue fallback.
 
-        v1.0.385: Dùng thay save() ở các chỗ Chrome workers gọi,
-        tránh crash khi Excel bị lock bởi process khác.
+        v1.0.385: Dùng thay save() ở các chỗ Chrome workers gọi.
+        v1.0.441: Retry loop + pending writes queue khi thất bại.
+
+        Nếu sau max_retries vẫn fail → lưu pending changes vào .pending_writes.json.
+        Lần load_or_create() tiếp theo sẽ flush pending writes.
         """
+        import time
+        for attempt in range(max_retries):
+            try:
+                # Flush pending writes trước khi save
+                self._flush_pending_writes()
+                self.save()
+                return True
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    delay = 2 * (attempt + 1)  # 2, 4, 6, 8, 10 seconds
+                    self.logger.warning(f"safe_save() retry {attempt+1}/{max_retries} after {delay}s: {e}")
+                    time.sleep(delay)
+                else:
+                    self.logger.warning(f"safe_save() failed after {max_retries} retries: {e}")
+        return False
+
+    def _get_pending_path(self) -> Path:
+        """Path to pending writes JSON file."""
+        return self.path.parent / f".pending_writes_{self.path.stem}.json"
+
+    def _save_pending_write(self, write_type: str, **kwargs):
+        """Lưu pending write vào JSON khi Excel bị lock.
+
+        write_type: 'scene', 'character', 'thumbnail'
+        kwargs: scene_id, img_path, status_img, media_id, etc.
+        """
+        import json
+        pending_path = self._get_pending_path()
+        pending = []
         try:
-            self.save()
-            return True
+            if pending_path.exists():
+                with open(pending_path, 'r', encoding='utf-8') as f:
+                    pending = json.load(f)
+        except:
+            pending = []
+
+        pending.append({
+            'type': write_type,
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            **kwargs
+        })
+
+        try:
+            with open(pending_path, 'w', encoding='utf-8') as f:
+                json.dump(pending, f, indent=2, ensure_ascii=False)
+            self.logger.info(f"Saved pending write: {write_type} {kwargs}")
         except Exception as e:
-            self.logger.warning(f"safe_save() failed (data vẫn ở memory, sẽ save lần sau): {e}")
-            return False
+            self.logger.error(f"Cannot save pending write: {e}")
+
+    def _flush_pending_writes(self):
+        """Flush pending writes từ JSON vào Excel."""
+        import json
+        pending_path = self._get_pending_path()
+        if not pending_path.exists():
+            return
+
+        try:
+            with open(pending_path, 'r', encoding='utf-8') as f:
+                pending = json.load(f)
+        except:
+            return
+
+        if not pending:
+            return
+
+        applied = 0
+        for item in pending:
+            try:
+                wtype = item.get('type', '')
+                if wtype == 'scene':
+                    scene_id = item.get('scene_id')
+                    if scene_id:
+                        self.update_scene(
+                            int(scene_id),
+                            img_path=item.get('img_path'),
+                            status_img=item.get('status_img'),
+                            media_id=item.get('media_id')
+                        )
+                        applied += 1
+                elif wtype == 'character':
+                    char_id = item.get('char_id')
+                    if char_id:
+                        self.update_character(
+                            char_id,
+                            media_id=item.get('media_id'),
+                            status=item.get('status')
+                        )
+                        applied += 1
+            except Exception as e:
+                self.logger.warning(f"Failed to apply pending write: {e}")
+
+        if applied > 0:
+            self.logger.info(f"Flushed {applied}/{len(pending)} pending writes")
+
+        # Xóa file pending sau khi flush
+        try:
+            pending_path.unlink()
+        except:
+            pass
 
     # ========================================================================
     # CHARACTERS METHODS
@@ -1689,8 +1791,10 @@ class PromptWorkbook:
         if ws.max_row > 1:
             ws.delete_rows(2, ws.max_row)
 
-        # Thêm plans
+        # Thêm plans (filter None)
         for plan in plans:
+            if not plan or not isinstance(plan, dict):
+                continue
             next_row = ws.max_row + 1
             ws.cell(row=next_row, column=1, value=int(plan.get("scene_id", 0)))
             ws.cell(row=next_row, column=2, value=plan.get("artistic_intent", "")[:500])

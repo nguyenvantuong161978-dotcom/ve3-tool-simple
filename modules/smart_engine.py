@@ -2748,16 +2748,32 @@ class SmartEngine:
                     self.log(f"  [v] {pid} OK")
                     results["success"] += 1
 
-                    # Update Excel status
-                    try:
-                        from modules.excel_manager import PromptWorkbook
-                        wb = PromptWorkbook(excel_path)
-                        wb.load_or_create()
-                        if pid.isdigit():
-                            wb.update_scene(int(pid), img_path=f"img/{pid}.png", status_img="done")
-                            wb.safe_save()
-                    except Exception as e:
-                        self.log(f"  [Excel] Warning: {e}", "WARN")
+                    # Update Excel status (v1.0.441: retry khi file bị lock)
+                    excel_saved = False
+                    for _excel_attempt in range(3):
+                        try:
+                            from modules.excel_manager import PromptWorkbook
+                            wb = PromptWorkbook(excel_path)
+                            wb.load_or_create()
+                            if pid.isdigit():
+                                wb.update_scene(int(pid), img_path=f"img/{pid}.png", status_img="done")
+                                excel_saved = wb.safe_save()
+                            else:
+                                excel_saved = True
+                            if excel_saved:
+                                break
+                        except Exception as e:
+                            self.log(f"  [Excel] Retry {_excel_attempt+1}/3: {e}", "WARN")
+                            import time
+                            time.sleep(3 * (_excel_attempt + 1))
+                    if not excel_saved and pid.isdigit():
+                        self.log(f"  [Excel] FAILED to save status for {pid} - saving to pending queue", "ERROR")
+                        try:
+                            from modules.excel_manager import PromptWorkbook
+                            wb = PromptWorkbook(excel_path)
+                            wb._save_pending_write('scene', scene_id=pid, img_path=f"img/{pid}.png", status_img="done")
+                        except Exception as pe:
+                            self.log(f"  [Excel] Cannot save pending: {pe}", "ERROR")
 
                 else:
                     self.log(f"  [x] {pid} FAIL: {error}", "WARN")
