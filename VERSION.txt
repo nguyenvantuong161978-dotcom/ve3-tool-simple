@@ -1,16 +1,16 @@
-1.0.431
+1.0.432
 2026-03-26 (VN)
-Change: Tach prompts thanh topic files rieng - story_prompts.py + psychology_prompts.py
+Change: Rewrite psychology_prompts.py theo mau Excel tham khao
 
 Thay doi:
+- v1.0.432: PSYCHOLOGY PROMPTS REWRITE
+  * Step 1: Khong hardcode character design - de API tu quyet dinh
+  * Step 3: character_lock day du de copy-paste vao moi prompt
+  * Step 5-7: Visual metaphor, floating text, split screen, diagrams
+  * Step 7: Full character description trong moi prompt, paper texture background
+  * Silhouette people cho nhan vat phu (khong tao character rieng)
+  * Tham khao: Social_Media_Psychology_Video_Analysis.xlsx
 - v1.0.431: TOPIC PROMPTS SYSTEM
-  * Tao modules/topic_prompts/ voi file rieng moi chu de
-  * story_prompts.py: prompts cho Story (giu nguyen logic cu)
-  * psychology_prompts.py: prompts cho Psychology/Education (cartoon style)
-  * progressive_prompts.py: goi self.topic_prompts.stepX() thay vi hardcode
-  * Moi step (1-7) da duoc chuyen sang topic_prompts
-- v1.0.430: TOPIC SELECTOR
-  * GUI: Them muc chon Topic (Story | Psychology)
-  * settings.yaml: them truong topic
+  * Tach prompts thanh file rieng moi chu de
+- v1.0.430: TOPIC SELECTOR (GUI)
 - v1.0.429: XOA LOGIC CLAIM EXPIRED
-- v1.0.428: FIX CLAIM BI CUOP

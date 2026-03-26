@@ -1,7 +1,10 @@
 """
 Psychology topic prompts - Tam ly / Giao duc.
-Anh minh hoa cartoon, nhan vat don gian (dau tron trang, ao len),
-boi canh am cung, mau sac nhe nhang. Style kenh giao duc YouTube.
+Minh hoa cartoon minimalist: nhan vat dau tron trang, mat don gian,
+silhouette people phu, visual metaphor manh, floating text labels,
+diagrams, paper texture background. Style kenh giao duc YouTube.
+
+Tham khao: Social_Media_Psychology_Video_Analysis.xlsx
 """
 
 
@@ -10,16 +13,6 @@ class PsychologyPrompts:
 
     TOPIC_NAME = "psychology"
     TOPIC_LABEL = "Tam ly / Giao duc"
-
-    # Style chung cho moi prompt
-    VISUAL_STYLE = (
-        "Cute cartoon illustration style, simple character with white round head, "
-        "spiky hair, expressive simple face (dot eyes, simple mouth), "
-        "wearing green cable-knit sweater and khaki pants with white sneakers. "
-        "Cozy warm indoor environments, soft pastel color palette, "
-        "warm lighting from lamps, clean digital illustration, "
-        "YouTube educational channel aesthetic, 16:9 aspect ratio"
-    )
 
     # ========== STEP 1: Analyze Content ==========
     def step1_analyze(self, sampled_text: str) -> str:
@@ -30,25 +23,35 @@ NOTE: The content is provided in sampled format (beginning + middle + end) to ca
 CONTENT (SAMPLED):
 {sampled_text}
 
-This is an EDUCATIONAL/PSYCHOLOGY video. Analyze the content to understand:
+This is an EDUCATIONAL/PSYCHOLOGY video with CARTOON ILLUSTRATION style.
+Analyze the content to understand:
 - What psychological concept or life lesson is being taught?
 - What emotions and situations are described?
 - What visual metaphors can illustrate these concepts?
+- What is the main character's journey/transformation?
+
+The visual style uses:
+- Cute minimalist character with round white head, simple dot eyes, gentle expressions
+- Clean black outline illustration style
+- Paper texture background
+- Silhouette figures for other people
+- Floating text labels and visual metaphors
+- Warm, accessible, educational aesthetic
 
 Return JSON only:
 {{
     "setting": {{
         "era": "modern day",
-        "location": "everyday life settings (bedroom, living room, office, school, etc.)",
+        "location": "everyday life settings relevant to the content",
         "atmosphere": "warm, relatable, educational"
     }},
     "themes": ["theme1", "theme2", "theme3"],
     "visual_style": {{
-        "cinematography": "cartoon illustration, simple character design, warm colors",
-        "color_palette": "soft pastels, warm tones, cozy atmosphere",
-        "lighting": "warm lamp light, soft natural light, comfortable indoor lighting"
+        "cinematography": "minimalist cartoon illustration, clean black outlines, paper texture",
+        "color_palette": "warm tones, soft pastels, clean whites",
+        "lighting": "warm soft lighting, clean illustration lighting"
     }},
-    "context_lock": "Cute cartoon illustration of a simple white round-headed character in green sweater, warm cozy setting, educational YouTube style"
+    "context_lock": "Cute minimalist cartoon illustration, clean black outline style, paper texture background, educational YouTube aesthetic"
 }}
 """
 
@@ -58,9 +61,9 @@ Return JSON only:
         themes_str = ', '.join(themes) if themes else 'Not specified'
         return f"""Analyze this educational/psychology content and divide it into logical segments for video illustration.
 
-IMPORTANT: Your segment analysis will be used by later steps to create CARTOON ILLUSTRATIONS.
+IMPORTANT: Your segment analysis will be used by later steps to create CARTOON ILLUSTRATIONS with VISUAL METAPHORS.
 Make your "message" and "key_elements" DETAILED enough to guide illustration creation.
-Focus on VISUAL METAPHORS and SITUATIONS that can be illustrated.
+Focus on: VISUAL METAPHORS, CONTRAST scenes, FLOATING TEXT ideas, DIAGRAM concepts.
 
 CONTENT CONTEXT:
 {context_lock}
@@ -83,10 +86,10 @@ CRITICAL REQUIREMENT:
 
 For each segment, provide:
 1. message: What concept/lesson is being taught? What situation is described?
-2. key_elements: List of VISUAL elements that can be illustrated (emotions, situations, objects, metaphors)
-3. visual_summary: 2-3 sentences describing what CARTOON ILLUSTRATIONS should show
+2. key_elements: List of VISUAL elements (visual metaphors, floating text ideas, contrast situations, diagrams)
+3. visual_summary: 2-3 sentences describing what CARTOON ILLUSTRATIONS should show, including visual metaphors
 4. mood: The emotional tone (anxious, hopeful, sad, empowering, reflective, etc.)
-5. characters_involved: Which people/roles appear (protagonist, friend, family member, etc.)
+5. characters_involved: Which people/roles appear (main character, silhouette people, etc.)
 
 Return JSON only:
 {{
@@ -94,11 +97,11 @@ Return JSON only:
         {{
             "segment_id": 1,
             "segment_name": "Introduction/Hook",
-            "message": "DETAILED description: what concept is introduced, what situation is shown",
-            "key_elements": ["character feeling emotion", "visual metaphor", "situation", "environment"],
-            "visual_summary": "2-3 sentences describing cartoon illustrations for this segment",
+            "message": "DETAILED description: what concept is introduced, what visual metaphor to use",
+            "key_elements": ["contrast situation", "visual metaphor", "floating text idea", "character emotion"],
+            "visual_summary": "2-3 sentences describing cartoon illustrations with visual metaphors",
             "mood": "reflective/anxious/hopeful/etc",
-            "characters_involved": ["main character", "friend"],
+            "characters_involved": ["main character", "silhouette people"],
             "estimated_duration": 15.0,
             "srt_range_start": 1,
             "srt_range_end": 25,
@@ -114,16 +117,20 @@ Return JSON only:
                          all_characters_mentioned: list, segment_insights: str,
                          targeted_srt_text: str) -> str:
         chars_str = ', '.join(all_characters_mentioned) if all_characters_mentioned else 'Analyze from content segments below'
-        return f"""Based on the content analysis below, identify all characters/people and create CARTOON visual descriptions.
+        return f"""Based on the content analysis below, identify the main character and any other characters for CARTOON ILLUSTRATION.
 
-IMPORTANT: This is a CARTOON ILLUSTRATION style video. All characters should be simple cartoon characters
-with white round heads, simple dot eyes, simple mouth expressions. They wear casual everyday clothing.
+IMPORTANT VISUAL STYLE:
+- This is a MINIMALIST CARTOON illustration style
+- Main character: cute round white head, simple dot eyes, gentle expression, clean black outline
+- The API must DECIDE the character's clothing and distinctive features based on the content
+- Other people in scenes should be SIMPLE SILHOUETTE FIGURES (not detailed characters)
+- Only create character entries for characters who need REFERENCE IMAGES (main character + any recurring named characters)
 
-CONTENT CONTEXT (from Step 1):
+CONTENT CONTEXT:
 - Setting: {setting.get('location', 'Not specified')}
 - Visual style: {context_lock}
 
-PEOPLE TO LOOK FOR (from segments):
+PEOPLE MENTIONED (from segments):
 {chars_str}
 
 CONTENT SEGMENTS ANALYSIS:
@@ -132,17 +139,21 @@ CONTENT SEGMENTS ANALYSIS:
 SAMPLE SRT CONTENT:
 {targeted_srt_text[:8000] if targeted_srt_text else 'Use segment analysis above'}
 
-IMPORTANT CARTOON STYLE RULES:
-- ALL characters have the SAME basic design: white round head, simple face (dot eyes, simple mouth)
-- They are DIFFERENTIATED by: clothing color, hair style, accessories, height
-- Main character: green cable-knit sweater, spiky white hair, khaki pants, white sneakers
-- Other characters: different colored clothing to distinguish them
-- NO photorealistic portraits - these are CARTOON characters
+CHARACTER DESIGN RULES:
+- Main character: cute minimalist character with round white head, simple dot eyes, gentle expression, clean black outline illustration style
+- Choose appropriate CLOTHING based on content theme (casual t-shirt, sweater, etc.)
+- Choose appropriate ACCESSORIES or distinctive features (hair sprout, glasses, etc.)
+- Other recurring named characters: same round head style but DIFFERENT clothing colors
+- Background/crowd people: described as "simple silhouette people" in prompts (NO separate character entry needed)
+- NO photorealistic portraits
 
 For each character, provide:
-1. portrait_prompt: Cartoon character description (NOT photorealistic)
-2. character_lock: Short 10-15 word cartoon description for scene prompts
+1. portrait_prompt: Minimalist cartoon character on white background
+2. character_lock: Full character description to be COPY-PASTED into every scene prompt
 3. is_minor: true if character is a child
+
+IMPORTANT: The character_lock must be COMPLETE and DETAILED enough to describe the character consistently across ALL scenes.
+Example character_lock: "cute minimalist character with round white head, small green sprout on top, simple dot eyes, gentle expression, blue t-shirt, beige pants, white sneakers, clean black outline illustration style"
 
 Return JSON:
 {{
@@ -151,8 +162,8 @@ Return JSON:
             "id": "char_id",
             "name": "Name or Role",
             "role": "protagonist/supporting/narrator",
-            "portrait_prompt": "Cute cartoon character, white round head, simple dot eyes, [expression], [hair style], wearing [colored clothing], standing on pure white background, clean digital illustration, simple design",
-            "character_lock": "cartoon character with white round head, [hair], wearing [colored clothing]",
+            "portrait_prompt": "Cute minimalist cartoon character, round white head, simple dot eyes, [expression], [distinctive feature], wearing [clothing], standing on pure white background, clean black outline illustration style",
+            "character_lock": "cute minimalist character with round white head, [distinctive feature], simple dot eyes, [expression], [clothing details], clean black outline illustration style",
             "is_minor": false
         }}
     ]
@@ -164,9 +175,9 @@ Return JSON:
                         all_locations_hints: list, segment_insights: str,
                         targeted_srt_text: str) -> str:
         locs_str = ', '.join(all_locations_hints) if all_locations_hints else 'Analyze from content segments below'
-        return f"""Based on the content analysis below, identify all locations/settings and create CARTOON ILLUSTRATION descriptions.
+        return f"""Based on the content analysis below, identify all locations/settings for CARTOON ILLUSTRATION.
 
-CONTENT CONTEXT (from Step 1):
+CONTENT CONTEXT:
 - Setting: {setting.get('location', 'Not specified')}
 - Visual style: {context_lock}
 
@@ -179,22 +190,14 @@ CONTENT SEGMENTS ANALYSIS:
 SAMPLE SRT CONTENT:
 {targeted_srt_text[:6000] if targeted_srt_text else 'Use segment analysis above'}
 
-IMPORTANT CARTOON STYLE RULES:
-- Locations should be CARTOON/ILLUSTRATION style, NOT photorealistic
-- Cozy, warm environments with soft colors
-- Warm lighting from lamps, windows, soft ambient light
-- Clean digital illustration style
-- Common settings: bedroom, living room, office, school, cafe, park
-- Furniture and objects should look cartoon/illustrated
-
-For each location, provide:
-1. location_prompt: Cartoon illustration description for generating reference image
-2. location_lock: Short description for scene prompts
-
-RULES FOR LOCATION IMAGES:
-- Locations MUST be EMPTY SPACES with NO characters/people
-- Show: cartoon furniture, warm lighting, cozy atmosphere, everyday objects
-- Style: clean digital illustration, warm color palette, soft shadows
+LOCATION ILLUSTRATION RULES:
+- Clean minimalist cartoon/illustration style with clean black outlines
+- Paper texture background feel
+- Warm, accessible, everyday environments
+- Simple but recognizable settings
+- Focus on: key objects, atmosphere, spatial layout
+- Locations MUST be EMPTY SPACES with NO characters/people/silhouettes
+- NO photorealistic images
 
 Return JSON only:
 {{
@@ -202,9 +205,9 @@ Return JSON only:
         {{
             "id": "loc_id",
             "name": "Location Name",
-            "location_prompt": "Cartoon illustration of [location], warm cozy atmosphere, soft lamp light, [furniture/objects], clean digital art, pastel colors, no people",
-            "location_lock": "cartoon cozy [location] with warm lighting (10-15 words)",
-            "lighting_default": "warm lamp light / soft natural light"
+            "location_prompt": "Minimalist cartoon illustration of [location], [key objects and furniture], clean black outline style, warm atmosphere, paper texture background, no people, no characters",
+            "location_lock": "cartoon [location] with [key feature], clean outline style (10-15 words)",
+            "lighting_default": "warm soft lighting"
         }}
     ]
 }}
@@ -217,6 +220,9 @@ Return JSON only:
                             context_lock: str, char_locks: list, loc_locks: list,
                             srt_text: str) -> str:
         return f"""You are an ILLUSTRATOR for an educational YouTube channel. Create exactly {image_count} illustration scenes for this content segment.
+
+IMPORTANT: Each illustration will become a VIDEO CLIP. The visual must CLOSELY MATCH the narration content.
+Think about: What VISUAL METAPHOR best illustrates this concept? What would make viewers UNDERSTAND the idea?
 
 SEGMENT INFO:
 - Name: "{seg_name}"
@@ -237,16 +243,24 @@ LOCATIONS (cartoon style):
 SRT CONTENT FOR THIS SEGMENT:
 {srt_text}
 
+ILLUSTRATION TECHNIQUES TO USE:
+- VISUAL METAPHORS: abstract concepts shown as physical objects (comparison as a scale, addiction as hooks, etc.)
+- CONTRAST SCENES: split screen or before/after showing differences
+- FLOATING TEXT LABELS: key words/phrases floating in scene to reinforce the message
+- DIAGRAMS: brain diagrams, comparison charts, flow visualizations
+- SILHOUETTE PEOPLE: background/crowd people as simple dark silhouettes
+- CHARACTER EXPRESSIONS: exaggerated simple expressions to convey emotion
+
 INSTRUCTIONS:
 1. Create EXACTLY {image_count} illustration scenes - no more, no less
-2. Each scene = one cartoon illustration that VISUALIZES the concept being discussed
-3. Think about VISUAL METAPHORS: how can you illustrate abstract psychology concepts?
-4. Show characters in RELATABLE SITUATIONS (lying in bed, talking on phone, sitting alone, etc.)
-5. Use EXACT character/location IDs from the lists above
-6. scene_id: just use 1, 2, 3... (will be renumbered later)
-7. REFERENCES ACCURACY:
-   - characters_used: ONLY characters who appear in that illustration
+2. Each scene must VISUALLY REPRESENT the narration content
+3. Use visual metaphors to illustrate abstract psychology concepts
+4. Use EXACT character/location IDs from the lists above
+5. scene_id: just use 1, 2, 3...
+6. REFERENCES ACCURACY:
+   - characters_used: ONLY main character or named characters who appear
    - location_used: ONLY ONE location per scene
+   - For scenes with only silhouette people and no main character, leave characters_used EMPTY
 
 Return JSON only:
 {{
@@ -258,10 +272,10 @@ Return JSON only:
             "srt_end": "timestamp",
             "duration": {scene_duration:.1f},
             "srt_text": "narration text for this scene",
-            "visual_moment": "what the cartoon illustration shows - specific situation/metaphor",
-            "characters_used": "nv_xxx, nv_yyy",
+            "visual_moment": "DETAILED description of what the illustration shows - include visual metaphors, floating text ideas, character actions",
+            "characters_used": "nv_xxx",
             "location_used": "loc_xxx",
-            "camera": "composition (centered, side view, bird's eye, etc.)",
+            "camera": "composition (centered, split screen, close-up, wide, etc.)",
             "lighting": "warm/soft/dramatic"
         }}
     ]
@@ -273,7 +287,9 @@ Create exactly {image_count} illustrations!"""
                               char_info: str, loc_info: str, scenes_text: str) -> str:
         return f"""You are an illustrator planning each scene's visual approach for an educational YouTube channel.
 
-VISUAL STYLE: Cartoon illustration with simple round-headed characters, warm cozy settings.
+IMPORTANT: Each scene becomes a VIDEO CLIP. Plan visuals that CLOSELY MATCH the narration.
+
+VISUAL STYLE: Minimalist cartoon illustration, clean black outlines, paper texture background.
 
 CONTENT CONTEXT:
 {context_lock}
@@ -290,27 +306,35 @@ LOCATIONS (cartoon):
 SCENES TO PLAN:
 {scenes_text}
 
-For EACH scene, plan the cartoon illustration:
-1. artistic_intent: What concept/emotion should this illustration convey?
-2. shot_type: Composition style (full scene, close-up on character, wide establishing shot, etc.)
-3. character_action: What is the cartoon character doing? Expression? Body language?
+For EACH scene, plan the cartoon illustration using these techniques:
+1. artistic_intent: What concept/emotion to convey? What VISUAL METAPHOR to use?
+2. shot_type: Composition (centered, split screen, triple panel, close-up, wide, bird's eye)
+3. character_action: What is character doing? Expression? Include FLOATING TEXT labels if relevant
 4. mood: Overall feeling (anxious, hopeful, lonely, empowered, reflective, etc.)
-5. lighting: Type of lighting (warm lamp, soft window light, dim evening, bright morning)
-6. color_palette: Dominant colors (warm pastels, cool blues, muted earth tones, etc.)
-7. key_focus: What should viewer notice first? (character's expression, visual metaphor, environment)
+5. lighting: Warm soft / dramatic / contrast lighting
+6. color_palette: Dominant colors for this specific scene
+7. key_focus: What viewer should notice first (visual metaphor, character expression, floating text)
+
+VISUAL TECHNIQUES TO CONSIDER:
+- Split screen comparisons (real vs filtered, before vs after)
+- Floating text labels ('MISSING OUT?', 'DESIGNED TO ADDICT', etc.)
+- Visual metaphors (hooks for addiction, scales for comparison, walls vs boundaries)
+- Silhouette crowds for "society" or "everyone else"
+- Diagrams (brain, comparison charts, timelines)
+- Transformation sequences (mask cracking, walls breaking, etc.)
 
 Return JSON only:
 {{
     "scene_plans": [
         {{
             "scene_id": 1,
-            "artistic_intent": "Show the character feeling overwhelmed by phone calls from family",
-            "shot_type": "Full body centered composition",
-            "character_action": "Standing in living room surrounded by floating phones, looking stressed",
-            "mood": "Overwhelmed, anxious",
-            "lighting": "Warm dim lamp light, evening atmosphere",
-            "color_palette": "Warm earth tones, soft orange from lamp, muted blues",
-            "key_focus": "Character's worried expression and the multiple phones around them"
+            "artistic_intent": "Show contrast between everyone photographing food vs character just eating",
+            "shot_type": "Wide restaurant table scene, centered composition",
+            "character_action": "Character sits among silhouette people, calmly eating while others hold up phones",
+            "mood": "Calm contrast, peaceful defiance",
+            "lighting": "Warm restaurant lighting",
+            "color_palette": "Warm earth tones, soft restaurant ambiance",
+            "key_focus": "Contrast between phone users and character eating naturally"
         }}
     ]
 }}
@@ -321,47 +345,55 @@ Return JSON only:
                              batch_size: int) -> str:
         return f"""Create detailed CARTOON ILLUSTRATION prompts for these {batch_size} scenes.
 
-VISUAL STYLE (MUST follow):
+IMPORTANT: Each scene becomes a VIDEO CLIP. Prompts must create visuals that MATCH the narration closely.
+
+VISUAL STYLE (MUST follow for ALL scenes):
 {context_lock}
 
-IMPORTANT STYLE RULES:
-- ALL illustrations must be in CARTOON/DIGITAL ILLUSTRATION style
-- Characters have white round heads, simple dot eyes, simple mouth expressions
-- Main character wears green cable-knit sweater, khaki pants, white sneakers
-- Environments are cozy, warm, with soft pastel colors
-- Clean lines, soft shadows, warm lighting
-- YouTube educational channel aesthetic
-- NO photorealistic images - everything is cartoon/illustration
+CRITICAL ILLUSTRATION STYLE RULES:
+- Clean minimalist cartoon illustration with clean black outlines
+- Paper texture background
+- Main character: use the FULL character_lock description from reference
+- Other people: "simple silhouette people" or "simple silhouette figures"
+- Use VISUAL METAPHORS to illustrate abstract concepts
+- Include FLOATING TEXT LABELS when the narration mentions key phrases/concepts
+- Use SPLIT SCREEN for comparison scenes
+- Use DIAGRAMS for scientific concepts
+- NO photorealistic images - everything is minimalist cartoon illustration
 
 REFERENCE FILE ANNOTATIONS:
-- Each character who appears MUST have their reference file: "character (nv1.png)"
-- Location MUST have reference file: "in the room (loc1.png)"
-- Format: "Cartoon illustration of character (nv_xxx.png) doing action in location (loc_xxx.png)"
+- Main character MUST have reference file: "cute minimalist character (nv1.png)"
+- Location MUST have reference file: "in cozy bedroom (loc_bedroom.png)"
+- Character description from character_lock should be INCLUDED in the prompt
+- Format: "[full character_lock description] (nv_xxx.png) [action] in [location description] (loc_xxx.png)"
 
 SCENES TO PROCESS ({batch_size} scenes - create EXACTLY {batch_size} prompts):
 {scenes_text}
 
 CRITICAL REQUIREMENTS:
-1. Create EXACTLY {batch_size} illustration prompts
-2. Each img_prompt MUST be UNIQUE
-3. Each prompt MUST specify "cartoon illustration" or "digital illustration" style
-4. Include character expressions and body language
-5. Include environment details (furniture, lighting, objects)
+1. Create EXACTLY {batch_size} scene prompts
+2. Each img_prompt MUST be UNIQUE and match the scene's narration
+3. Include the FULL character description (from character_lock) in every prompt where character appears
+4. Include visual metaphors, floating text labels, diagrams as planned
+5. End every prompt with: "clean black outline illustration style, paper texture background"
 
 For each scene, create:
-1. img_prompt: Cartoon illustration prompt with reference annotations
-2. video_prompt: Simple animation description (character moves, expression changes)
+1. img_prompt: Detailed illustration prompt matching the narration content
+2. video_prompt: Animation description (character movement, text appearing, transitions)
 
 Example img_prompt:
-"Cute cartoon illustration, a simple character with white round head and worried expression (nv1.png) lying on bed looking at phone, cozy bedroom with warm lamp light (loc_bedroom.png), soft pastel colors, clean digital art style, educational YouTube aesthetic"
+"Restaurant dining table scene, 4-5 simple silhouette people all holding up smartphones taking photos of food on table, cute minimalist character with round white head, small green sprout on top, simple dot eyes, gentle expression, blue t-shirt, beige pants, white sneakers, clean black outline illustration style (nv1.png) sitting among them HOLDING CHOPSTICKS actually eating food normally, warm restaurant lighting (loc_restaurant.png), contrast between phone users and real eater, clean black outline illustration style, paper texture background"
+
+Example video_prompt:
+"Multiple people simultaneously pull out smartphones and start photographing food, camera moves toward table, main character ignores phones picks up chopsticks and starts eating naturally, contrast visualization"
 
 Return JSON only with EXACTLY {batch_size} scenes:
 {{
     "scenes": [
         {{
             "scene_id": 1,
-            "img_prompt": "Cartoon illustration of character (nv_xxx.png) in situation, in location (loc_xxx.png), warm cozy style...",
-            "video_prompt": "character slowly looks up, expression changes from sad to hopeful..."
+            "img_prompt": "DETAILED illustration prompt with character description (nv_xxx.png) and location (loc_xxx.png), visual metaphors, floating text, clean black outline illustration style, paper texture background",
+            "video_prompt": "animation: character actions, text appearing/disappearing, visual transitions..."
         }}
     ]
 }}
