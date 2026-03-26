@@ -192,7 +192,7 @@ class Character:
             image_file=str(data.get("image_file", "")),
             status=str(data.get("status", "pending")),
             is_child=is_child,
-            media_id=str(data.get("media_id", "")),
+            media_id=str(data.get("media_id", "") or ""),
         )
 
 
@@ -247,7 +247,7 @@ class Location:
             lighting_default=str(data.get("lighting_default", "")),
             image_file=str(data.get("image_file", "")),
             status=str(data.get("status", "pending")),
-            media_id=str(data.get("media_id", "")),
+            media_id=str(data.get("media_id", "") or ""),
         )
 
 

@@ -1,8 +1,12 @@
-1.0.436
+1.0.437
 2026-03-26 (VN)
-Change: Fix UPDATE - copy subdirectories trong modules/
+Change: Fix media_id "None" string bug
 
 Thay doi:
+- v1.0.437: FIX media_id "None" string
+  * str(None) = "None" (string) pass qua "if not media_id" check
+  * Chrome 2 validate khi Chrome 1 chua tao xong reference
+  * Fix: dung "or" pattern: str(data.get("media_id", "") or "")
 - v1.0.436: FIX UPDATE copy modules subdirectories
   * ZIP update chi copy modules/*.py, KHONG copy subdirectories
   * Them logic copy subdirectories (modules/topic_prompts/, etc.)
