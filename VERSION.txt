@@ -1,8 +1,16 @@
-1.0.433
+1.0.434
 2026-03-26 (VN)
-Change: Step 8 thumbnail topic-aware + hook all steps
+Change: Psychology prompts quality iteration - NO TEXT in scenes, multi-panel, full outfit
 
 Thay doi:
+- v1.0.434: PSYCHOLOGY PROMPTS QUALITY FIX
+  * NO TEXT/WORDS trong scene prompts (AI tao text sai chinh ta)
+  * Thay text bang ICONS, SYMBOLS, visual metaphors
+  * Thumbnail VAN co text (de tang CTR)
+  * Character_lock bat buoc co: top + bottom + footwear + distinctive feature
+  * Them SPLIT SCREEN va TRIPLE PANEL composition examples
+  * Nhan vat chinh xuat hien >= 80% scenes
+  * Bo "visual metaphor:" va "floating text label:" meta-labels
 - v1.0.433: STEP 8 THUMBNAIL TOPIC-AWARE
   * Them step8_thumbnail() vao psychology_prompts.py (cartoon style)
   * Hook Step 8 trong progressive_prompts.py dung self.topic_prompts.step8_thumbnail()

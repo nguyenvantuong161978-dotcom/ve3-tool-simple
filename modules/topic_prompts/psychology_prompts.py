@@ -1,7 +1,7 @@
 """
 Psychology topic prompts - Tam ly / Giao duc.
 Minh hoa cartoon minimalist: nhan vat dau tron trang, mat don gian,
-silhouette people phu, visual metaphor manh, floating text labels,
+silhouette people phu, visual metaphor manh, icons/symbols thay cho text,
 diagrams, paper texture background. Style kenh giao duc YouTube.
 
 Tham khao: Social_Media_Psychology_Video_Analysis.xlsx
@@ -96,7 +96,9 @@ The visual style uses:
 - Clean black outline illustration style
 - Paper texture background
 - Silhouette figures for other people
-- Floating text labels and visual metaphors
+- Visual metaphors (physical objects representing abstract concepts)
+- NO TEXT/WORDS in the image (AI generates text with spelling errors)
+- Numbers and simple icons are OK, but NO words/labels/captions
 - Warm, accessible, educational aesthetic
 
 Return JSON only:
@@ -124,7 +126,7 @@ Return JSON only:
 
 IMPORTANT: Your segment analysis will be used by later steps to create CARTOON ILLUSTRATIONS with VISUAL METAPHORS.
 Make your "message" and "key_elements" DETAILED enough to guide illustration creation.
-Focus on: VISUAL METAPHORS, CONTRAST scenes, FLOATING TEXT ideas, DIAGRAM concepts.
+Focus on: VISUAL METAPHORS, CONTRAST scenes, DIAGRAM concepts. NO text/words in images.
 
 CONTENT CONTEXT:
 {context_lock}
@@ -147,7 +149,7 @@ CRITICAL REQUIREMENT:
 
 For each segment, provide:
 1. message: What concept/lesson is being taught? What situation is described?
-2. key_elements: List of VISUAL elements (visual metaphors, floating text ideas, contrast situations, diagrams)
+2. key_elements: List of VISUAL elements (visual metaphors, contrast situations, diagrams, symbolic objects)
 3. visual_summary: 2-3 sentences describing what CARTOON ILLUSTRATIONS should show, including visual metaphors
 4. mood: The emotional tone (anxious, hopeful, sad, empowering, reflective, etc.)
 5. characters_involved: Which people/roles appear (main character, silhouette people, etc.)
@@ -202,8 +204,9 @@ SAMPLE SRT CONTENT:
 
 CHARACTER DESIGN RULES:
 - Main character: cute minimalist character with round white head, simple dot eyes, gentle expression, clean black outline illustration style
-- Choose appropriate CLOTHING based on content theme (casual t-shirt, sweater, etc.)
-- Choose appropriate ACCESSORIES or distinctive features (hair sprout, glasses, etc.)
+- MUST include a DISTINCTIVE VISUAL IDENTIFIER (small green sprout on top, tiny flower, antenna, etc.) that makes the character instantly recognizable
+- MUST specify FULL OUTFIT: top (t-shirt/hoodie/sweater + color), bottom (pants/shorts + color), footwear (sneakers/shoes + color)
+- Choose appropriate ACCESSORIES or distinctive features based on content
 - Other recurring named characters: same round head style but DIFFERENT clothing colors
 - Background/crowd people: described as "simple silhouette people" in prompts (NO separate character entry needed)
 - NO photorealistic portraits
@@ -213,7 +216,16 @@ For each character, provide:
 2. character_lock: Full character description to be COPY-PASTED into every scene prompt
 3. is_minor: true if character is a child
 
-IMPORTANT: The character_lock must be COMPLETE and DETAILED enough to describe the character consistently across ALL scenes.
+IMPORTANT: The character_lock must include ALL of these elements:
+- Head: round white head
+- Distinctive feature: a unique visual identifier (sprout, flower, antenna, hair accessory)
+- Eyes: simple dot eyes
+- Expression: default expression
+- Clothing TOP: specific garment + color (e.g., blue t-shirt, grey hoodie)
+- Clothing BOTTOM: specific garment + color (e.g., beige pants, dark shorts)
+- Footwear: specific type + color (e.g., white sneakers, brown shoes)
+- Style suffix: clean black outline illustration style
+
 Example character_lock: "cute minimalist character with round white head, small green sprout on top, simple dot eyes, gentle expression, blue t-shirt, beige pants, white sneakers, clean black outline illustration style"
 
 Return JSON:
@@ -305,12 +317,12 @@ SRT CONTENT FOR THIS SEGMENT:
 {srt_text}
 
 ILLUSTRATION TECHNIQUES TO USE:
-- VISUAL METAPHORS: abstract concepts shown as physical objects (comparison as a scale, addiction as hooks, etc.)
+- VISUAL METAPHORS: abstract concepts shown as physical objects (comparison as a scale, addiction as hooks, chains, walls, masks, etc.)
 - CONTRAST SCENES: split screen or before/after showing differences
-- FLOATING TEXT LABELS: key words/phrases floating in scene to reinforce the message
-- DIAGRAMS: brain diagrams, comparison charts, flow visualizations
+- DIAGRAMS: brain diagrams, comparison charts, flow visualizations (numbers OK, but NO text/words)
 - SILHOUETTE PEOPLE: background/crowd people as simple dark silhouettes
 - CHARACTER EXPRESSIONS: exaggerated simple expressions to convey emotion
+- IMPORTANT: NO TEXT/WORDS/LABELS in the image - AI generates text with spelling errors. Use ICONS, SYMBOLS, NUMBERS instead
 
 INSTRUCTIONS:
 1. Create EXACTLY {image_count} illustration scenes - no more, no less
@@ -318,10 +330,10 @@ INSTRUCTIONS:
 3. Use visual metaphors to illustrate abstract psychology concepts
 4. Use EXACT character/location IDs from the lists above
 5. scene_id: just use 1, 2, 3...
-6. REFERENCES ACCURACY:
+6. MAIN CHARACTER PRESENCE: The main character should appear in AT LEAST 80% of scenes. Even in conceptual scenes, show the character observing, reacting, or interacting with the visual metaphor. Only omit the character for pure diagram/infographic scenes.
+7. REFERENCES ACCURACY:
    - characters_used: ONLY main character or named characters who appear
    - location_used: ONLY ONE location per scene
-   - For scenes with only silhouette people and no main character, leave characters_used EMPTY
 
 Return JSON only:
 {{
@@ -333,7 +345,7 @@ Return JSON only:
             "srt_end": "timestamp",
             "duration": {scene_duration:.1f},
             "srt_text": "narration text for this scene",
-            "visual_moment": "DETAILED description of what the illustration shows - include visual metaphors, floating text ideas, character actions",
+            "visual_moment": "DETAILED description of what the illustration shows - include visual metaphors, symbolic objects, character actions. NO text/words in image",
             "characters_used": "nv_xxx",
             "location_used": "loc_xxx",
             "camera": "composition (centered, split screen, close-up, wide, etc.)",
@@ -370,19 +382,26 @@ SCENES TO PLAN:
 For EACH scene, plan the cartoon illustration using these techniques:
 1. artistic_intent: What concept/emotion to convey? What VISUAL METAPHOR to use?
 2. shot_type: Composition (centered, split screen, triple panel, close-up, wide, bird's eye)
-3. character_action: What is character doing? Expression? Include FLOATING TEXT labels if relevant
+3. character_action: What is character doing? Expression? What symbolic objects are nearby?
 4. mood: Overall feeling (anxious, hopeful, lonely, empowered, reflective, etc.)
 5. lighting: Warm soft / dramatic / contrast lighting
 6. color_palette: Dominant colors for this specific scene
 7. key_focus: What viewer should notice first (visual metaphor, character expression, floating text)
 
 VISUAL TECHNIQUES TO CONSIDER:
-- Split screen comparisons (real vs filtered, before vs after)
-- Floating text labels ('MISSING OUT?', 'DESIGNED TO ADDICT', etc.)
-- Visual metaphors (hooks for addiction, scales for comparison, walls vs boundaries)
+- SPLIT SCREEN comparisons (real vs filtered, before vs after, online vs offline) - USE THIS for at least 15-20% of scenes
+- TRIPLE PANEL layouts for showing progression or multiple perspectives
+- Visual metaphors as PHYSICAL OBJECTS the character interacts with (hooks, scales, chains, masks, walls)
+- ICONS and SYMBOLS instead of text (heart icon, question mark, exclamation mark, arrows, etc.)
 - Silhouette crowds for "society" or "everyone else"
-- Diagrams (brain, comparison charts, timelines)
+- Diagrams (brain, comparison charts, timelines) - numbers OK but NO text/words
 - Transformation sequences (mask cracking, walls breaking, etc.)
+- IMPORTANT: NO TEXT/WORDS/LABELS in prompts - AI generates text with spelling errors
+
+COMPOSITION VARIETY REQUIREMENT:
+- At least 2-3 scenes MUST use SPLIT SCREEN or TRIPLE PANEL composition
+- At least 2-3 scenes should use CLOSE-UP for emotional impact
+- Mix wide, medium, close-up, and multi-panel compositions for visual variety
 
 Return JSON only:
 {{
@@ -432,7 +451,8 @@ VISUAL STYLE RULES:
 - Clean minimalist cartoon illustration with clean black outlines
 - Paper texture background
 - Character must match the character_lock description exactly
-- Use VISUAL METAPHORS and FLOATING TEXT to hook viewers
+- Use VISUAL METAPHORS, FLOATING TEXT, and bold typography to hook viewers
+- Thumbnails CAN have TEXT/WORDS (unlike scene images) - use bold, short text for CTR
 - NO photorealistic images
 
 RULES FOR PROMPTS:
@@ -443,21 +463,22 @@ RULES FOR PROMPTS:
 3. Include the FULL character description (from character_lock) in every prompt
 4. Each prompt MUST be unique in composition and emotional appeal
 5. End every prompt with: "clean black outline illustration style, paper texture background"
+6. Include BOLD SHORT TEXT (1-3 words) as visual hook in at least 2 of 3 thumbnails
 
 CREATE EXACTLY 3 THUMBNAIL PROMPTS:
 
 VERSION 1 - "portrait_main" (CHARACTER CLOSE-UP):
 Goal: Main character with strong expression that represents the video's core message.
-Style: Close-up, character looking at viewer, visual metaphor element nearby, floating text with key concept.
+Style: Close-up, character looking at viewer, visual metaphor element nearby, bold text with key concept floating above.
 Emotion: Curiosity, hope, determination.
 
 VERSION 2 - "concept_visual" (VISUAL METAPHOR):
 Goal: The most powerful visual metaphor from the content. Makes viewers think "I need to understand this!"
-Style: Character interacting with visual metaphor (breaking chains, carrying weight, lighting candle in dark).
+Style: Character interacting with visual metaphor (breaking chains, carrying weight, lighting candle in dark), bold text label.
 Emotion: Intrigue, realization, transformation.
 
 VERSION 3 - "youtube_ctr" (MAXIMUM CLICK-THROUGH):
-Goal: Maximum CTR using contrast/surprise. Character in unexpected situation with floating text hook.
+Goal: Maximum CTR using contrast/surprise. Character in unexpected situation with bold floating text hook.
 Style: Split screen or dramatic contrast, character with big expressive eyes, bold floating text label.
 Emotion: Surprise, "wait what?!", relatable struggle.
 
@@ -504,11 +525,13 @@ CRITICAL ILLUSTRATION STYLE RULES:
 - Paper texture background
 - Main character: use the FULL character_lock description from reference
 - Other people: "simple silhouette people" or "simple silhouette figures"
-- Use VISUAL METAPHORS to illustrate abstract concepts
-- Include FLOATING TEXT LABELS when the narration mentions key phrases/concepts
-- Use SPLIT SCREEN for comparison scenes
-- Use DIAGRAMS for scientific concepts
+- Show abstract concepts as PHYSICAL OBJECTS the character interacts with (scales, chains, walls, masks, hooks, etc.)
+- Use ICONS and SYMBOLS instead of text (heart icon, question mark, exclamation mark, arrows, checkmark, X mark)
+- Use split screen for comparison/contrast scenes
+- Use diagrams for scientific concepts (numbers OK but NO words)
 - NO photorealistic images - everything is minimalist cartoon illustration
+- DO NOT write "visual metaphor:" as a label - just DESCRIBE what the illustration shows directly
+- CRITICAL: NO TEXT/WORDS/LABELS in the image prompt - AI generates text with spelling errors. Replace text with ICONS, SYMBOLS, or visual representations
 
 REFERENCE FILE ANNOTATIONS:
 - Main character MUST have reference file: "cute minimalist character (nv1.png)"
@@ -523,26 +546,38 @@ CRITICAL REQUIREMENTS:
 1. Create EXACTLY {batch_size} scene prompts
 2. Each img_prompt MUST be UNIQUE and match the scene's narration
 3. Include the FULL character description (from character_lock) in every prompt where character appears
-4. Include visual metaphors, floating text labels, diagrams as planned
-5. End every prompt with: "clean black outline illustration style, paper texture background"
+4. Describe visual metaphors as ACTUAL OBJECTS in the scene, NOT as meta-instructions
+5. CRITICAL: NO TEXT/WORDS/LABELS in image prompts - AI generates text with spelling errors. Use ICONS (heart, question mark, arrows, checkmark, X) and SYMBOLS instead
+6. End every prompt with: "clean black outline illustration style, paper texture background"
 
 For each scene, create:
-1. img_prompt: Detailed illustration prompt matching the narration content
-2. video_prompt: Animation description (character movement, text appearing, transitions)
+1. img_prompt: Detailed illustration prompt describing what the image SHOWS (not meta-instructions). NO TEXT IN IMAGE.
+2. video_prompt: Animation description (character movement, transitions)
 
-Example img_prompt:
-"Restaurant dining table scene, 4-5 simple silhouette people all holding up smartphones taking photos of food on table, cute minimalist character with round white head, small green sprout on top, simple dot eyes, gentle expression, blue t-shirt, beige pants, white sneakers, clean black outline illustration style (nv1.png) sitting among them HOLDING CHOPSTICKS actually eating food normally, warm restaurant lighting (loc_restaurant.png), contrast between phone users and real eater, clean black outline illustration style, paper texture background"
+Example img_prompt (GOOD - no text, uses visual metaphors):
+"Restaurant dining table scene, 4-5 simple silhouette people all holding up smartphones taking photos of food on table, cute minimalist character with round white head, small green sprout on top, simple dot eyes, gentle expression, blue t-shirt, beige pants, white sneakers (nv1.png) sitting among them HOLDING CHOPSTICKS actually eating food normally, warm restaurant lighting (loc_restaurant.png), contrast between phone users and real eater, clean black outline illustration style, paper texture background"
+
+BAD example (DO NOT write like this - has text/words):
+"visual metaphor: phone as prison bars, floating text label: 'TRAPPED', concept: digital addiction"
+GOOD version of the same idea (visual only, no text):
+"Character standing behind giant smartphone screen with app icons arranged like PRISON BARS, hands gripping the bars, large exclamation mark icon above, dark blue glow from screen"
+
+Example SPLIT SCREEN prompt (no text, visual contrast only):
+"SPLIT SCREEN composition divided by vertical line. LEFT SIDE warm golden tones: cute minimalist character with round white head (nv1.png) sitting at real cafe table, holding warm coffee cup, genuine smile, cozy atmosphere, sun icon above. RIGHT SIDE cold blue tones: same character sitting alone staring at phone screen showing endless scrolling feed, slouched posture, tired eyes, moon icon above, clean black outline illustration style, paper texture background"
+
+Example TRIPLE PANEL prompt (no text, visual progression):
+"TRIPLE PANEL horizontal layout. PANEL 1: character wearing decorative social MASK smiling widely, sparkle effects around. PANEL 2: mask starting to CRACK AND PEEL showing real face underneath, crack lines visible. PANEL 3: character with mask fully removed, calm genuine expression, warm golden glow around head, clean black outline illustration style, paper texture background"
 
 Example video_prompt:
-"Multiple people simultaneously pull out smartphones and start photographing food, camera moves toward table, main character ignores phones picks up chopsticks and starts eating naturally, contrast visualization"
+"Multiple people simultaneously pull out smartphones and start photographing food, camera moves toward table, main character ignores phones picks up chopsticks and starts eating naturally"
 
 Return JSON only with EXACTLY {batch_size} scenes:
 {{
     "scenes": [
         {{
             "scene_id": 1,
-            "img_prompt": "DETAILED illustration prompt with character description (nv_xxx.png) and location (loc_xxx.png), visual metaphors, floating text, clean black outline illustration style, paper texture background",
-            "video_prompt": "animation: character actions, text appearing/disappearing, visual transitions..."
+            "img_prompt": "DETAILED illustration prompt with character description (nv_xxx.png) and location (loc_xxx.png), visual metaphors, NO TEXT IN IMAGE, clean black outline illustration style, paper texture background",
+            "video_prompt": "animation: character actions, visual transitions..."
         }}
     ]
 }}
