@@ -2848,12 +2848,19 @@ class SimpleGUI(tk.Tk):
                         if src.exists():
                             shutil.copy2(str(src), str(dst))
 
-                    # Copy modules folder
+                    # Copy modules folder (including subdirectories)
                     src_modules = extracted_folder / "modules"
                     dst_modules = TOOL_DIR / "modules"
                     if src_modules.exists():
                         for py_file in src_modules.glob("*.py"):
                             shutil.copy2(str(py_file), str(dst_modules / py_file.name))
+                        # Copy subdirectories (e.g. modules/topic_prompts/)
+                        for sub_dir in src_modules.iterdir():
+                            if sub_dir.is_dir():
+                                dst_sub = dst_modules / sub_dir.name
+                                if dst_sub.exists():
+                                    shutil.rmtree(str(dst_sub))
+                                shutil.copytree(str(sub_dir), str(dst_sub))
 
                     # Xoa temp files
                     if zip_path.exists():

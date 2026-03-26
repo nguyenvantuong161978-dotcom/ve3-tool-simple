@@ -1,8 +1,12 @@
-1.0.435
+1.0.436
 2026-03-26 (VN)
-Change: Fix topic_prompts import - fallback import cho VM
+Change: Fix UPDATE - copy subdirectories trong modules/
 
 Thay doi:
+- v1.0.436: FIX UPDATE copy modules subdirectories
+  * ZIP update chi copy modules/*.py, KHONG copy subdirectories
+  * Them logic copy subdirectories (modules/topic_prompts/, etc.)
+  * Day la nguyen nhan VM bi loi "No module named modules.topic_prompts"
 - v1.0.435: FIX IMPORT topic_prompts
   * Them fallback import (relative import) khi absolute import fail
   * Fix loi "No module named modules.topic_prompts" tren VM
