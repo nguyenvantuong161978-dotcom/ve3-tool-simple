@@ -1,8 +1,11 @@
-1.0.434
+1.0.435
 2026-03-26 (VN)
-Change: Psychology prompts quality iteration - NO TEXT in scenes, multi-panel, full outfit
+Change: Fix topic_prompts import - fallback import cho VM
 
 Thay doi:
+- v1.0.435: FIX IMPORT topic_prompts
+  * Them fallback import (relative import) khi absolute import fail
+  * Fix loi "No module named modules.topic_prompts" tren VM
 - v1.0.434: PSYCHOLOGY PROMPTS QUALITY FIX
   * NO TEXT/WORDS trong scene prompts (AI tao text sai chinh ta)
   * Thay text bang ICONS, SYMBOLS, visual metaphors

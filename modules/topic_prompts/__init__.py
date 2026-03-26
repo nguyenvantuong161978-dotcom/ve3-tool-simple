@@ -3,8 +3,12 @@ Topic-specific prompts for Progressive Prompts Generator.
 Moi chu de co 1 file Python rieng de de tuy chinh.
 """
 
-from modules.topic_prompts.story_prompts import StoryPrompts
-from modules.topic_prompts.psychology_prompts import PsychologyPrompts
+try:
+    from modules.topic_prompts.story_prompts import StoryPrompts
+    from modules.topic_prompts.psychology_prompts import PsychologyPrompts
+except ImportError:
+    from .story_prompts import StoryPrompts
+    from .psychology_prompts import PsychologyPrompts
 
 TOPIC_MAP = {
     "story": StoryPrompts,

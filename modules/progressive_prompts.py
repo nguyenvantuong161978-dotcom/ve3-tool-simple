@@ -158,8 +158,22 @@ class ProgressivePromptsGenerator:
         self.logger = get_logger("progressive_prompts")
 
         # Topic-specific prompts
-        from modules.topic_prompts import get_topic_prompts
-        self.topic_prompts = get_topic_prompts(self.topic)
+        try:
+            from modules.topic_prompts import get_topic_prompts
+            self.topic_prompts = get_topic_prompts(self.topic)
+        except ImportError:
+            try:
+                # Fallback: direct import
+                import importlib
+                topic_pkg = importlib.import_module("modules.topic_prompts")
+                self.topic_prompts = topic_pkg.get_topic_prompts(self.topic)
+            except ImportError:
+                # Last resort: add parent to path and retry
+                _parent = str(Path(__file__).parent.parent)
+                if _parent not in sys.path:
+                    sys.path.insert(0, _parent)
+                from modules.topic_prompts import get_topic_prompts
+                self.topic_prompts = get_topic_prompts(self.topic)
 
         # API keys
         self.deepseek_keys = [k for k in config.get("deepseek_api_keys", []) if k and k.strip()]
