@@ -1791,19 +1791,19 @@ class PromptWorkbook:
         if ws.max_row > 1:
             ws.delete_rows(2, ws.max_row)
 
-        # Thêm plans (filter None)
+        # Thêm plans (filter None values)
         for plan in plans:
             if not plan or not isinstance(plan, dict):
                 continue
             next_row = ws.max_row + 1
-            ws.cell(row=next_row, column=1, value=int(plan.get("scene_id", 0)))
-            ws.cell(row=next_row, column=2, value=plan.get("artistic_intent", "")[:500])
-            ws.cell(row=next_row, column=3, value=plan.get("shot_type", ""))
-            ws.cell(row=next_row, column=4, value=plan.get("character_action", "")[:500])
-            ws.cell(row=next_row, column=5, value=plan.get("mood", ""))
-            ws.cell(row=next_row, column=6, value=plan.get("lighting", ""))
-            ws.cell(row=next_row, column=7, value=plan.get("color_palette", ""))
-            ws.cell(row=next_row, column=8, value=plan.get("key_focus", "")[:300])
+            ws.cell(row=next_row, column=1, value=int(plan.get("scene_id") or 0))
+            ws.cell(row=next_row, column=2, value=(plan.get("artistic_intent") or "")[:500])
+            ws.cell(row=next_row, column=3, value=plan.get("shot_type") or "")
+            ws.cell(row=next_row, column=4, value=(plan.get("character_action") or "")[:500])
+            ws.cell(row=next_row, column=5, value=plan.get("mood") or "")
+            ws.cell(row=next_row, column=6, value=plan.get("lighting") or "")
+            ws.cell(row=next_row, column=7, value=plan.get("color_palette") or "")
+            ws.cell(row=next_row, column=8, value=(plan.get("key_focus") or "")[:300])
 
         self.logger.info(f"Saved {len(plans)} scene plans")
 
