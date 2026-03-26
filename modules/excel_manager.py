@@ -865,7 +865,7 @@ class PromptWorkbook:
             except Exception:
                 break  # Lỗi khác → bỏ qua lock, tiếp tục save
 
-        max_save_retries = 5
+        max_save_retries = 3  # v1.0.442: giảm từ 5 xuống 3 (có direct overwrite fallback)
         save_retry_delay = 2  # seconds
 
         for save_attempt in range(max_save_retries):
@@ -893,21 +893,36 @@ class PromptWorkbook:
                         pass
                     raise RuntimeError("Excel save failed: temp file corrupt")
 
-                # Bước 3: Backup file gốc (nếu có)
+                # Bước 3: Replace file gốc bằng temp
                 if self.path.exists():
+                    # Strategy 1: Atomic rename qua .bak (an toàn nhất)
+                    renamed_to_bak = False
                     try:
                         if bak_path.exists():
                             os.unlink(str(bak_path))
                         os.rename(str(self.path), str(bak_path))
+                        renamed_to_bak = True
                     except PermissionError:
-                        # v1.0.357: File bị lock → retry sau delay
-                        raise  # Để outer retry loop xử lý
+                        # v1.0.442: rename .bak fail → thử ghi đè trực tiếp
+                        # temp_path đã verify OK, an toàn để dùng
+                        import shutil
+                        try:
+                            shutil.copy2(str(temp_path), str(self.path))
+                            self.logger.info(f"Direct overwrite OK (skip .bak backup)")
+                            try:
+                                os.unlink(str(temp_path))
+                            except Exception:
+                                pass
+                            self._release_lock(lock_fd, lock_path)
+                            return  # SUCCESS via direct copy!
+                        except PermissionError:
+                            raise  # File thực sự bị lock cả đọc + ghi
                     except Exception as e:
                         self.logger.warning(f"Không tạo được backup: {e}")
                         try:
                             os.unlink(str(self.path))
                         except PermissionError:
-                            raise  # Để outer retry loop xử lý
+                            raise
                         except Exception:
                             pass
 
@@ -992,11 +1007,12 @@ class PromptWorkbook:
         except Exception:
             pass
     
-    def safe_save(self, max_retries: int = 5) -> bool:
+    def safe_save(self, max_retries: int = 3) -> bool:
         """Save với retry + pending queue fallback.
 
         v1.0.385: Dùng thay save() ở các chỗ Chrome workers gọi.
         v1.0.441: Retry loop + pending writes queue khi thất bại.
+        v1.0.442: Giảm retries (3 thay vì 5) vì save() đã có direct overwrite fallback.
 
         Nếu sau max_retries vẫn fail → lưu pending changes vào .pending_writes.json.
         Lần load_or_create() tiếp theo sẽ flush pending writes.
@@ -1010,7 +1026,7 @@ class PromptWorkbook:
                 return True
             except Exception as e:
                 if attempt < max_retries - 1:
-                    delay = 2 * (attempt + 1)  # 2, 4, 6, 8, 10 seconds
+                    delay = 3 * (attempt + 1)  # 3, 6 seconds
                     self.logger.warning(f"safe_save() retry {attempt+1}/{max_retries} after {delay}s: {e}")
                     time.sleep(delay)
                 else:

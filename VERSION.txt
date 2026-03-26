@@ -1,8 +1,13 @@
-1.0.441
+1.0.442
 2026-03-26 (VN)
-Change: MERGE SHORT SCENES - gop scenes duoi 4s dua vao noi dung SRT
+Change: EXCEL SAVE DIRECT OVERWRITE - khi rename .bak fail thi ghi de truc tiep
 
 Thay doi:
+- v1.0.442: EXCEL SAVE DIRECT OVERWRITE
+  * Khi os.rename(original, .bak) fail (file bi lock): dung shutil.copy2 ghi de truc tiep
+  * Giam retry: save() 3 lan (tu 5), safe_save() 3 lan (tu 5)
+  * Tong thoi gian cho toi da: ~30s thay vi ~3 phut
+  * Pending writes van la safety net cuoi cung
 - v1.0.441: DURATION + VIDEO MODE + EXCEL WRITE RELIABILITY
   * SPLIT scenes qua dai (>8s) thanh nhieu scenes nho
   * MERGE scenes qua ngan (<4s) voi scene ke ben (multi-pass)
