@@ -2868,26 +2868,9 @@ class SimpleGUI(tk.Tk):
                     if extract_dir.exists():
                         shutil.rmtree(str(extract_dir))
 
-                # v1.0.298: Sync operational settings (video_mode, excel_mode...)
-                # Preserve machine-specific settings (API keys, chrome paths, etc.)
-                try:
-                    import yaml as _yaml
-                    cfg_path = TOOL_DIR / "config" / "settings.yaml"
-                    if cfg_path.exists():
-                        with open(cfg_path, 'r', encoding='utf-8') as f:
-                            cfg = _yaml.safe_load(f) or {}
-                        changed = False
-                        # Keys that should always match the official version
-                        sync_keys = {'video_mode': 'small', 'excel_mode': 'small'}
-                        for k, v in sync_keys.items():
-                            if cfg.get(k) != v:
-                                cfg[k] = v
-                                changed = True
-                        if changed:
-                            with open(cfg_path, 'w', encoding='utf-8') as f:
-                                _yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
-                except:
-                    pass
+                # v1.0.438: KHÔNG reset video_mode/excel_mode khi update
+                # Giữ nguyên settings mà user đã chọn trên VM
+                # (Trước đây force reset về 'small' - gây mất settings)
 
                 # Lay version moi sau khi update
                 new_version = self._get_git_version()

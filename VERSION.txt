@@ -1,8 +1,11 @@
-1.0.437
+1.0.438
 2026-03-26 (VN)
-Change: Fix media_id "None" string bug
+Change: UPDATE khong reset video_mode/excel_mode
 
 Thay doi:
+- v1.0.438: UPDATE giu nguyen settings VM
+  * Bo logic force reset video_mode/excel_mode ve "small" khi update
+  * VM chon Full thi update xong van la Full
 - v1.0.437: FIX media_id "None" string
   * str(None) = "None" (string) pass qua "if not media_id" check
   * Chrome 2 validate khi Chrome 1 chua tao xong reference
