@@ -12,6 +12,8 @@ deepseek_api_keys:
 - sk-0d427db6c9754e669a4f6392914d5766
 early_video_start: 10
 excel_mode: small
+# topic: story | psychology (chu de noi dung)
+topic: story
 flow_aspect_ratio: landscape
 flow_bearer_token: ''
 flow_delay: 3.0

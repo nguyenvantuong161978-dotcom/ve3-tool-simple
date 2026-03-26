@@ -116,6 +116,23 @@ class SettingsWindow(tk.Toplevel):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # === CHU DE NOI DUNG (Topic) ===
+        topic_lf = tk.LabelFrame(main_frame, text=" CHU DE NOI DUNG (Topic) ", bg='#16213e', fg='#ff9f43',
+                                 font=("Arial", 10, "bold"), padx=10, pady=8)
+        topic_lf.pack(fill="x", pady=5)
+
+        self.topic_var = tk.StringVar(value="story")
+
+        topic_row = tk.Frame(topic_lf, bg='#16213e')
+        topic_row.pack(fill="x", pady=4)
+        tk.Radiobutton(topic_row, text="Story (Phim truyen)", variable=self.topic_var, value="story",
+                       bg='#16213e', fg='#ffcc00', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        tk.Radiobutton(topic_row, text="Psychology (Tam ly/Giao duc)", variable=self.topic_var, value="psychology",
+                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+
+        tk.Label(topic_lf, text="Story: Anh/video realistic. Psychology: Minh hoa cartoon giao duc.",
+                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
+
         # === CHE DO TAO ANH ===
         mode_lf = tk.LabelFrame(main_frame, text=" CHE DO TAO ANH (Mode) ", bg='#16213e', fg='#a29bfe',
                                 font=("Arial", 10, "bold"), padx=10, pady=8)
@@ -323,6 +340,7 @@ class SettingsWindow(tk.Toplevel):
                 with open(settings_path, "r", encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
 
+                self.topic_var.set(config.get('topic', 'story'))
                 self.mode_var.set(config.get('excel_mode', 'small'))
                 self.gen_mode_var.set(config.get('generation_mode', 'api'))
                 self.chrome_model_var.set(str(config.get('chrome_model_index', 0)))
@@ -348,6 +366,7 @@ class SettingsWindow(tk.Toplevel):
                     config = yaml.safe_load(f) or {}
 
             # Update
+            config['topic'] = self.topic_var.get()
             config['excel_mode'] = self.mode_var.get()
             config['video_mode'] = self.mode_var.get()
             config['generation_mode'] = self.gen_mode_var.get()

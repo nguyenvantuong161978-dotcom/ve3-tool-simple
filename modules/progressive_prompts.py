@@ -154,6 +154,7 @@ class ProgressivePromptsGenerator:
             config: Config chứa API keys và settings
         """
         self.config = config
+        self.topic = config.get("topic", "story")  # story | psychology
         self.logger = get_logger("progressive_prompts")
 
         # API keys

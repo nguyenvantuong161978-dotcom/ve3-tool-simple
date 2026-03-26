@@ -1,19 +1,16 @@
-1.0.429
+1.0.430
 2026-03-26 (VN)
-Change: Xoa logic expired - co CLAIMED la KHONG lay, tuyet doi an toan
+Change: Them Topic selector - Story | Psychology
 
 Thay doi:
+- v1.0.430: TOPIC SELECTOR
+  * GUI: Them muc "CHU DE NOI DUNG" voi Story va Psychology
+  * settings.yaml: them truong "topic: story | psychology"
+  * ProgressivePromptsGenerator: nhan self.topic tu config
+  * Chuan bi ha tang cho multi-topic (chua thay doi logic steps)
 - v1.0.429: XOA LOGIC CLAIM EXPIRED
   * Khong tu dong xoa _CLAIMED bat ke thoi gian
-  * Co _CLAIMED = skip project, KHONG cuop
-  * Xoa cleanup_stale_claims() - khong can nua
-  * Fix ca master_control.py
 - v1.0.428: FIX CLAIM BI CUOP
-  * _is_claim_expired() tra ve True khi doc file loi → VM khac xoa claim hop le
-  * Fix: return False khi exception (giu nguyen claim, khong xoa)
+  * _is_claim_expired() return False khi doc file loi
 - v1.0.427: CLAIM TIMEOUT 12H
-  * Tang CLAIM_TIMEOUT_HOURS tu 8 len 12 gio
 - v1.0.426: 429 RETRY + MODEL SWITCH
-  * 429 quota: nghi 60s + doi model (Pro → Banana 2 → Imagen 4) roi retry
-  * Max 3 lan retry moi scene khi 429
-  * Bo PHASE 2 upload gallery - dung drag-drop truc tiep
