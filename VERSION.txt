@@ -1,16 +1,16 @@
-1.0.430
+1.0.431
 2026-03-26 (VN)
-Change: Them Topic selector - Story | Psychology
+Change: Tach prompts thanh topic files rieng - story_prompts.py + psychology_prompts.py
 
 Thay doi:
+- v1.0.431: TOPIC PROMPTS SYSTEM
+  * Tao modules/topic_prompts/ voi file rieng moi chu de
+  * story_prompts.py: prompts cho Story (giu nguyen logic cu)
+  * psychology_prompts.py: prompts cho Psychology/Education (cartoon style)
+  * progressive_prompts.py: goi self.topic_prompts.stepX() thay vi hardcode
+  * Moi step (1-7) da duoc chuyen sang topic_prompts
 - v1.0.430: TOPIC SELECTOR
-  * GUI: Them muc "CHU DE NOI DUNG" voi Story va Psychology
-  * settings.yaml: them truong "topic: story | psychology"
-  * ProgressivePromptsGenerator: nhan self.topic tu config
-  * Chuan bi ha tang cho multi-topic (chua thay doi logic steps)
+  * GUI: Them muc chon Topic (Story | Psychology)
+  * settings.yaml: them truong topic
 - v1.0.429: XOA LOGIC CLAIM EXPIRED
-  * Khong tu dong xoa _CLAIMED bat ke thoi gian
 - v1.0.428: FIX CLAIM BI CUOP
-  * _is_claim_expired() return False khi doc file loi
-- v1.0.427: CLAIM TIMEOUT 12H
-- v1.0.426: 429 RETRY + MODEL SWITCH
