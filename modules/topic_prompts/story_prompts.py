@@ -10,6 +10,67 @@ class StoryPrompts:
     TOPIC_NAME = "story"
     TOPIC_LABEL = "Phim truyen / Drama"
 
+    # ========== FALLBACK & UTILITIES ==========
+    def fallback_style(self) -> str:
+        """Style suffix cho fallback prompts khi API fail."""
+        return "Cinematic 4K, dramatic lighting, photorealistic, film quality."
+
+    def fallback_video_style(self) -> str:
+        return "Smooth cinematic camera movement"
+
+    def split_scene_prompt(self, duration: float, min_shots: int, max_shots: int,
+                           srt_start: str, srt_end: str, srt_text: str,
+                           visual_moment: str, characters_used: str,
+                           location_used: str, char_locks: list, loc_locks: list) -> str:
+        """Prompt de chia scene dai thanh nhieu shots."""
+        return f"""You are a FILM DIRECTOR. This scene is {duration:.1f} seconds - TOO LONG for one shot (max 8s).
+Split it into {min_shots}-{max_shots} DISTINCT cinematic shots.
+
+ORIGINAL SCENE:
+- Duration: {duration:.1f}s (from {srt_start} to {srt_end})
+- Narration: "{srt_text}"
+- Visual concept: "{visual_moment}"
+- Characters: {characters_used}
+- Location: {location_used}
+
+AVAILABLE CHARACTERS:
+{chr(10).join(char_locks) if char_locks else 'None'}
+
+AVAILABLE LOCATIONS:
+{chr(10).join(loc_locks) if loc_locks else 'None'}
+
+RULES FOR SPLITTING:
+1. Each shot MUST be 4-8 seconds (divide the {duration:.1f}s total). MINIMUM 4 seconds per shot
+2. Each shot must show DIFFERENT aspect: angle, focus, emotion
+3. All shots together must cover the FULL narration
+4. Use EXACT character/location IDs from the lists above
+5. Think cinematically - what sequence of shots tells this story best?
+
+Examples of good splits:
+- Character making decision: Close-up face -> Insert object -> Wide shot reaction
+- Two people talking: Speaker close-up -> Listener reaction -> Two-shot
+- Action sequence: Wide establishing -> Medium action -> Close-up detail
+
+Return JSON only:
+{{
+    "shots": [
+        {{
+            "shot_number": 1,
+            "duration": 5.0,
+            "srt_text": "portion of narration for this shot",
+            "visual_moment": "what viewer sees - specific and purposeful",
+            "shot_purpose": "why this shot at this moment",
+            "characters_used": "{characters_used}",
+            "location_used": "{location_used}",
+            "camera": "shot type and movement"
+        }}
+    ]
+}}"""
+
+    def has_narrator_role(self) -> bool:
+        """Story co narrator rieng (nvc)."""
+        return True
+
     # ========== STEP 1: Analyze Story ==========
     def step1_analyze(self, sampled_text: str) -> str:
         return f"""Analyze this story and extract key information for visual production.
@@ -197,6 +258,8 @@ SEGMENT INFO:
 - Duration: {seg_duration:.1f} seconds total
 - Required: EXACTLY {image_count} scenes
 - IMPORTANT: Each scene must be {min_scene_duration}-{max_scene_duration} seconds (average ~{scene_duration:.1f}s)
+- MINIMUM {min_scene_duration} seconds per scene - NO scene shorter than {min_scene_duration}s
+- MAXIMUM {max_scene_duration} seconds per scene - NO scene longer than {max_scene_duration}s
 
 STORY CONTEXT:
 {context_lock}
@@ -330,5 +393,85 @@ Return JSON only with EXACTLY {batch_size} scenes:
             "video_prompt": "camera movement and action description..."
         }}
     ]
+}}
+"""
+
+    # ========== STEP 8: Thumbnails ==========
+    def step8_thumbnail(self, setting: dict, themes: list, visual_style: dict,
+                        context_lock: str, protagonist, chars_info: str,
+                        locs_info: str, char_ids: list, loc_ids: list) -> str:
+        return f"""You are an expert YouTube thumbnail designer and cinematographer.
+Create 3 compelling thumbnail image prompts for a YouTube video based on this story.
+
+STORY CONTEXT:
+- Setting: {setting}
+- Themes: {themes}
+- Visual style: {visual_style}
+- Context lock: {context_lock}
+
+MAIN CHARACTER (protagonist): {protagonist.id} ({protagonist.name})
+Character description: {protagonist.character_lock or protagonist.english_prompt}
+
+ALL CHARACTERS:
+{chars_info}
+
+LOCATIONS:
+{locs_info}
+
+AVAILABLE REFERENCE IDs:
+- Characters: {char_ids}
+- Locations: {loc_ids}
+
+RULES FOR PROMPTS:
+1. Write in English, cinematic style, highly detailed
+2. MUST annotate references EXACTLY like this:
+   - Character: "a beautiful woman (nv1.png)" or "(nv1.png) standing proud"
+   - Location: "in the grand hall (loc1.png)" or "(loc2.png) background"
+3. Choose the most emotionally powerful character + location combination
+4. Each prompt MUST be unique in composition, angle, and emotional tone
+5. THUMBNAIL OPTIMIZED: close-up face or upper body, strong contrast, bold expression
+
+CREATE EXACTLY 3 THUMBNAIL PROMPTS:
+
+VERSION 1 - "portrait_main" (ASPIRATIONAL PORTRAIT):
+Goal: Main character at their most beautiful/powerful/attractive. The ideal version viewers want to see or become.
+Style: Glamorous close-up, perfect lighting, aspirational expression (confident, serene, powerful).
+Emotion: Desire, admiration, aspiration.
+
+VERSION 2 - "dramatic_scene" (CURIOSITY / TENSION):
+Goal: The most dramatic, tense, or emotionally charged moment. Creates "what happened?!" reaction.
+Style: Medium shot or close-up, dynamic composition, intense expression (fear, rage, tears, shock).
+Emotion: Curiosity, tension, suspense.
+
+VERSION 3 - "youtube_ctr" (MAXIMUM CLICK-THROUGH):
+Goal: Maximum CTR using proven YouTube formula: expressive face + implicit context + visual hook.
+Style: Extreme close-up face with BIG EMOTION, simple high-contrast background, one clear focal point.
+Emotion: Surprise, shock, disbelief, intense joy — whatever fits the story best.
+
+Return JSON only:
+{{
+  "thumbnails": [
+    {{
+      "thumb_id": 1,
+      "version_desc": "portrait_main",
+      "img_prompt": "...full prompt with (nvX.png) and (locX.png) annotations...",
+      "characters_used": "nv1",
+      "location_used": "loc1"
+    }},
+    {{
+      "thumb_id": 2,
+      "version_desc": "dramatic_scene",
+      "img_prompt": "...",
+      "characters_used": "nv1",
+      "location_used": "loc1"
+    }},
+    {{
+      "thumb_id": 3,
+      "version_desc": "youtube_ctr",
+      "img_prompt": "...",
+      "characters_used": "nv1",
+      "location_used": ""
+    }}
+  ]
 }}
 """

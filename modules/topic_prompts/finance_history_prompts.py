@@ -49,7 +49,7 @@ AVAILABLE LOCATIONS:
 {chr(10).join(loc_locks) if loc_locks else 'None'}
 
 RULES FOR SPLITTING:
-1. Each panel MUST be 3-8 seconds (divide the {duration:.1f}s total)
+1. Each panel MUST be 4-8 seconds (divide the {duration:.1f}s total). MINIMUM 4 seconds per panel
 2. Each panel must show DIFFERENT aspect of the economic concept being explained
 3. All panels together must cover the FULL narration
 4. Use EXACT character/location IDs from the lists above
@@ -210,15 +210,16 @@ SAMPLE SRT CONTENT:
 {targeted_srt_text[:8000] if targeted_srt_text else 'Use segment analysis above'}
 
 CHARACTER DESIGN RULES:
+- ONLY ONE NARRATOR CHARACTER: Create exactly 1 narrator/host character. Do NOT create multiple narrator characters.
 - Narrator/Host: a warm, intellectual cartoon character - think professor or historian type
   * Detailed face with expressive eyes, specific hairstyle and color
   * Thoughtful, analytical expressions
   * Smart casual or academic clothing
 - MUST include a DISTINCTIVE VISUAL IDENTIFIER (specific glasses, bow tie, vest, distinctive hair, beard, etc.)
 - MUST specify FULL OUTFIT: top (sweater/shirt/vest + color), bottom (pants/trousers + color), footwear (shoes + color)
-- Historical figures: cartoon versions with period-appropriate clothing
+- Historical figures mentioned in content: DO NOT create separate character entries for them. Show them as generic cartoon people in scenes (e.g., "a 19th century businessman in top hat"). Only create reference images for the NARRATOR.
 - Background people: detailed cartoon people (NOT silhouettes - this is NOT minimalist style)
-- Only create character entries for characters who need REFERENCE IMAGES
+- MAXIMUM 1-2 characters total. The narrator is the ONLY character that needs a reference image.
 
 For each character, provide:
 1. portrait_prompt: Detailed cartoon character on simple background
@@ -318,6 +319,8 @@ SEGMENT INFO:
 - Duration: {seg_duration:.1f} seconds total
 - Required: EXACTLY {image_count} illustrations
 - Each illustration covers {min_scene_duration}-{max_scene_duration} seconds of narration
+- MINIMUM {min_scene_duration} seconds per scene - NO scene shorter than {min_scene_duration}s
+- MAXIMUM {max_scene_duration} seconds per scene - NO scene longer than {max_scene_duration}s
 
 VISUAL STYLE:
 {context_lock}
@@ -344,9 +347,10 @@ ILLUSTRATION TECHNIQUES FOR FINANCE/HISTORY:
 INSTRUCTIONS:
 1. Create EXACTLY {image_count} illustration scenes - no more, no less
 2. Each scene must VISUALLY REPRESENT the narration content
-3. Use historical scenes and data visualizations to illustrate economic concepts
-4. Use EXACT character/location IDs from the lists above
-5. scene_id: just use 1, 2, 3...
+3. DURATION RULES: Each scene MUST be {min_scene_duration}-{max_scene_duration} seconds. NEVER create a scene shorter than {min_scene_duration}s or longer than {max_scene_duration}s.
+4. Use historical scenes and data visualizations to illustrate economic concepts
+5. Use EXACT character/location IDs from the lists above
+6. scene_id: just use 1, 2, 3...
 6. NARRATOR PRESENCE: The narrator/historian character should appear in AT LEAST 60% of scenes (presenting, observing, at desk). Other scenes can be pure historical illustrations or data visualizations.
 7. REFERENCES ACCURACY:
    - characters_used: ONLY narrator or named characters who appear
@@ -447,6 +451,13 @@ IMPORTANT: Each scene becomes a VIDEO CLIP. Prompts must create visuals that MAT
 VISUAL STYLE (MUST follow for ALL scenes):
 {context_lock}
 
+ABSOLUTE RULE - NO TEXT IN IMAGES:
+- NEVER include ANY English, Swedish, or other language WORDS in image prompts
+- NEVER use quoted strings like 'WEALTH CREATION', 'Folkhemmet', 'FREE HEALTHCARE' etc.
+- NEVER request readable text on signs, documents, banners, headlines, labels
+- INSTEAD USE: numbers (3.5%, $100M), currency symbols ($, €, kr), arrows (↑↓), flag icons, building icons, percentage signs (%)
+- INSTEAD OF text labels, use VISUAL REPRESENTATIONS: a hospital = building with red cross, a school = building with book icon, wealth = gold coins/stacks
+
 CRITICAL ILLUSTRATION STYLE RULES:
 - DETAILED cartoon illustration (NOT minimalist - rich, warm, editorial comic style)
 - Warm color palette: golden, amber, earth tones, warm blues
@@ -456,7 +467,6 @@ CRITICAL ILLUSTRATION STYLE RULES:
 - Show economic data as VISUAL CHARTS, GRAPHS with numbers and arrows (NO text labels)
 - Use MAPS with arrows for trade/capital flows
 - Historical scenes in period-appropriate cartoon style
-- NO TEXT/WORDS/LABELS in the image - use NUMBERS, CURRENCY SYMBOLS ($, €, kr), ARROWS, PERCENTAGE SIGNS (%) instead
 - DO NOT write meta-labels like "data visualization:" - just DESCRIBE what the illustration shows
 
 REFERENCE FILE ANNOTATIONS:
@@ -489,10 +499,18 @@ Example img_prompt (GOOD - historical scene):
 Example img_prompt (GOOD - data visualization):
 "SPLIT SCREEN composition divided by vertical golden line. LEFT SIDE warm amber tones: cartoon illustration of thriving 1950s Swedish factory with smokestacks, workers streaming in, upward green arrow and numbers 4.2% above. RIGHT SIDE cooler tones: same factory in 1990s looking quieter, fewer workers, downward red arrow and numbers 1.1% above, warm cartoon historian with grey wavy hair, round glasses (nv1.png) standing between both sides gesturing at comparison, detailed cartoon illustration style, warm color palette, soft lighting"
 
-BAD example (DO NOT write like this - has text/words):
-"Chart labeled 'GDP Growth Rate' with text annotations showing 'Sweden leads Europe'"
-GOOD version (visual only, no text):
-"Large cartoon line chart on warm parchment paper, green line trending sharply upward from left to right, small flag icons of Sweden at the top and other country flags below, numerical values 3.5%, 4.2%, 2.1% next to data points, warm golden lighting"
+BAD examples (DO NOT write like this - has text/words):
+- "Chart labeled 'GDP Growth Rate' with text annotations showing 'Sweden leads Europe'"
+- "Document with text 'WEALTH CREATION' and 'WELFARE STATE'"
+- "Sign reading 'Folkhemmet' on the building"
+- "Blueprint with text 'Hem PC Reform'"
+- "Banner saying 'FREE HEALTHCARE'"
+GOOD versions (visual only, NO words - use icons, flags, numbers):
+- "Large cartoon line chart on warm parchment, green line trending upward, Swedish flag icon at top, other country flag icons below, numbers 3.5%, 4.2% next to data points"
+- "Two golden scale pans: LEFT pan heavy with factory icons and coin stacks, RIGHT pan lighter with hospital and school building icons, golden arrow pointing from left to right"
+- "Warm brick building with Swedish flag on top, family silhouettes visible through windows, golden warm glow emanating from inside"
+- "Desktop computer icon on desk with large green checkmark above, Swedish flag pin on the monitor"
+- "Hospital building with large red cross symbol on front, green checkmark icon floating above"
 
 Example video_prompt:
 "Camera slowly pans across the harbor from left to right, ships gently rocking, workers moving crates, smoke rising from steamship, green arrow gradually grows upward"

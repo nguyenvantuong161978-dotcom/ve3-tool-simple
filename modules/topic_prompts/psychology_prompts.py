@@ -44,7 +44,7 @@ AVAILABLE LOCATIONS:
 {chr(10).join(loc_locks) if loc_locks else 'None'}
 
 RULES FOR SPLITTING:
-1. Each panel MUST be 3-8 seconds (divide the {duration:.1f}s total)
+1. Each panel MUST be 4-8 seconds (divide the {duration:.1f}s total). MINIMUM 4 seconds per panel
 2. Each panel must show DIFFERENT aspect of the concept being explained
 3. All panels together must cover the FULL narration
 4. Use EXACT character/location IDs from the lists above
@@ -303,6 +303,8 @@ SEGMENT INFO:
 - Duration: {seg_duration:.1f} seconds total
 - Required: EXACTLY {image_count} illustrations
 - Each illustration covers {min_scene_duration}-{max_scene_duration} seconds of narration
+- MINIMUM {min_scene_duration} seconds per scene - NO scene shorter than {min_scene_duration}s
+- MAXIMUM {max_scene_duration} seconds per scene - NO scene longer than {max_scene_duration}s
 
 VISUAL STYLE:
 {context_lock}
