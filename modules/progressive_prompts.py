@@ -2444,9 +2444,12 @@ Create scenes (~8s each). Return JSON:
         # 1. Tính duration thực từ SRT timestamps
         # 2. SPLIT scenes quá dài (>max_dur) thành nhiều scenes nhỏ
         # 3. MERGE scenes quá ngắn (<min_dur) với scene kế bên (multi-pass)
+        # v1.0.442: SKIP SPLIT/MERGE khi excel_mode=small (giữ nguyên key moments)
         # =====================================================================
         min_dur = self.config.get("min_scene_duration", 4)
         max_dur = self.config.get("max_scene_duration", 8)
+        _excel_mode = self.config.get("excel_mode", "full").lower()
+        _skip_duration_enforcement = (_excel_mode == "small")
 
         def _calc_actual_duration(scene):
             """Tính duration thực từ srt_start/srt_end timestamps."""
@@ -2484,105 +2487,110 @@ Create scenes (~8s each). Return JSON:
             scene["duration"] = round(_calc_actual_duration(scene), 2)
 
         # --- PHASE 1: SPLIT scenes quá dài ---
-        split_count = 0
-        split_result = []
-        for scene in all_scenes:
-            dur = scene.get("duration", 0)
-            if dur > max_dur:
-                # Tính số scenes cần chia
-                n_parts = max(2, int(dur / max_dur) + (1 if dur % max_dur > 0 else 0))
-                indices = scene.get("srt_indices", [])
-                if isinstance(indices, list) and len(indices) >= n_parts:
-                    # Chia đều srt_indices
-                    chunk_size = max(1, len(indices) // n_parts)
-                    for p in range(n_parts):
-                        start_i = p * chunk_size
-                        end_i = min((p + 1) * chunk_size, len(indices)) if p < n_parts - 1 else len(indices)
-                        sub_indices = indices[start_i:end_i]
-                        if not sub_indices:
-                            continue
-                        sub_entries = [e for idx, e in enumerate(srt_entries, 1) if idx in sub_indices]
-                        sub_scene = dict(scene)  # shallow copy
-                        sub_scene["srt_indices"] = sub_indices
-                        if sub_entries:
-                            sub_scene["srt_start"] = sub_entries[0].start_time
-                            sub_scene["srt_end"] = sub_entries[-1].end_time
-                            sub_scene["srt_text"] = " ".join([e.text for e in sub_entries])
-                            sub_scene["duration"] = round(_calc_actual_duration(sub_scene), 2)
-                        else:
-                            sub_scene["duration"] = round(dur / n_parts, 2)
-                        split_result.append(sub_scene)
-                    split_count += 1
+        # v1.0.442: Skip SPLIT khi small mode (key moments cần giữ nguyên duration dài)
+        if _skip_duration_enforcement:
+            self._log(f"  [SMALL MODE] Skip SPLIT/MERGE - giữ nguyên {len(all_scenes)} key moment scenes")
+
+        if not _skip_duration_enforcement:
+            split_count = 0
+            split_result = []
+            for scene in all_scenes:
+                dur = scene.get("duration", 0)
+                if dur > max_dur:
+                    # Tính số scenes cần chia
+                    n_parts = max(2, int(dur / max_dur) + (1 if dur % max_dur > 0 else 0))
+                    indices = scene.get("srt_indices", [])
+                    if isinstance(indices, list) and len(indices) >= n_parts:
+                        # Chia đều srt_indices
+                        chunk_size = max(1, len(indices) // n_parts)
+                        for p in range(n_parts):
+                            start_i = p * chunk_size
+                            end_i = min((p + 1) * chunk_size, len(indices)) if p < n_parts - 1 else len(indices)
+                            sub_indices = indices[start_i:end_i]
+                            if not sub_indices:
+                                continue
+                            sub_entries = [e for idx, e in enumerate(srt_entries, 1) if idx in sub_indices]
+                            sub_scene = dict(scene)  # shallow copy
+                            sub_scene["srt_indices"] = sub_indices
+                            if sub_entries:
+                                sub_scene["srt_start"] = sub_entries[0].start_time
+                                sub_scene["srt_end"] = sub_entries[-1].end_time
+                                sub_scene["srt_text"] = " ".join([e.text for e in sub_entries])
+                                sub_scene["duration"] = round(_calc_actual_duration(sub_scene), 2)
+                            else:
+                                sub_scene["duration"] = round(dur / n_parts, 2)
+                            split_result.append(sub_scene)
+                        split_count += 1
+                    else:
+                        split_result.append(scene)
                 else:
                     split_result.append(scene)
-            else:
-                split_result.append(scene)
 
-        if split_count > 0:
-            self._log(f"  [SPLIT] Split {split_count} long scenes (>{max_dur}s), {len(all_scenes)} → {len(split_result)} scenes")
-            all_scenes = split_result
+            if split_count > 0:
+                self._log(f"  [SPLIT] Split {split_count} long scenes (>{max_dur}s), {len(all_scenes)} → {len(split_result)} scenes")
+                all_scenes = split_result
 
-        # --- PHASE 2: MERGE scenes quá ngắn (multi-pass) ---
-        total_merge_count = 0
-        for pass_num in range(5):  # Max 5 passes
-            short_count = sum(1 for s in all_scenes if s.get("duration", 0) < min_dur)
-            if short_count == 0:
-                break
+            # --- PHASE 2: MERGE scenes quá ngắn (multi-pass) ---
+            total_merge_count = 0
+            for pass_num in range(5):  # Max 5 passes
+                short_count = sum(1 for s in all_scenes if s.get("duration", 0) < min_dur)
+                if short_count == 0:
+                    break
 
-            merged_scenes = []
-            i = 0
-            pass_merges = 0
-            skip_next = False
+                merged_scenes = []
+                i = 0
+                pass_merges = 0
+                skip_next = False
 
-            while i < len(all_scenes):
-                if skip_next:
-                    skip_next = False
+                while i < len(all_scenes):
+                    if skip_next:
+                        skip_next = False
+                        i += 1
+                        continue
+
+                    current = all_scenes[i]
+                    cur_dur = current.get("duration", 0)
+
+                    if cur_dur >= min_dur:
+                        merged_scenes.append(current)
+                        i += 1
+                        continue
+
+                    # Scene quá ngắn - thử gộp
+                    merged = False
+
+                    # Thử gộp với scene SAU
+                    if i + 1 < len(all_scenes):
+                        next_scene = all_scenes[i + 1]
+                        combined = cur_dur + next_scene.get("duration", 0)
+                        if combined <= max_dur:
+                            merged_scenes.append(_merge_two_scenes(current, next_scene))
+                            pass_merges += 1
+                            skip_next = True
+                            merged = True
+
+                    # Nếu không gộp được với SAU, thử gộp với TRƯỚC
+                    if not merged and merged_scenes:
+                        prev = merged_scenes[-1]
+                        combined = prev.get("duration", 0) + cur_dur
+                        if combined <= max_dur:
+                            merged_scenes[-1] = _merge_two_scenes(prev, current)
+                            pass_merges += 1
+                            merged = True
+
+                    if not merged:
+                        merged_scenes.append(current)
+
                     i += 1
-                    continue
 
-                current = all_scenes[i]
-                cur_dur = current.get("duration", 0)
+                total_merge_count += pass_merges
+                all_scenes = merged_scenes
 
-                if cur_dur >= min_dur:
-                    merged_scenes.append(current)
-                    i += 1
-                    continue
+                if pass_merges == 0:
+                    break  # Không merge được nữa
 
-                # Scene quá ngắn - thử gộp
-                merged = False
-
-                # Thử gộp với scene SAU
-                if i + 1 < len(all_scenes):
-                    next_scene = all_scenes[i + 1]
-                    combined = cur_dur + next_scene.get("duration", 0)
-                    if combined <= max_dur:
-                        merged_scenes.append(_merge_two_scenes(current, next_scene))
-                        pass_merges += 1
-                        skip_next = True
-                        merged = True
-
-                # Nếu không gộp được với SAU, thử gộp với TRƯỚC
-                if not merged and merged_scenes:
-                    prev = merged_scenes[-1]
-                    combined = prev.get("duration", 0) + cur_dur
-                    if combined <= max_dur:
-                        merged_scenes[-1] = _merge_two_scenes(prev, current)
-                        pass_merges += 1
-                        merged = True
-
-                if not merged:
-                    merged_scenes.append(current)
-
-                i += 1
-
-            total_merge_count += pass_merges
-            all_scenes = merged_scenes
-
-            if pass_merges == 0:
-                break  # Không merge được nữa
-
-        if total_merge_count > 0:
-            self._log(f"  [MERGE] Merged {total_merge_count} short scenes (<{min_dur}s) in {pass_num + 1} passes")
+            if total_merge_count > 0:
+                self._log(f"  [MERGE] Merged {total_merge_count} short scenes (<{min_dur}s) in {pass_num + 1} passes")
 
         # Reassign scene_id
         for new_id, scene in enumerate(all_scenes, 1):

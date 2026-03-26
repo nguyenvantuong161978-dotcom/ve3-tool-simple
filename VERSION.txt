@@ -1,8 +1,13 @@
-1.0.442
-2026-03-26 (VN)
-Change: EXCEL SAVE DIRECT OVERWRITE - khi rename .bak fail thi ghi de truc tiep
+1.0.443
+2026-03-27 (VN)
+Change: FIX SMALL MODE - skip SPLIT/MERGE khi excel_mode=small
 
 Thay doi:
+- v1.0.443: FIX SMALL MODE SCENE COUNT
+  * Skip SPLIT/MERGE duration enforcement khi excel_mode=small
+  * Small mode: giu nguyen key moment scenes (20-30s) khong bi chia nho
+  * Truoc: small mode tao it scenes roi SPLIT lai pha ra nhieu → vo hieu hoa small
+  * Sau: small mode giu dung so scenes nhu Step 2 da tinh
 - v1.0.442: EXCEL SAVE DIRECT OVERWRITE
   * Khi os.rename(original, .bak) fail (file bi lock): dung shutil.copy2 ghi de truc tiep
   * Giam retry: save() 3 lan (tu 5), safe_save() 3 lan (tu 5)
