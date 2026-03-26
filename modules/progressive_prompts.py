@@ -566,49 +566,12 @@ class ProgressivePromptsGenerator:
         min_shots = max(2, int(duration / 7))
         max_shots = max(2, int(duration / 4))
 
-        prompt = f"""You are a FILM DIRECTOR. This scene is {duration:.1f} seconds - TOO LONG for one shot (max 8s).
-Split it into {min_shots}-{max_shots} DISTINCT cinematic shots.
-
-ORIGINAL SCENE:
-- Duration: {duration:.1f}s (from {srt_start} to {srt_end})
-- Narration: "{srt_text}"
-- Visual concept: "{visual_moment}"
-- Characters: {characters_used}
-- Location: {location_used}
-
-AVAILABLE CHARACTERS:
-{chr(10).join(char_locks) if char_locks else 'None'}
-
-AVAILABLE LOCATIONS:
-{chr(10).join(loc_locks) if loc_locks else 'None'}
-
-RULES FOR SPLITTING:
-1. Each shot MUST be 3-8 seconds (divide the {duration:.1f}s total)
-2. Each shot must show DIFFERENT aspect: angle, focus, emotion
-3. All shots together must cover the FULL narration
-4. Use EXACT character/location IDs from the lists above
-5. Think cinematically - what sequence of shots tells this story best?
-
-Examples of good splits:
-- Character making decision: Close-up face → Insert object → Wide shot reaction
-- Two people talking: Speaker close-up → Listener reaction → Two-shot
-- Action sequence: Wide establishing → Medium action → Close-up detail
-
-Return JSON only:
-{{
-    "shots": [
-        {{
-            "shot_number": 1,
-            "duration": 5.0,
-            "srt_text": "portion of narration for this shot",
-            "visual_moment": "what viewer sees - specific and purposeful",
-            "shot_purpose": "why this shot at this moment",
-            "characters_used": "{characters_used}",
-            "location_used": "{location_used}",
-            "camera": "shot type and movement"
-        }}
-    ]
-}}"""
+        # v1.0.433: dung topic_prompts
+        prompt = self.topic_prompts.split_scene_prompt(
+            duration, min_shots, max_shots, srt_start, srt_end,
+            srt_text, visual_moment, characters_used, location_used,
+            char_locks, loc_locks
+        )
 
         response = self._call_api(prompt, temperature=0.5, max_tokens=2000)
         if not response:
@@ -1559,8 +1522,9 @@ SEGMENT "{seg_name}":
                 role = char_data.get("role", "supporting").lower()
 
                 # Tạo ID đơn giản và nhất quán
-                if role == "narrator" or "narrator" in char_data.get("name", "").lower():
-                    char_id = "nvc"  # Narrator luôn là nvc
+                # v1.0.433: narrator detection chi ap dung cho story topic
+                if self.topic_prompts.has_narrator_role() and (role == "narrator" or "narrator" in char_data.get("name", "").lower()):
+                    char_id = "nvc"  # Narrator luôn là nvc (chi story)
                 else:
                     char_counter += 1
                     char_id = f"nv{char_counter}"  # nv1, nv2, nv3...
@@ -1812,7 +1776,7 @@ SEGMENT "{seg_name}":
         relevant_locs = [f"- {lid}: {llock}" for lid, llock in list(loc_locks.items())[:3]]
 
         # Build prompt
-        prompt = f"""Create {image_count} cinematic shots for this story segment.
+        prompt = f"""Create {image_count} visual scenes for this content segment.
 
 SEGMENT: "{seg_name}"
 Story: {message}
@@ -1992,7 +1956,7 @@ Return JSON only:
             for idx, entry in batch_entries:
                 srt_text += f"[{idx+1}] {entry.start_time} --> {entry.end_time}\n{entry.text}\n\n"
 
-            prompt = f"""Create cinematic shots for this content.
+            prompt = f"""Create visual scenes for this content.
 
 CONTEXT: {context_lock}
 
@@ -2886,8 +2850,8 @@ Scene {scene_id}:
                         chars_used = original.get("characters_used") or ""
                         loc_used = original.get("location_used") or ""
 
-                        fallback_prompt = f"Cinematic scene: {visual_moment or srt_text[:200]}. "
-                        fallback_prompt += "4K photorealistic, dramatic lighting, film quality."
+                        fallback_prompt = f"Scene: {visual_moment or srt_text[:200]}. "
+                        fallback_prompt += self.topic_prompts.fallback_style()
 
                         if chars_used:
                             for cid in chars_used.split(","):
@@ -2934,7 +2898,7 @@ Scene {scene_id}:
                             loc_used = orig.get("location_used") or ""
 
                             unique_prompt = f"Scene {scene_id}: {visual or srt_text}. "
-                            unique_prompt += "Cinematic 4K, dramatic lighting, photorealistic, film quality."
+                            unique_prompt += self.topic_prompts.fallback_style()
 
                             if chars_used:
                                 for cid in chars_used.split(","):
@@ -3307,81 +3271,12 @@ Scene {scene_id}:
         char_ids = [c.id for c in main_chars[:5]]
         loc_ids = [loc.id for loc in (locations or [])[:5]] if locations else []
 
-        prompt = f"""You are an expert YouTube thumbnail designer and cinematographer.
-Create 3 compelling thumbnail image prompts for a YouTube video based on this story.
-
-STORY CONTEXT:
-- Setting: {setting}
-- Themes: {themes}
-- Visual style: {visual_style}
-- Context lock: {context_lock}
-
-MAIN CHARACTER (protagonist): {protagonist.id} ({protagonist.name})
-Character description: {protagonist.character_lock or protagonist.english_prompt}
-
-ALL CHARACTERS:
-{chars_info}
-
-LOCATIONS:
-{locs_info}
-
-AVAILABLE REFERENCE IDs:
-- Characters: {char_ids}
-- Locations: {loc_ids}
-
-RULES FOR PROMPTS:
-1. Write in English, cinematic style, highly detailed
-2. MUST annotate references EXACTLY like this:
-   - Character: "a beautiful woman (nv1.png)" or "(nv1.png) standing proud"
-   - Location: "in the grand hall (loc1.png)" or "(loc2.png) background"
-3. Choose the most emotionally powerful character + location combination
-4. Each prompt MUST be unique in composition, angle, and emotional tone
-5. THUMBNAIL OPTIMIZED: close-up face or upper body, strong contrast, bold expression
-
-CREATE EXACTLY 3 THUMBNAIL PROMPTS:
-
-VERSION 1 - "portrait_main" (ASPIRATIONAL PORTRAIT):
-Goal: Main character at their most beautiful/powerful/attractive. The ideal version viewers want to see or become.
-Style: Glamorous close-up, perfect lighting, aspirational expression (confident, serene, powerful).
-Emotion: Desire, admiration, aspiration.
-
-VERSION 2 - "dramatic_scene" (CURIOSITY / TENSION):
-Goal: The most dramatic, tense, or emotionally charged moment. Creates "what happened?!" reaction.
-Style: Medium shot or close-up, dynamic composition, intense expression (fear, rage, tears, shock).
-Emotion: Curiosity, tension, suspense.
-
-VERSION 3 - "youtube_ctr" (MAXIMUM CLICK-THROUGH):
-Goal: Maximum CTR using proven YouTube formula: expressive face + implicit context + visual hook.
-Style: Extreme close-up face with BIG EMOTION, simple high-contrast background, one clear focal point.
-Emotion: Surprise, shock, disbelief, intense joy — whatever fits the story best.
-
-Return JSON only:
-{{
-  "thumbnails": [
-    {{
-      "thumb_id": 1,
-      "version_desc": "portrait_main",
-      "img_prompt": "...full prompt with (nvX.png) and (locX.png) annotations...",
-      "characters_used": "nv1",
-      "location_used": "loc1"
-    }},
-    {{
-      "thumb_id": 2,
-      "version_desc": "dramatic_scene",
-      "img_prompt": "...",
-      "characters_used": "nv1",
-      "location_used": "loc1"
-    }},
-    {{
-      "thumb_id": 3,
-      "version_desc": "youtube_ctr",
-      "img_prompt": "...",
-      "characters_used": "nv1",
-      "location_used": ""
-    }}
-  ]
-}}
-"""
+        prompt = self.topic_prompts.step8_thumbnail(
+            setting=setting, themes=themes, visual_style=visual_style,
+            context_lock=context_lock, protagonist=protagonist,
+            chars_info=chars_info, locs_info=locs_info,
+            char_ids=char_ids, loc_ids=loc_ids
+        )
 
         self._log(f"  Calling API for 3 thumbnail prompts...")
         response = self._call_api(prompt, temperature=0.75, max_tokens=4096)

@@ -1,8 +1,12 @@
-1.0.432
+1.0.433
 2026-03-26 (VN)
-Change: Rewrite psychology_prompts.py theo mau Excel tham khao
+Change: Step 8 thumbnail topic-aware + hook all steps
 
 Thay doi:
+- v1.0.433: STEP 8 THUMBNAIL TOPIC-AWARE
+  * Them step8_thumbnail() vao psychology_prompts.py (cartoon style)
+  * Hook Step 8 trong progressive_prompts.py dung self.topic_prompts.step8_thumbnail()
+  * Tat ca 8 steps da topic-aware: fallback, narrator, split_scene, step1-8
 - v1.0.432: PSYCHOLOGY PROMPTS REWRITE
   * Step 1: Khong hardcode character design - de API tu quyet dinh
   * Step 3: character_lock day du de copy-paste vao moi prompt

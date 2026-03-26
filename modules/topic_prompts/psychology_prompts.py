@@ -14,6 +14,67 @@ class PsychologyPrompts:
     TOPIC_NAME = "psychology"
     TOPIC_LABEL = "Tam ly / Giao duc"
 
+    # ========== FALLBACK & UTILITIES ==========
+    def fallback_style(self) -> str:
+        """Style suffix cho fallback prompts khi API fail."""
+        return "Clean cartoon illustration, minimalist style, clean black outlines, paper texture background."
+
+    def fallback_video_style(self) -> str:
+        return "Smooth illustration animation, gentle movement"
+
+    def split_scene_prompt(self, duration: float, min_shots: int, max_shots: int,
+                           srt_start: str, srt_end: str, srt_text: str,
+                           visual_moment: str, characters_used: str,
+                           location_used: str, char_locks: list, loc_locks: list) -> str:
+        """Prompt de chia scene dai thanh nhieu illustrations."""
+        return f"""You are an ILLUSTRATOR for an educational YouTube channel. This scene is {duration:.1f} seconds - TOO LONG for one illustration (max 8s).
+Split it into {min_shots}-{max_shots} DISTINCT illustration panels.
+
+ORIGINAL SCENE:
+- Duration: {duration:.1f}s (from {srt_start} to {srt_end})
+- Narration: "{srt_text}"
+- Visual concept: "{visual_moment}"
+- Characters: {characters_used}
+- Location: {location_used}
+
+AVAILABLE CHARACTERS:
+{chr(10).join(char_locks) if char_locks else 'None'}
+
+AVAILABLE LOCATIONS:
+{chr(10).join(loc_locks) if loc_locks else 'None'}
+
+RULES FOR SPLITTING:
+1. Each panel MUST be 3-8 seconds (divide the {duration:.1f}s total)
+2. Each panel must show DIFFERENT aspect of the concept being explained
+3. All panels together must cover the FULL narration
+4. Use EXACT character/location IDs from the lists above
+5. Use visual metaphors, floating text, diagrams to illustrate concepts
+
+Examples of good splits:
+- Concept explanation: Overview illustration -> Detail zoom -> Visual metaphor
+- Comparison: Before state -> After state -> Resolution
+- Emotional journey: Problem shown -> Impact felt -> Solution found
+
+Return JSON only:
+{{
+    "shots": [
+        {{
+            "shot_number": 1,
+            "duration": 5.0,
+            "srt_text": "portion of narration for this panel",
+            "visual_moment": "what the illustration shows - with visual metaphors",
+            "shot_purpose": "why this illustration at this moment",
+            "characters_used": "{characters_used}",
+            "location_used": "{location_used}",
+            "camera": "composition style"
+        }}
+    ]
+}}"""
+
+    def has_narrator_role(self) -> bool:
+        """Psychology khong co narrator rieng."""
+        return False
+
     # ========== STEP 1: Analyze Content ==========
     def step1_analyze(self, sampled_text: str) -> str:
         return f"""Analyze this educational/psychology content and extract key information for visual illustration.
@@ -337,6 +398,94 @@ Return JSON only:
             "key_focus": "Contrast between phone users and character eating naturally"
         }}
     ]
+}}
+"""
+
+    # ========== STEP 7: Scene Prompts ==========
+    # ========== STEP 8: Thumbnail ==========
+    def step8_thumbnail(self, setting: dict, themes: list, visual_style: dict,
+                        context_lock: str, protagonist, chars_info: str,
+                        locs_info: str, char_ids: list, loc_ids: list) -> str:
+        return f"""You are a YouTube thumbnail designer for an EDUCATIONAL/PSYCHOLOGY channel.
+Create 3 compelling thumbnail image prompts in CARTOON ILLUSTRATION style.
+
+CONTENT CONTEXT:
+- Setting: {setting}
+- Themes: {themes}
+- Visual style: {visual_style}
+- Context lock: {context_lock}
+
+MAIN CHARACTER: {protagonist.id} ({protagonist.name})
+Character description: {protagonist.character_lock or protagonist.english_prompt}
+
+ALL CHARACTERS:
+{chars_info}
+
+LOCATIONS:
+{locs_info}
+
+AVAILABLE REFERENCE IDs:
+- Characters: {char_ids}
+- Locations: {loc_ids}
+
+VISUAL STYLE RULES:
+- Clean minimalist cartoon illustration with clean black outlines
+- Paper texture background
+- Character must match the character_lock description exactly
+- Use VISUAL METAPHORS and FLOATING TEXT to hook viewers
+- NO photorealistic images
+
+RULES FOR PROMPTS:
+1. Write in English, cartoon illustration style
+2. MUST annotate references EXACTLY like this:
+   - Character: "cute character (nv1.png)" or "(nv1.png) looking up"
+   - Location: "in cozy room (loc1.png)"
+3. Include the FULL character description (from character_lock) in every prompt
+4. Each prompt MUST be unique in composition and emotional appeal
+5. End every prompt with: "clean black outline illustration style, paper texture background"
+
+CREATE EXACTLY 3 THUMBNAIL PROMPTS:
+
+VERSION 1 - "portrait_main" (CHARACTER CLOSE-UP):
+Goal: Main character with strong expression that represents the video's core message.
+Style: Close-up, character looking at viewer, visual metaphor element nearby, floating text with key concept.
+Emotion: Curiosity, hope, determination.
+
+VERSION 2 - "concept_visual" (VISUAL METAPHOR):
+Goal: The most powerful visual metaphor from the content. Makes viewers think "I need to understand this!"
+Style: Character interacting with visual metaphor (breaking chains, carrying weight, lighting candle in dark).
+Emotion: Intrigue, realization, transformation.
+
+VERSION 3 - "youtube_ctr" (MAXIMUM CLICK-THROUGH):
+Goal: Maximum CTR using contrast/surprise. Character in unexpected situation with floating text hook.
+Style: Split screen or dramatic contrast, character with big expressive eyes, bold floating text label.
+Emotion: Surprise, "wait what?!", relatable struggle.
+
+Return JSON only:
+{{
+  "thumbnails": [
+    {{
+      "thumb_id": 1,
+      "version_desc": "portrait_main",
+      "img_prompt": "...full prompt with (nvX.png) and (locX.png), ending with clean black outline illustration style, paper texture background",
+      "characters_used": "nv1",
+      "location_used": "loc1"
+    }},
+    {{
+      "thumb_id": 2,
+      "version_desc": "concept_visual",
+      "img_prompt": "...",
+      "characters_used": "nv1",
+      "location_used": ""
+    }},
+    {{
+      "thumb_id": 3,
+      "version_desc": "youtube_ctr",
+      "img_prompt": "...",
+      "characters_used": "nv1",
+      "location_used": ""
+    }}
+  ]
 }}
 """
 
