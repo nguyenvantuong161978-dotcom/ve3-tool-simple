@@ -129,8 +129,10 @@ class SettingsWindow(tk.Toplevel):
                        bg='#16213e', fg='#ffcc00', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
         tk.Radiobutton(topic_row, text="Psychology (Tam ly/Giao duc)", variable=self.topic_var, value="psychology",
                        bg='#16213e', fg='#00ff88', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        tk.Radiobutton(topic_row, text="Finance History (Tai chinh/Lich su)", variable=self.topic_var, value="finance_history",
+                       bg='#16213e', fg='#ffa502', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
 
-        tk.Label(topic_lf, text="Story: Anh/video realistic. Psychology: Minh hoa cartoon giao duc.",
+        tk.Label(topic_lf, text="Story: Realistic. Psychology: Cartoon giao duc. Finance: Hoat hinh lich su tai chinh.",
                  bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 
         # === CHE DO TAO ANH ===

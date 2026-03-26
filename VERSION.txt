@@ -1,8 +1,14 @@
-1.0.438
+1.0.439
 2026-03-26 (VN)
-Change: UPDATE khong reset video_mode/excel_mode
+Change: Them topic Finance History (Lich su Tai chinh)
 
 Thay doi:
+- v1.0.439: FINANCE HISTORY TOPIC
+  * Them finance_history_prompts.py - phong cach hoat hinh chi tiet (editorial illustration)
+  * Nhan vat cartoon chi tiet (khong minimalist), background giau chi tiet
+  * Data visualizations: charts, maps, graphs voi so lieu (khong text)
+  * Historical scenes: nha may, thanh pho, quoc hoi cartoon
+  * Them vao GUI topic selector
 - v1.0.438: UPDATE giu nguyen settings VM
   * Bo logic force reset video_mode/excel_mode ve "small" khi update
   * VM chon Full thi update xong van la Full
