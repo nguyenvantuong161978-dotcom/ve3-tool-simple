@@ -327,6 +327,55 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path, alread
         except Exception as e:
             log(f"[IMPORT] Copy _CLAIMED to local error: {e}", "WARN")
 
+        # === BƯỚC 4: Đọc topic từ _CLAIMED (dòng 5) → update settings.yaml ===
+        # v1.0.444: Tự động đổi topic + excel_mode theo chủ đề trong _CLAIMED
+        # Mapping: truyện → story/small, tâm lý → psychology/full, tài chính → finance_history/full
+        #          tài chính vn → finance_history_vn/full
+        try:
+            local_claimed = local_dir / "_CLAIMED"
+            if local_claimed.exists():
+                claimed_lines = local_claimed.read_text(encoding='utf-8').strip().split('\n')
+                if len(claimed_lines) >= 5 and claimed_lines[4].strip():
+                    raw_topic = claimed_lines[4].strip().lower()
+                    # Mapping chủ đề tiếng Việt → topic code + excel_mode
+                    TOPIC_MAPPING = {
+                        'truyện': ('story', 'small'),
+                        'truyen': ('story', 'small'),
+                        'story': ('story', 'small'),
+                        'tâm lý': ('psychology', 'full'),
+                        'tam ly': ('psychology', 'full'),
+                        'psychology': ('psychology', 'full'),
+                        'tài chính': ('finance_history', 'full'),
+                        'tai chinh': ('finance_history', 'full'),
+                        'finance_history': ('finance_history', 'full'),
+                        'tài chính vn': ('finance_history_vn', 'full'),
+                        'tai chinh vn': ('finance_history_vn', 'full'),
+                        'finance_history_vn': ('finance_history_vn', 'full'),
+                    }
+                    mapped = TOPIC_MAPPING.get(raw_topic)
+                    if mapped:
+                        new_topic, new_excel_mode = mapped
+                        # Update settings.yaml
+                        import yaml
+                        settings_path = TOOL_DIR / "config" / "settings.yaml"
+                        if settings_path.exists():
+                            with open(settings_path, 'r', encoding='utf-8') as f:
+                                settings = yaml.safe_load(f) or {}
+                            old_topic = settings.get('topic', '')
+                            old_mode = settings.get('excel_mode', '')
+                            if old_topic != new_topic or old_mode != new_excel_mode:
+                                settings['topic'] = new_topic
+                                settings['excel_mode'] = new_excel_mode
+                                with open(settings_path, 'w', encoding='utf-8') as f:
+                                    yaml.dump(settings, f, default_flow_style=False, allow_unicode=True)
+                                log(f"[IMPORT] Auto-config: topic={new_topic}, excel_mode={new_excel_mode} (từ _CLAIMED: '{raw_topic}')")
+                            else:
+                                log(f"[IMPORT] Topic already correct: {new_topic}/{new_excel_mode}")
+                    else:
+                        log(f"[IMPORT] Unknown topic in _CLAIMED: '{raw_topic}' - giữ nguyên settings", "WARN")
+        except Exception as e:
+            log(f"[IMPORT] Auto-config topic error: {e}", "WARN")
+
         return local_dir
     except Exception as e:
         log(f"[IMPORT] Error copying {name}: {e}", "ERROR")

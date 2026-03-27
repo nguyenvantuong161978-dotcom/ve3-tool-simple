@@ -1,8 +1,20 @@
-1.0.443
+1.0.444
 2026-03-27 (VN)
-Change: FIX SMALL MODE - skip SPLIT/MERGE khi excel_mode=small
+Change: THEM FINANCE HISTORY VN - phong cach Viet Nam cho Lich su Tai chinh
 
 Thay doi:
+- v1.0.444: FINANCE HISTORY VN (Phong cach Viet Nam)
+  * Them finance_history_vn_prompts.py - phong cach gan gui khan gia Viet
+  * Nhan vat Viet Nam: da ngam, toc den, trang phuc Viet (ao so mi, polo)
+  * Boi canh Viet: quan ca phe, pho co, cho, nha pho, kien truc Phap thuoc dia
+  * Mau sac Viet: do gach, vang dong, xanh ngoc, trang kem
+  * Van giu phien ban phong cach My (finance_history) nguyen ven
+  * Them vao GUI topic selector
+  * AUTO-CONFIG: _CLAIMED dong 5 = topic tu Google Sheet col S
+  * VM tu dong doi topic + excel_mode khi import project
+  * Mapping: truyen→story/small, tam ly→psychology/full, tai chinh→finance_history/full
+  * robust_copy.py: _get_topic_from_sheet() doc col S, ghi vao _CLAIMED dong 5
+  * run_excel_api.py: doc _CLAIMED dong 5 → update settings.yaml
 - v1.0.443: FIX SMALL MODE SCENE COUNT
   * Skip SPLIT/MERGE duration enforcement khi excel_mode=small
   * Small mode: giu nguyen key moment scenes (20-30s) khong bi chia nho

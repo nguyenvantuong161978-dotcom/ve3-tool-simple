@@ -586,7 +586,8 @@ class TaskQueue:
 
         try:
             account_str = self._get_account_from_sheet(code)
-            claim_content = self._make_claim_content(account=account_str)
+            topic_str = self._get_topic_from_sheet(code)
+            claim_content = self._make_claim_content(account=account_str, topic=topic_str)
 
             # Bước 2: Tạo file _CLAIMING_{VM_ID} bằng O_CREAT|O_EXCL (atomic)
             # Nếu file đã tồn tại → FileExistsError → VM khác đang claim
@@ -743,9 +744,9 @@ class TaskQueue:
 
     # --- Private methods ---
 
-    def _make_claim_content(self, account: str = "") -> str:
+    def _make_claim_content(self, account: str = "", topic: str = "") -> str:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return f"{self.vm_id}\n{timestamp}\n{self.hostname}\n{account}\n"
+        return f"{self.vm_id}\n{timestamp}\n{self.hostname}\n{account}\n{topic}\n"
 
     def _is_claim_expired(self, claimed_file: Path) -> bool:
         try:
@@ -849,6 +850,33 @@ class TaskQueue:
             return ""
         except Exception as e:
             self.log(f"[QUEUE] Lỗi đọc sheet: {e}", "WARN")
+            return ""
+
+    def _get_topic_from_sheet(self, code: str) -> str:
+        """Đọc topic từ Google Sheet NGUON. Col G = code, Col S = topic.
+
+        Col S chứa chủ đề: truyện, tâm lý, tài chính, tài chính vn
+        """
+        if not self.tool_dir:
+            return ""
+        try:
+            if self._sheet_cache is None:
+                self._sheet_cache = self._load_nguon_sheet()
+            if not self._sheet_cache:
+                return ""
+            code_upper = code.upper()
+            for row in self._sheet_cache:
+                if len(row) > 18:  # Cần ít nhất 19 cột (A-S)
+                    cell_g = str(row[6]).strip().upper()
+                    if cell_g == code_upper:
+                        topic = str(row[18]).strip()  # Col S = index 18
+                        if topic:
+                            self.log(f"[QUEUE] Found topic for {code}: {topic}")
+                            return topic
+            self.log(f"[QUEUE] No topic found for {code} in sheet NGUON col S", "WARN")
+            return ""
+        except Exception as e:
+            self.log(f"[QUEUE] Lỗi đọc topic từ sheet: {e}", "WARN")
             return ""
 
     def _load_nguon_sheet(self) -> list:
