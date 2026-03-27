@@ -75,6 +75,52 @@ Return JSON only:
         """Psychology khong co narrator rieng."""
         return False
 
+    def get_default_character(self, override_prompt: str = "") -> dict:
+        """Tra ve nhan vat mac dinh cho psychology (minimalist cartoon).
+
+        Args:
+            override_prompt: Neu co, dung lam portrait_prompt thay vi mac dinh.
+                             Doc tu Google Sheet col L sheet THONG TIN.
+
+        Returns:
+            dict voi keys: name, role, portrait_prompt, character_lock, is_minor
+        """
+        if override_prompt and override_prompt.strip():
+            prompt = override_prompt.strip()
+            lock = prompt
+            for cut_phrase in ["He stands", "She stands", "Standing", "He is standing", "She is standing",
+                               "standing on", "on pure white"]:
+                idx = lock.find(cut_phrase)
+                if idx > 0:
+                    lock = lock[:idx].rstrip(", .")
+                    break
+            return {
+                "name": "Main Character",
+                "role": "protagonist",
+                "portrait_prompt": prompt,
+                "character_lock": lock,
+                "is_minor": False,
+            }
+
+        # Mac dinh: Cute minimalist character
+        return {
+            "name": "Main Character",
+            "role": "protagonist",
+            "portrait_prompt": (
+                "Cute minimalist cartoon character, round white head, simple dot eyes, "
+                "gentle calm expression, small green sprout growing on top of head, "
+                "wearing a soft blue t-shirt, beige pants, white sneakers, "
+                "standing on pure white background, clean black outline illustration style, "
+                "paper texture background."
+            ),
+            "character_lock": (
+                "cute minimalist character with round white head, small green sprout on top, "
+                "simple dot eyes, gentle calm expression, soft blue t-shirt, beige pants, "
+                "white sneakers, clean black outline illustration style"
+            ),
+            "is_minor": False,
+        }
+
     # ========== STEP 1: Analyze Content ==========
     def step1_analyze(self, sampled_text: str) -> str:
         return f"""Analyze this educational/psychology content and extract key information for visual illustration.

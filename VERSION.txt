@@ -1,6 +1,6 @@
-1.0.449
+1.0.450
 2026-03-27 (VN)
-Change: PREDEFINED CHARACTER + VIDEO STYLE FIX
+Change: PREDEFINED CHARACTER cho ca 3 chu de (psychology + finance + finance_vn)
 
 Thay doi:
 - v1.0.449: PREDEFINED CHARACTER + GOOGLE SHEET CHARACTER TEMPLATE
