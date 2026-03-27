@@ -3117,13 +3117,14 @@ Scene {scene_id}:
                 img_prompt = scene_data.get("img_prompt", "")
                 video_prompt = scene_data.get("video_prompt", "")
 
-                # v1.0.446: Video-only mode - no img_prompt, no references
+                # v1.0.446: Video-only mode - no img_prompt, giữ character reference cho T2V
                 if is_video_only:
                     img_prompt = ""  # Video-only: no image prompt
-                    char_ids = []
-                    loc_id = ""
-                    ref_files = []
-                    chars_used_str = ""
+                    # Giữ characters_used từ director_plan (Step 5) - T2V cần biết nhân vật
+                    char_ids = [cid.strip() for cid in (original.get("characters_used") or "").split(",") if cid.strip()]
+                    loc_id = ""  # Video-only: không cần location reference
+                    ref_files = [char_image_lookup.get(cid, f"{cid}.png") for cid in char_ids]
+                    chars_used_str = ",".join(char_ids) if char_ids else ""
                     loc_used_str = ""
                 else:
                     # v1.0.423: Không ép thêm refs từ Step 5 nữa
