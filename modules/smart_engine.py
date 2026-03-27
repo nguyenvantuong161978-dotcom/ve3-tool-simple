@@ -5576,6 +5576,20 @@ class SmartEngine:
                         self._video_results['success'] += 1
                         self.log(f"[VIDEO] OK: {image_id} -> {video_path.name}")
 
+                        # v1.0.446: Ghi status_vid="done" vào Excel
+                        try:
+                            from modules.excel_manager import PromptWorkbook
+                            excel_files = list(proj_dir.glob("*_prompts.xlsx"))
+                            if not excel_files:
+                                excel_files = list((proj_dir / "prompts").glob("*_prompts.xlsx"))
+                            if excel_files and image_id.isdigit():
+                                wb = PromptWorkbook(excel_files[0])
+                                wb.load_or_create()
+                                wb.update_scene(int(image_id), status_vid="done")
+                                wb.safe_save()
+                        except Exception as e:
+                            self.log(f"[VIDEO] WARN: Không ghi Excel: {e}", "WARN")
+
                         # Xóa ảnh gốc nếu cần
                         if self._video_settings.get('replace_image', True):
                             png_path = img_dir / f"{image_id}.png"
@@ -5588,16 +5602,14 @@ class SmartEngine:
                         success = True
                         break
 
-                    # generate_video_chrome() đã xử lý bên trong rồi
-                    if not success:
-                        self._video_results['failed'] += 1
-                        self._video_results['failed_items'].append(item)  # Track for retry
-                        self.log(f"[VIDEO] FAILED: {image_id} - {error}", "ERROR")
-
                 except Exception as e:
-                    self._video_results['failed'] += 1
-                    self._video_results['failed_items'].append(item)  # Track for retry
-                    self.log(f"[VIDEO] Error {image_id}: {e}", "ERROR")
+                    self.log(f"[VIDEO] Error {image_id} (retry {retry+1}): {e}", "ERROR")
+
+            # v1.0.446: Chỉ đếm failed SAU KHI hết retry (không đếm trong vòng for)
+            if not success:
+                self._video_results['failed'] += 1
+                self._video_results['failed_items'].append(item)
+                self.log(f"[VIDEO] FAILED: {image_id} sau {MAX_VIDEO_RETRIES} retries", "ERROR")
 
             # Delay between videos
             time.sleep(2)
@@ -5913,6 +5925,15 @@ class SmartEngine:
                         processed_scenes.add(scene_id)
                         consecutive_disconnect = 0  # Reset on success
                         self.log(f"[PARALLEL-VIDEO] [v] Video OK: {scene_id} ({video_count_created} videos)")
+
+                        # v1.0.446: Ghi status_vid="done" vào Excel
+                        try:
+                            sid = int(scene_id) if str(scene_id).isdigit() else None
+                            if sid is not None:
+                                wb.update_scene(sid, status_vid="done")
+                                wb.safe_save()
+                        except Exception as e:
+                            self.log(f"[PARALLEL-VIDEO] WARN: Không ghi Excel: {e}", "WARN")
 
                         # Xóa ảnh gốc nếu cần
                         if video_cfg.get('replace_image', True):
