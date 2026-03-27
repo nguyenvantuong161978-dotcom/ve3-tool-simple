@@ -3,12 +3,15 @@
 Change: FIX video lam lai + JS menu + VIDEO-ONLY MODE
 
 Thay doi:
-- v1.0.447: FIX VIDEO LAM LAI + JS MENU CLICK SAI
+- v1.0.447: FIX VIDEO LAM LAI + JS MENU CLICK SAI + TIMEOUT + COMPLETION
   * FIX: Video tao xong KHONG ghi status_vid=done vao Excel → restart lam lai het
   * FIX: Check .mp4 thuc te tren disk truoc khi queue va tao video
   * 2 lop bao ve: (1) file .mp4 tren disk, (2) status_vid trong Excel
   * FIX: JS menu dung positive keywords thay vi negative filter (tranh click nham)
   * FIX: failed count chi dem SAU KHI het retry (khong dem trong vong for)
+  * Tang video timeout: 180s → 360s (6 phut) cho tat ca ham generate_video
+  * FIX: Dem .mp4 vao images_done (truoc chi dem .png → video xong xoa png → ti le giam)
+  * Ti le completion = (anh .png + video .mp4 + .SKIP) / total_scenes
 - v1.0.446: VIDEO-ONLY MODE + FIX T2V JS MENU
   * Them psychology_video va finance_video topics (chi tao video, khong anh)
   * Topic moi: is_video_only=True → Step 4 skip locations, Step 7 chi co video_prompt
