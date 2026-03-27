@@ -137,7 +137,15 @@ class SettingsWindow(tk.Toplevel):
         tk.Radiobutton(topic_row2, text="Finance VN (Tai chinh - Phong cach Viet)", variable=self.topic_var, value="finance_history_vn",
                        bg='#16213e', fg='#ff6b6b', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
 
-        tk.Label(topic_lf, text="Story: Realistic. Psychology: Cartoon giao duc. Finance: Hoat hinh phuong Tay. Finance VN: Phong cach Viet Nam.",
+        topic_row3 = tk.Frame(topic_lf, bg='#16213e')
+        topic_row3.pack(fill="x", pady=4)
+        tk.Label(topic_row3, text="VIDEO ONLY (chi tao video, khong anh):", bg='#16213e', fg='#ff9ff3', font=("Arial", 9, "bold")).pack(side="left", padx=5)
+        tk.Radiobutton(topic_row3, text="Tam ly Video", variable=self.topic_var, value="psychology_video",
+                       bg='#16213e', fg='#ff9ff3', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        tk.Radiobutton(topic_row3, text="Tai chinh Video", variable=self.topic_var, value="finance_video",
+                       bg='#16213e', fg='#ff9ff3', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+
+        tk.Label(topic_lf, text="VIDEO ONLY: Chi tao 1 anh nhan vat + video T2V truc tiep (nhanh hon, khong can tao anh scene).",
                  bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 
         # === CHE DO TAO ANH ===

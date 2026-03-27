@@ -1611,6 +1611,14 @@ SEGMENT "{seg_name}":
         self._log("[STEP 4/7] Tạo locations...")
         self._log("="*60)
 
+        # v1.0.446: Video-only topics skip locations entirely
+        is_video_only = getattr(self.topic_prompts, 'is_video_only', lambda: False)()
+        if is_video_only:
+            self._log("  -> VIDEO-ONLY mode: Skip locations (no reference images needed)")
+            workbook.update_step_status("step_4", "COMPLETED", 0, 0, "Video-only: no locations")
+            workbook.save()
+            return StepResult("create_locations", StepStatus.COMPLETED, "Video-only: skipped")
+
         # Check if already done
         existing_locs = workbook.get_locations()
         if existing_locs and len(existing_locs) > 0:
@@ -3096,6 +3104,9 @@ Scene {scene_id}:
                     else:
                         seen_for_dedup.add(prompt_key)
 
+            # v1.0.446: Check video-only mode
+            is_video_only = getattr(self.topic_prompts, 'is_video_only', lambda: False)()
+
             # Build Scene objects in memory (NOT saving yet)
             for scene_data in api_scenes:
                 scene_id = int(scene_data.get("scene_id", 0))
@@ -3104,38 +3115,48 @@ Scene {scene_id}:
                     continue
 
                 img_prompt = scene_data.get("img_prompt", "")
+                video_prompt = scene_data.get("video_prompt", "")
 
-                # v1.0.423: Không ép thêm refs từ Step 5 nữa
-                # Để API Step 7 tự quyết định refs dựa trên nội dung scene
-                # Chỉ lấy từ original làm fallback nếu prompt không có refs
-                char_ids = [cid.strip() for cid in (original.get("characters_used") or "").split(",") if cid.strip()]
-                loc_id = original.get("location_used") or ""
+                # v1.0.446: Video-only mode - no img_prompt, no references
+                if is_video_only:
+                    img_prompt = ""  # Video-only: no image prompt
+                    char_ids = []
+                    loc_id = ""
+                    ref_files = []
+                    chars_used_str = ""
+                    loc_used_str = ""
+                else:
+                    # v1.0.423: Không ép thêm refs từ Step 5 nữa
+                    # Để API Step 7 tự quyết định refs dựa trên nội dung scene
+                    # Chỉ lấy từ original làm fallback nếu prompt không có refs
+                    char_ids = [cid.strip() for cid in (original.get("characters_used") or "").split(",") if cid.strip()]
+                    loc_id = original.get("location_used") or ""
 
-                # Parse prompt to extract ACTUAL character/location IDs used
-                # v1.0.423: Regex match cả ID có chữ (nvc, nvp1, loc_office...)
-                char_pattern = r'\(([nN][vV][_a-zA-Z0-9]+)\.png\)'
-                prompt_char_matches = re.findall(char_pattern, img_prompt)
-                if prompt_char_matches:
-                    # Lọc bỏ những match có "loc" (tránh nhầm)
-                    char_ids = list(set(m for m in prompt_char_matches if not m.lower().startswith('loc')))
+                    # Parse prompt to extract ACTUAL character/location IDs used
+                    # v1.0.423: Regex match cả ID có chữ (nvc, nvp1, loc_office...)
+                    char_pattern = r'\(([nN][vV][_a-zA-Z0-9]+)\.png\)'
+                    prompt_char_matches = re.findall(char_pattern, img_prompt)
+                    if prompt_char_matches:
+                        # Lọc bỏ những match có "loc" (tránh nhầm)
+                        char_ids = list(set(m for m in prompt_char_matches if not m.lower().startswith('loc')))
 
-                loc_pattern = r'\(([lL][oO][cC][_a-zA-Z0-9]+)\.png\)'
-                prompt_loc_matches = re.findall(loc_pattern, img_prompt)
-                if prompt_loc_matches:
-                    loc_id = prompt_loc_matches[0]  # Chỉ 1 location
+                    loc_pattern = r'\(([lL][oO][cC][_a-zA-Z0-9]+)\.png\)'
+                    prompt_loc_matches = re.findall(loc_pattern, img_prompt)
+                    if prompt_loc_matches:
+                        loc_id = prompt_loc_matches[0]  # Chỉ 1 location
 
-                ref_files = [char_image_lookup.get(cid, f"{cid}.png") for cid in char_ids]
-                if loc_id:
-                    ref_files.append(loc_image_lookup.get(loc_id, f"{loc_id}.png"))
+                    ref_files = [char_image_lookup.get(cid, f"{cid}.png") for cid in char_ids]
+                    if loc_id:
+                        ref_files.append(loc_image_lookup.get(loc_id, f"{loc_id}.png"))
+
+                    chars_used_str = ",".join(char_ids) if char_ids else ""
+                    loc_used_str = loc_id if loc_id else ""
 
                 video_note = ""
                 excel_mode = self.config.get("excel_mode", "full").lower()
                 segment_id = original.get("segment_id", 1)
                 if excel_mode == "basic" and segment_id > 1:
                     video_note = "SKIP"
-
-                chars_used_str = ",".join(char_ids) if char_ids else ""
-                loc_used_str = loc_id if loc_id else ""
 
                 srt_start = original.get("srt_start", "")
                 srt_end = original.get("srt_end", "")
@@ -3149,11 +3170,11 @@ Scene {scene_id}:
                     planned_duration=planned_duration,
                     srt_text=original.get("srt_text", ""),
                     img_prompt=img_prompt,
-                    video_prompt=scene_data.get("video_prompt", ""),
+                    video_prompt=video_prompt,
                     characters_used=chars_used_str,
                     location_used=loc_used_str,
                     reference_files=json.dumps(ref_files) if ref_files else "",
-                    status_img="pending",
+                    status_img="skip" if is_video_only else "pending",
                     status_vid="pending",
                     video_note=video_note,
                     segment_id=segment_id

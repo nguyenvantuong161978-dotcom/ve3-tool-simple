@@ -351,6 +351,12 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path, alread
                         'tài chính vn': ('finance_history_vn', 'full'),
                         'tai chinh vn': ('finance_history_vn', 'full'),
                         'finance_history_vn': ('finance_history_vn', 'full'),
+                        'tâm lý video': ('psychology_video', 'full'),
+                        'tam ly video': ('psychology_video', 'full'),
+                        'psychology_video': ('psychology_video', 'full'),
+                        'tài chính video': ('finance_video', 'full'),
+                        'tai chinh video': ('finance_video', 'full'),
+                        'finance_video': ('finance_video', 'full'),
                     }
                     mapped = TOPIC_MAPPING.get(raw_topic)
                     if mapped:

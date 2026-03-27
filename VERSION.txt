@@ -1,8 +1,21 @@
-1.0.445
+1.0.446
 2026-03-27 (VN)
-Change: FIX T2V MODE SWITCH - page readiness check + retry + refresh
+Change: VIDEO-ONLY MODE (T2V) cho psychology_video va finance_video
 
 Thay doi:
+- v1.0.446: VIDEO-ONLY MODE + FIX T2V JS MENU
+  * Them psychology_video va finance_video topics (chi tao video, khong anh)
+  * Topic moi: is_video_only=True → Step 4 skip locations, Step 7 chi co video_prompt
+  * progressive_prompts.py: xu ly video-only (skip locations, status_img="skip")
+  * smart_engine.py _load_prompts(): detect video-only scenes (khong img_prompt, co video_prompt)
+  * smart_engine.py run(): tach video_only prompts → goi _generate_videos_t2v()
+  * Them _generate_videos_t2v(): tao video truc tiep bang T2V, khong can anh
+  * FIX JS_SWITCH_TO_T2V_MODE: them .focus() + MouseEvent + .click() de mo menu
+  * FIX JS_SELECT_MODEL_BY_INDEX: cung fix tuong tu
+  * Truoc: JS chi dispatch PointerEvent → menu khong mo
+  * Sau: focus + PointerEvent + MouseEvent + click() → menu mo thanh cong
+  * GUI: them VIDEO ONLY row voi 2 topic moi (mau hong)
+  * run_excel_api.py: them mapping cho video-only topics
 - v1.0.445: FIX T2V MODE SWITCH
   * Them _wait_for_page_ready() - doi page load xong truoc khi thao tac UI
   * Tang retry tu 3 len 5 lan

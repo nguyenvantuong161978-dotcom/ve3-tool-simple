@@ -937,15 +937,19 @@ JS_SELECT_MODEL_BY_INDEX = '''
     // 1. Check panel da mo chua (tim Radix tab IMAGE)
     var imgTab = document.querySelector('[id*="trigger-IMAGE"]');
     if (!imgTab || imgTab.getBoundingClientRect().width === 0) {
-        // Panel chua mo -> click bottom bar (PointerEvent)
+        // Panel chua mo -> click bottom bar
         var btns = document.querySelectorAll('button');
         var halfH = window.innerHeight * 0.5;
         for (var i = 0; i < btns.length; i++) {
             var rect = btns[i].getBoundingClientRect();
             var t = btns[i].textContent.trim();
             if (rect.y > halfH && rect.width > 50 && t.indexOf('add_2') < 0 && t.indexOf('arrow_forward') < 0) {
-                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                btns[i].focus();
+                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, pointerId: 1, pointerType: 'mouse'}));
+                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true, pointerId: 1, pointerType: 'mouse'}));
+                btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                btns[i].click();
                 console.log('[MODEL] 1. Opened settings: ' + t.substring(0, 40));
                 break;
             }
@@ -1035,14 +1039,32 @@ JS_SWITCH_TO_T2V_MODE = '''
     if (!vidTab || vidTab.getBoundingClientRect().width === 0) {
         var btns = document.querySelectorAll('button');
         var halfH = window.innerHeight * 0.5;
+        var found = false;
         for (var i = 0; i < btns.length; i++) {
             var rect = btns[i].getBoundingClientRect();
             var t = btns[i].textContent.trim();
             if (rect.y > halfH && rect.width > 50 && t.indexOf('add_2') < 0 && t.indexOf('arrow_forward') < 0) {
-                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                btns[i].focus();
+                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, pointerId: 1, pointerType: 'mouse'}));
+                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true, pointerId: 1, pointerType: 'mouse'}));
+                btns[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                btns[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                btns[i].click();
                 console.log('[T2V] 1. Opened settings: ' + t.substring(0, 40));
+                found = true;
                 break;
+            }
+        }
+        if (!found) {
+            // Fallback: try clicking any visible bottom-bar element
+            var allEls = document.querySelectorAll('[class*="bottom"], [class*="toolbar"], [class*="settings"]');
+            for (var j = 0; j < allEls.length; j++) {
+                var r2 = allEls[j].getBoundingClientRect();
+                if (r2.y > halfH && r2.width > 30 && r2.height > 10) {
+                    allEls[j].click();
+                    console.log('[T2V] 1. Fallback click: ' + allEls[j].tagName);
+                    break;
+                }
             }
         }
     } else {

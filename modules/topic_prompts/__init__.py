@@ -8,17 +8,23 @@ try:
     from modules.topic_prompts.psychology_prompts import PsychologyPrompts
     from modules.topic_prompts.finance_history_prompts import FinanceHistoryPrompts
     from modules.topic_prompts.finance_history_vn_prompts import FinanceHistoryVNPrompts
+    from modules.topic_prompts.psychology_video_prompts import PsychologyVideoPrompts
+    from modules.topic_prompts.finance_video_prompts import FinanceVideoPrompts
 except ImportError:
     from .story_prompts import StoryPrompts
     from .psychology_prompts import PsychologyPrompts
     from .finance_history_prompts import FinanceHistoryPrompts
     from .finance_history_vn_prompts import FinanceHistoryVNPrompts
+    from .psychology_video_prompts import PsychologyVideoPrompts
+    from .finance_video_prompts import FinanceVideoPrompts
 
 TOPIC_MAP = {
     "story": StoryPrompts,
     "psychology": PsychologyPrompts,
     "finance_history": FinanceHistoryPrompts,
     "finance_history_vn": FinanceHistoryVNPrompts,
+    "psychology_video": PsychologyVideoPrompts,
+    "finance_video": FinanceVideoPrompts,
 }
 
 

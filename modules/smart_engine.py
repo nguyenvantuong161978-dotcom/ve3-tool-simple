@@ -3413,17 +3413,35 @@ class SmartEngine:
                 "skipped": "all_exist"
             }
         else:
-            # === 5. TAO IMAGES - CHON MODE DUA TREN SETTINGS ===
+            # === v1.0.446: Tách video_only prompts khỏi image prompts ===
+            video_only_prompts = [p for p in prompts if p.get('is_video_only', False)]
+            image_prompts = [p for p in prompts if not p.get('is_video_only', False)]
 
-            if generation_mode == 'api':
-                self.log("[STEP 5] Tao images bang API MODE...")
-                scene_results = self.generate_images_api(prompts, proj_dir)
-            elif generation_mode == 'chrome':
-                self.log("[STEP 5] Tao images bang CHROME MODE (khong API)...")
-                scene_results = self.generate_images_chrome(prompts, proj_dir)
+            if video_only_prompts:
+                self.log(f"[VIDEO-ONLY] {len(video_only_prompts)} scenes chi tao video (T2V), {len(image_prompts)} scenes tao anh")
+
+            # === 5. TAO IMAGES - CHON MODE DUA TREN SETTINGS ===
+            scene_results = {"success": 0, "failed": 0}
+
+            if image_prompts:
+                if generation_mode == 'api':
+                    self.log("[STEP 5] Tao images bang API MODE...")
+                    scene_results = self.generate_images_api(image_prompts, proj_dir)
+                elif generation_mode == 'chrome':
+                    self.log("[STEP 5] Tao images bang CHROME MODE (khong API)...")
+                    scene_results = self.generate_images_chrome(image_prompts, proj_dir)
+                else:
+                    self.log("[STEP 5] Tao images bang BROWSER MODE...")
+                    scene_results = self.generate_images_browser(image_prompts, proj_dir)
             else:
-                self.log("[STEP 5] Tao images bang BROWSER MODE...")
-                scene_results = self.generate_images_browser(prompts, proj_dir)
+                self.log("[STEP 5] Khong co image prompts (video-only mode)")
+
+            # === 5.1: TAO VIDEO CHO VIDEO-ONLY SCENES (T2V) ===
+            if video_only_prompts:
+                self.log(f"[STEP 5.1] Tao {len(video_only_prompts)} video bang T2V MODE...")
+                t2v_results = self._generate_videos_t2v(video_only_prompts, proj_dir)
+                scene_results["success"] = scene_results.get("success", 0) + t2v_results.get("success", 0)
+                scene_results["failed"] = scene_results.get("failed", 0) + t2v_results.get("failed", 0)
 
             # === RESTART VIDEO WORKER NẾU CHƯA CHẠY (sau DRISSION MODE đã lưu token) ===
             if not self._video_worker_running:
@@ -4751,7 +4769,15 @@ class SmartEngine:
                 status = row[status_col] if status_col is not None and status_col < len(row) else None
                 is_child = row[is_child_col] if is_child_col is not None and is_child_col < len(row) else None
 
-                if not pid or not prompt:
+                # v1.0.446: Get video_prompt early for video-only check
+                _vp_early = ""
+                if video_prompt_col is not None and video_prompt_col < len(row):
+                    _vp_early = row[video_prompt_col] or ""
+
+                # v1.0.446: Allow video-only scenes (no img_prompt but has video_prompt)
+                if not pid:
+                    continue
+                if not prompt and not _vp_early:
                     continue
 
                 # === FIX: Convert float to int for numeric IDs ===
@@ -4831,19 +4857,27 @@ class SmartEngine:
                 # Characters (nv*) and Locations (loc*) -> nv/ folder
                 is_reference = pid_str.startswith('nv') or pid_str.startswith('loc')
 
+                # v1.0.446: Detect video-only scenes (no img_prompt but has video_prompt)
+                prompt_str_check = str(prompt).strip() if prompt else ""
+                video_prompt_str_check = str(video_prompt).strip() if video_prompt else ""
+                is_video_only = bool(not prompt_str_check and video_prompt_str_check and not is_reference)
+
                 if is_reference:
                     out_path = proj_dir / "nv" / f"{pid_str}.png"
+                elif is_video_only:
+                    out_path = proj_dir / "img" / f"{pid_str}.mp4"  # Video-only → .mp4
                 else:
                     out_path = proj_dir / "img" / f"{pid_str}.png"
 
                 prompts.append({
                     'id': pid_str,
-                    'prompt': str(prompt).strip(),
+                    'prompt': prompt_str_check,
                     'output_path': str(out_path),
                     'sheet': sheet_name,
                     'reference_files': str(reference_files).strip() if reference_files else "",
                     'nv_path': str(proj_dir / "nv"),  # Path to reference images folder
-                    'video_prompt': str(video_prompt).strip() if video_prompt else ""  # For I2V
+                    'video_prompt': video_prompt_str_check,  # For I2V or T2V
+                    'is_video_only': is_video_only,  # v1.0.446: Video-only flag
                 })
                 count += 1
 
@@ -4988,6 +5022,158 @@ class SmartEngine:
             self.log(f"Load video settings error: {e}", "WARN")
 
         return False
+
+    def _generate_videos_t2v(self, video_only_prompts: List[Dict], proj_dir: Path) -> Dict:
+        """
+        v1.0.446: Tạo video trực tiếp bằng T2V (Text-to-Video) cho video-only scenes.
+        KHÔNG cần ảnh - dùng video_prompt để tạo video thuần.
+        Flow: Setup DrissionFlowAPI → Chuyển T2V mode → Tạo video từng scene.
+        """
+        import yaml
+        import time
+
+        results = {"success": 0, "failed": 0}
+
+        if not video_only_prompts:
+            return results
+
+        self.log(f"=== TẠO VIDEO BẰNG T2V MODE ({len(video_only_prompts)} scenes) ===")
+
+        # Load settings
+        settings = {}
+        try:
+            config_path = self.config_dir / "settings.yaml"
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    settings = yaml.safe_load(f) or {}
+        except:
+            pass
+
+        ws_cfg = settings.get('webshare_proxy', {})
+        machine_id = ws_cfg.get('machine_id', 1)
+
+        # Đọc project URL từ Excel
+        project_url = None
+        excel_files = list(proj_dir.glob("*_prompts.xlsx"))
+        if not excel_files:
+            excel_files = list((proj_dir / "prompts").glob("*_prompts.xlsx"))
+        if excel_files:
+            excel_path = excel_files[0]
+            try:
+                wb_config = self._load_excel_with_retry(excel_path, read_only=True)
+                if 'config' in wb_config.sheetnames:
+                    ws = wb_config['config']
+                    for row in ws.iter_rows(min_row=1, max_row=10, values_only=True):
+                        if row and len(row) >= 2:
+                            key = str(row[0] or '').strip().lower()
+                            if key == 'flow_project_url' and row[1]:
+                                project_url = str(row[1]).strip()
+                                break
+                wb_config.close()
+            except Exception as e:
+                self.log(f"[T2V] Lỗi đọc project URL: {e}", "WARN")
+
+        # Khởi tạo DrissionFlowAPI
+        from modules.drission_flow_api import DrissionFlowAPI
+
+        api = DrissionFlowAPI(
+            chrome_portable=self.chrome_portable if self._chrome_portable_override else None,
+            headless=False,
+            worker_id=self.worker_id,
+            total_workers=self.total_workers,
+            machine_id=machine_id,
+            log_callback=lambda msg, lvl="INFO": self.log(msg, lvl),
+            verbose=True,
+        )
+
+        # Setup Chrome
+        setup_kwargs = {"timeout": 120}
+        if project_url:
+            setup_kwargs["project_url"] = project_url
+        else:
+            setup_kwargs["wait_for_project"] = True
+
+        ok = api.setup(**setup_kwargs)
+        if not ok:
+            self.log("[T2V] Setup Chrome FAIL!", "ERROR")
+            return {"success": 0, "failed": len(video_only_prompts)}
+
+        # Tạo thư mục img/
+        img_dir = proj_dir / "img"
+        img_dir.mkdir(parents=True, exist_ok=True)
+
+        # Tạo video từng scene
+        for i, p in enumerate(video_only_prompts):
+            if self.stop_flag:
+                break
+
+            pid = p.get('id', '')
+            video_prompt = p.get('video_prompt', '')
+            output_path = p.get('output_path', str(img_dir / f"{pid}.mp4"))
+
+            # Skip nếu đã có
+            if Path(output_path).exists():
+                self.log(f"  [{i+1}/{len(video_only_prompts)}] {pid} - đã có .mp4, skip")
+                results["success"] += 1
+                continue
+
+            if not video_prompt:
+                self.log(f"  [{i+1}/{len(video_only_prompts)}] {pid} - video_prompt rỗng, skip")
+                results["failed"] += 1
+                continue
+
+            self.log(f"  [{i+1}/{len(video_only_prompts)}] {pid}: {video_prompt[:60]}...")
+
+            # Tạo video bằng T2V
+            save_path = Path(output_path)
+            success, video_path, error = api.generate_video_pure_t2v(
+                prompt=video_prompt,
+                save_path=save_path,
+                max_wait=300,  # 5 phút đợi video
+                timeout=60,
+                max_retries=3
+            )
+
+            if success:
+                self.log(f"  [v] {pid} OK: {video_path}")
+                results["success"] += 1
+
+                # Update Excel status
+                try:
+                    from modules.excel_manager import PromptWorkbook
+                    if excel_files:
+                        wb = PromptWorkbook(excel_files[0])
+                        wb.load_or_create()
+                        if pid.isdigit():
+                            wb.update_scene(int(pid), status_vid="done")
+                        wb.safe_save()
+                except Exception as e:
+                    self.log(f"  [WARN] Không thể update Excel: {e}", "WARN")
+            else:
+                self.log(f"  [x] {pid} FAIL: {error}", "WARN")
+                results["failed"] += 1
+
+                # 403 handling
+                if error and '403' in str(error):
+                    self.log(f"  [403] Cleanup + Restart Chrome...")
+                    try:
+                        api.cleanup_browser_data()
+                        saved_url = getattr(api, '_current_project_url', None)
+                        api._kill_chrome()
+                        api.close()
+                        time.sleep(2)
+                        api.setup(project_url=saved_url, skip_403_reset=True)
+                    except Exception as e:
+                        self.log(f"  [403] Restart error: {e}", "WARN")
+
+        # Cleanup
+        try:
+            api.close()
+        except:
+            pass
+
+        self.log(f"[T2V] Kết quả: success={results['success']}, failed={results['failed']}")
+        return results
 
     def _create_videos_like_images(self, proj_dir: Path, excel_path: Path = None):
         """
