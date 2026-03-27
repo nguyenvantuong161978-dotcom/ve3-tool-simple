@@ -445,10 +445,11 @@ class QualityChecker:
                 backup_img = img_backup_dir / f"{scene_id}.png"
                 actual_vid = img_dir / f"{scene_id}.mp4"
 
-                # Check if has image in img/ or img_backup/ OR permanently skipped (.SKIP)
+                # Check if has image OR video in img/ or img_backup/ OR permanently skipped (.SKIP)
                 # v1.0.306: .SKIP = đã thử đủ số lần, không tạo được (content policy)
+                # v1.0.447: Đếm cả .mp4 vào images_done (video xong sẽ xóa .png)
                 skip_marker = img_dir / f"{scene_id}.SKIP"
-                if actual_img.exists() or backup_img.exists() or skip_marker.exists():
+                if actual_img.exists() or backup_img.exists() or skip_marker.exists() or actual_vid.exists():
                     status.images_done += 1
                 else:
                     status.images_missing.append(scene_id)
