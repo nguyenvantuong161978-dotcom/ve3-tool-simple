@@ -7325,12 +7325,24 @@ class DrissionFlowAPI:
         self.log(f"[T2V→I2V]   → Model: Chrome sẽ dùng (interceptor convert _t2v_ → _r2v_)")
 
         # 1. Chuyển sang T2V mode + Lower Priority model
-        # CHỈ LÀM LẦN ĐẦU khi mới mở Chrome - sau F5 refresh không cần làm lại
         # v1.0.388: LUÔN chọn lại mode trước MỖI lần generate video
-        # switch_to_t2v_mode() đã bao gồm: Video → Thành phần → 16:9 → x1 → Lower Priority
+        # v1.0.445: Nếu switch fail → refresh page + retry 1 lần nữa
         self.log("[T2V→I2V] Setup Video mode...")
         if not self.switch_to_t2v_mode():
-            self.log("[T2V→I2V] [WARN] Không chuyển được T2V mode, thử tiếp...", "WARN")
+            self.log("[T2V→I2V] [WARN] T2V mode fail - refresh page và thử lại...", "WARN")
+            try:
+                saved_url = getattr(self, '_current_project_url', None)
+                if saved_url:
+                    self.driver.get(saved_url)
+                    time.sleep(5)
+                else:
+                    self.driver.run_js("location.reload();")
+                    time.sleep(5)
+                # Retry sau refresh
+                if not self.switch_to_t2v_mode():
+                    self.log("[T2V→I2V] [WARN] Vẫn không chuyển được T2V mode sau refresh", "WARN")
+            except Exception as e:
+                self.log(f"[T2V→I2V] [WARN] Refresh error: {e}", "WARN")
 
         # 2. Reset video state
         self.driver.run_js("""
@@ -7547,20 +7559,61 @@ class DrissionFlowAPI:
         # Dùng cách cũ: select_model_by_index() - 1 JS all-in-one với setTimeout
         return self.select_model_by_index(model_index)
 
+    def _wait_for_page_ready(self, max_wait: int = 15) -> bool:
+        """
+        v1.0.445: Đợi page load xong trước khi thao tác UI.
+        Check: có textarea hoặc có button nào ở bottom bar.
+        """
+        start = time.time()
+        while time.time() - start < max_wait:
+            try:
+                ready = self.driver.run_js("""
+                    var textarea = document.querySelector('textarea');
+                    var btns = document.querySelectorAll('button');
+                    var hasBottomBtn = false;
+                    var halfH = window.innerHeight * 0.5;
+                    for (var i = 0; i < btns.length; i++) {
+                        if (btns[i].getBoundingClientRect().y > halfH && btns[i].getBoundingClientRect().width > 50) {
+                            hasBottomBtn = true;
+                            break;
+                        }
+                    }
+                    return (textarea && hasBottomBtn) ? 'READY' : 'LOADING';
+                """)
+                if ready == 'READY':
+                    return True
+            except Exception:
+                pass
+            time.sleep(1)
+        return False
+
     def switch_to_t2v_mode(self) -> bool:
         """
-        v1.0.397: Chuyển sang Video mode - all-in-one JS với setTimeout.
+        v1.0.445: Chuyển sang Video mode - all-in-one JS với setTimeout.
         Flow: Mở settings → Video tab → Thành phần → 16:9 → x1 → Model dropdown → Lower Priority.
-        Cùng pattern như JS_SELECT_MODEL_BY_INDEX - chạy 1 lần JS, đợi kết quả.
+        v1.0.445: Thêm page readiness check + refresh nếu page chưa load.
         """
         if not self._ready:
             return False
 
-        MAX_RETRIES = 3
+        MAX_RETRIES = 5
 
         for attempt in range(MAX_RETRIES):
             try:
                 self.log(f"[Mode] Chuyển sang T2V mode (attempt {attempt + 1}/{MAX_RETRIES})...")
+
+                # v1.0.445: Đợi page load xong trước khi thao tác UI
+                if not self._wait_for_page_ready(max_wait=10):
+                    self.log(f"[Mode] Page chưa load xong, đợi thêm...", "WARN")
+                    if attempt < MAX_RETRIES - 1:
+                        # Refresh page nếu chưa load
+                        try:
+                            self.driver.run_js("location.reload();")
+                            self.log("[Mode] Refreshed page, đợi load...")
+                        except Exception:
+                            pass
+                        time.sleep(5)
+                        continue
 
                 # Reset result
                 self.driver.run_js("window._t2vResult = 'PENDING';")
@@ -7568,7 +7621,7 @@ class DrissionFlowAPI:
                 # Chạy all-in-one JS
                 self.driver.run_js(JS_SWITCH_TO_T2V_MODE)
 
-                # Đợi JS async hoàn thành (tổng setTimeout: 1.5 + 1.0 + 0.5 + 0.5 + 0.5 + 0.8 + 0.5 + 0.3 = ~5.6s)
+                # Đợi JS async hoàn thành (tổng setTimeout: 1.5 + 0.5 + 0.3 + 0.3 + 0.5 + 0.8 + 0.5 = ~5.6s)
                 time.sleep(7)
 
                 # Kiểm tra kết quả
@@ -7584,9 +7637,18 @@ class DrissionFlowAPI:
                     self.driver.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
                     time.sleep(1)
 
+                    # v1.0.445: Sau 2 lần fail → thử refresh page
+                    if attempt == 1:
+                        self.log("[Mode] Refresh page sau 2 lần fail...")
+                        try:
+                            self.driver.run_js("location.reload();")
+                        except Exception:
+                            pass
+                        time.sleep(5)
+
             except Exception as e:
                 self.log(f"[Mode] Error: {e}", "ERROR")
-                time.sleep(0.5)
+                time.sleep(1)
 
         self.log("[Mode] [x] Không thể chuyển sang T2V mode sau nhiều lần thử", "ERROR")
         return False

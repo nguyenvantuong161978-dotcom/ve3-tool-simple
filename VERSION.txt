@@ -1,8 +1,15 @@
-1.0.444
+1.0.445
 2026-03-27 (VN)
-Change: THEM FINANCE HISTORY VN - phong cach Viet Nam cho Lich su Tai chinh
+Change: FIX T2V MODE SWITCH - page readiness check + retry + refresh
 
 Thay doi:
+- v1.0.445: FIX T2V MODE SWITCH
+  * Them _wait_for_page_ready() - doi page load xong truoc khi thao tac UI
+  * Tang retry tu 3 len 5 lan
+  * Tu dong refresh page khi page chua load hoac sau 2 lan fail
+  * _execute_video_t2v_mode: refresh + retry khi switch_to_t2v_mode() fail
+  * Truoc: page chua load → JS khong tim thay element → PENDING → fail
+  * Sau: doi page ready → chay JS → neu fail thi refresh → retry
 - v1.0.444: FINANCE HISTORY VN (Phong cach Viet Nam)
   * Them finance_history_vn_prompts.py - phong cach gan gui khan gia Viet
   * Nhan vat Viet Nam: da ngam, toc den, trang phuc Viet (ao so mi, polo)
