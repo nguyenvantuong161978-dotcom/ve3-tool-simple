@@ -5372,6 +5372,11 @@ class SmartEngine:
         if image_id.startswith('nv') or image_id.startswith('loc'):
             return
 
+        # v1.0.446: Check .mp4 đã tồn tại trên disk → skip (không làm lại)
+        mp4_check = Path(image_path).parent / f"{image_id}.mp4"
+        if mp4_check.exists():
+            return
+
         with self._video_queue_lock:
             # Check count limit (bao gồm video đã có sẵn)
             count_num = self._video_settings.get('count_num', 0)
@@ -5545,6 +5550,13 @@ class SmartEngine:
             image_id = item['image_id']
             video_prompt = item.get('video_prompt', '') or "Subtle motion, cinematic, slow movement"
             media_name = item.get('media_name', '')  # Cached media_name from image generation
+
+            # v1.0.446: Check .mp4 đã tồn tại → skip (không làm lại)
+            mp4_check = img_dir / f"{image_id}.mp4"
+            if mp4_check.exists():
+                self.log(f"[VIDEO] Skip {image_id}: .mp4 đã có")
+                self._video_results['success'] += 1
+                continue
 
             if not media_name:
                 self.log(f"[VIDEO] Skip {image_id}: Không có media_name (cần tạo lại ảnh)", "WARN")
