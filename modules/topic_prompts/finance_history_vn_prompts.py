@@ -86,6 +86,57 @@ Return JSON only:
         """Finance history co narrator/historian role."""
         return True
 
+    def get_default_character(self, override_prompt: str = "") -> dict:
+        """Tra ve nhan vat mac dinh cho finance history VN (nguoi Viet).
+
+        Args:
+            override_prompt: Neu co, dung lam portrait_prompt thay vi mac dinh.
+                             Doc tu Google Sheet col L sheet THONG TIN.
+
+        Returns:
+            dict voi keys: name, role, portrait_prompt, character_lock, is_minor
+        """
+        if override_prompt and override_prompt.strip():
+            prompt = override_prompt.strip()
+            lock = prompt
+            for cut_phrase in ["He stands in", "She stands in", "Standing in", "He is standing", "She is standing",
+                               "Anh ta dung", "Nhan vat dung"]:
+                idx = lock.find(cut_phrase)
+                if idx > 0:
+                    lock = lock[:idx].rstrip(", .")
+                    break
+            return {
+                "name": "Narrator",
+                "role": "protagonist",
+                "portrait_prompt": prompt,
+                "character_lock": lock,
+                "is_minor": False,
+            }
+
+        # Mac dinh: Nhan vat Viet Nam (phien ban Viet cua intellectual historian)
+        return {
+            "name": "Narrator",
+            "role": "protagonist",
+            "portrait_prompt": (
+                "Detailed cartoon character, a thoughtful Vietnamese intellectual man in his late 40s, "
+                "with a kind face, warm dark brown eyes behind thin modern glasses, "
+                "neat short black hair with subtle grey at the temples, clean-shaven with warm tan skin. "
+                "He wears a light blue polo shirt, dark navy trousers, and clean brown leather shoes. "
+                "He stands in a cozy Vietnamese coffee shop with wooden tables, tropical plants, "
+                "vintage Vietnamese posters on brick walls, warm golden light from hanging lanterns, "
+                "looking directly at the viewer with a warm, analytical expression. "
+                "Detailed cartoon illustration style, Vietnamese aesthetic, warm earthy tones, soft lighting."
+            ),
+            "character_lock": (
+                "Detailed cartoon Vietnamese intellectual man in his late 40s, kind face, "
+                "warm dark brown eyes behind thin modern glasses, neat short black hair with subtle grey at the temples, "
+                "clean-shaven, warm tan skin, light blue polo shirt, dark navy trousers, "
+                "clean brown leather shoes, warm analytical expression, "
+                "detailed cartoon illustration style, Vietnamese aesthetic"
+            ),
+            "is_minor": False,
+        }
+
     # ========== STEP 1: Analyze Content ==========
     def step1_analyze(self, sampled_text: str) -> str:
         return f"""Analyze this financial history / economics content and extract key information for visual illustration targeting VIETNAMESE audiences.
@@ -506,7 +557,13 @@ CRITICAL REQUIREMENTS:
 
 For each scene, create:
 1. img_prompt: Detailed illustration prompt describing what the image SHOWS (not meta-instructions). NO TEXT IN IMAGE.
-2. video_prompt: Animation description (camera movement, character actions, data animation)
+2. video_prompt: Animation description (camera movement, character actions, data animation). MUST end with style: "detailed cartoon animation style, Vietnamese aesthetic, warm earthy tones, soft lighting"
+   - CRITICAL: video_prompt MUST maintain the SAME detailed cartoon animation style as img_prompt
+   - Character in video: use FULL character_lock description (Vietnamese features, specific clothes, etc.)
+   - Other people in video: detailed cartoon Vietnamese people (NOT silhouettes)
+   - DO NOT create realistic/photorealistic video - keep detailed cartoon animation style
+   - Vietnamese setting: motorbikes, tropical plants, French colonial architecture
+   - Color palette: brick red, golden, jade green, warm earthy tones
 
 Example img_prompt (GOOD - narrator at Vietnamese coffee shop):
 "Cozy Vietnamese coffee shop with wooden tables and green tropical plants, vintage Vietnamese posters on brick walls, warm Vietnamese cartoon historian with short neat dark black hair, thin modern glasses, warm tan skin, light blue polo shirt (nv1.png) sitting at wooden table with Vietnamese iced coffee (ca phe sua da) in tall glass, holding up a small cartoon globe, warm golden light from hanging lanterns, motorbikes visible through open front, ceiling fan slowly turning (loc_cafe.png), detailed cartoon illustration style, Vietnamese aesthetic, warm earthy tones, soft lighting"
@@ -528,8 +585,8 @@ GOOD versions (visual only, NO words - use icons, flags, numbers):
 - "Modern Vietnamese bank building with Vietnamese flag, golden coin stacks visible through glass windows, green upward arrows"
 - "Vietnamese family in modern apartment, laptop on table, large green checkmark above, Vietnamese flag pin on shelf"
 
-Example video_prompt:
-"Camera slowly pans across the Saigon harbor from left to right, ships gently rocking, workers moving crates, smoke rising from steamship, green arrow gradually grows upward"
+Example video_prompt (GOOD - includes full style):
+"Cozy Vietnamese coffee shop with tropical plants and hanging lanterns. Vietnamese cartoon historian with short dark hair, thin glasses, light blue polo shirt (nv1.png) sitting at wooden table with iced coffee, picks up small cartoon globe and rotates it while explaining. Ceiling fan slowly turning above, motorbikes passing by outside. Camera slowly zooms in on his expression. Detailed cartoon animation style, Vietnamese aesthetic, warm earthy tones, soft lighting"
 
 Return JSON only with EXACTLY {batch_size} scenes:
 {{
@@ -537,7 +594,7 @@ Return JSON only with EXACTLY {batch_size} scenes:
         {{
             "scene_id": 1,
             "img_prompt": "DETAILED illustration prompt with Vietnamese aesthetic, character description (nv_xxx.png) and location (loc_xxx.png), NO TEXT IN IMAGE, detailed cartoon illustration style, Vietnamese aesthetic, warm earthy tones, soft lighting",
-            "video_prompt": "animation: camera movement, character actions, data animation..."
+            "video_prompt": "Character description (nv_xxx.png) [action], [camera movement], detailed cartoon animation style, Vietnamese aesthetic, warm earthy tones, soft lighting"
         }}
     ]
 }}

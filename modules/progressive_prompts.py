@@ -175,6 +175,9 @@ class ProgressivePromptsGenerator:
                 from modules.topic_prompts import get_topic_prompts
                 self.topic_prompts = get_topic_prompts(self.topic)
 
+        # Character template override (tu Google Sheet col L sheet THONG TIN)
+        self.character_template = config.get("character_template", "")
+
         # API keys
         self.deepseek_keys = [k for k in config.get("deepseek_api_keys", []) if k and k.strip()]
         self.deepseek_index = 0
@@ -1447,6 +1450,39 @@ Return JSON only:
             self._log(f"  -> Đã có {len(existing_chars)} characters, skip!")
             workbook.update_step_status("step_3", "COMPLETED", len(existing_chars), len(existing_chars), "Already done")
             return StepResult("create_characters", StepStatus.COMPLETED, "Already done")
+
+        # === v1.0.448: Check predefined character (finance topics) ===
+        # Ưu tiên: (1) Google Sheet col L override → (2) default từ topic prompts
+        if hasattr(self.topic_prompts, 'get_default_character'):
+            override = self.character_template or ""
+            default_char = self.topic_prompts.get_default_character(override)
+            if default_char:
+                self._log(f"  -> Dùng nhân vật mặc định (skip API call)")
+                if override:
+                    self._log(f"  -> Override từ Google Sheet col L")
+                try:
+                    char_id = "nv1"
+                    char = Character(
+                        id=char_id,
+                        name=default_char.get("name", "Narrator"),
+                        role=default_char.get("role", "protagonist"),
+                        english_prompt=default_char.get("portrait_prompt", ""),
+                        character_lock=default_char.get("character_lock", ""),
+                        vietnamese_prompt="",
+                        image_file=f"{char_id}.png",
+                        is_child=default_char.get("is_minor", False),
+                        status="pending",
+                    )
+                    workbook.add_character(char)
+                    workbook.save()
+                    self._log(f"  -> Saved predefined character: {char.name} ({char.role})")
+                    self._log(f"     character_lock: {char.character_lock[:100]}...")
+                    elapsed = int(time.time() - step_start)
+                    workbook.update_step_status("step_3", "COMPLETED", 1, 1,
+                        f"{elapsed}s - 1 char (predefined)")
+                    return StepResult("create_characters", StepStatus.COMPLETED, "Predefined character", {"characters": [default_char]})
+                except Exception as e:
+                    self._log(f"  WARN: Predefined character failed: {e}, fallback to API", "WARN")
 
         # Read story_analysis from Excel
         story_analysis = {}

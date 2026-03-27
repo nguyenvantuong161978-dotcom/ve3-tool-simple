@@ -379,6 +379,20 @@ def import_from_master(master_dir: Path, name: str, local_projects: Path, alread
                                 log(f"[IMPORT] Topic already correct: {new_topic}/{new_excel_mode}")
                     else:
                         log(f"[IMPORT] Unknown topic in _CLAIMED: '{raw_topic}' - giữ nguyên settings", "WARN")
+
+                # === BƯỚC 4b: Đọc character template từ _CLAIMED (dòng 6) ===
+                # v1.0.448: Character template từ Google Sheet col L sheet THONG TIN
+                if len(claimed_lines) >= 6 and claimed_lines[5].strip():
+                    char_template = claimed_lines[5].strip()
+                    import yaml
+                    settings_path = TOOL_DIR / "config" / "settings.yaml"
+                    if settings_path.exists():
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings = yaml.safe_load(f) or {}
+                        settings['character_template'] = char_template
+                        with open(settings_path, 'w', encoding='utf-8') as f:
+                            yaml.dump(settings, f, default_flow_style=False, allow_unicode=True)
+                        log(f"[IMPORT] Character template from _CLAIMED line 6: {char_template[:80]}...")
         except Exception as e:
             log(f"[IMPORT] Auto-config topic error: {e}", "WARN")
 

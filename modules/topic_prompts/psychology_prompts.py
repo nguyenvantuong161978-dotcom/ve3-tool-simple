@@ -554,7 +554,12 @@ CRITICAL REQUIREMENTS:
 
 For each scene, create:
 1. img_prompt: Detailed illustration prompt describing what the image SHOWS (not meta-instructions). NO TEXT IN IMAGE.
-2. video_prompt: Animation description (character movement, transitions)
+2. video_prompt: Animation description (character movement, transitions). MUST end with style: "clean minimalist cartoon animation style, paper texture background"
+   - CRITICAL: video_prompt MUST maintain the SAME cartoon animation style as img_prompt
+   - Character in video: use FULL character_lock description (round white head, simple dot eyes, etc.)
+   - Other people in video: "simple silhouette figures"
+   - DO NOT create realistic/photorealistic video - keep minimalist cartoon style
+   - Visual metaphors remain as PHYSICAL OBJECTS in animation
 
 Example img_prompt (GOOD - no text, uses visual metaphors):
 "Restaurant dining table scene, 4-5 simple silhouette people all holding up smartphones taking photos of food on table, cute minimalist character with round white head, small green sprout on top, simple dot eyes, gentle expression, blue t-shirt, beige pants, white sneakers (nv1.png) sitting among them HOLDING CHOPSTICKS actually eating food normally, warm restaurant lighting (loc_restaurant.png), contrast between phone users and real eater, clean black outline illustration style, paper texture background"
@@ -570,8 +575,8 @@ Example SPLIT SCREEN prompt (no text, visual contrast only):
 Example TRIPLE PANEL prompt (no text, visual progression):
 "TRIPLE PANEL horizontal layout. PANEL 1: character wearing decorative social MASK smiling widely, sparkle effects around. PANEL 2: mask starting to CRACK AND PEEL showing real face underneath, crack lines visible. PANEL 3: character with mask fully removed, calm genuine expression, warm golden glow around head, clean black outline illustration style, paper texture background"
 
-Example video_prompt:
-"Multiple people simultaneously pull out smartphones and start photographing food, camera moves toward table, main character ignores phones picks up chopsticks and starts eating naturally"
+Example video_prompt (GOOD - includes full style):
+"Cute minimalist character with round white head, small green sprout on top, simple dot eyes, blue t-shirt, beige pants (nv1.png) sitting at restaurant table. Simple silhouette figures around the table simultaneously pull out smartphones and start photographing food. Camera slowly moves toward table. Main character calmly ignores phones, picks up chopsticks and starts eating naturally. Warm soft lighting, clean minimalist cartoon animation style, paper texture background"
 
 Return JSON only with EXACTLY {batch_size} scenes:
 {{
@@ -579,7 +584,7 @@ Return JSON only with EXACTLY {batch_size} scenes:
         {{
             "scene_id": 1,
             "img_prompt": "DETAILED illustration prompt with character description (nv_xxx.png) and location (loc_xxx.png), visual metaphors, NO TEXT IN IMAGE, clean black outline illustration style, paper texture background",
-            "video_prompt": "animation: character actions, visual transitions..."
+            "video_prompt": "Character description (nv_xxx.png) [action], [camera movement], clean minimalist cartoon animation style, paper texture background"
         }}
     ]
 }}

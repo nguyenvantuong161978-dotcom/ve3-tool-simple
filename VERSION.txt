@@ -1,8 +1,24 @@
-1.0.447
+1.0.449
 2026-03-27 (VN)
-Change: FIX video lam lai + JS menu + VIDEO-ONLY MODE
+Change: PREDEFINED CHARACTER + VIDEO STYLE FIX
 
 Thay doi:
+- v1.0.449: PREDEFINED CHARACTER + GOOGLE SHEET CHARACTER TEMPLATE
+  * Finance topics: nhan vat mac dinh co dinh (intellectual historian, Studio Ghibli style)
+  * Finance VN: phien ban nguoi Viet (da ngam, toc den, ao polo xanh)
+  * get_default_character(): skip API call Step 3, dung nhan vat mac dinh
+  * Tham so hoa: doc col L sheet THONG TIN tu Google Sheet
+  * Neu col L co gia tri → override nhan vat mac dinh
+  * Cache trong _CLAIMED dong 6 → truyen vao settings.yaml → progressive_prompts
+  * Uu tien: (1) Google Sheet col L > (2) default tu topic prompts > (3) API
+- v1.0.448: FIX VIDEO_PROMPT STYLE - GIU PHONG CACH CARTOON/HOAT HINH
+  * FIX: video_prompt cua psychology PHAI co "clean minimalist cartoon animation style, paper texture background"
+  * FIX: video_prompt cua finance_history PHAI co "detailed cartoon animation style, warm color palette"
+  * FIX: video_prompt cua finance_history_vn PHAI co "detailed cartoon animation style, Vietnamese aesthetic"
+  * Them huong dan: character description day du, KHONG tao video realistic/photorealistic
+  * Cap nhat example video_prompt voi full style cho ca 3 chu de
+  * Truoc: video_prompt chi co "camera movement, action" → AI tao video thuc te nguoi that
+  * Sau: video_prompt co full style + character description → giu phong cach hoat hinh
 - v1.0.447: FIX VIDEO LAM LAI + JS MENU CLICK SAI + TIMEOUT + COMPLETION
   * FIX: Video tao xong KHONG ghi status_vid=done vao Excel → restart lam lai het
   * FIX: Check .mp4 thuc te tren disk truoc khi queue va tao video

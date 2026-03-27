@@ -492,6 +492,7 @@ class TaskQueue:
         self.log = log or _log_default
         self.hostname = socket.gethostname()
         self._sheet_cache = None
+        self._thongtin_cache = None
 
     def scan_available(self) -> List[str]:
         """Scan tất cả projects chưa được claim."""
@@ -587,7 +588,8 @@ class TaskQueue:
         try:
             account_str = self._get_account_from_sheet(code)
             topic_str = self._get_topic_from_sheet(code)
-            claim_content = self._make_claim_content(account=account_str, topic=topic_str)
+            character_str = self._get_character_from_sheet(code)
+            claim_content = self._make_claim_content(account=account_str, topic=topic_str, character=character_str)
 
             # Bước 2: Tạo file _CLAIMING_{VM_ID} bằng O_CREAT|O_EXCL (atomic)
             # Nếu file đã tồn tại → FileExistsError → VM khác đang claim
@@ -744,9 +746,9 @@ class TaskQueue:
 
     # --- Private methods ---
 
-    def _make_claim_content(self, account: str = "", topic: str = "") -> str:
+    def _make_claim_content(self, account: str = "", topic: str = "", character: str = "") -> str:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return f"{self.vm_id}\n{timestamp}\n{self.hostname}\n{account}\n{topic}\n"
+        return f"{self.vm_id}\n{timestamp}\n{self.hostname}\n{account}\n{topic}\n{character}\n"
 
     def _is_claim_expired(self, claimed_file: Path) -> bool:
         try:
@@ -851,6 +853,71 @@ class TaskQueue:
         except Exception as e:
             self.log(f"[QUEUE] Lỗi đọc sheet: {e}", "WARN")
             return ""
+
+    def _get_character_from_sheet(self, code: str) -> str:
+        """Đọc character template từ Google Sheet THONG TIN. Col G = code, Col L = character prompt.
+
+        Col L chứa portrait prompt của nhân vật chính (nếu có).
+        Nếu có giá trị → dùng thay cho nhân vật mặc định trong topic prompts.
+        """
+        if not self.tool_dir:
+            return ""
+        try:
+            if self._thongtin_cache is None:
+                self._thongtin_cache = self._load_thongtin_sheet()
+            if not self._thongtin_cache:
+                return ""
+            code_upper = code.upper()
+            for row in self._thongtin_cache:
+                if len(row) > 11:  # Cần ít nhất 12 cột (A-L)
+                    cell_g = str(row[6]).strip().upper()  # Col G = code
+                    if cell_g == code_upper:
+                        char_prompt = str(row[11]).strip()  # Col L = index 11
+                        if char_prompt:
+                            self.log(f"[QUEUE] Found character template for {code} from sheet THONG TIN")
+                            return char_prompt
+            self.log(f"[QUEUE] No character template for {code} in sheet THONG TIN col L", "INFO")
+            return ""
+        except Exception as e:
+            self.log(f"[QUEUE] Lỗi đọc character từ sheet THONG TIN: {e}", "WARN")
+            return ""
+
+    def _load_thongtin_sheet(self) -> list:
+        """Load sheet THONG TIN từ Google Sheets (1 lần)."""
+        try:
+            import json as _json
+            config_file = self.tool_dir / "config" / "config.json"
+            if not config_file.exists():
+                return []
+            cfg = _json.loads(config_file.read_text(encoding='utf-8'))
+            sa_path = (
+                cfg.get("SERVICE_ACCOUNT_JSON") or
+                cfg.get("CREDENTIAL_PATH") or
+                "creds.json"
+            )
+            spreadsheet_name = cfg.get("SPREADSHEET_NAME")
+            if not spreadsheet_name:
+                return []
+            sa_file = Path(sa_path)
+            if not sa_file.exists():
+                sa_file = self.tool_dir / "config" / sa_path
+            if not sa_file.exists():
+                return []
+            import gspread
+            from google.oauth2.service_account import Credentials
+            scopes = [
+                "https://www.googleapis.com/auth/spreadsheets.readonly",
+                "https://www.googleapis.com/auth/drive.readonly",
+            ]
+            creds = Credentials.from_service_account_file(str(sa_file), scopes=scopes)
+            gc = gspread.authorize(creds)
+            ws = gc.open(spreadsheet_name).worksheet("THONG TIN")
+            data = ws.get_all_values()
+            self.log(f"[QUEUE] Loaded sheet THONG TIN: {len(data)} rows")
+            return data
+        except Exception as e:
+            self.log(f"[QUEUE] Lỗi load sheet THONG TIN: {e}", "WARN")
+            return []
 
     def _get_topic_from_sheet(self, code: str) -> str:
         """Đọc topic từ Google Sheet NGUON. Col G = code, Col S = topic.

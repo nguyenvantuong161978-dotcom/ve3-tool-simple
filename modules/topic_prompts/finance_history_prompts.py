@@ -81,6 +81,60 @@ Return JSON only:
         """Finance history co narrator/historian role."""
         return True
 
+    def get_default_character(self, override_prompt: str = "") -> dict:
+        """Tra ve nhan vat mac dinh cho finance history.
+
+        Args:
+            override_prompt: Neu co, dung lam portrait_prompt thay vi mac dinh.
+                             Doc tu Google Sheet col L sheet THONG TIN.
+
+        Returns:
+            dict voi keys: name, role, portrait_prompt, character_lock, is_minor
+        """
+        if override_prompt and override_prompt.strip():
+            # Dung prompt tu Google Sheet
+            prompt = override_prompt.strip()
+            # Tao character_lock tu portrait_prompt (bo phan location/background)
+            lock = prompt
+            # Cat bo phan "He stands in..." hoac "standing in..." neu co
+            for cut_phrase in ["He stands in", "She stands in", "Standing in", "He is standing", "She is standing"]:
+                idx = lock.find(cut_phrase)
+                if idx > 0:
+                    lock = lock[:idx].rstrip(", .")
+                    break
+            return {
+                "name": "Narrator",
+                "role": "protagonist",
+                "portrait_prompt": prompt,
+                "character_lock": lock,
+                "is_minor": False,
+            }
+
+        # Mac dinh: Intellectual historian
+        return {
+            "name": "Narrator",
+            "role": "protagonist",
+            "portrait_prompt": (
+                "Detailed cartoon character, a thoughtful intellectual man in his late 40s, "
+                "with a kind, square-jawed face, warm hazel eyes behind round tortoiseshell glasses, "
+                "a neatly trimmed salt-and-pepper beard, and slightly tousled dark brown hair with grey streaks at the temples. "
+                "He wears a forest green corduroy blazer over a cream-colored cable-knit sweater, "
+                "a burgundy checkered shirt collar peeking out, dark olive chinos, and brown leather brogue shoes. "
+                "He stands in a warm-lit, book-filled study with a large historical map of Sweden on the wall behind him, "
+                "looking directly at the viewer with a warm, analytical expression. "
+                "Detailed cartoon illustration style, Studio Ghibli aesthetic, warm color palette, soft lighting."
+            ),
+            "character_lock": (
+                "Detailed cartoon intellectual man in his late 40s, kind square-jawed face, "
+                "warm hazel eyes behind round tortoiseshell glasses, neatly trimmed salt-and-pepper beard, "
+                "slightly tousled dark brown hair with grey streaks at the temples, "
+                "forest green corduroy blazer over cream-colored cable-knit sweater, "
+                "burgundy checkered shirt collar peeking out, dark olive chinos, brown leather brogue shoes, "
+                "warm analytical expression, detailed cartoon illustration style, Studio Ghibli aesthetic"
+            ),
+            "is_minor": False,
+        }
+
     # ========== STEP 1: Analyze Content ==========
     def step1_analyze(self, sampled_text: str) -> str:
         return f"""Analyze this financial history / economics content and extract key information for visual illustration.
@@ -488,7 +542,13 @@ CRITICAL REQUIREMENTS:
 
 For each scene, create:
 1. img_prompt: Detailed illustration prompt describing what the image SHOWS (not meta-instructions). NO TEXT IN IMAGE.
-2. video_prompt: Animation description (camera movement, character actions, data animation)
+2. video_prompt: Animation description (camera movement, character actions, data animation). MUST end with style: "detailed cartoon animation style, warm color palette, soft lighting"
+   - CRITICAL: video_prompt MUST maintain the SAME detailed cartoon animation style as img_prompt
+   - Character in video: use FULL character_lock description (detailed features, specific clothes, etc.)
+   - Other people in video: detailed cartoon people (NOT silhouettes - rich editorial style)
+   - DO NOT create realistic/photorealistic video - keep detailed cartoon animation style
+   - Data elements: animated charts, arrows growing, numbers appearing
+   - Color palette: golden, amber, earth tones, warm blues
 
 Example img_prompt (GOOD - narrator at desk):
 "Warm cozy study room filled with bookshelves and vintage maps on walls, warm cartoon historian with grey wavy hair, round glasses, kind brown eyes, mustard yellow sweater over white collared shirt (nv1.png) sitting at large wooden desk covered with open books and papers, holding up a small cartoon globe, desk lamp casting warm golden light, large window showing twilight sky behind, coffee mug on desk (loc_study.png), detailed cartoon illustration style, warm color palette, soft lighting"
@@ -512,8 +572,8 @@ GOOD versions (visual only, NO words - use icons, flags, numbers):
 - "Desktop computer icon on desk with large green checkmark above, Swedish flag pin on the monitor"
 - "Hospital building with large red cross symbol on front, green checkmark icon floating above"
 
-Example video_prompt:
-"Camera slowly pans across the harbor from left to right, ships gently rocking, workers moving crates, smoke rising from steamship, green arrow gradually grows upward"
+Example video_prompt (GOOD - includes full style):
+"Warm cozy study room with bookshelves and vintage maps. Cartoon historian with grey wavy hair, round glasses, mustard yellow sweater (nv1.png) sitting at wooden desk, picks up small cartoon globe and rotates it while gesturing knowingly. Desk lamp flickers warm golden light, coffee mug steaming on desk. Camera slowly zooms in on his expression. Detailed cartoon animation style, warm color palette, soft lighting"
 
 Return JSON only with EXACTLY {batch_size} scenes:
 {{
@@ -521,7 +581,7 @@ Return JSON only with EXACTLY {batch_size} scenes:
         {{
             "scene_id": 1,
             "img_prompt": "DETAILED illustration prompt with character description (nv_xxx.png) and location (loc_xxx.png), NO TEXT IN IMAGE, detailed cartoon illustration style, warm color palette, soft lighting",
-            "video_prompt": "animation: camera movement, character actions, data animation..."
+            "video_prompt": "Character description (nv_xxx.png) [action], [camera movement], detailed cartoon animation style, warm color palette, soft lighting"
         }}
     ]
 }}
