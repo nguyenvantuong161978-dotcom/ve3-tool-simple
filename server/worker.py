@@ -160,6 +160,7 @@ def main():
     session = ChromeSession(
         chrome_portable_path=chrome_path,
         port=port,
+        ipv6=ipv6,
     )
     if account:
         session._account = account
@@ -210,6 +211,7 @@ def main():
                 session = ChromeSession(
                     chrome_portable_path=chrome_path,
                     port=port,
+                    ipv6=ipv6,
                 )
                 if account:
                     session._account = account

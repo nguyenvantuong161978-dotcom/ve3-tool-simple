@@ -232,6 +232,7 @@ class ChromePool:
                 session = ChromeSession(
                     chrome_portable_path=worker.chrome_path,
                     port=worker.port,
+                    ipv6=worker.ipv6,
                 )
 
                 # Set account de auto-login khi can

@@ -270,6 +270,7 @@ async function refresh() {
             wHtml += '<span class="worker-status ' + cls + '">' + statusText + '</span>';
             wHtml += '<div class="worker-info">';
             if (w.account) wHtml += w.account.split('@')[0] + '<br>';
+            if (w.ipv6) wHtml += '<span style="color:#818cf8;font-size:10px">' + w.ipv6.substring(0,25) + '</span><br>';
             wHtml += 'Done: ' + w.completed + ' | Fail: ' + w.failed;
             wHtml += '</div>';
             if (w.current_task) wHtml += '<div class="worker-task">Task: ' + w.current_task + '</div>';
@@ -608,6 +609,7 @@ if __name__ == '__main__':
                 session = ChromeSession(
                     chrome_portable_path=worker.chrome_path,
                     port=worker.port,
+                    ipv6=worker.ipv6,
                 )
                 if worker.account:
                     session._account = worker.account

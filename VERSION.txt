@@ -1,8 +1,17 @@
-1.0.472
+1.0.473
 2026-03-28 (VN)
-Change: Web Dashboard + Single Process + Fix worker spam/error
+Change: IPv6 SOCKS5 proxy cho moi Chrome worker
 
 Thay doi:
+- v1.0.473: IPv6 SUPPORT - Moi Chrome dung IPv6 rieng
+  * server/chrome_session.py: Nhan ipv6 param, tao SOCKS5 proxy tu dong
+    - Moi Chrome co 1 SOCKS5 proxy rieng (port = debug_port + 200)
+    - Chrome ket noi qua --proxy-server=socks5://127.0.0.1:{proxy_port}
+    - Traffic di qua IPv6 address duoc assign tu Sheet SERVER col C
+  * server/app.py: Truyen worker.ipv6 vao ChromeSession
+  * server/chrome_pool.py: Truyen worker.ipv6 vao ChromeSession
+  * server/worker.py: Truyen ipv6 vao ChromeSession
+  * Fix 403 reCAPTCHA: Root cause la tat ca Chrome dung chung IPv4
 - v1.0.472: WEB DASHBOARD + SINGLE PROCESS
   * server/app.py v4.0: Single process + Web Dashboard
     - Web dashboard tai http://server:5000/ (dark theme, auto-refresh 2s)

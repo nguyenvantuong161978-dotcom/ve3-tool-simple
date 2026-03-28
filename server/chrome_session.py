@@ -339,12 +339,13 @@ def get_server_accounts() -> list:
 class ChromeSession:
     """Quản lý Chrome session cho proxy server."""
 
-    def __init__(self, chrome_portable_path: str = None, port: int = 19222):
+    def __init__(self, chrome_portable_path: str = None, port: int = 19222, ipv6: str = ""):
         """
         Args:
             chrome_portable_path: Đường dẫn tới ChromePortable.exe
                                   Mặc định: {tool_dir}/GoogleChromePortable/GoogleChromePortable.exe
             port: Debug port cho Chrome (mặc định 19222 - không trùng với workers 9222/9223)
+            ipv6: IPv6 address - nếu có sẽ tạo SOCKS5 proxy để Chrome dùng IPv6
         """
         if chrome_portable_path:
             self.chrome_path = Path(chrome_portable_path)
@@ -353,6 +354,9 @@ class ChromeSession:
 
         self.chrome_data = self.chrome_path.parent / "Data" / "profile"
         self.port = port
+        self.ipv6 = ipv6.strip() if ipv6 else ""
+        self._proxy_port = 0  # SOCKS5 proxy port (set khi start proxy)
+        self._proxy = None  # IPv6SocksProxy instance
         self.page = None
         self.ready = False
         self.project_url = None
@@ -476,6 +480,27 @@ class ChromeSession:
         co.set_argument('--no-first-run')
         co.set_argument('--no-default-browser-check')
 
+        # IPv6: Start SOCKS5 proxy và set Chrome dùng proxy
+        if self.ipv6:
+            self._proxy_port = self.port + 200  # VD: port 19222 → proxy 19422
+            self.log(f"IPv6: {self.ipv6}")
+            self.log(f"Starting SOCKS5 proxy on 127.0.0.1:{self._proxy_port}...")
+            try:
+                from modules.ipv6_proxy import IPv6SocksProxy
+                self._proxy = IPv6SocksProxy(
+                    listen_port=self._proxy_port,
+                    ipv6_address=self.ipv6,
+                    log_func=lambda msg: self.log(f"[PROXY] {msg}"),
+                )
+                if self._proxy.start():
+                    self.log(f"SOCKS5 proxy READY → Chrome sẽ dùng IPv6", "OK")
+                    co.set_argument(f'--proxy-server=socks5://127.0.0.1:{self._proxy_port}')
+                    co.set_argument('--proxy-bypass-list=<-loopback>')
+                else:
+                    self.log(f"SOCKS5 proxy FAILED! Chrome sẽ dùng IPv4", "ERROR")
+            except Exception as e:
+                self.log(f"IPv6 proxy error: {e}", "ERROR")
+
         try:
             self.page = ChromiumPage(co)
             self.log(f"Chrome opened: {self.page.title}", "OK")
@@ -523,6 +548,10 @@ class ChromeSession:
             co2.set_address(f'127.0.0.1:{self.port}')
             co2.set_argument('--no-first-run')
             co2.set_argument('--no-default-browser-check')
+            # IPv6 proxy (neu da start o tren)
+            if self._proxy and self._proxy._running:
+                co2.set_argument(f'--proxy-server=socks5://127.0.0.1:{self._proxy_port}')
+                co2.set_argument('--proxy-bypass-list=<-loopback>')
             try:
                 self.page = ChromiumPage(co2)
                 self.log(f"Chrome mo lai: {self.page.title}", "OK")
