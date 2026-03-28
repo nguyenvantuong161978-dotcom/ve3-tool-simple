@@ -201,6 +201,42 @@ class SettingsWindow(tk.Toplevel):
         tk.Label(gen_lf, text="Chrome UI: Tao anh/video truc tiep qua Chrome (khong dung API). Model chi ap dung cho Chrome mode.",
                  bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 
+        # === LOCAL SERVER (dat o day de de quan sat) ===
+        server_frame = tk.LabelFrame(main_frame, text=" LOCAL PROXY SERVER ", bg='#16213e', fg='#ffd93d',
+                                      font=("Arial", 10, "bold"), padx=10, pady=10)
+        server_frame.pack(fill="x", pady=5)
+
+        tk.Label(server_frame, text="Gui anh qua server thay vi dung Chrome local. Nhieu VM cung nhap chung → tu dong chia tai.",
+                 bg='#16213e', fg='#888', font=("Arial", 8), justify="left").pack(anchor="w")
+
+        # Checkbox bat/tat
+        self.local_server_enabled_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(server_frame, text="BAT Local Server Mode",
+                       variable=self.local_server_enabled_var,
+                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460',
+                       activebackground='#16213e', activeforeground='#00ff88',
+                       font=("Arial", 10, "bold"),
+                       command=self._toggle_server_fields).pack(anchor="w", pady=(8, 0))
+
+        # Server URLs (multi-line: moi dong 1 server)
+        tk.Label(server_frame, text="Server URLs (moi dong 1 server):", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
+        self.server_urls_text = tk.Text(server_frame, height=3, width=60,
+                                         font=("Consolas", 10), bg='#0f3460', fg='white',
+                                         insertbackground='white')
+        self.server_urls_text.pack(fill="x", pady=2)
+        tk.Label(server_frame, text="Vi du: http://192.168.1.100:5000",
+                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
+
+        # Status label
+        self.server_status_lbl = tk.Label(server_frame, text="", bg='#16213e', fg='#888',
+                                           font=("Consolas", 9))
+        self.server_status_lbl.pack(anchor="w", pady=(5, 0))
+
+        # Nut kiem tra ket noi
+        tk.Button(server_frame, text="Kiem tra ket noi", command=self._check_server_connection,
+                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(anchor="w", pady=5)
+
         # === KIEM TRA TAI NGUYEN ===
         check_frame = tk.LabelFrame(main_frame, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
                                     font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -292,43 +328,6 @@ class SettingsWindow(tk.Toplevel):
                  insertbackground='white').pack(side="left", fill="x", expand=True)
         tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
                   bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
-
-        # === LOCAL SERVER ===
-        server_frame = tk.LabelFrame(main_frame, text=" LOCAL PROXY SERVER ", bg='#16213e', fg='#ffd93d',
-                                      font=("Arial", 10, "bold"), padx=10, pady=10)
-        server_frame.pack(fill="x", pady=5)
-
-        tk.Label(server_frame, text="Gui anh qua server thay vi dung Chrome local.\n"
-                 "Server chay bang: python -m server.app",
-                 bg='#16213e', fg='#888', font=("Arial", 8), justify="left").pack(anchor="w")
-
-        # Checkbox bat/tat
-        self.local_server_enabled_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(server_frame, text="BAT Local Server Mode",
-                       variable=self.local_server_enabled_var,
-                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460',
-                       activebackground='#16213e', activeforeground='#00ff88',
-                       font=("Arial", 10, "bold"),
-                       command=self._toggle_server_fields).pack(anchor="w", pady=(8, 0))
-
-        # Server URLs (multi-line: moi dong 1 server)
-        tk.Label(server_frame, text="Server URLs (moi dong 1 server):", bg='#16213e', fg='white',
-                 font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
-        self.server_urls_text = tk.Text(server_frame, height=3, width=60,
-                                         font=("Consolas", 10), bg='#0f3460', fg='white',
-                                         insertbackground='white')
-        self.server_urls_text.pack(fill="x", pady=2)
-        tk.Label(server_frame, text="Vi du: http://192.168.1.100:5000  (nhieu VM cung nhap chung → tu dong chia tai)",
-                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
-
-        # Status label
-        self.server_status_lbl = tk.Label(server_frame, text="", bg='#16213e', fg='#888',
-                                           font=("Consolas", 9))
-        self.server_status_lbl.pack(anchor="w", pady=(5, 0))
-
-        # Nut kiem tra ket noi
-        tk.Button(server_frame, text="Kiem tra ket noi", command=self._check_server_connection,
-                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(anchor="w", pady=5)
 
         # === VEO3 ACCOUNTS (v1.0.108) ===
         account_frame = tk.LabelFrame(main_frame, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
