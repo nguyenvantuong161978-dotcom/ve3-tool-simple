@@ -3692,10 +3692,10 @@ class BrowserFlowGenerator:
                     self._log(f"  [{idx+1}] {pid} [OK] → {opath.name} ({server.name})" +
                               (f" media_id={_media_name[:40]}..." if _media_name else ""))
 
-                    # v1.0.510: Cap nhat Excel giong API mode - retry 3 lan + media_id + pending write
+                    # v1.0.511: Cap nhat Excel - retry 10 lan + media_id + pending write
                     with excel_lock:
                         _saved_ok = False
-                        for _sa in range(3):
+                        for _sa in range(10):
                             try:
                                 if pid.startswith('nv') or pid.startswith('loc'):
                                     workbook.update_character(pid, status="done", image_file=str(opath),
@@ -3711,8 +3711,8 @@ class BrowserFlowGenerator:
                                     _saved_ok = True
                                     break
                             except Exception as e:
-                                if _sa < 2:
-                                    self._log(f"  [{idx+1}] Excel save retry {_sa+1}/3: {e}", "warn")
+                                if _sa < 9:
+                                    self._log(f"  [{idx+1}] Excel save retry {_sa+1}/10: {e}", "warn")
                                     time.sleep(3)
                                     try:
                                         workbook = PromptWorkbook(excel_path)
@@ -3720,7 +3720,7 @@ class BrowserFlowGenerator:
                                     except:
                                         pass
                                 else:
-                                    self._log(f"  [{idx+1}] Excel save FAILED after 3 attempts: {e}", "warn")
+                                    self._log(f"  [{idx+1}] Excel save FAILED after 10 attempts: {e}", "warn")
                         # Pending write fallback
                         if not _saved_ok:
                             try:
@@ -3794,7 +3794,7 @@ class BrowserFlowGenerator:
                             # v1.0.510: Retry save giong API mode
                             with excel_lock:
                                 _saved_ok2 = False
-                                for _sa2 in range(3):
+                                for _sa2 in range(10):
                                     try:
                                         if pid.startswith('nv') or pid.startswith('loc'):
                                             workbook.update_character(pid, status="done", image_file=str(opath),
@@ -3810,8 +3810,8 @@ class BrowserFlowGenerator:
                                             _saved_ok2 = True
                                             break
                                     except Exception as e:
-                                        if _sa2 < 2:
-                                            self._log(f"  [{idx+1}] Excel retry save {_sa2+1}/3: {e}", "warn")
+                                        if _sa2 < 9:
+                                            self._log(f"  [{idx+1}] Excel retry save {_sa2+1}/10: {e}", "warn")
                                             time.sleep(3)
                                             try:
                                                 workbook = PromptWorkbook(excel_path)
@@ -4603,10 +4603,10 @@ class BrowserFlowGenerator:
                         pass
 
                     # Update Excel if available - SAVE MEDIA_ID for SCENE images
-                    # v1.0.441: Retry 3 lần đảm bảo ghi được Excel
+                    # v1.0.441: Retry 10 lần đảm bảo ghi được Excel
                     if workbook and not is_reference_image:
                         _scene_saved = False
-                        for _sa in range(3):
+                        for _sa in range(10):
                             try:
                                 workbook.update_scene(
                                     int(pid),
@@ -4622,8 +4622,8 @@ class BrowserFlowGenerator:
                                         self._log(f"   [WARN] Scene {pid}: API không trả về media_name (I2V sẽ không hoạt động)", "warn")
                                     break
                             except Exception as e:
-                                if _sa < 2:
-                                    self._log(f"   [EXCEL] Save scene {pid} retry {_sa+1}/3: {e}", "warn")
+                                if _sa < 9:
+                                    self._log(f"   [EXCEL] Save scene {pid} retry {_sa+1}/10: {e}", "warn")
                                     time.sleep(3)
                                     try:
                                         workbook = PromptWorkbook(excel_path)
@@ -4651,8 +4651,8 @@ class BrowserFlowGenerator:
                     if images[0].media_name and is_reference_image:
                         media_id_saved = False
                         if workbook:
-                            # v1.0.383: Retry 3 lần khi Excel bị lock (WinError 32)
-                            for _save_attempt in range(3):
+                            # v1.0.383: Retry 10 lần khi Excel bị lock (WinError 32)
+                            for _save_attempt in range(10):
                                 try:
                                     # v1.0.210: Thêm status="done" khi có media_id
                                     if workbook.update_character(pid, media_id=images[0].media_name, status="done"):
@@ -4665,8 +4665,8 @@ class BrowserFlowGenerator:
                                         self._log(f"   [EXCEL] {pid} not found in characters sheet", "warn")
                                         break  # Không retry nếu character không tồn tại
                                 except Exception as e:
-                                    if _save_attempt < 2:
-                                        self._log(f"   [EXCEL] Save retry {_save_attempt+1}/3: {e}", "warn")
+                                    if _save_attempt < 9:
+                                        self._log(f"   [EXCEL] Save retry {_save_attempt+1}/10: {e}", "warn")
                                         time.sleep(2)  # Đợi file unlock
                                         # Reload workbook để lấy file handle mới
                                         try:
@@ -4854,7 +4854,7 @@ class BrowserFlowGenerator:
                                     self.stats["failed"] -= 1  # Undo the fail count
                                     # Save media_id for scene images (v1.0.441: retry)
                                     if images2[0].media_name and not is_reference_image:
-                                        for _sa in range(3):
+                                        for _sa in range(10):
                                             try:
                                                 if workbook:
                                                     workbook.update_scene(int(pid), media_id=images2[0].media_name)
@@ -4864,7 +4864,7 @@ class BrowserFlowGenerator:
                                                 else:
                                                     break
                                             except Exception as _se:
-                                                if _sa < 2:
+                                                if _sa < 9:
                                                     time.sleep(2)
                                                     try:
                                                         workbook = PromptWorkbook(excel_path)
