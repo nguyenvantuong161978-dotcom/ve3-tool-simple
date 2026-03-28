@@ -1,15 +1,22 @@
-1.0.451
+1.0.452
 2026-03-28 (VN)
-Change: FIX CONTENT MATCHING - hinh anh PHAI minh hoa dung noi dung SRT
+Change: CRITICAL FIX - srt_text va visual_moment bi MAT khi luu Excel
 
 Thay doi:
+- v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
+  * BUG GOC: save_director_plan() doc field "text" nhung Step 5 tao "srt_text" → LUON TRONG
+  * BUG 2: visual_moment, camera, lighting KHONG CO TRONG director_plan columns → mat data
+  * Step 7 nhan duoc: "- Text: " (trong!) + "- Visual moment: " (trong!) → hinh generic
+  * FIX 1: save_director_plan() doc "srt_text" thay vi "text"
+  * FIX 2: Them 3 columns moi: visual_moment, camera, lighting vao director_plan
+  * FIX 3: get_director_plan() ho tro ca format cu (11 cols) va moi (14 cols)
+  * FIX 4: Step 5 dam bao moi scene co srt_text (fallback tu SRT entries neu API thieu)
+  * FIX 5: update_director_plan_status() detect format cu/moi de cap nhat dung cot
+  * Truoc: Step 7 tao hinh KHONG KHOP vi khong co noi dung SRT + visual_moment
+  * Sau: Step 7 co day du "Text" + "Visual moment" → hinh minh hoa dung noi dung
 - v1.0.451: FIX CONTENT MATCHING - HINH ANH PHAI MINH HOA NOI DUNG
-  * Them #1 PRIORITY CONTENT MATCHING vao tat ca 6 chu de (story, psychology, finance, finance_vn, psychology_video, finance_video)
-  * img_prompt PHAI minh hoa CHINH XAC noi dung SRT (truong "Text") - KHONG tao hinh chung chung
-  * "Text" la SU THAT, "Visual moment" chi la goi y - neu xung dot thi theo "Text"
-  * Ví dụ: Text noi "nao bo tiet ra dopamine" → hinh PHAI co nao + dopamine, KHONG phai hinh generic
-  * Truoc: 1 dong "match narration" + 20 dong style → API tap trung style, bo qua noi dung
-  * Sau: #1 PRIORITY content matching DAU TIEN + vi du cu the cho tung chu de
+  * Them #1 PRIORITY CONTENT MATCHING vao tat ca 6 chu de
+  * img_prompt PHAI minh hoa CHINH XAC noi dung SRT - KHONG tao hinh chung chung
 - v1.0.450: Them predefined character cho psychology topic
 - v1.0.449: PREDEFINED CHARACTER + GOOGLE SHEET CHARACTER TEMPLATE
   * Finance topics: nhan vat mac dinh co dinh (intellectual historian, Studio Ghibli style)

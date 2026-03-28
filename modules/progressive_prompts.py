@@ -2290,6 +2290,15 @@ Create scenes (~8s each). Return JSON:
                         api_scenes.append(fill_scene)
                     self._log(f"     -> Added {scenes_needed} auto-fill scenes, total: {len(api_scenes)}")
 
+            # v1.0.451: Đảm bảo mỗi scene đều có srt_text populated
+            # API có thể trả về srt_text trống hoặc thiếu → lấy từ SRT entries thực tế
+            for sc in api_scenes:
+                if not sc.get("srt_text"):
+                    sc_indices = sc.get("srt_indices", [])
+                    if isinstance(sc_indices, list) and sc_indices:
+                        sc_ents = [e for idx, e in enumerate(srt_entries, 1) if idx in sc_indices]
+                        sc["srt_text"] = " ".join([e.text for e in sc_ents]) if sc_ents else ""
+
             local_scenes.extend(api_scenes)
             return (seg_idx, local_scenes, image_count)
 

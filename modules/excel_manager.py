@@ -59,7 +59,10 @@ DIRECTOR_PLAN_COLUMNS = [
     "srt_start",        # Thời gian bắt đầu (HH:MM:SS,mmm)
     "srt_end",          # Thời gian kết thúc (HH:MM:SS,mmm)
     "duration",         # Độ dài (giây)
-    "srt_text",         # Nội dung text
+    "srt_text",         # Nội dung text SRT (QUAN TRỌNG - dùng cho Step 7 content matching)
+    "visual_moment",    # Mô tả visual moment (từ Step 5 API)
+    "camera",           # Camera angle/movement
+    "lighting",         # Lighting description
     "characters_used",  # JSON list nhân vật trong scene (backup)
     "location_used",    # Location ID (backup)
     "reference_files",  # JSON list reference files (backup)
@@ -810,6 +813,9 @@ class PromptWorkbook:
             "srt_end": 15,
             "duration": 10,
             "srt_text": 50,
+            "visual_moment": 50,
+            "camera": 20,
+            "lighting": 20,
             "characters_used": 25,
             "location_used": 15,
             "reference_files": 30,
@@ -1487,23 +1493,25 @@ class PromptWorkbook:
             # Duration: handle cả "duration" và "duration_seconds" (3-8s từ SRT timing)
             duration = scene.get("duration") or scene.get("duration_seconds") or 0
             ws.cell(row=next_row, column=5, value=round(duration, 2) if duration else 0)
-            ws.cell(row=next_row, column=6, value=scene.get("text", "")[:500])
-            # New columns for backup
-            # Handle characters_used - convert list to JSON string if needed
+            ws.cell(row=next_row, column=6, value=(scene.get("srt_text") or scene.get("text") or "")[:500])
+            # v1.0.451: Them visual_moment, camera, lighting (QUAN TRONG cho Step 7 content matching)
+            ws.cell(row=next_row, column=7, value=(scene.get("visual_moment") or "")[:500])
+            ws.cell(row=next_row, column=8, value=scene.get("camera", ""))
+            ws.cell(row=next_row, column=9, value=scene.get("lighting", ""))
+            # Characters, location, reference files
             chars_used = scene.get("characters_used", "[]")
             if isinstance(chars_used, list):
                 chars_used = json.dumps(chars_used)
-            ws.cell(row=next_row, column=7, value=chars_used)
+            ws.cell(row=next_row, column=10, value=chars_used)
 
-            ws.cell(row=next_row, column=8, value=scene.get("location_used", ""))
+            ws.cell(row=next_row, column=11, value=scene.get("location_used", ""))
 
-            # Handle reference_files - convert list to JSON string if needed
             ref_files = scene.get("reference_files", "[]")
             if isinstance(ref_files, list):
                 ref_files = json.dumps(ref_files)
-            ws.cell(row=next_row, column=9, value=ref_files)
-            ws.cell(row=next_row, column=10, value=scene.get("img_prompt", "")[:1000])
-            ws.cell(row=next_row, column=11, value=scene.get("status", "backup"))
+            ws.cell(row=next_row, column=12, value=ref_files)
+            ws.cell(row=next_row, column=13, value=scene.get("img_prompt", "")[:1000])
+            ws.cell(row=next_row, column=14, value=scene.get("status", "backup"))
 
         self.save()
         self.logger.info(f"Saved {len(scenes_data)} scenes to director_plan")
@@ -1524,21 +1532,47 @@ class PromptWorkbook:
             if row[0] is None:
                 continue
 
-            # Handle both old format and new format with segment_id
-            plans.append({
-                "plan_id": row[0],
-                "scene_id": row[0],  # Alias cho plan_id (step 5 dùng scene_id)
-                "segment_id": row[1] if len(row) > 1 else 1,  # NEW: segment_id column
-                "srt_start": row[2] if len(row) > 2 else "",
-                "srt_end": row[3] if len(row) > 3 else "",
-                "duration": row[4] if len(row) > 4 else 0,
-                "srt_text": row[5] if len(row) > 5 else "",
-                "characters_used": row[6] if len(row) > 6 else "[]",
-                "location_used": row[7] if len(row) > 7 else "",
-                "reference_files": row[8] if len(row) > 8 else "[]",
-                "img_prompt": row[9] if len(row) > 9 else "",
-                "status": row[10] if len(row) > 10 else "pending",
-            })
+            # v1.0.451: Them visual_moment, camera, lighting columns
+            # Detect format: new (14 cols) vs old (11 cols)
+            num_cols = len(row)
+            if num_cols >= 14:
+                # NEW format (v1.0.451+): 14 columns
+                plans.append({
+                    "plan_id": row[0],
+                    "scene_id": row[0],
+                    "segment_id": row[1] if row[1] else 1,
+                    "srt_start": row[2] or "",
+                    "srt_end": row[3] or "",
+                    "duration": row[4] or 0,
+                    "srt_text": row[5] or "",
+                    "visual_moment": row[6] or "",
+                    "camera": row[7] or "",
+                    "lighting": row[8] or "",
+                    "characters_used": row[9] or "[]",
+                    "location_used": row[10] or "",
+                    "reference_files": row[11] or "[]",
+                    "img_prompt": row[12] or "",
+                    "status": row[13] or "pending",
+                })
+            else:
+                # OLD format (pre v1.0.451): 11 columns - backward compatible
+                plans.append({
+                    "plan_id": row[0],
+                    "scene_id": row[0],
+                    "segment_id": row[1] if len(row) > 1 and row[1] else 1,
+                    "srt_start": row[2] if len(row) > 2 else "",
+                    "srt_end": row[3] if len(row) > 3 else "",
+                    "duration": row[4] if len(row) > 4 else 0,
+                    "srt_text": row[5] if len(row) > 5 else "",
+                    "visual_moment": "",
+                    "camera": "",
+                    "lighting": "",
+                    "characters_used": row[6] if len(row) > 6 else "[]",
+                    "location_used": row[7] if len(row) > 7 else "",
+                    "reference_files": row[8] if len(row) > 8 else "[]",
+                    "img_prompt": row[9] if len(row) > 9 else "",
+                    "status": row[10] if len(row) > 10 else "pending",
+                })
 
         return plans
 
@@ -1548,9 +1582,13 @@ class PromptWorkbook:
 
         ws = self.workbook[self.DIRECTOR_PLAN_SHEET]
 
+        # Detect format: new (14 cols) vs old (11 cols)
+        max_col = ws.max_column or 11
+        status_col = 14 if max_col >= 14 else 11
+
         for row_idx in range(2, ws.max_row + 1):
             if ws.cell(row=row_idx, column=1).value == plan_id:
-                ws.cell(row=row_idx, column=11, value=status)
+                ws.cell(row=row_idx, column=status_col, value=status)
                 return True
 
         return False
