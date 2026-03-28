@@ -1433,6 +1433,17 @@ class SimpleGUI(tk.Tk):
                   bg='#00cec9', fg='white', font=("Arial", 8, "bold"),
                   relief="flat", padx=8).pack(side="left", padx=4, pady=4)
 
+        # Server button
+        self._server_process = None
+        self.server_btn = tk.Button(btns2, text="CHAY SERVER", command=self._toggle_server,
+                                     bg='#fd79a8', fg='white', font=("Arial", 8, "bold"),
+                                     relief="flat", padx=8)
+        self.server_btn.pack(side="left", padx=4, pady=4)
+
+        self.server_status_dot = tk.Label(btns2, text="", bg='#0d2a4a', fg='#888',
+                                           font=("Consolas", 8))
+        self.server_status_dot.pack(side="left", padx=2)
+
         # === WORKERS (3 rows) ===
         wf = tk.Frame(self, bg='#16213e', padx=8, pady=5)
         wf.pack(fill="x", padx=5, pady=(5, 0))
@@ -3008,6 +3019,85 @@ class SimpleGUI(tk.Tk):
         """Mo cua so Settings."""
         SettingsWindow(self)
 
+    # ================================================================
+    # LOCAL PROXY SERVER - Chay/dung server tu GUI
+    # ================================================================
+
+    def _toggle_server(self):
+        """Bat/tat Local Proxy Server."""
+        if self._server_process and self._server_process.poll() is None:
+            # Server dang chay → dung
+            self._stop_server()
+        else:
+            # Server chua chay → chay
+            self._start_server()
+
+    def _start_server(self):
+        """Chay server trong subprocess."""
+        import subprocess
+
+        # Check flask installed
+        try:
+            import flask
+        except ImportError:
+            from tkinter import messagebox
+            messagebox.showerror("Thieu Flask",
+                "Chua cai flask!\n\nChay lenh:\n  pip install flask\n\nRoi thu lai.")
+            return
+
+        python_exe = sys.executable
+        server_script = str(TOOL_DIR / "server" / "app.py")
+
+        try:
+            # Chay server trong subprocess rieng
+            self._server_process = subprocess.Popen(
+                [python_exe, "-u", server_script],
+                cwd=str(TOOL_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+
+            self.server_btn.config(text="DUNG SERVER", bg='#e94560')
+            self.server_status_dot.config(text="SERVER DANG CHAY", fg='#00ff88')
+            self.status_var.set("Server dang khoi dong...")
+
+            # Monitor server process
+            self._monitor_server()
+
+        except Exception as e:
+            from tkinter import messagebox
+            messagebox.showerror("Loi", f"Khong chay duoc server:\n{e}")
+
+    def _stop_server(self):
+        """Dung server."""
+        if self._server_process:
+            try:
+                self._server_process.terminate()
+                self._server_process.wait(timeout=5)
+            except Exception:
+                try:
+                    self._server_process.kill()
+                except Exception:
+                    pass
+            self._server_process = None
+
+        self.server_btn.config(text="CHAY SERVER", bg='#fd79a8')
+        self.server_status_dot.config(text="", fg='#888')
+        self.status_var.set("Server da dung")
+
+    def _monitor_server(self):
+        """Kiem tra server con chay khong."""
+        if self._server_process and self._server_process.poll() is not None:
+            # Server da tat
+            exit_code = self._server_process.returncode
+            self._server_process = None
+            self.server_btn.config(text="CHAY SERVER", bg='#fd79a8')
+            self.server_status_dot.config(text=f"DA TAT (code={exit_code})", fg='#e94560')
+            return
+        if self._server_process:
+            self.after(3000, self._monitor_server)
+
     def _setup_vm(self):
         """Setup SMB share + IPv6 cho may ao."""
         import tkinter.messagebox as msgbox
@@ -3610,6 +3700,17 @@ class SimpleGUI(tk.Tk):
         ProjectDetail(self, code)
 
     def destroy(self):
+        # Dung server neu dang chay
+        if hasattr(self, '_server_process') and self._server_process:
+            try:
+                self._server_process.terminate()
+                self._server_process.wait(timeout=3)
+            except Exception:
+                try:
+                    self._server_process.kill()
+                except Exception:
+                    pass
+
         # Kill all processes khi dong GUI
         if self.manager:
             try:

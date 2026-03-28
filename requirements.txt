@@ -26,3 +26,6 @@ pywin32>=306
 
 # 2FA TOTP
 pyotp>=2.9.0
+
+# Local Proxy Server
+flask>=3.0.0
