@@ -1,12 +1,18 @@
 """
-Local Proxy Server - Queue System cho nhieu VM
+Local Proxy Server - Multi-Chrome Queue System cho nhieu VM
+
+v2.0: Multi-Chrome - Chay N Chrome song song (thay vi 1)
+- Moi Chrome: 1 account rieng + 1 IPv6 rieng + 1 queue worker thread rieng
+- 5 Chrome Portable: GoogleChromePortable, - Copy, - Copy (2), - Copy (3), - Copy (4)
+- Account + IPv6 doc tu Google Sheet "SERVER" (col B = account, col C = IPv6)
+- Shared queue: task vao queue chung, worker nao ranh se lay
 
 Flow:
-1. Server khoi dong → mo Chrome → dang nhap Google → vao Flow → tao project → san sang
+1. Server khoi dong → doc accounts tu Sheet SERVER → mo N Chrome → dang nhap → san sang
 2. VM gui POST /api/fix/create-image-veo3 voi {body_json, flow_auth_token, flow_url}
-3. Server xep vao hang doi (FIFO) → xu ly tung task mot
+3. Server xep vao hang doi FIFO → worker ranh lay task tu queue
 4. Chrome tao recaptchaToken → Google nhan token khach + captcha hop le → tao anh
-5. VM poll GET /api/fix/task-status?taskId=xxx → nhan ket qua + vi tri queue
+5. VM poll GET /api/fix/task-status?taskId=xxx → nhan ket qua
 
 API Contract:
   POST /api/fix/create-image-veo3
@@ -19,10 +25,13 @@ API Contract:
     Response: { success: true, result: { media: [...] } }
 
   GET /api/status
-    Response: { status: "running", chrome_ready: true, queue_size: 5, ... }
+    Response: { status: "running", chrome_count: 5, chrome_ready: 3, queue_size: 10, ... }
 
   GET /api/queue
     Response: { queue: [{taskId, vm_id, prompt_preview, status, position}, ...] }
+
+  GET /api/workers
+    Response: { workers: [{index, ready, busy, account, completed, failed}, ...] }
 """
 import sys
 import os
@@ -32,7 +41,6 @@ import time
 import threading
 import traceback
 from pathlib import Path
-from collections import OrderedDict
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -41,24 +49,22 @@ TOOL_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(TOOL_DIR))
 
 from flask import Flask, request, jsonify
-from server.chrome_session import ChromeSession
 
 app = Flask(__name__)
 
 # ============================================================
-# Queue System - Xu ly tuan tu, tra ket qua dung noi
+# Shared Queue + Task Storage
 # ============================================================
-# Task storage: taskId → task_data
-tasks = {}  # OrderedDict-like behavior via insertion order (Python 3.7+)
+# Task storage: taskId -> task_data
+tasks = {}
 task_lock = threading.Lock()
 
-# Queue: danh sach task_id theo thu tu FIFO
-task_queue = []  # List of task_ids waiting to be processed
+# Queue: list of task_ids (FIFO)
+task_queue = []
 queue_lock = threading.Lock()
 
-# Chrome session (singleton)
-chrome_session: ChromeSession = None
-processing_task_id = None  # Task dang duoc xu ly
+# Chrome Pool (initialized in main)
+chrome_pool = None
 
 # Stats
 stats = {
@@ -69,118 +75,19 @@ stats = {
 }
 
 
-def get_chrome_session() -> ChromeSession:
-    """Lazy init Chrome session."""
-    global chrome_session
-    if chrome_session is None:
-        chrome_session = ChromeSession()
-        chrome_session.setup()
-    return chrome_session
-
-
 def _get_queue_position(task_id: str) -> int:
     """Tra ve vi tri trong queue (1-based). 0 = dang processing. -1 = khong trong queue."""
-    global processing_task_id
-    if task_id == processing_task_id:
-        return 0  # Dang xu ly
+    # Check if any worker is processing this task
+    if chrome_pool:
+        for w in chrome_pool.workers:
+            if w.current_task_id == task_id:
+                return 0  # Dang xu ly
+
     with queue_lock:
         try:
             return task_queue.index(task_id) + 1
         except ValueError:
             return -1  # Khong trong queue (da xong hoac loi)
-
-
-# ============================================================
-# Queue Worker - Xu ly task tuan tu (1 thread duy nhat)
-# ============================================================
-def _queue_worker():
-    """Worker thread xu ly queue. Chi 1 thread duy nhat chay ham nay."""
-    global processing_task_id
-
-    print("[QUEUE] Worker started - doi task...")
-
-    while True:
-        # Lay task tiep theo tu queue
-        task_id = None
-        with queue_lock:
-            if task_queue:
-                task_id = task_queue[0]  # Peek, chua remove
-
-        if task_id is None:
-            time.sleep(0.5)  # Khong co task, doi
-            continue
-
-        # Lay task data
-        with task_lock:
-            task = tasks.get(task_id)
-        if not task:
-            # Task bi xoa (cleanup), bo qua
-            with queue_lock:
-                if task_id in task_queue:
-                    task_queue.remove(task_id)
-            continue
-
-        # Bat dau xu ly
-        processing_task_id = task_id
-        with task_lock:
-            tasks[task_id]['status'] = 'processing'
-            tasks[task_id]['started_at'] = time.time()
-
-        vm_id = task.get('vm_id', '?')
-        prompt_preview = task.get('prompt', '')[:50]
-        queue_size = len(task_queue)
-        print(f"[QUEUE] Processing: {task_id[:8]}... | VM: {vm_id} | Queue: {queue_size} | Prompt: {prompt_preview}...")
-
-        try:
-            session = get_chrome_session()
-            if not session.ready:
-                session.setup()
-                if not session.ready:
-                    raise RuntimeError("Chrome session not ready")
-
-            # Tao anh
-            result = session.generate_image(
-                client_bearer_token=task['bearer_token'],
-                client_project_id=task['project_id'],
-                client_prompt=task['prompt'],
-                model_name=task.get('model_name', 'GEM_PIX_2'),
-                aspect_ratio=task.get('aspect_ratio', 'IMAGE_ASPECT_RATIO_LANDSCAPE'),
-                seed=task.get('seed'),
-            )
-
-            with task_lock:
-                if result and 'media' in result:
-                    tasks[task_id]['status'] = 'completed'
-                    tasks[task_id]['result'] = result
-                    tasks[task_id]['completed_at'] = time.time()
-                    stats['total_completed'] += 1
-                    duration = time.time() - tasks[task_id].get('started_at', time.time())
-                    print(f"[QUEUE] [OK] {task_id[:8]}... | VM: {vm_id} | {duration:.1f}s")
-                elif result and 'error' in result:
-                    tasks[task_id]['status'] = 'failed'
-                    tasks[task_id]['error'] = result['error']
-                    stats['total_failed'] += 1
-                    print(f"[QUEUE] [FAIL] {task_id[:8]}... | VM: {vm_id} | {result['error'][:80]}")
-                else:
-                    tasks[task_id]['status'] = 'failed'
-                    tasks[task_id]['error'] = 'No media in response'
-                    stats['total_failed'] += 1
-                    print(f"[QUEUE] [FAIL] {task_id[:8]}... | VM: {vm_id} | No media")
-
-        except Exception as e:
-            traceback.print_exc()
-            with task_lock:
-                tasks[task_id]['status'] = 'failed'
-                tasks[task_id]['error'] = str(e)
-                stats['total_failed'] += 1
-            print(f"[QUEUE] [ERROR] {task_id[:8]}... | VM: {vm_id} | {str(e)[:80]}")
-
-        finally:
-            # Xoa khoi queue
-            processing_task_id = None
-            with queue_lock:
-                if task_id in task_queue:
-                    task_queue.remove(task_id)
 
 
 # ============================================================
@@ -259,6 +166,7 @@ def create_image():
                 'aspect_ratio': aspect_ratio,
                 'seed': seed,
                 'vm_id': vm_id,
+                'worker': None,  # Worker index se xu ly task nay
             }
             stats['total_received'] += 1
 
@@ -266,7 +174,10 @@ def create_image():
             task_queue.append(task_id)
             queue_position = len(task_queue)
 
-        print(f"[QUEUE] +Task {task_id[:8]}... | VM: {vm_id} | Pos: {queue_position} | Prompt: {prompt[:50]}...")
+        # Log
+        ready = chrome_pool.total_ready() if chrome_pool else 0
+        avail = chrome_pool.available_count() if chrome_pool else 0
+        print(f"[QUEUE] +Task {task_id[:8]}... | VM: {vm_id} | Pos: {queue_position} | Workers: {avail}/{ready} free | Prompt: {prompt[:50]}...")
 
         return jsonify({
             "success": True,
@@ -284,18 +195,6 @@ def task_status():
     Poll task status + vi tri trong queue.
 
     GET /api/fix/task-status?taskId=xxx
-
-    Response khi dang doi:
-    { "success": true, "status": "queued", "queue_position": 3 }
-
-    Response khi dang xu ly:
-    { "success": true, "status": "processing" }
-
-    Response khi xong:
-    { "success": true, "result": { "media": [...] } }
-
-    Response khi loi:
-    { "success": false, "error": "..." }
     """
     task_id = request.args.get('taskId', '')
     if not task_id:
@@ -319,13 +218,13 @@ def task_status():
             response["queue_position"] = position
         elif position == 0:
             response["status"] = "processing"
+            response["worker"] = task.get('worker')
         return jsonify(response)
 
 
 @app.route('/api/status', methods=['GET'])
 def server_status():
-    """Server health check + queue info."""
-    global chrome_session
+    """Server health check + queue info + worker stats."""
     uptime = time.time() - stats['start_time']
 
     with queue_lock:
@@ -339,11 +238,28 @@ def server_status():
             if t['status'] in ('queued', 'processing'):
                 vm_tasks[vm] = vm_tasks.get(vm, 0) + 1
 
+    # Worker stats
+    total_workers = len(chrome_pool.workers) if chrome_pool else 0
+    ready_workers = chrome_pool.total_ready() if chrome_pool else 0
+    available_workers = chrome_pool.available_count() if chrome_pool else 0
+
+    # Processing tasks
+    processing = []
+    if chrome_pool:
+        for w in chrome_pool.workers:
+            if w.busy and w.current_task_id:
+                processing.append({
+                    "worker": w.index,
+                    "task": w.current_task_id[:8] + "...",
+                })
+
     return jsonify({
         "status": "running",
-        "chrome_ready": chrome_session is not None and chrome_session.ready,
+        "chrome_count": total_workers,
+        "chrome_ready": ready_workers,
+        "chrome_available": available_workers,
         "queue_size": queue_size,
-        "processing": processing_task_id[:8] + "..." if processing_task_id else None,
+        "processing": processing,
         "vm_active": vm_tasks,
         "stats": {
             "total_received": stats['total_received'],
@@ -351,6 +267,20 @@ def server_status():
             "total_failed": stats['total_failed'],
             "uptime_hours": round(uptime / 3600, 1),
         },
+    })
+
+
+@app.route('/api/workers', methods=['GET'])
+def workers_info():
+    """Chi tiet tung Chrome worker."""
+    if not chrome_pool:
+        return jsonify({"workers": [], "error": "ChromePool not initialized"})
+
+    return jsonify({
+        "total": len(chrome_pool.workers),
+        "ready": chrome_pool.total_ready(),
+        "available": chrome_pool.available_count(),
+        "workers": chrome_pool.get_stats(),
     })
 
 
@@ -374,9 +304,23 @@ def queue_info():
             "wait_time": round(time.time() - t.get('created_at', time.time()), 1),
         })
 
+    # Processing tasks
+    processing = []
+    if chrome_pool:
+        for w in chrome_pool.workers:
+            if w.busy and w.current_task_id:
+                with task_lock:
+                    t = tasks.get(w.current_task_id, {})
+                processing.append({
+                    "worker": w.index,
+                    "taskId": w.current_task_id[:8] + "...",
+                    "vm_id": t.get('vm_id', '?'),
+                    "prompt_preview": t.get('prompt', '')[:60],
+                })
+
     return jsonify({
         "queue_size": len(queue_items),
-        "processing": processing_task_id[:8] + "..." if processing_task_id else None,
+        "processing": processing,
         "queue": queue_items,
     })
 
@@ -405,13 +349,14 @@ def cleanup_old_tasks():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("LOCAL PROXY SERVER - Queue System")
+    print("  LOCAL PROXY SERVER - Multi-Chrome Queue System")
     print("=" * 60)
     print()
     print("Endpoints:")
     print("  POST /api/fix/create-image-veo3  - Tao anh (xep hang doi)")
     print("  GET  /api/fix/task-status         - Poll ket qua + vi tri queue")
     print("  GET  /api/status                  - Server status + queue info")
+    print("  GET  /api/workers                 - Chi tiet tung Chrome worker")
     print("  GET  /api/queue                   - Xem chi tiet hang doi")
     print()
 
@@ -419,21 +364,50 @@ if __name__ == '__main__':
     cleanup_thread = threading.Thread(target=cleanup_old_tasks, daemon=True)
     cleanup_thread.start()
 
-    # Start queue worker (1 thread xu ly tuan tu)
-    worker_thread = threading.Thread(target=_queue_worker, daemon=True)
-    worker_thread.start()
+    # ============================================================
+    # Init Chrome Pool
+    # ============================================================
+    from server.chrome_pool import ChromePool, get_server_config
 
-    # Pre-init Chrome session
-    print("[INIT] Khoi tao Chrome session...")
+    print("[INIT] Doc cau hinh tu Google Sheet 'SERVER'...")
+    server_configs = []
     try:
-        chrome_session = ChromeSession()
-        chrome_session.setup()
-        print(f"[INIT] Chrome ready: {chrome_session.ready}")
+        server_configs = get_server_config()
+        if server_configs:
+            print(f"[INIT] Tim thay {len(server_configs)} accounts/IPv6")
+        else:
+            print("[INIT] Khong tim thay config trong sheet 'SERVER'")
+            print("[INIT] Server se chay voi Chrome da dang nhap san")
     except Exception as e:
-        print(f"[INIT] Chrome setup failed: {e}")
-        print("[INIT] Server van chay - Chrome se duoc init khi co request dau tien")
+        print(f"[INIT] Loi doc sheet: {e}")
+        print("[INIT] Server se chay voi Chrome da dang nhap san")
 
     print()
-    print("Server starting on http://0.0.0.0:5000")
+    print("[INIT] Khoi tao Chrome Pool...")
+    chrome_pool = ChromePool()
+    chrome_pool.init_workers(server_configs)
+
+    if not chrome_pool.workers:
+        print("[INIT] KHONG TIM THAY Chrome Portable nao!")
+        print("[INIT] Can it nhat 1 folder: GoogleChromePortable/GoogleChromePortable.exe")
+        print("[INIT] Server se chay nhung KHONG THE tao anh!")
+    else:
+        print()
+        print(f"[INIT] Setup {len(chrome_pool.workers)} Chrome workers...")
+        ready_count = chrome_pool.setup_all()
+
+        if ready_count > 0:
+            print()
+            print(f"[INIT] {ready_count} Chrome workers READY!")
+            # Start worker threads
+            chrome_pool.start_workers(task_queue, queue_lock, tasks, task_lock, stats)
+            print(f"[INIT] {ready_count} worker threads started!")
+        else:
+            print("[INIT] KHONG CO Chrome worker nao san sang!", )
+            print("[INIT] Server se chay nhung KHONG THE tao anh!")
+
+    print()
+    print(f"Server starting on http://0.0.0.0:5000")
+    print(f"Chrome workers: {chrome_pool.total_ready() if chrome_pool else 0}")
     print("=" * 60)
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

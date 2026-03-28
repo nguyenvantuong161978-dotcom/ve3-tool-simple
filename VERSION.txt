@@ -1,8 +1,19 @@
-1.0.466
+1.0.467
 2026-03-28 (VN)
-Change: FIX token extraction - chi can bearer, khong can recaptcha
+Change: MULTI-CHROME SERVER - 5 Chrome song song, moi Chrome 1 account + 1 IPv6
 
 Thay doi:
+- v1.0.467: MULTI-CHROME SERVER
+  * server/chrome_pool.py: ChromePool quan ly N Chrome instances song song
+  * ChromeWorker: moi Chrome co folder rieng, port rieng (19222-19226), account rieng, IPv6 rieng
+  * get_server_config(): doc accounts (col B) + IPv6 (col C) tu Google Sheet "SERVER"
+  * Shared queue: tat ca workers pull tu 1 queue chung (worker nao ranh lay task)
+  * 5 Chrome Portable: GoogleChromePortable, -Copy, -Copy (2), -Copy (3), -Copy (4)
+  * server/app.py v2.0: dung ChromePool thay vi single ChromeSession
+  * Them endpoint GET /api/workers: xem chi tiet tung Chrome worker
+  * GET /api/status: them chrome_count, chrome_ready, chrome_available, processing list
+  * Truoc: 1 Chrome = xu ly tuan tu 1 anh/lan
+  * Sau: N Chrome = xu ly N anh song song (N = so Chrome co san + accounts)
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
   * BUG GOC: save_director_plan() doc field "text" nhung Step 5 tao "srt_text" → LUON TRONG
   * BUG 2: visual_moment, camera, lighting KHONG CO TRONG director_plan columns → mat data
