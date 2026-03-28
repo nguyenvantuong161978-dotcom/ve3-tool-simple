@@ -1,8 +1,15 @@
-1.0.481
+1.0.482
 2026-03-28 (VN)
-Change: Server cleanup browser data sau moi request
+Change: Chrome 2 - Thumbnail + Validator qua local server
 
 Thay doi:
+- v1.0.482: CHROME 2 LOCAL SERVER SUPPORT
+  * Thumbnail: Neu local_server_enabled → dung GoogleFlowAPI qua server (khong mo Chrome)
+    - Landscape (3 anh) + Portrait (3 anh) deu qua server
+    - Reference images (imageInputs) van duoc truyen day du
+  * Validator: Neu local_server_enabled → skip Chrome validator
+    - Mark refs as verified (server se validate khi tao anh)
+    - Chrome 2 khong can mo Chrome nao khi co local server
 - v1.0.481: SERVER - Them lai JS_CLEANUP sau moi generate_image()
   * Sau moi request (thanh cong/loi): xoa localStorage, sessionStorage, IndexedDB, cookies, cache, service workers
   * Tranh Google track/flag browser qua stored data

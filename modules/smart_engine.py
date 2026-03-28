@@ -6078,6 +6078,15 @@ class SmartEngine:
         headless = cfg.get('browser_headless', False)
         generation_mode = cfg.get('generation_mode', 'api')
 
+        # === LOCAL SERVER MODE: Thumbnail qua server ===
+        local_server_enabled = cfg.get('local_server_enabled', False)
+        local_server_url = cfg.get('local_server_url', '')
+        if local_server_enabled and local_server_url:
+            self.log(f"[THUMB] LOCAL SERVER MODE: {local_server_url}")
+            return self._generate_thumbnails_via_server(
+                thumbnails, wb, proj_dir, thumb_dir, excel_media_ids, cfg
+            )
+
         # Thumbnail luon dung mang may mac dinh (khong proxy/webshare)
         drission = DrissionFlowAPI(
             headless=headless,
@@ -6299,6 +6308,151 @@ class SmartEngine:
             pass
 
         self.log(f"[THUMB] === XONG: {success_count}/6 thumbnails ===")
+        return success_count > 0
+
+    def _generate_thumbnails_via_server(self, thumbnails, wb, proj_dir, thumb_dir, excel_media_ids, cfg):
+        """Tao thumbnails qua local server (khong dung Chrome local)."""
+        import json
+        import base64
+        from modules.google_flow_api import GoogleFlowAPI, AspectRatio
+
+        local_server_url = cfg.get('local_server_url', '')
+        bearer_token = cfg.get('flow_bearer_token', '')
+        if not bearer_token:
+            bearer_token = wb.get_config_value('flow_bearer_token') or ''
+        flow_project_id = wb.get_config_value('flow_project_id') or cfg.get('flow_project_id', '')
+        flow_timeout = cfg.get('flow_timeout', 120)
+
+        if not bearer_token:
+            self.log("[THUMB] Khong co bearer_token!", "ERROR")
+            return False
+
+        excel_media_ids_lower = {k.lower(): v for k, v in excel_media_ids.items()}
+
+        def _build_refs(thumbnail):
+            image_inputs = []
+            ref_files_str = thumbnail.reference_files or ""
+            try:
+                ref_files = json.loads(ref_files_str) if ref_files_str else []
+            except Exception:
+                ref_files = []
+            for ref in ref_files:
+                ref_id = Path(ref).stem.lower()
+                if ref_id in excel_media_ids_lower:
+                    image_inputs.append({
+                        "name": excel_media_ids_lower[ref_id],
+                        "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
+                    })
+                    self.log(f"[THUMB] Ref OK: {ref_id} -> {excel_media_ids_lower[ref_id][:30]}...")
+            return image_inputs
+
+        success_count = 0
+
+        # Batch A: Landscape
+        self.log("[THUMB] Batch A: Landscape (3 anh) qua server...")
+        for i, thumb in enumerate(thumbnails[:3]):
+            fname = f"thumb_{i+1:03d}.png"
+            save_path = thumb_dir / fname
+            if thumb.status_img == "done" and thumb.img_path and (proj_dir / thumb.img_path).exists():
+                self.log(f"[THUMB] {fname} da co, skip")
+                success_count += 1
+                continue
+
+            image_inputs = _build_refs(thumb)
+            self.log(f"[THUMB] Tao {fname}: {thumb.img_prompt[:60]}...")
+
+            api = GoogleFlowAPI(
+                bearer_token=bearer_token, project_id=flow_project_id,
+                timeout=flow_timeout, verbose=False,
+                proxy_api_token='', use_proxy=True, local_server_url=local_server_url,
+            )
+            ok, images, err = api.generate_images(
+                prompt=thumb.img_prompt, count=1,
+                aspect_ratio=AspectRatio.LANDSCAPE,
+                image_inputs=image_inputs if image_inputs else None,
+            )
+            if ok and images:
+                gen_img = images[0]
+                saved = False
+                if hasattr(gen_img, 'base64_data') and gen_img.base64_data:
+                    with open(save_path, 'wb') as f:
+                        f.write(base64.b64decode(gen_img.base64_data))
+                    saved = True
+                elif hasattr(gen_img, 'url') and gen_img.url:
+                    import requests as req
+                    try:
+                        r = req.get(gen_img.url, timeout=30)
+                        if r.status_code == 200:
+                            with open(save_path, 'wb') as f:
+                                f.write(r.content)
+                            saved = True
+                    except Exception:
+                        pass
+                if saved:
+                    wb.update_thumbnail(thumb.thumb_id, status_img="done", img_path=f"thumbnail/{fname}")
+                    wb.safe_save()
+                    success_count += 1
+                    self.log(f"[THUMB] [v] {fname} OK (server)")
+                else:
+                    self.log(f"[THUMB] [x] {fname} FAIL: khong luu duoc", "WARN")
+            else:
+                wb.update_thumbnail(thumb.thumb_id, status_img="error")
+                wb.safe_save()
+                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
+
+        # Batch B: Portrait
+        self.log("[THUMB] Batch B: Portrait (3 anh) qua server...")
+        for i, thumb in enumerate(thumbnails[:3]):
+            fname = f"thumb_{i+4:03d}.png"
+            save_path = thumb_dir / fname
+            if thumb.status_portrait == "done" and thumb.img_path_portrait and (proj_dir / thumb.img_path_portrait).exists():
+                self.log(f"[THUMB] {fname} da co, skip")
+                success_count += 1
+                continue
+
+            image_inputs = _build_refs(thumb)
+            self.log(f"[THUMB] Tao {fname} (portrait): {thumb.img_prompt[:60]}...")
+
+            api = GoogleFlowAPI(
+                bearer_token=bearer_token, project_id=flow_project_id,
+                timeout=flow_timeout, verbose=False,
+                proxy_api_token='', use_proxy=True, local_server_url=local_server_url,
+            )
+            ok, images, err = api.generate_images(
+                prompt=thumb.img_prompt, count=1,
+                aspect_ratio=AspectRatio.PORTRAIT,
+                image_inputs=image_inputs if image_inputs else None,
+            )
+            if ok and images:
+                gen_img = images[0]
+                saved = False
+                if hasattr(gen_img, 'base64_data') and gen_img.base64_data:
+                    with open(save_path, 'wb') as f:
+                        f.write(base64.b64decode(gen_img.base64_data))
+                    saved = True
+                elif hasattr(gen_img, 'url') and gen_img.url:
+                    import requests as req
+                    try:
+                        r = req.get(gen_img.url, timeout=30)
+                        if r.status_code == 200:
+                            with open(save_path, 'wb') as f:
+                                f.write(r.content)
+                            saved = True
+                    except Exception:
+                        pass
+                if saved:
+                    wb.update_thumbnail(thumb.thumb_id, status_portrait="done", img_path_portrait=f"thumbnail/{fname}")
+                    wb.safe_save()
+                    success_count += 1
+                    self.log(f"[THUMB] [v] {fname} OK (portrait, server)")
+                else:
+                    self.log(f"[THUMB] [x] {fname} FAIL: khong luu duoc", "WARN")
+            else:
+                wb.update_thumbnail(thumb.thumb_id, status_portrait="error")
+                wb.safe_save()
+                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
+
+        self.log(f"[THUMB] === XONG (SERVER): {success_count}/6 thumbnails ===")
         return success_count > 0
 
     # =========================================================================

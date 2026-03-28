@@ -519,6 +519,19 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = yaml.safe_load(f)
 
+                # === LOCAL SERVER MODE: Skip Chrome validator, dung server ===
+                local_server_enabled = config.get('local_server_enabled', False)
+                local_server_url = config.get('local_server_url', '')
+                if local_server_enabled and local_server_url:
+                    log(f"  [VALIDATOR] LOCAL SERVER MODE - skip Chrome validator")
+                    log(f"  [VALIDATOR] Server se validate references khi tao anh")
+                    # Mark all refs as verified (server handles validation)
+                    for ref_id in refs_to_validate:
+                        workbook.update_character(ref_id, status="verified")
+                    workbook.save()
+                    validated_refs = set(refs_to_validate)
+                    raise Exception("SKIP_VALIDATOR")
+
                 # Nếu chưa có URL, đợi Chrome 1 tạo xong project TRƯỚC KHI mở Chrome validator
                 if not project_url:
                     log(f"  [WAIT] No project URL yet - waiting for Chrome 1 to create Flow project...")
