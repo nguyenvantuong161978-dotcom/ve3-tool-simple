@@ -226,7 +226,12 @@ class IPv6SocksProxy:
                     pass
 
             if not addrinfo:
-                self.log(f"[IPv6-Proxy] No IPv6 address for {host}")
+                # Chi log 1 lan cho moi host, tranh spam
+                no_ipv6_hosts = getattr(self, '_no_ipv6_hosts', set())
+                if host not in no_ipv6_hosts:
+                    self.log(f"[IPv6-Proxy] No IPv6 address for {host}")
+                    no_ipv6_hosts.add(host)
+                    self._no_ipv6_hosts = no_ipv6_hosts
                 return None
 
             family, socktype, proto, canonname, sockaddr = addrinfo[0]
@@ -239,7 +244,10 @@ class IPv6SocksProxy:
                     # Bind socket vào IPv6 address đã chọn (port 0 = OS chọn port tự do)
                     sock.bind((self.ipv6_address, 0, 0, 0))  # (host, port, flowinfo, scope_id)
                 except Exception as bind_err:
-                    self.log(f"[IPv6-Proxy] Bind warning: {bind_err}")
+                    # Chi log 1 lan dau, tranh spam
+                    if not getattr(self, '_bind_warned', False):
+                        self.log(f"[IPv6-Proxy] Bind warning (chi log 1 lan): {bind_err}")
+                        self._bind_warned = True
                     # Vẫn thử connect dù bind fail
 
             sock.connect(sockaddr)

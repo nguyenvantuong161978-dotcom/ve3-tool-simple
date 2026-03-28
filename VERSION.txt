@@ -1,3 +1,13 @@
+1.0.492
+2026-03-28 (VN)
+Change: FIX Bind warning spam + /api/queue crash
+
+Fix:
+- IPv6 proxy: Bind warning chi log 1 lan (tranh spam hang tram dong)
+- IPv6 proxy: "No IPv6 address for X" chi log 1 lan cho moi host
+- /api/queue: Fix TypeError khi w.current_task_id la None (race condition)
+
+---
 1.0.491
 2026-03-28 (VN)
 Change: SERVER IPv6 ROTATION tu sheet + GUI nhap bo sung

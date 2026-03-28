@@ -609,12 +609,13 @@ def queue_info():
     processing = []
     if chrome_pool:
         for w in chrome_pool.workers:
-            if w.busy and w.current_task_id:
+            tid = w.current_task_id
+            if w.busy and tid:
                 with task_lock:
-                    t = tasks.get(w.current_task_id, {})
+                    t = tasks.get(tid, {})
                 processing.append({
                     "worker": w.index,
-                    "taskId": w.current_task_id[:8] + "...",
+                    "taskId": tid[:8] + "...",
                     "vm_id": t.get('vm_id', '?'),
                     "prompt_preview": t.get('prompt', '')[:60],
                 })
