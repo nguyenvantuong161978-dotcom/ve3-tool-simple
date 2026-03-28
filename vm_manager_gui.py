@@ -2964,6 +2964,14 @@ class SimpleGUI(tk.Tk):
                                     shutil.rmtree(str(dst_sub))
                                 shutil.copytree(str(sub_dir), str(dst_sub))
 
+                    # Copy server folder (local proxy server)
+                    src_server = extracted_folder / "server"
+                    dst_server = TOOL_DIR / "server"
+                    if src_server.exists():
+                        dst_server.mkdir(exist_ok=True)
+                        for py_file in src_server.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_server / py_file.name))
+
                     # Xoa temp files
                     if zip_path.exists():
                         zip_path.unlink()
