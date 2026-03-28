@@ -40,7 +40,7 @@ class ServerGUI(tk.Tk):
         super().__init__()
 
         self.title("Chrome Server")
-        self.geometry("700x550")
+        self.geometry("700x600")
         self.configure(bg=BG)
         self.resizable(True, True)
 
@@ -99,26 +99,6 @@ class ServerGUI(tk.Tk):
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
 
-        # Mode toggle (Gop / Tach)
-        row_mode = tk.Frame(card, bg=BG2)
-        row_mode.pack(fill='x', padx=20, pady=(0, 10))
-
-        tk.Label(row_mode, text="Che do (Mode)", font=("Segoe UI", 13, "bold"),
-                 bg=BG2, fg=FG).pack(side='left')
-
-        self.mode_var = tk.StringVar(value="gop")
-        self.mode_btn = tk.Button(row_mode, text="GOP", font=("Segoe UI", 11, "bold"),
-                                  bg=BLUE, fg='white', width=6, relief='flat',
-                                  command=self._toggle_mode)
-        self.mode_btn.pack(side='right')
-
-        self.mode_hint = tk.Label(card, text="GOP: Chrome chay chung voi server (mac dinh).  TACH: Chrome chay CMD rieng.",
-                 font=("Segoe UI", 9), bg=BG2, fg=FG2)
-        self.mode_hint.pack(padx=20, anchor='w')
-
-        # Separator
-        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
-
         # Chrome count
         row2 = tk.Frame(card, bg=BG2)
         row2.pack(fill='x', padx=20, pady=(0, 10))
@@ -163,15 +143,6 @@ class ServerGUI(tk.Tk):
         else:
             self.ipv6_btn.config(text="TAT", bg='#475569')
 
-    def _toggle_mode(self):
-        current = self.mode_var.get()
-        if current == "gop":
-            self.mode_var.set("tach")
-            self.mode_btn.config(text="TACH", bg=ORANGE)
-        else:
-            self.mode_var.set("gop")
-            self.mode_btn.config(text="GOP", bg=BLUE)
-
     def _get_chrome_count(self):
         val = self.chrome_combo.get()
         if val == "Tat ca":
@@ -193,7 +164,6 @@ class ServerGUI(tk.Tk):
 
         use_ipv6 = self.ipv6_var.get()
         chrome_count = self._get_chrome_count()
-        mode = self.mode_var.get()  # 'gop' or 'tach'
 
         # Thu thap IPv6 bo sung tu text box
         extra_ipv6_text = self.ipv6_text.get("1.0", "end").strip()
@@ -203,20 +173,20 @@ class ServerGUI(tk.Tk):
         ]
 
         # Switch to monitor page
-        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6, mode))
+        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6))
 
-    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None, mode='gop'):
+    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None):
         self.setup_frame.destroy()
         self._build_monitor_page()
 
         # Start server in background
         threading.Thread(
             target=self._start_server,
-            args=(use_ipv6, chrome_count, extra_ipv6 or [], mode),
+            args=(use_ipv6, chrome_count, extra_ipv6 or []),
             daemon=True,
         ).start()
 
-    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None, mode='gop'):
+    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None):
         """Start Flask + Chrome workers in background."""
         self._add_log("Khoi dong server...", "INFO")
 
@@ -231,7 +201,7 @@ class ServerGUI(tk.Tk):
             server_settings['use_ipv6'] = use_ipv6
             server_settings['chrome_count'] = chrome_count
             server_settings['extra_ipv6'] = extra_ipv6 or []
-            server_settings['mode'] = mode
+            server_settings['mode'] = 'gop'
             server_settings['started'] = True
 
         # Redirect server_log to our GUI
