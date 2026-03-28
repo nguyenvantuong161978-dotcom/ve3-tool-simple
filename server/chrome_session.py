@@ -890,270 +890,146 @@ class ChromeSession:
         self.log("Textarea không xuất hiện!", "ERROR")
         return False
 
-    def _handle_create_with_flow_page(self) -> bool:
-        """
-        v1.0.506: Xử lý trang "Create with Flow" (sync từ API mode).
-        Trang này xuất hiện khi vào Flow lần đầu hoặc sau clear data + login lại.
-        Cần click nút "Create with Flow" / "Tạo với Flow" để vào trang có nút "Dự án mới".
-
-        Returns: True nếu đã qua trang này (hoặc không cần), False nếu thất bại.
-        """
-        # Check có đang ở trang "Create with Flow" không (giống API mode)
+    def _click_create_with_flow(self) -> bool:
+        """Click nút 'Create with Flow' / 'Tạo với Flow' nếu có. (giống API mode)"""
         try:
-            is_create_page = self.page.run_js('''
+            click_result = self.page.run_js('''
                 (function() {
-                    var url = window.location.href;
-                    if (url.includes('/tools/flow') && !url.includes('/project/')) {
-                        var btns = document.querySelectorAll('button');
-                        for (var b of btns) {
-                            var text = (b.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                return 'HAS_CREATE_BUTTON';
-                            }
-                        }
-                        var spans = document.querySelectorAll('span');
-                        for (var s of spans) {
-                            var text = (s.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                return 'HAS_CREATE_BUTTON';
-                            }
+                    var btns = document.querySelectorAll('button');
+                    for (var b of btns) {
+                        var text = (b.textContent || '').trim();
+                        if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                            b.click();
+                            return 'CLICKED';
                         }
                     }
-                    return 'NOT_CREATE_PAGE';
+                    var spans = document.querySelectorAll('span');
+                    for (var s of spans) {
+                        var text = (s.textContent || '').trim();
+                        if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                            var btn = s.closest('button');
+                            if (btn) { btn.click(); return 'CLICKED_VIA_SPAN'; }
+                        }
+                    }
+                    return 'NOT_FOUND';
                 })();
             ''')
-        except Exception:
-            return True
+            if click_result and 'CLICKED' in str(click_result):
+                return True
+        except:
+            pass
+        return False
 
-        if is_create_page != 'HAS_CREATE_BUTTON':
-            return True
+    def _dismiss_popups(self):
+        """Dismiss popup thông báo (Bắt đầu / Get started / Got it). (giống API mode)"""
+        try:
+            for sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
+                        'tag:button@@text():Bắt Đầu', 'tag:button@@text():Got it',
+                        'tag:button@@text():Dismiss']:
+                try:
+                    btn = self.page.ele(sel, timeout=0.5)
+                    if btn:
+                        btn.click()
+                        self.log(f"Dismissed popup: {sel.split(':')[-1]}")
+                        time.sleep(1)
+                        return True
+                except:
+                    continue
+        except:
+            pass
+        return False
 
-        self.log("Dang o trang 'Create with Flow'! Click de tiep tuc...", "WARN")
+    def _create_new_project(self) -> bool:
+        """
+        v1.0.508: Tạo project mới - COPY Y NGUYÊN logic từ API mode warmup flow.
+        1 vòng lặp 20 lần: check Create with Flow + Dự án mới + dismiss popup + reload mỗi 5 lần.
+        """
+        self.log("Tạo project mới...")
+        time.sleep(2)
 
-        # Retry 20 lần, reload mỗi 5 lần (giống API mode)
+        # Vòng lặp giống API mode warmup (20 lần retry, reload mỗi 5)
         for attempt in range(20):
-            # Dismiss popup ("Bắt đầu" / "Get started") - popup xuất hiện SAU khi click
+            # Check URL - có thể đã vào project rồi
             try:
-                for _sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
-                             'tag:button@@text():Got it']:
-                    try:
-                        _btn = self.page.ele(_sel, timeout=0.5)
-                        if _btn:
-                            _btn.click()
-                            self.log(f"Dismissed popup: {_sel.split(':')[-1]}")
-                            time.sleep(1)
-                            break
-                    except:
-                        continue
-            except:
-                pass
-
-            # Mục tiêu: tìm nút "Dự án mới" (add_2) = đã qua trang Create with Flow
-            try:
-                btn = self.page.ele('tag:button@@text():add_2', timeout=1)
-                if btn:
-                    self.log(f"'Du an moi' da xuat hien! (attempt {attempt+1})", "OK")
+                current_url = self.page.url or ''
+                if '/project/' in current_url:
+                    self.log(f"Da vao project: {current_url}", "OK")
                     return True
             except:
                 pass
 
-            # Click "Create with Flow" nếu có (giống API mode)
+            # Dismiss popup (Bắt đầu / Get started / Got it)
+            self._dismiss_popups()
+
+            # Tìm button "Dự án mới" (add_2) - đây là mục tiêu
             try:
-                click_result = self.page.run_js('''
-                    (function() {
-                        var btns = document.querySelectorAll('button');
-                        for (var b of btns) {
-                            var text = (b.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                b.click();
-                                return 'CLICKED';
-                            }
-                        }
-                        var spans = document.querySelectorAll('span');
-                        for (var s of spans) {
-                            var text = (s.textContent || '').trim();
-                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
-                                var btn = s.closest('button');
-                                if (btn) { btn.click(); return 'CLICKED_VIA_SPAN'; }
-                            }
-                        }
-                        return 'NOT_FOUND';
-                    })();
-                ''')
-                if click_result and 'CLICKED' in str(click_result):
-                    self.log(f"Clicked 'Create with Flow' ({attempt+1}/20)")
-                    time.sleep(1)
-                    continue  # Check lại ngay
+                btn = self.page.ele('tag:button@@text():add_2', timeout=1)
+                if btn:
+                    self.log(f"Clicked 'Du an moi' (attempt {attempt+1})", "OK")
+                    btn.click()
+                    time.sleep(3)
+                    # Đợi vào project
+                    for w in range(30):
+                        try:
+                            if '/project/' in (self.page.url or ''):
+                                self.log(f"Project created: {self.page.url}", "OK")
+                                return True
+                        except:
+                            pass
+                        time.sleep(1)
+                        if w % 10 == 9:
+                            self.log(f"  ... doi vao project {w+1}s")
+                    # Vẫn chưa vào → tiếp tục retry
+                    self.log("Click 'Du an moi' nhung chua vao project, thu lai...", "WARN")
+                    continue
             except:
                 pass
+
+            # Thử JS click "Dự án mới"
+            try:
+                result = self.page.run_js(JS_CLICK_NEW_PROJECT)
+                if result and 'CLICKED' in str(result):
+                    self.log(f"Clicked 'Du an moi' JS (attempt {attempt+1})", "OK")
+                    time.sleep(3)
+                    for w in range(30):
+                        try:
+                            if '/project/' in (self.page.url or ''):
+                                self.log(f"Project created: {self.page.url}", "OK")
+                                return True
+                        except:
+                            pass
+                        time.sleep(1)
+                    self.log("Click 'Du an moi' JS nhung chua vao project, thu lai...", "WARN")
+                    continue
+            except Exception as e:
+                if "ContextLost" in str(type(e).__name__) or "refresh" in str(e).lower():
+                    self.log("Page dang refresh, doi...")
+                    time.sleep(2)
+                    try:
+                        if '/project/' in (self.page.url or ''):
+                            return True
+                    except:
+                        pass
+                    continue
+
+            # Thử click "Create with Flow" nếu có (giống API mode)
+            if self._click_create_with_flow():
+                self.log(f"Clicked 'Create with Flow' ({attempt+1}/20)")
+                time.sleep(1)
+                continue  # Check lại ngay
 
             # Reload page mỗi 5 lần
             if attempt > 0 and attempt % 5 == 0:
                 self.log(f"Reload Flow page ({attempt}/20)...", "WARN")
-                self.page.get(FLOW_URL)
-                time.sleep(2)
+                try:
+                    self.page.get(FLOW_URL)
+                    time.sleep(3)
+                except:
+                    pass
 
             time.sleep(0.5)
 
-        self.log("Khong qua duoc trang 'Create with Flow' sau 20 lan!", "ERROR")
-        return False
-
-    def _create_new_project(self) -> bool:
-        """Tạo project mới (copy logic từ drission_flow_api._auto_setup_project)."""
-        self.log("Tạo project mới...")
-        time.sleep(2)
-
-        # v1.0.506: Xử lý trang "Create with Flow" trước (sync từ API mode)
-        if not self._handle_create_with_flow_page():
-            return False
-
-        MAX_REFRESH = 6
-        for refresh_count in range(MAX_REFRESH):
-            # Dismiss popups ("Bắt đầu" / "Get started" / "Got it")
-            if refresh_count == 0:
-                try:
-                    dismiss_selectors = [
-                        'tag:button@@text():Bắt đầu',
-                        'tag:button@@text():Get started',
-                        'tag:button@@text():Bắt Đầu',
-                        'tag:button@@text():Got it',
-                        'tag:button@@text():Dismiss',
-                    ]
-                    for sel in dismiss_selectors:
-                        try:
-                            popup_btn = self.page.ele(sel, timeout=1)
-                            if popup_btn:
-                                popup_btn.click()
-                                self.log(f"Dismissed popup: {sel.split(':')[-1]}")
-                                time.sleep(1)
-                                break
-                        except:
-                            continue
-                except:
-                    pass
-
-            # Tim button trong 10s
-            clicked_success = False
-            for i in range(10):
-                # Check URL - co the da vao project roi
-                try:
-                    current_url = self.page.url or ''
-                    if '/project/' in current_url:
-                        self.log(f"Da vao project: {current_url}", "OK")
-                        return True
-                except:
-                    pass
-
-                # Thu 1: DrissionPage selector (add_2 = icon button)
-                try:
-                    btn = self.page.ele('tag:button@@text():add_2', timeout=1)
-                    if btn:
-                        btn.click()
-                        self.log("Clicked 'Du an moi' (add_2 selector)", "OK")
-                        clicked_success = True
-                        time.sleep(3)
-                        try:
-                            if '/project/' in (self.page.url or ''):
-                                self.log(f"Project created: {self.page.url}", "OK")
-                                return True
-                        except:
-                            pass
-                        break
-                except:
-                    pass
-
-                # Thu 2: JS click
-                try:
-                    result = self.page.run_js(JS_CLICK_NEW_PROJECT)
-                    if result and 'CLICKED' in str(result):
-                        self.log(f"Clicked 'Du an moi' (JS): {result}", "OK")
-                        clicked_success = True
-                        time.sleep(3)
-                        try:
-                            if '/project/' in (self.page.url or ''):
-                                self.log(f"Project created: {self.page.url}", "OK")
-                                return True
-                        except:
-                            pass
-                        break
-                except Exception as e:
-                    if "ContextLost" in str(type(e).__name__) or "refresh" in str(e).lower():
-                        self.log("Page dang refresh, doi...")
-                        time.sleep(2)
-                        try:
-                            if '/project/' in (self.page.url or ''):
-                                return True
-                        except:
-                            pass
-                        continue
-
-                time.sleep(1)
-
-                # Giua chung: thu dismiss popup
-                if i == 4:
-                    self.log("  ... doi button 'Du an moi' xuat hien...")
-                    try:
-                        for _sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
-                                     'tag:button@@text():Got it']:
-                            try:
-                                _btn = self.page.ele(_sel, timeout=1)
-                                if _btn:
-                                    _btn.click()
-                                    self.log(f"Dismissed popup: {_sel.split(':')[-1]}")
-                                    time.sleep(1)
-                                    break
-                            except:
-                                continue
-                        else:
-                            # Click diem trong de dismiss overlay
-                            self.page.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
-                            self.log("Clicked diem trong de dismiss popup")
-                            time.sleep(1)
-                    except:
-                        pass
-            else:
-                # Khong tim thay button → check URL truoc khi F5
-                try:
-                    if '/project/' in (self.page.url or ''):
-                        return True
-                except:
-                    pass
-
-                # Thu click diem trong truoc khi refresh
-                if refresh_count < 2:
-                    try:
-                        self.page.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
-                        time.sleep(1)
-                    except:
-                        pass
-
-                # F5 refresh
-                self.log(f"Khong thay button - F5 refresh ({refresh_count + 1}/{MAX_REFRESH})...", "WARN")
-                try:
-                    self.page.get(FLOW_URL)
-                    time.sleep(5)
-                except:
-                    pass
-                continue
-
-            if clicked_success:
-                # Da click, doi them
-                time.sleep(3)
-                try:
-                    if '/project/' in (self.page.url or ''):
-                        self.log(f"Project created: {self.page.url}", "OK")
-                        return True
-                except:
-                    pass
-
-        # Lan cuoi: check URL
-        try:
-            if '/project/' in (self.page.url or ''):
-                return True
-        except:
-            pass
-
-        self.log(f"Khong tao duoc project sau {MAX_REFRESH} lan refresh!", "ERROR")
+        self.log("Khong tao duoc project sau 20 lan!", "ERROR")
         return False
 
     def _wait_for_textarea(self, timeout: int = 30) -> bool:
