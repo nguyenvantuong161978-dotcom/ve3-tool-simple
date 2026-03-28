@@ -194,7 +194,7 @@ def main():
         task = get_next_task(worker_id)
 
         if not task:
-            time.sleep(1)
+            time.sleep(3)  # Doi 3s truoc khi poll lai (tranh spam server)
             continue
 
         task_id = task.get('task_id', '?')
@@ -234,8 +234,13 @@ def main():
                 report_done(worker_id, task_id, success=True, result=result)
             elif result and 'error' in result:
                 total_failed += 1
-                err = str(result.get('error', ''))[:100]
-                log(f"FAIL: {task_id[:8]}... | {err}", "ERROR")
+                err_raw = result.get('error', '')
+                if isinstance(err_raw, dict):
+                    err = f"Error {err_raw.get('code', '?')}: {err_raw.get('message', str(err_raw))}"
+                else:
+                    err = str(err_raw)
+                err = err[:200]
+                log(f"FAIL: {task_id[:8]}... | {err[:100]}", "ERROR")
                 report_done(worker_id, task_id, success=False, error=err)
             else:
                 total_failed += 1
