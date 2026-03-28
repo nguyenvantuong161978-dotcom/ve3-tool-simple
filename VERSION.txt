@@ -1,3 +1,12 @@
+1.0.498
+2026-03-29 (VN)
+Change: GUI - Them nut THEM VAO MAY + TEST IPv6
+
+- THEM VAO MAY: Chay netsh de add IPv6 vao network interface
+- TEST IPv6: Kiem tra IPv6 nao da assign + bind duoc
+- Hien popup ket qua chi tiet (OK/CHUA ADD/BIND FAIL)
+
+---
 1.0.497
 2026-03-29 (VN)
 Change: 403 → DOI IPv6 NGAY moi lan (khong doi 9 lan)

@@ -40,7 +40,7 @@ class ServerGUI(tk.Tk):
         super().__init__()
 
         self.title("Chrome Server")
-        self.geometry("700x600")
+        self.geometry("700x650")
         self.configure(bg=BG)
         self.resizable(True, True)
 
@@ -84,17 +84,37 @@ class ServerGUI(tk.Tk):
                  font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
 
         # IPv6 list input (optional - bo sung them IPv6 ngoai sheet)
-        tk.Label(card, text="IPv6 bo sung (moi dong 1 IP, de trong neu chi dung sheet):",
+        tk.Label(card, text="IPv6 (moi dong 1 IP):",
                  font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w', pady=(8, 2))
 
         ipv6_text_frame = tk.Frame(card, bg=BG2)
-        ipv6_text_frame.pack(fill='x', padx=20, pady=(0, 5))
+        ipv6_text_frame.pack(fill='x', padx=20, pady=(0, 2))
 
-        self.ipv6_text = tk.Text(ipv6_text_frame, height=3, width=50,
+        self.ipv6_text = tk.Text(ipv6_text_frame, height=4, width=50,
                                   font=("Consolas", 9), bg='#0f172a', fg=FG,
                                   insertbackground=FG, relief='solid', bd=1,
                                   highlightbackground=BORDER)
         self.ipv6_text.pack(fill='x')
+
+        # IPv6 buttons: THEM VAO MAY + TEST
+        ipv6_btn_frame = tk.Frame(card, bg=BG2)
+        ipv6_btn_frame.pack(fill='x', padx=20, pady=(2, 5))
+
+        self.ipv6_add_btn = tk.Button(ipv6_btn_frame, text="THEM VAO MAY",
+                                       font=("Segoe UI", 9, "bold"),
+                                       bg=BLUE, fg='#0f172a', relief='flat', cursor='hand2',
+                                       command=self._add_ipv6_to_machine)
+        self.ipv6_add_btn.pack(side='left', padx=(0, 8))
+
+        self.ipv6_test_btn = tk.Button(ipv6_btn_frame, text="TEST IPv6",
+                                        font=("Segoe UI", 9, "bold"),
+                                        bg=ORANGE, fg='#0f172a', relief='flat', cursor='hand2',
+                                        command=self._test_ipv6)
+        self.ipv6_test_btn.pack(side='left')
+
+        self.ipv6_status_label = tk.Label(ipv6_btn_frame, text="", font=("Segoe UI", 9),
+                                           bg=BG2, fg=FG2)
+        self.ipv6_status_label.pack(side='left', padx=10)
 
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
@@ -142,6 +162,170 @@ class ServerGUI(tk.Tk):
             self.ipv6_btn.config(text="BAT", bg=GREEN)
         else:
             self.ipv6_btn.config(text="TAT", bg='#475569')
+
+    def _get_ipv6_list(self):
+        """Lay danh sach IPv6 tu text box."""
+        text = self.ipv6_text.get("1.0", "end").strip()
+        return [
+            line.strip() for line in text.split('\n')
+            if line.strip() and ':' in line.strip()
+        ]
+
+    def _add_ipv6_to_machine(self):
+        """Them IPv6 vao network interface bang netsh."""
+        ipv6_list = self._get_ipv6_list()
+        if not ipv6_list:
+            self.ipv6_status_label.config(text="Chua nhap IPv6!", fg=RED)
+            return
+
+        self.ipv6_add_btn.config(state='disabled', text="DANG THEM...")
+        self.ipv6_status_label.config(text="", fg=FG2)
+        threading.Thread(target=self._do_add_ipv6, args=(ipv6_list,), daemon=True).start()
+
+    def _do_add_ipv6(self, ipv6_list):
+        """Thread: chay netsh de add IPv6."""
+        import subprocess
+        added = 0
+        skipped = 0
+        failed = 0
+
+        # Tim network interface name
+        iface = self._detect_interface()
+
+        for ip in ipv6_list:
+            try:
+                result = subprocess.run(
+                    ['netsh', 'interface', 'ipv6', 'add', 'address', iface, ip],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    added += 1
+                elif 'already' in result.stderr.lower() or 'da ton tai' in result.stderr.lower() \
+                        or result.returncode == 1:
+                    # Co the da ton tai
+                    skipped += 1
+                else:
+                    failed += 1
+            except Exception:
+                failed += 1
+
+        msg = f"Them: {added}  Co san: {skipped}  Loi: {failed}"
+        color = GREEN if failed == 0 else YELLOW
+        self.after(0, lambda: self.ipv6_status_label.config(text=msg, fg=color))
+        self.after(0, lambda: self.ipv6_add_btn.config(state='normal', text="THEM VAO MAY"))
+
+    def _detect_interface(self):
+        """Tim ten network interface chinh (Ethernet/Wi-Fi)."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ['netsh', 'interface', 'ipv6', 'show', 'address'],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in result.stdout.split('\n'):
+                line = line.strip()
+                if line.startswith('Interface') and ':' in line:
+                    name = line.split(':', 1)[1].strip()
+                    if name.lower() not in ('loopback pseudo-interface 1',):
+                        return name
+        except Exception:
+            pass
+        return "Ethernet"
+
+    def _test_ipv6(self):
+        """Test IPv6 - kiem tra IPv6 nao da duoc assign va hoat dong."""
+        ipv6_list = self._get_ipv6_list()
+        if not ipv6_list:
+            self.ipv6_status_label.config(text="Chua nhap IPv6!", fg=RED)
+            return
+
+        self.ipv6_test_btn.config(state='disabled', text="DANG TEST...")
+        self.ipv6_status_label.config(text="", fg=FG2)
+        threading.Thread(target=self._do_test_ipv6, args=(ipv6_list,), daemon=True).start()
+
+    def _do_test_ipv6(self, ipv6_list):
+        """Thread: kiem tra IPv6."""
+        import subprocess
+        import socket
+
+        # 1. Lay danh sach IPv6 hien co tren may
+        assigned = set()
+        try:
+            result = subprocess.run(
+                ['netsh', 'interface', 'ipv6', 'show', 'address'],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in result.stdout.split('\n'):
+                line = line.strip()
+                if '2001:' in line or '::' in line:
+                    parts = line.split()
+                    for p in parts:
+                        if ':' in p and not p.endswith('%'):
+                            # Loai bo %interface suffix
+                            clean = p.split('%')[0]
+                            if clean.startswith('2001:') or clean.startswith('fe80:'):
+                                assigned.add(clean.lower())
+        except Exception:
+            pass
+
+        ok_count = 0
+        fail_count = 0
+        results = []
+
+        for ip in ipv6_list:
+            ip_lower = ip.lower()
+            if ip_lower in assigned:
+                # Da assign → test bind
+                try:
+                    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+                    sock.bind((ip, 0))
+                    sock.close()
+                    results.append(f"  OK  {ip}")
+                    ok_count += 1
+                except Exception:
+                    results.append(f"  BIND FAIL  {ip}")
+                    fail_count += 1
+            else:
+                results.append(f"  CHUA ADD  {ip}")
+                fail_count += 1
+
+        # Hien ket qua trong popup
+        msg = f"OK: {ok_count}  Loi: {fail_count} / {len(ipv6_list)}"
+        color = GREEN if fail_count == 0 else (YELLOW if ok_count > 0 else RED)
+        self.after(0, lambda: self.ipv6_status_label.config(text=msg, fg=color))
+        self.after(0, lambda: self.ipv6_test_btn.config(state='normal', text="TEST IPv6"))
+
+        # Show detail popup
+        detail = f"IPv6 Test Results ({ok_count}/{len(ipv6_list)} OK)\n\n" + "\n".join(results)
+        self.after(0, lambda: self._show_ipv6_result(detail))
+
+    def _show_ipv6_result(self, detail):
+        """Hien popup ket qua test IPv6."""
+        popup = tk.Toplevel(self)
+        popup.title("IPv6 Test Results")
+        popup.geometry("500x400")
+        popup.configure(bg=BG)
+        popup.transient(self)
+
+        text = tk.Text(popup, bg=BG, fg=FG, font=("Consolas", 10),
+                       wrap='none', bd=0, padx=10, pady=10)
+        text.pack(fill='both', expand=True)
+
+        for line in detail.split('\n'):
+            if 'OK' in line and 'FAIL' not in line and 'CHUA' not in line:
+                text.insert('end', line + '\n', 'ok')
+            elif 'FAIL' in line or 'CHUA' in line:
+                text.insert('end', line + '\n', 'fail')
+            else:
+                text.insert('end', line + '\n')
+
+        text.tag_config('ok', foreground=GREEN)
+        text.tag_config('fail', foreground=RED)
+        text.config(state='disabled')
+
+        tk.Button(popup, text="DONG", font=("Segoe UI", 11, "bold"),
+                  bg=BLUE, fg='#0f172a', relief='flat',
+                  command=popup.destroy).pack(pady=10)
 
     def _get_chrome_count(self):
         val = self.chrome_combo.get()
