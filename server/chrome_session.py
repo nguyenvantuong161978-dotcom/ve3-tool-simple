@@ -866,6 +866,27 @@ class ChromeSession:
             self.log(f"READY! Project: {self.project_url}", "OK")
             return True
 
+        # v1.0.506: Textarea không xuất hiện → có thể đang ở trang "Create with Flow"
+        # (giống API mode: đã login nhưng page chưa sẵn sàng)
+        self.log("Textarea khong xuat hien - check Create with Flow...", "WARN")
+        if self._handle_create_with_flow_page():
+            # Đã qua trang Create with Flow → thử tạo project mới
+            try:
+                current_url = self.page.url or ''
+                if '/project/' not in current_url:
+                    success = self._create_new_project()
+                    if not success:
+                        self.log("Khong tao duoc project sau Create with Flow!", "ERROR")
+                        return False
+            except:
+                pass
+            # Đợi textarea lần nữa
+            if self._wait_for_textarea():
+                self.ready = True
+                self.project_url = self.page.url
+                self.log(f"READY! Project: {self.project_url}", "OK")
+                return True
+
         self.log("Textarea không xuất hiện!", "ERROR")
         return False
 
@@ -877,7 +898,7 @@ class ChromeSession:
 
         Returns: True nếu đã qua trang này (hoặc không cần), False nếu thất bại.
         """
-        # Check có đang ở trang "Create with Flow" không
+        # Check có đang ở trang "Create with Flow" không (giống API mode)
         try:
             is_create_page = self.page.run_js('''
                 (function() {
@@ -902,10 +923,10 @@ class ChromeSession:
                 })();
             ''')
         except Exception:
-            return True  # Lỗi check → bỏ qua, tiếp tục flow bình thường
+            return True
 
         if is_create_page != 'HAS_CREATE_BUTTON':
-            return True  # Không phải trang Create with Flow → OK
+            return True
 
         self.log("Dang o trang 'Create with Flow'! Click de tiep tuc...", "WARN")
 
@@ -936,7 +957,7 @@ class ChromeSession:
             except:
                 pass
 
-            # Click "Create with Flow" nếu có
+            # Click "Create with Flow" nếu có (giống API mode)
             try:
                 click_result = self.page.run_js('''
                     (function() {
