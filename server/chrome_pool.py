@@ -184,13 +184,9 @@ class ChromePool:
         """
         server_configs = server_configs or []
 
-        # Thu thap TAT CA IPv6 tu sheet (col C) de dung khi rotate
-        self._ipv6_list = [
-            cfg['ipv6'] for cfg in server_configs
-            if cfg.get('ipv6', '').strip()
-        ]
-        if self._ipv6_list:
-            self._log(f"[IPv6] Thu thap {len(self._ipv6_list)} IPv6 tu sheet SERVER")
+        # IPv6 list cho rotation - chi tu GUI (khong lay tu sheet)
+        # GUI se truyen qua app.py → chrome_pool._ipv6_list
+        self._ipv6_list = []
 
         chromes = self.discover_chromes()
         if not chromes:

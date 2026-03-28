@@ -1003,11 +1003,11 @@ def _do_start_workers():
     # Store configs globally for /internal/worker-config
     _stored_server_configs = list(server_configs)
 
-    # Tat IPv6 neu user chon
+    # Xoa IPv6 tu sheet - chi dung IPv6 tu GUI
+    for cfg in server_configs:
+        cfg['ipv6'] = ""
     if not use_ipv6:
         server_log("IPv6: TAT - Chrome se dung IPv4", "WARN")
-        for cfg in server_configs:
-            cfg['ipv6'] = ""
 
     def pool_log(msg, level="INFO"):
         server_log(msg, level)
@@ -1019,10 +1019,17 @@ def _do_start_workers():
 
     chrome_pool.init_workers(server_configs)
 
-    # Them IPv6 bo sung tu GUI (neu co)
+    # IPv6 tu GUI (nguon duy nhat - khong lay tu sheet)
     if extra_ipv6 and use_ipv6:
-        chrome_pool._ipv6_list.extend(extra_ipv6)
-        server_log(f"[IPv6] Them {len(extra_ipv6)} IPv6 bo sung tu GUI (tong: {len(chrome_pool._ipv6_list)})")
+        chrome_pool._ipv6_list = list(extra_ipv6)
+        server_log(f"[IPv6] {len(extra_ipv6)} IPv6 tu GUI")
+        # Gan IPv6 tu GUI cho tung worker (thay vi tu sheet)
+        for i, w in enumerate(chrome_pool.workers):
+            if i < len(extra_ipv6):
+                w.ipv6 = extra_ipv6[i]
+            else:
+                # Quay vong neu nhieu worker hon IPv6
+                w.ipv6 = extra_ipv6[i % len(extra_ipv6)]
 
     # Gioi han so Chrome neu user chon
     if chrome_count > 0 and len(chrome_pool.workers) > chrome_count:

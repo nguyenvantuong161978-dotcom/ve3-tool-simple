@@ -1,3 +1,12 @@
+1.0.499
+2026-03-29 (VN)
+Change: IPv6 CHI tu GUI - Bo lay tu Google Sheet
+
+- Bo logic lay IPv6 tu sheet SERVER col C
+- IPv6 chi tu text box trong GUI setting
+- Moi worker duoc gan IPv6 tu GUI list (quay vong neu nhieu worker)
+
+---
 1.0.498
 2026-03-29 (VN)
 Change: GUI - Them nut THEM VAO MAY + TEST IPv6
