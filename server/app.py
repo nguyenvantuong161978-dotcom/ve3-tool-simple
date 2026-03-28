@@ -1,20 +1,28 @@
 """
-Local Proxy Server - Giống nanoai.pics
+Local Proxy Server - Queue System cho nhieu VM
 
 Flow:
-1. Server khởi động → mở Chrome → đăng nhập Google → vào Flow → tạo project → sẵn sàng
-2. Client gửi POST /api/fix/create-image-veo3 với {body_json, flow_auth_token, flow_url}
-3. Server inject interceptor (thay bearer token + projectId) → paste prompt → Enter
-4. Chrome tạo recaptchaToken → Google nhận token khách + captcha hợp lệ → tạo ảnh
-5. Client poll GET /api/fix/task-status?taskId=xxx → nhận kết quả
+1. Server khoi dong → mo Chrome → dang nhap Google → vao Flow → tao project → san sang
+2. VM gui POST /api/fix/create-image-veo3 voi {body_json, flow_auth_token, flow_url}
+3. Server xep vao hang doi (FIFO) → xu ly tung task mot
+4. Chrome tao recaptchaToken → Google nhan token khach + captcha hop le → tao anh
+5. VM poll GET /api/fix/task-status?taskId=xxx → nhan ket qua + vi tri queue
 
-API Contract (giống nanoai.pics):
+API Contract:
   POST /api/fix/create-image-veo3
     Body: { body_json: {...}, flow_auth_token: "ya29.xxx", flow_url: "https://..." }
-    Response: { success: true, taskId: "uuid" }
+    Response: { success: true, taskId: "uuid", queue_position: 3 }
 
   GET /api/fix/task-status?taskId=xxx
+    Response: { success: true, status: "queued", queue_position: 2 }
+    Response: { success: true, status: "processing" }
     Response: { success: true, result: { media: [...] } }
+
+  GET /api/status
+    Response: { status: "running", chrome_ready: true, queue_size: 5, ... }
+
+  GET /api/queue
+    Response: { queue: [{taskId, vm_id, prompt_preview, status, position}, ...] }
 """
 import sys
 import os
@@ -24,6 +32,7 @@ import time
 import threading
 import traceback
 from pathlib import Path
+from collections import OrderedDict
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -37,14 +46,27 @@ from server.chrome_session import ChromeSession
 app = Flask(__name__)
 
 # ============================================================
-# Task Manager - Quản lý tasks async
+# Queue System - Xu ly tuan tu, tra ket qua dung noi
 # ============================================================
-tasks = {}  # taskId → { status, result, error, created_at }
+# Task storage: taskId → task_data
+tasks = {}  # OrderedDict-like behavior via insertion order (Python 3.7+)
 task_lock = threading.Lock()
+
+# Queue: danh sach task_id theo thu tu FIFO
+task_queue = []  # List of task_ids waiting to be processed
+queue_lock = threading.Lock()
 
 # Chrome session (singleton)
 chrome_session: ChromeSession = None
-chrome_lock = threading.Lock()  # Serialize image generation (1 Chrome = 1 task tại 1 thời điểm)
+processing_task_id = None  # Task dang duoc xu ly
+
+# Stats
+stats = {
+    'total_received': 0,
+    'total_completed': 0,
+    'total_failed': 0,
+    'start_time': time.time(),
+}
 
 
 def get_chrome_session() -> ChromeSession:
@@ -56,6 +78,111 @@ def get_chrome_session() -> ChromeSession:
     return chrome_session
 
 
+def _get_queue_position(task_id: str) -> int:
+    """Tra ve vi tri trong queue (1-based). 0 = dang processing. -1 = khong trong queue."""
+    global processing_task_id
+    if task_id == processing_task_id:
+        return 0  # Dang xu ly
+    with queue_lock:
+        try:
+            return task_queue.index(task_id) + 1
+        except ValueError:
+            return -1  # Khong trong queue (da xong hoac loi)
+
+
+# ============================================================
+# Queue Worker - Xu ly task tuan tu (1 thread duy nhat)
+# ============================================================
+def _queue_worker():
+    """Worker thread xu ly queue. Chi 1 thread duy nhat chay ham nay."""
+    global processing_task_id
+
+    print("[QUEUE] Worker started - doi task...")
+
+    while True:
+        # Lay task tiep theo tu queue
+        task_id = None
+        with queue_lock:
+            if task_queue:
+                task_id = task_queue[0]  # Peek, chua remove
+
+        if task_id is None:
+            time.sleep(0.5)  # Khong co task, doi
+            continue
+
+        # Lay task data
+        with task_lock:
+            task = tasks.get(task_id)
+        if not task:
+            # Task bi xoa (cleanup), bo qua
+            with queue_lock:
+                if task_id in task_queue:
+                    task_queue.remove(task_id)
+            continue
+
+        # Bat dau xu ly
+        processing_task_id = task_id
+        with task_lock:
+            tasks[task_id]['status'] = 'processing'
+            tasks[task_id]['started_at'] = time.time()
+
+        vm_id = task.get('vm_id', '?')
+        prompt_preview = task.get('prompt', '')[:50]
+        queue_size = len(task_queue)
+        print(f"[QUEUE] Processing: {task_id[:8]}... | VM: {vm_id} | Queue: {queue_size} | Prompt: {prompt_preview}...")
+
+        try:
+            session = get_chrome_session()
+            if not session.ready:
+                session.setup()
+                if not session.ready:
+                    raise RuntimeError("Chrome session not ready")
+
+            # Tao anh
+            result = session.generate_image(
+                client_bearer_token=task['bearer_token'],
+                client_project_id=task['project_id'],
+                client_prompt=task['prompt'],
+                model_name=task.get('model_name', 'GEM_PIX_2'),
+                aspect_ratio=task.get('aspect_ratio', 'IMAGE_ASPECT_RATIO_LANDSCAPE'),
+                seed=task.get('seed'),
+            )
+
+            with task_lock:
+                if result and 'media' in result:
+                    tasks[task_id]['status'] = 'completed'
+                    tasks[task_id]['result'] = result
+                    tasks[task_id]['completed_at'] = time.time()
+                    stats['total_completed'] += 1
+                    duration = time.time() - tasks[task_id].get('started_at', time.time())
+                    print(f"[QUEUE] [OK] {task_id[:8]}... | VM: {vm_id} | {duration:.1f}s")
+                elif result and 'error' in result:
+                    tasks[task_id]['status'] = 'failed'
+                    tasks[task_id]['error'] = result['error']
+                    stats['total_failed'] += 1
+                    print(f"[QUEUE] [FAIL] {task_id[:8]}... | VM: {vm_id} | {result['error'][:80]}")
+                else:
+                    tasks[task_id]['status'] = 'failed'
+                    tasks[task_id]['error'] = 'No media in response'
+                    stats['total_failed'] += 1
+                    print(f"[QUEUE] [FAIL] {task_id[:8]}... | VM: {vm_id} | No media")
+
+        except Exception as e:
+            traceback.print_exc()
+            with task_lock:
+                tasks[task_id]['status'] = 'failed'
+                tasks[task_id]['error'] = str(e)
+                stats['total_failed'] += 1
+            print(f"[QUEUE] [ERROR] {task_id[:8]}... | VM: {vm_id} | {str(e)[:80]}")
+
+        finally:
+            # Xoa khoi queue
+            processing_task_id = None
+            with queue_lock:
+                if task_id in task_queue:
+                    task_queue.remove(task_id)
+
+
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -63,7 +190,7 @@ def get_chrome_session() -> ChromeSession:
 @app.route('/api/fix/create-image-veo3', methods=['POST'])
 def create_image():
     """
-    Tạo task sinh ảnh - giống nanoai.pics.
+    Tao task sinh anh - xep vao hang doi.
 
     Body JSON:
     {
@@ -72,7 +199,8 @@ def create_image():
             "requests": [{ "prompt": "...", "imageModelName": "GEM_PIX_2", ... }]
         },
         "flow_auth_token": "ya29.xxx",
-        "flow_url": "https://aisandbox-pa.googleapis.com/v1/projects/{id}/flowMedia:batchGenerateImages"
+        "flow_url": "https://aisandbox-pa.googleapis.com/v1/projects/{id}/flowMedia:batchGenerateImages",
+        "vm_id": "TA6-T1"  // Optional: de biet task tu VM nao
     }
     """
     try:
@@ -83,13 +211,14 @@ def create_image():
         body_json = data.get('body_json')
         flow_auth_token = data.get('flow_auth_token', '')
         flow_url = data.get('flow_url', '')
+        vm_id = data.get('vm_id', request.remote_addr or 'unknown')
 
         if not body_json:
             return jsonify({"success": False, "error": "Missing body_json"}), 400
         if not flow_auth_token:
             return jsonify({"success": False, "error": "Missing flow_auth_token"}), 400
 
-        # Extract prompt từ body_json
+        # Extract prompt tu body_json
         prompt = ""
         if 'requests' in body_json and body_json['requests']:
             prompt = body_json['requests'][0].get('prompt', '')
@@ -97,12 +226,11 @@ def create_image():
         if not prompt:
             return jsonify({"success": False, "error": "No prompt in body_json.requests[0].prompt"}), 400
 
-        # Extract project ID từ body_json hoặc flow_url
+        # Extract project ID tu body_json hoac flow_url
         project_id = ""
         if body_json.get('clientContext', {}).get('projectId'):
             project_id = body_json['clientContext']['projectId']
         elif flow_url:
-            # Parse từ URL: .../projects/{project_id}/flowMedia:...
             parts = flow_url.split('/projects/')
             if len(parts) > 1:
                 project_id = parts[1].split('/')[0]
@@ -116,27 +244,35 @@ def create_image():
         aspect_ratio = req.get('imageAspectRatio', 'IMAGE_ASPECT_RATIO_LANDSCAPE')
         seed = req.get('seed', None)
 
-        # Tạo task
+        # Tao task va xep vao queue
         task_id = str(uuid.uuid4())
         with task_lock:
             tasks[task_id] = {
-                'status': 'pending',
+                'status': 'queued',
                 'result': None,
                 'error': None,
                 'created_at': time.time(),
                 'prompt': prompt,
                 'project_id': project_id,
+                'bearer_token': flow_auth_token,
+                'model_name': model_name,
+                'aspect_ratio': aspect_ratio,
+                'seed': seed,
+                'vm_id': vm_id,
             }
+            stats['total_received'] += 1
 
-        # Chạy task trong background thread
-        thread = threading.Thread(
-            target=_process_image_task,
-            args=(task_id, flow_auth_token, project_id, prompt, model_name, aspect_ratio, seed),
-            daemon=True
-        )
-        thread.start()
+        with queue_lock:
+            task_queue.append(task_id)
+            queue_position = len(task_queue)
 
-        return jsonify({"success": True, "taskId": task_id})
+        print(f"[QUEUE] +Task {task_id[:8]}... | VM: {vm_id} | Pos: {queue_position} | Prompt: {prompt[:50]}...")
+
+        return jsonify({
+            "success": True,
+            "taskId": task_id,
+            "queue_position": queue_position,
+        })
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -145,17 +281,20 @@ def create_image():
 @app.route('/api/fix/task-status', methods=['GET'])
 def task_status():
     """
-    Poll task status - giống nanoai.pics.
+    Poll task status + vi tri trong queue.
 
     GET /api/fix/task-status?taskId=xxx
 
-    Response khi đang xử lý:
+    Response khi dang doi:
+    { "success": true, "status": "queued", "queue_position": 3 }
+
+    Response khi dang xu ly:
     { "success": true, "status": "processing" }
 
     Response khi xong:
     { "success": true, "result": { "media": [...] } }
 
-    Response khi lỗi:
+    Response khi loi:
     { "success": false, "error": "..." }
     """
     task_id = request.args.get('taskId', '')
@@ -173,82 +312,87 @@ def task_status():
     elif task['status'] == 'failed':
         return jsonify({"success": False, "error": task['error']})
     else:
-        return jsonify({"success": True, "status": task['status']})
+        # queued hoac processing
+        position = _get_queue_position(task_id)
+        response = {"success": True, "status": task['status']}
+        if position > 0:
+            response["queue_position"] = position
+        elif position == 0:
+            response["status"] = "processing"
+        return jsonify(response)
 
 
 @app.route('/api/status', methods=['GET'])
 def server_status():
-    """Server health check."""
+    """Server health check + queue info."""
     global chrome_session
+    uptime = time.time() - stats['start_time']
+
+    with queue_lock:
+        queue_size = len(task_queue)
+
+    # Danh sach VM dang co task
+    vm_tasks = {}
+    with task_lock:
+        for tid, t in tasks.items():
+            vm = t.get('vm_id', '?')
+            if t['status'] in ('queued', 'processing'):
+                vm_tasks[vm] = vm_tasks.get(vm, 0) + 1
+
     return jsonify({
         "status": "running",
         "chrome_ready": chrome_session is not None and chrome_session.ready,
-        "pending_tasks": sum(1 for t in tasks.values() if t['status'] in ('pending', 'processing')),
-        "completed_tasks": sum(1 for t in tasks.values() if t['status'] == 'completed'),
-        "failed_tasks": sum(1 for t in tasks.values() if t['status'] == 'failed'),
+        "queue_size": queue_size,
+        "processing": processing_task_id[:8] + "..." if processing_task_id else None,
+        "vm_active": vm_tasks,
+        "stats": {
+            "total_received": stats['total_received'],
+            "total_completed": stats['total_completed'],
+            "total_failed": stats['total_failed'],
+            "uptime_hours": round(uptime / 3600, 1),
+        },
+    })
+
+
+@app.route('/api/queue', methods=['GET'])
+def queue_info():
+    """Xem chi tiet hang doi."""
+    queue_items = []
+
+    with queue_lock:
+        queue_copy = list(task_queue)
+
+    for i, tid in enumerate(queue_copy):
+        with task_lock:
+            t = tasks.get(tid, {})
+        queue_items.append({
+            "position": i + 1,
+            "taskId": tid[:8] + "...",
+            "vm_id": t.get('vm_id', '?'),
+            "prompt_preview": t.get('prompt', '')[:60],
+            "status": t.get('status', '?'),
+            "wait_time": round(time.time() - t.get('created_at', time.time()), 1),
+        })
+
+    return jsonify({
+        "queue_size": len(queue_items),
+        "processing": processing_task_id[:8] + "..." if processing_task_id else None,
+        "queue": queue_items,
     })
 
 
 # ============================================================
-# Task Processing
-# ============================================================
-
-def _process_image_task(task_id: str, bearer_token: str, project_id: str,
-                        prompt: str, model_name: str, aspect_ratio: str, seed: int):
-    """Xử lý task sinh ảnh trong background thread."""
-    try:
-        with task_lock:
-            tasks[task_id]['status'] = 'processing'
-
-        # Serialize Chrome access (chỉ 1 task tại 1 thời điểm)
-        with chrome_lock:
-            session = get_chrome_session()
-
-            if not session.ready:
-                # Thử setup lại
-                session.setup()
-                if not session.ready:
-                    raise RuntimeError("Chrome session not ready")
-
-            # Tạo ảnh
-            result = session.generate_image(
-                client_bearer_token=bearer_token,
-                client_project_id=project_id,
-                client_prompt=prompt,
-                model_name=model_name,
-                aspect_ratio=aspect_ratio,
-                seed=seed,
-            )
-
-        with task_lock:
-            if result and 'media' in result:
-                tasks[task_id]['status'] = 'completed'
-                tasks[task_id]['result'] = result
-            elif result and 'error' in result:
-                tasks[task_id]['status'] = 'failed'
-                tasks[task_id]['error'] = result['error']
-            else:
-                tasks[task_id]['status'] = 'failed'
-                tasks[task_id]['error'] = 'No media in response'
-
-    except Exception as e:
-        traceback.print_exc()
-        with task_lock:
-            tasks[task_id]['status'] = 'failed'
-            tasks[task_id]['error'] = str(e)
-
-
-# ============================================================
-# Cleanup old tasks (giữ tối đa 1 giờ)
+# Cleanup old tasks (giu toi da 1 gio)
 # ============================================================
 
 def cleanup_old_tasks():
-    """Xóa tasks cũ hơn 1 giờ."""
+    """Xoa tasks cu hon 1 gio."""
     while True:
-        time.sleep(300)  # Check mỗi 5 phút
+        time.sleep(300)  # Check moi 5 phut
         cutoff = time.time() - 3600
         with task_lock:
-            old_ids = [tid for tid, t in tasks.items() if t['created_at'] < cutoff]
+            old_ids = [tid for tid, t in tasks.items()
+                       if t['created_at'] < cutoff and t['status'] in ('completed', 'failed')]
             for tid in old_ids:
                 del tasks[tid]
         if old_ids:
@@ -261,28 +405,33 @@ def cleanup_old_tasks():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("LOCAL PROXY SERVER - Giống nanoai.pics")
+    print("LOCAL PROXY SERVER - Queue System")
     print("=" * 60)
     print()
     print("Endpoints:")
-    print("  POST /api/fix/create-image-veo3  - Tạo ảnh")
-    print("  GET  /api/fix/task-status         - Poll kết quả")
-    print("  GET  /api/status                  - Server status")
+    print("  POST /api/fix/create-image-veo3  - Tao anh (xep hang doi)")
+    print("  GET  /api/fix/task-status         - Poll ket qua + vi tri queue")
+    print("  GET  /api/status                  - Server status + queue info")
+    print("  GET  /api/queue                   - Xem chi tiet hang doi")
     print()
 
     # Start cleanup thread
     cleanup_thread = threading.Thread(target=cleanup_old_tasks, daemon=True)
     cleanup_thread.start()
 
+    # Start queue worker (1 thread xu ly tuan tu)
+    worker_thread = threading.Thread(target=_queue_worker, daemon=True)
+    worker_thread.start()
+
     # Pre-init Chrome session
-    print("[INIT] Khởi tạo Chrome session...")
+    print("[INIT] Khoi tao Chrome session...")
     try:
         chrome_session = ChromeSession()
         chrome_session.setup()
         print(f"[INIT] Chrome ready: {chrome_session.ready}")
     except Exception as e:
         print(f"[INIT] Chrome setup failed: {e}")
-        print("[INIT] Server vẫn chạy - Chrome sẽ được init khi có request đầu tiên")
+        print("[INIT] Server van chay - Chrome se duoc init khi co request dau tien")
 
     print()
     print("Server starting on http://0.0.0.0:5000")

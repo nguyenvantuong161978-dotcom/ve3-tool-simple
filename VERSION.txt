@@ -1,6 +1,6 @@
-1.0.463
+1.0.464
 2026-03-28 (VN)
-Change: FIX interceptor khong capture bearer token tu image requests
+Change: Server queue system cho nhieu VM + FIX interceptor bearer token
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
