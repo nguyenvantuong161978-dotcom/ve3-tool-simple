@@ -812,9 +812,16 @@ class ChromeSession:
             if not ok:
                 return {"error": "Cannot paste prompt"}
 
-            # 5. Enter (gửi)
-            self.log("Đợi recaptcha (4s) → Enter...")
-            time.sleep(4)
+            # 5. Doi recaptcha load xong truoc khi Enter
+            self.log("Doi recaptcha (8s)...")
+            time.sleep(8)
+
+            # Check recaptcha da load chua
+            recap_check = self.page.run_js("""
+                var frames = document.querySelectorAll('iframe[src*="recaptcha"]');
+                return frames.length > 0 ? 'RECAPTCHA_FOUND_' + frames.length : 'NO_RECAPTCHA';
+            """)
+            self.log(f"reCAPTCHA: {recap_check}")
 
             from DrissionPage.common import Keys
             self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
