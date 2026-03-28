@@ -1,3 +1,12 @@
+1.0.500
+2026-03-29 (VN)
+Change: GUI - Luu settings tu dong (IPv6, Chrome count)
+
+- Luu vao config/server_gui.json khi bam START
+- Tu dong load lai khi mo GUI lan sau
+- Khong can nhap lai IPv6 moi lan
+
+---
 1.0.499
 2026-03-29 (VN)
 Change: IPv6 CHI tu GUI - Bo lay tu Google Sheet

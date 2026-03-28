@@ -11,6 +11,7 @@ Flow:
 """
 import sys
 import os
+import json
 import threading
 import time
 import tkinter as tk
@@ -47,8 +48,10 @@ class ServerGUI(tk.Tk):
         self._server_started = False
         self._logs = []
         self._workers_info = []
+        self._settings_file = TOOL_DIR / "config" / "server_gui.json"
 
         self._build_setup_page()
+        self._load_settings()
 
     # ============================================================
     # Setup Page
@@ -154,6 +157,45 @@ class ServerGUI(tk.Tk):
             pass
         tk.Label(self.setup_frame, text=f"v{version}", font=("Segoe UI", 9),
                  bg=BG, fg=FG2).pack(side='bottom', pady=10)
+
+    def _load_settings(self):
+        """Load settings tu file JSON."""
+        try:
+            if self._settings_file.exists():
+                data = json.loads(self._settings_file.read_text(encoding='utf-8'))
+                # IPv6 toggle
+                if 'use_ipv6' in data:
+                    self.ipv6_var.set(data['use_ipv6'])
+                    if data['use_ipv6']:
+                        self.ipv6_btn.config(text="BAT", bg=GREEN)
+                    else:
+                        self.ipv6_btn.config(text="TAT", bg='#475569')
+                # IPv6 list
+                if data.get('ipv6_list'):
+                    self.ipv6_text.delete("1.0", "end")
+                    self.ipv6_text.insert("1.0", "\n".join(data['ipv6_list']))
+                # Chrome count
+                if 'chrome_count' in data:
+                    val = data['chrome_count']
+                    self.chrome_combo.set("Tat ca" if val == 0 else str(val))
+        except Exception:
+            pass
+
+    def _save_settings(self):
+        """Luu settings ra file JSON."""
+        try:
+            self._settings_file.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'use_ipv6': self.ipv6_var.get(),
+                'ipv6_list': self._get_ipv6_list(),
+                'chrome_count': self._get_chrome_count(),
+            }
+            self._settings_file.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding='utf-8'
+            )
+        except Exception:
+            pass
 
     def _toggle_ipv6(self):
         current = self.ipv6_var.get()
@@ -345,6 +387,7 @@ class ServerGUI(tk.Tk):
 
         self._server_started = True
         self.start_btn.config(text="DANG KHOI DONG...", bg='#475569', state='disabled')
+        self._save_settings()
 
         use_ipv6 = self.ipv6_var.get()
         chrome_count = self._get_chrome_count()
