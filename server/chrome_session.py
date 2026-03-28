@@ -367,13 +367,44 @@ class ChromeSession:
     # Setup - Khởi tạo Chrome + vào Flow + tạo project
     # ============================================================
 
+    def _clear_chrome_data(self):
+        """Xoa Chrome data (giu First Run) de force fresh login."""
+        import shutil
+        data_dir = self.chrome_data
+        if not data_dir.exists():
+            return
+
+        self.log(f"Clear Chrome data: {data_dir}")
+        first_run = data_dir / "First Run"
+        has_first_run = first_run.exists()
+
+        for item in data_dir.iterdir():
+            if item.name == "First Run":
+                continue
+            try:
+                if item.is_dir():
+                    shutil.rmtree(str(item), ignore_errors=True)
+                else:
+                    item.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        # Tao lai First Run neu can
+        if not has_first_run:
+            try:
+                first_run.touch()
+            except Exception:
+                pass
+        self.log("Chrome data cleared", "OK")
+
     def setup(self) -> bool:
         """
         Full setup giống tool:
-        1. Mở Chrome Portable
-        2. Vào labs.google/fx/tools/flow
-        3. Tạo project mới
-        4. Đợi textarea sẵn sàng
+        1. Nếu có _account → clear data + force login
+        2. Mở Chrome Portable
+        3. Vào labs.google/fx/tools/flow
+        4. Tạo project mới
+        5. Đợi textarea sẵn sàng
 
         Returns: True nếu sẵn sàng
         """
@@ -383,6 +414,15 @@ class ChromeSession:
         if not self.chrome_path.exists():
             self.log(f"Chrome not found: {self.chrome_path}", "ERROR")
             return False
+
+        # 1b. Nếu có account được assign → clear data + force login trước
+        if self._account:
+            self.log(f"Account assigned: {self._account['id']} → clear data + login")
+            self._clear_chrome_data()
+            login_ok = self._auto_login()
+            if not login_ok:
+                self.log(f"Dang nhap that bai: {self._account['id']}", "ERROR")
+                return False
 
         # 2. Mở Chrome
         self.log(f"Mở Chrome: {self.chrome_path}")
@@ -415,7 +455,7 @@ class ChromeSession:
         current_url = self.page.url or ''
         self.log(f"URL: {current_url}")
 
-        # Check login - tu dong dang nhap neu chua
+        # Check login - tu dong dang nhap neu chua (fallback cho truong hop khong co _account)
         if 'accounts.google.com' in current_url:
             self.log("Chua dang nhap! Tu dong dang nhap...", "WARN")
             login_ok = self._auto_login()
@@ -832,39 +872,40 @@ class ChromeSession:
 
     def _auto_login(self) -> bool:
         """
-        Tu dong dang nhap Google bang tai khoan tu sheet SERVER cot B.
+        Tu dong dang nhap Google.
 
-        Flow:
-        1. Doc tai khoan tu Google Sheet (sheet "SERVER", cot B)
-        2. Goi login_google_chrome() tu google_login.py
-        3. Xoay vong tai khoan neu co nhieu
+        Uu tien:
+        1. Dung self._account neu da set (tu ChromePool)
+        2. Fallback: doc tu sheet SERVER + xoay vong
         """
-        self.log("Doc tai khoan tu sheet 'SERVER' cot B...")
+        # 1. Uu tien account da duoc assign
+        if self._account:
+            account = self._account
+            self.log(f"Dung account da assign: {account['id']}")
+        else:
+            # Fallback: doc tu sheet
+            self.log("Doc tai khoan tu sheet 'SERVER' cot B...")
+            accounts = get_server_accounts()
+            if not accounts:
+                self.log("Khong tim thay tai khoan!", "ERROR")
+                return False
 
-        accounts = get_server_accounts()
-        if not accounts:
-            self.log("Khong tim thay tai khoan trong sheet 'SERVER'!", "ERROR")
-            self.log("Hay them tai khoan vao Google Sheet → sheet 'SERVER' → cot B", "ERROR")
-            self.log("Format: email|password|2fa_secret (moi dong 1 tai khoan)", "ERROR")
-            return False
+            server_index_file = TOOL_DIR / "config" / ".server_account_index.json"
+            current_index = 0
+            try:
+                if server_index_file.exists():
+                    data = json.loads(server_index_file.read_text(encoding='utf-8'))
+                    current_index = data.get('index', 0)
+                    if current_index >= len(accounts):
+                        current_index = 0
+            except Exception:
+                pass
 
-        # Xoay vong tai khoan (doc index tu file)
-        server_index_file = TOOL_DIR / "config" / ".server_account_index.json"
-        current_index = 0
-        try:
-            if server_index_file.exists():
-                data = json.loads(server_index_file.read_text(encoding='utf-8'))
-                current_index = data.get('index', 0)
-                if current_index >= len(accounts):
-                    current_index = 0
-        except Exception:
-            pass
+            account = accounts[current_index]
+            self._account = account
+            self.log(f"Dung tai khoan {current_index + 1}/{len(accounts)}: {account['id']}")
 
-        account = accounts[current_index]
-        self.log(f"Dung tai khoan {current_index + 1}/{len(accounts)}: {account['id']}")
-        self._account = account
-
-        # Goi login
+        # 2. Goi login
         try:
             sys.path.insert(0, str(TOOL_DIR))
             from google_login import login_google_chrome
@@ -877,49 +918,22 @@ class ChromeSession:
                     pass
                 self.page = None
 
+            # Dung port rieng cho login (tranh trung voi port chinh)
+            login_port = self.port + 100  # 19222 → 19322, etc.
+
             success = login_google_chrome(
                 account_info=account,
                 chrome_portable=str(self.chrome_path),
                 profile_dir=str(self.chrome_data),
-                worker_id=99  # Port rieng cho server (9222 + 99 = 9321)
+                worker_id=login_port - 9222,  # worker_id de tinh port
             )
 
             if success:
                 self.log(f"Dang nhap thanh cong: {account['id']}", "OK")
-
-                # Luu index + xoay vong cho lan sau
-                next_index = (current_index + 1) % len(accounts)
-                try:
-                    server_index_file.write_text(
-                        json.dumps({"index": next_index}, ensure_ascii=False),
-                        encoding='utf-8'
-                    )
-                except Exception:
-                    pass
-
-                # Mo lai Chrome voi DrissionPage
-                from DrissionPage import ChromiumPage, ChromiumOptions
-                co = ChromiumOptions()
-                co.set_browser_path(str(self.chrome_path))
-                co.set_user_data_path(str(self.chrome_data))
-                co.set_address(f'127.0.0.1:{self.port}')
-                co.set_argument('--no-first-run')
-                co.set_argument('--no-default-browser-check')
-
-                self.page = ChromiumPage(co)
-                self.log(f"Chrome mo lai: {self.page.title}", "OK")
+                # KHONG mo lai Chrome o day - setup() se mo sau
                 return True
             else:
                 self.log(f"Dang nhap that bai: {account['id']}", "ERROR")
-                # Thu tai khoan tiep theo
-                next_index = (current_index + 1) % len(accounts)
-                try:
-                    server_index_file.write_text(
-                        json.dumps({"index": next_index}, ensure_ascii=False),
-                        encoding='utf-8'
-                    )
-                except Exception:
-                    pass
                 return False
 
         except Exception as e:
