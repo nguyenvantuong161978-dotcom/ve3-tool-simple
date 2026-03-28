@@ -1,3 +1,13 @@
+1.0.503
+2026-03-29 (VN)
+Change: Account rotation - dung IT NHAT + tranh trung worker
+
+- get_next_account(): chon tai khoan it dung nhat (khong phai xoay vong)
+- Tranh chon account dang duoc worker khac dung (phat 1000 diem)
+- Track so lan dung moi account (_account_usage)
+- Dam bao tai khoan moi luon duoc uu tien
+
+---
 1.0.502
 2026-03-29 (VN)
 Change: Server GUI - Them UPDATE + Tai khoan nhap tu GUI (giong IPv6)

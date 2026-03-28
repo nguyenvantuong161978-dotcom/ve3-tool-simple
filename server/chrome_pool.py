@@ -155,8 +155,8 @@ class ChromePool:
         self._log_fn = log_callback or (lambda msg, level="INFO": print(f"[ChromePool] {msg}"))
         self._ipv6_list: List[str] = []  # Tat ca IPv6 tu sheet SERVER col C
         self._ipv6_rotate_index = 0  # Vi tri hien tai trong _ipv6_list
-        self._all_accounts: List[Dict] = []  # Tat ca tai khoan tu sheet SERVER
-        self._account_rotate_index = 0  # Vi tri hien tai (xoay vong)
+        self._all_accounts: List[Dict] = []  # Tat ca tai khoan
+        self._account_usage: Dict[str, int] = {}  # email -> so lan da dung
 
     def _log(self, msg: str, level: str = "INFO"):
         self._log_fn(msg, level)
@@ -222,21 +222,35 @@ class ChromePool:
 
     def get_next_account(self, current_email: str = "") -> Optional[Dict]:
         """
-        Lay tai khoan tiep theo (xoay vong), bo qua current_email.
+        Lay tai khoan IT DUNG NHAT, khac voi current_email.
+        Tranh trung voi account dang duoc worker khac dung.
         Returns: account dict hoac None.
         """
         if not self._all_accounts:
             return None
 
-        # Xoay vong qua danh sach, bo qua account hien tai
-        for _ in range(len(self._all_accounts)):
-            self._account_rotate_index = (self._account_rotate_index + 1) % len(self._all_accounts)
-            candidate = self._all_accounts[self._account_rotate_index]
-            if candidate['id'] != current_email:
-                return candidate
+        best = None
+        best_score = float('inf')
+        for acc in self._all_accounts:
+            email = acc['id']
+            if email == current_email:
+                continue
+            usage = self._account_usage.get(email, 0)
+            # Phat diem neu dang duoc worker khac dung (tranh trung)
+            in_use = any(
+                w.account and w.account['id'] == email
+                for w in self.workers
+            )
+            score = usage + (1000 if in_use else 0)
+            if score < best_score:
+                best_score = score
+                best = acc
 
-        # Tat ca deu giong current → tra ve cai dau tien
-        return self._all_accounts[0]
+        if best:
+            self._account_usage[best['id']] = self._account_usage.get(best['id'], 0) + 1
+            self._log(f"Next account: {best['id']} (used={self._account_usage[best['id']]}x)")
+
+        return best
 
     def get_next_ipv6(self, current_ipv6: str = "") -> str:
         """
