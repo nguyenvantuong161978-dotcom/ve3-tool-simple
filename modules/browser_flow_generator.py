@@ -3544,6 +3544,16 @@ class BrowserFlowGenerator:
         workbook.load_or_create()
         excel_lock = threading.Lock()
 
+        # Load media_ids tu Excel (nv1 -> media_id, loc1 -> media_id)
+        media_ids = {}
+        try:
+            media_ids = workbook.get_media_ids()
+            if media_ids:
+                self._log(f"[REF] Loaded {len(media_ids)} media_ids for references")
+        except Exception:
+            pass
+        media_ids_lower = {k.lower(): v for k, v in media_ids.items()}
+
         success_count = 0
         failed_count = 0
         count_lock = threading.Lock()
@@ -3577,6 +3587,7 @@ class BrowserFlowGenerator:
                 'prompt': prompt_text,
                 'output_path': output_path,
                 'index': i,
+                'reference_files': prompt_data.get('reference_files', ''),
             })
 
         self._log(f"[SKIP] Da co {success_count} anh | Con {len(pending_prompts)} can tao")
@@ -3591,6 +3602,24 @@ class BrowserFlowGenerator:
             ptxt = prompt_info['prompt']
             opath = prompt_info['output_path']
             idx = prompt_info['index']
+            ref_files_raw = prompt_info.get('reference_files', '')
+
+            # Build image_inputs tu reference_files + media_ids
+            image_inputs = []
+            if ref_files_raw:
+                try:
+                    import json as _json
+                    ref_list = _json.loads(ref_files_raw) if isinstance(ref_files_raw, str) else ref_files_raw
+                    if isinstance(ref_list, list):
+                        for ref in ref_list:
+                            ref_id = Path(ref).stem.lower()  # "nv/nv1.png" → "nv1"
+                            if ref_id in media_ids_lower:
+                                image_inputs.append({
+                                    "name": media_ids_lower[ref_id],
+                                    "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"
+                                })
+                except Exception:
+                    pass
 
             # Chon server tot nhat
             server = pool.pick_best_server()
@@ -3611,13 +3640,15 @@ class BrowserFlowGenerator:
                 local_server_url=server.url,
             )
 
-            self._log(f"  [{idx+1}/{len(prompts)}] {pid} → {server.name} (q={server.queue_size})")
+            ref_info = f" +{len(image_inputs)}ref" if image_inputs else ""
+            self._log(f"  [{idx+1}/{len(prompts)}] {pid} → {server.name} (q={server.queue_size}){ref_info}")
 
             try:
                 ok, images, error = api.generate_images(
                     prompt=ptxt,
                     count=1,
                     aspect_ratio=aspect_ratio,
+                    image_inputs=image_inputs if image_inputs else None,
                 )
 
                 if ok and images:
@@ -3686,7 +3717,7 @@ class BrowserFlowGenerator:
                             proxy_api_token='', use_proxy=True,
                             local_server_url=server2.url,
                         )
-                        ok2, images2, err2 = api2.generate_images(prompt=ptxt, count=1, aspect_ratio=aspect_ratio)
+                        ok2, images2, err2 = api2.generate_images(prompt=ptxt, count=1, aspect_ratio=aspect_ratio, image_inputs=image_inputs if image_inputs else None)
                         if ok2 and images2:
                             gen_img2 = images2[0]
                             saved2 = False

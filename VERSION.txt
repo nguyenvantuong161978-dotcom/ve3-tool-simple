@@ -1,8 +1,19 @@
-1.0.482
+1.0.483
 2026-03-28 (VN)
-Change: Chrome 2 - Thumbnail + Validator qua local server
+Change: FIX REFERENCES - local server khong truyen imageInputs
 
 Thay doi:
+- v1.0.483: FIX CRITICAL - References bi mat trong local server mode
+  * BUG: _generate_via_local_server KHONG truyen image_inputs khi goi api.generate_images()
+    - pending_prompts khong luu reference_files tu prompt data
+    - api.generate_images() goi KHONG co image_inputs parameter
+    → Tat ca anh tao qua server KHONG CO tham chieu (reference images)
+  * FIX:
+    - Load media_ids tu Excel (nv1 → media_id, loc1 → media_id)
+    - Luu reference_files vao pending_prompts
+    - Build image_inputs tu reference_files + media_ids
+    - Truyen image_inputs vao api.generate_images() (ca lan dau + retry)
+    - Log so references: "[7/441] 105 → server (q=0) +2ref"
 - v1.0.482: CHROME 2 LOCAL SERVER SUPPORT
   * Thumbnail: Neu local_server_enabled → dung GoogleFlowAPI qua server (khong mo Chrome)
     - Landscape (3 anh) + Portrait (3 anh) deu qua server
