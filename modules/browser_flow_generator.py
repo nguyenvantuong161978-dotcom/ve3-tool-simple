@@ -2462,34 +2462,42 @@ class BrowserFlowGenerator:
                 # v1.0.514: Luu va khoi phuc config an toan bang try/finally
                 old_server_enabled = self.config.get('local_server_enabled', False)
                 old_server_url = self.config.get('local_server_url', '')
+                server_result = None
                 try:
                     self.config['local_server_enabled'] = True
                     self.config['local_server_url'] = local_server_url
 
-                    # Chay lai - generate_from_prompts_api se tu dong dung server
                     # Server tu skip anh da co tren disk (check output_path.exists())
                     server_result = self.generate_from_prompts_api(
                         prompts=prompts,
                         excel_path=excel_path,
                         bearer_token=bearer_token
                     )
+                except Exception as e:
+                    self._log(f"[API+SERVER] Server call FAILED: {e}", "ERROR")
+                    server_result = {"success": False, "stats": {"success": 0, "failed": api_failed, "skipped": 0}}
                 finally:
                     # LUON khoi phuc config du co loi
                     self.config['local_server_enabled'] = old_server_enabled
                     self.config['local_server_url'] = old_server_url
 
                 server_stats = server_result.get("stats", {})
-                # server_stats.success = anh SERVER tao moi
-                # server_stats.skipped = anh da co file (API tao truoc hoac skip cu)
-                # server_stats.failed = anh server cung khong lam duoc
-                # Tong success = API tao + Server tao = skipped (file cu) + success (moi)
+                # LUU Y: Switch chi xay ra khi api_success == 0 (API khong tao anh MOI nao)
+                # server_stats.success = anh SERVER tao MOI
+                # server_stats.skipped = file da co tren disk (tu run truoc hoac parallel worker)
+                # server_stats.failed = anh ca server cung khong lam duoc
+                # → Tong co file = success + skipped (= tat ca prompt co anh tren disk)
+                # → Tong failed = failed (= prompt khong co anh)
+                server_new = server_stats.get("success", 0)
+                server_existed = server_stats.get("skipped", 0)
+                server_failed = server_stats.get("failed", 0)
                 combined_stats = {
-                    "success": server_stats.get("success", 0) + server_stats.get("skipped", 0),
-                    "failed": server_stats.get("failed", 0),
+                    "success": server_new + server_existed,
+                    "failed": server_failed,
                     "skipped": 0,
                 }
-                self._log(f"[API+SERVER] Ket qua: API tao {api_success}, Server tao {server_stats.get('success', 0)}, "
-                          f"Tong: {combined_stats['success']} OK, {combined_stats['failed']} fail")
+                self._log(f"[API+SERVER] Ket qua: Server tao moi {server_new}, da co san {server_existed}, "
+                          f"that bai {server_failed} | Tong: {combined_stats['success']} OK, {server_failed} fail")
                 return {"success": True, "stats": combined_stats}
             elif should_switch:
                 self._log("[API+SERVER] Muon chuyen Server nhung chua cau hinh Server URL hop le!", "WARN")
@@ -3528,13 +3536,15 @@ class BrowserFlowGenerator:
             from modules.google_flow_api import GoogleFlowAPI, AspectRatio
             from modules.server_pool import ServerPool
         except ImportError as e:
-            return {"success": False, "error": f"Khong import duoc module: {e}"}
+            return {"success": False, "error": f"Khong import duoc module: {e}",
+                    "stats": {"success": 0, "failed": 0, "skipped": 0}}
 
         # Excel (can truoc de doc token tu Excel config)
         if excel_path is None:
             excel_path = self._find_excel_file()
         if excel_path is None or not excel_path.exists():
-            return {"success": False, "error": "Khong tim thay file Excel"}
+            return {"success": False, "error": "Khong tim thay file Excel",
+                    "stats": {"success": 0, "failed": 0, "skipped": 0}}
 
         # Bearer token - uu tien: param > config > Excel > DrissionPage
         if not bearer_token:
@@ -3579,7 +3589,8 @@ class BrowserFlowGenerator:
                 self._log("Khong co bearer token, dung DrissionPage de lay...")
                 bearer_token = self._extract_token_via_drission(excel_path)
         if not bearer_token:
-            return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc."}
+            return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc.",
+                    "stats": {"success": 0, "failed": 0, "skipped": 0}}
 
         # Server Pool - nhieu server song song
         pool = ServerPool(self.config, log_callback=lambda msg, lvl="info": self._log(f"[POOL] {msg}", lvl))
@@ -3587,7 +3598,8 @@ class BrowserFlowGenerator:
         num_servers = pool.available_count()
 
         if num_servers == 0:
-            return {"success": False, "error": "Khong co server nao kha dung!"}
+            return {"success": False, "error": "Khong co server nao kha dung!",
+                    "stats": {"success": 0, "failed": 0, "skipped": 0}}
 
         # Project ID va config chung
         flow_project_id = self.config.get('flow_project_id', self.project_code)
@@ -3657,7 +3669,8 @@ class BrowserFlowGenerator:
         self._log(f"[SKIP] Da co {success_count} anh | Con {len(pending_prompts)} can tao")
 
         if not pending_prompts:
-            return {"success": True, "total": len(prompts), "generated": success_count, "failed": 0}
+            return {"success": True, "total": len(prompts), "generated": 0, "failed": 0,
+                    "stats": {"success": 0, "failed": 0, "skipped": skipped_count}}
 
         # Ham xu ly 1 prompt tren 1 server
         def _process_one(prompt_info):
@@ -4327,7 +4340,8 @@ class BrowserFlowGenerator:
 
         if not setup_success:
             self._log("[FAIL] DrissionFlowAPI setup failed sau tất cả retries!", "error")
-            return {"success": False, "error": "DrissionFlowAPI setup failed"}
+            return {"success": False, "error": "DrissionFlowAPI setup failed",
+                    "stats": {"success": 0, "failed": len(prompts), "skipped": 0}}
 
         self._log(f"Tong: {len(prompts)} prompts")
 
@@ -4381,7 +4395,8 @@ class BrowserFlowGenerator:
 
         drission_api = getattr(self, '_drission_api', None)
         if not drission_api:
-            return {"success": False, "error": "DrissionFlowAPI chưa được khởi tạo"}
+            return {"success": False, "error": "DrissionFlowAPI chưa được khởi tạo",
+                    "stats": {"success": 0, "failed": len(prompts), "skipped": 0}}
 
         # Reset stats
         self.stats = {"total": len(prompts), "success": 0, "failed": 0, "skipped": 0}

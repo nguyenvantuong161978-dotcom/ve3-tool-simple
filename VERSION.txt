@@ -1,3 +1,12 @@
+1.0.515
+2026-03-29 (VN)
+Change: FIX stats key cho TAT CA return paths - dam bao API+Server khong vo logic
+
+- FIX: Them "stats" key vao 6 early returns thieu (setup fail, import fail, no token, no server)
+- DrissionFlowAPI setup failed + chua khoi tao → them stats
+- _generate_via_local_server: import fail, no Excel, no token, no server → them stats
+- Dam bao MOI return path deu co "stats" key de api+server merge khong bi loi
+
 1.0.514
 2026-03-29 (VN)
 Change: FIX logic API+Server mode - sua 5 bugs
