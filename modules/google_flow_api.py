@@ -247,6 +247,14 @@ class GoogleFlowAPI:
         if not self.bearer_token.startswith("ya29."):
             print("[WARN]  Warning: Bearer token should start with 'ya29.'")
 
+    def set_local_server(self, url: str):
+        """Doi sang server khac (cho multi-server load balancing)."""
+        self.local_server_url = url.rstrip('/')
+        self.PROXY_IMAGE_API_URL = f"{self.local_server_url}/api/fix/create-image-veo3"
+        self.PROXY_VIDEO_API_URL = f"{self.local_server_url}/api/fix/create-video-veo3"
+        self.PROXY_TASK_STATUS_URL = f"{self.local_server_url}/api/fix/task-status"
+        self.use_proxy = True
+
         self.session = self._create_session()
     
     def _create_session(self) -> requests.Session:

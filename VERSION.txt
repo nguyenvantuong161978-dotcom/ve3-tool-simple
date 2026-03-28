@@ -1,6 +1,6 @@
-1.0.464
+1.0.465
 2026-03-28 (VN)
-Change: Server queue system cho nhieu VM + FIX interceptor bearer token
+Change: Multi-server load balancing - VM phan bo anh qua nhieu server song song
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN

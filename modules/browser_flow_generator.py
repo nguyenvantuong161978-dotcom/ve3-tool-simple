@@ -3430,16 +3430,18 @@ class BrowserFlowGenerator:
         bearer_token: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Tao anh qua Local Proxy Server (dung GoogleFlowAPI).
-        Server dung Chrome cua server de bypass captcha,
-        VM chi can gui bearer token + prompt.
+        Tao anh qua Local Proxy Server(s).
+        Ho tro NHIEU server song song (N server = N anh dong thoi).
+        VM tu dong chon server it viec nhat (least-queue).
         """
-        local_server_url = self.config.get('local_server_url', '')
+        import time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         try:
             from modules.google_flow_api import GoogleFlowAPI, AspectRatio
+            from modules.server_pool import ServerPool
         except ImportError as e:
-            return {"success": False, "error": f"Khong import duoc GoogleFlowAPI: {e}"}
+            return {"success": False, "error": f"Khong import duoc module: {e}"}
 
         # Excel (can truoc de doc token tu Excel config)
         if excel_path is None:
@@ -3451,7 +3453,6 @@ class BrowserFlowGenerator:
         if not bearer_token:
             bearer_token = self.config.get('flow_bearer_token', '')
         if not bearer_token and excel_path:
-            # Thu doc tu Excel config
             try:
                 wb_tmp = PromptWorkbook(excel_path)
                 wb_tmp.load_or_create()
@@ -3463,71 +3464,64 @@ class BrowserFlowGenerator:
         if not bearer_token:
             # Chrome 2 (worker_id > 0): doi Chrome 1 extract token truoc
             if self.worker_id > 0:
-                import time
                 self._log(f"[Worker {self.worker_id}] Doi Chrome 1 lay token (check Excel moi 10s)...")
-                for wait_i in range(18):  # Doi toi da 3 phut
+                for wait_i in range(18):
                     time.sleep(10)
                     try:
                         wb_tmp2 = PromptWorkbook(excel_path)
                         wb_tmp2.load_or_create()
                         bearer_token = wb_tmp2.get_config_value('flow_bearer_token')
                         if bearer_token:
-                            self._log(f"[Worker {self.worker_id}] Token tu Excel (Chrome 1 da luu): {bearer_token[:20]}...")
+                            self._log(f"[Worker {self.worker_id}] Token tu Excel: {bearer_token[:20]}...")
                             break
                     except:
                         pass
                     if (wait_i + 1) % 6 == 0:
                         self._log(f"[Worker {self.worker_id}] Van doi token... ({(wait_i+1)*10}s)")
-
-            # Neu van chua co → tu extract (Chrome 1 hoac fallback)
             if not bearer_token:
                 self._log("Khong co bearer token, dung DrissionPage de lay...")
                 bearer_token = self._extract_token_via_drission(excel_path)
         if not bearer_token:
             return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc."}
 
-        # Project ID
+        # Server Pool - nhieu server song song
+        pool = ServerPool(self.config, log_callback=lambda msg, lvl="info": self._log(f"[POOL] {msg}", lvl))
+        pool.refresh_all()
+        num_servers = pool.available_count()
+
+        if num_servers == 0:
+            return {"success": False, "error": "Khong co server nao kha dung!"}
+
+        # Project ID va config chung
         flow_project_id = self.config.get('flow_project_id', self.project_code)
-        self._log(f"Project ID: {flow_project_id}")
-        self._log(f"Token: {bearer_token[:20]}...{bearer_token[-10:]}")
-        self._log(f"Server: {local_server_url}")
-        self._log(f"Prompts: {len(prompts)}")
-
-        # Tao GoogleFlowAPI voi local server
-        api = GoogleFlowAPI(
-            bearer_token=bearer_token,
-            project_id=flow_project_id,
-            timeout=self.config.get('flow_timeout', 120),
-            verbose=self.verbose,
-            proxy_api_token='',  # Local server khong can proxy token
-            use_proxy=True,
-            local_server_url=local_server_url
-        )
-
+        flow_timeout = self.config.get('flow_timeout', 120)
         ar_setting = self.config.get('flow_aspect_ratio', 'landscape')
-        ar_map = {
-            'landscape': AspectRatio.LANDSCAPE,
-            'portrait': AspectRatio.PORTRAIT,
-            'square': AspectRatio.SQUARE,
-        }
+        ar_map = {'landscape': AspectRatio.LANDSCAPE, 'portrait': AspectRatio.PORTRAIT, 'square': AspectRatio.SQUARE}
         aspect_ratio = ar_map.get(ar_setting, AspectRatio.LANDSCAPE)
 
-        # Load Excel de cap nhat status
+        self._log(f"Project ID: {flow_project_id}")
+        self._log(f"Token: {bearer_token[:20]}...{bearer_token[-10:]}")
+        self._log(f"Servers: {num_servers} kha dung")
+        self._log(f"Prompts: {len(prompts)}")
+        self._log(f"Mode: {'SONG SONG' if num_servers > 1 else 'TUAN TU'} ({num_servers} server)")
+
+        # Load Excel + lock cho thread-safe writes
         workbook = PromptWorkbook(excel_path)
         workbook.load_or_create()
+        excel_lock = threading.Lock()
 
         success_count = 0
         failed_count = 0
+        count_lock = threading.Lock()
         proj_dir = Path(self.project_path)
 
+        # Filter prompts can xu ly
+        pending_prompts = []
         for i, prompt_data in enumerate(prompts):
             prompt_id = prompt_data.get('id', str(i + 1))
             prompt_text = prompt_data.get('prompt', '')
             if not prompt_text:
                 continue
-
-            self._log(f"[{i+1}/{len(prompts)}] ID: {prompt_id}")
-            self._log(f"  Prompt: {prompt_text[:60]}...")
 
             # Xac dinh output path
             if prompt_id.startswith('nv') or prompt_id.startswith('loc'):
@@ -3535,20 +3529,62 @@ class BrowserFlowGenerator:
             elif prompt_id.startswith('thumb'):
                 output_path = proj_dir / "thumb" / f"{prompt_id}.png"
             else:
-                output_path = proj_dir / "img" / f"scene_{int(prompt_id):03d}.png"
+                try:
+                    output_path = proj_dir / "img" / f"scene_{int(prompt_id):03d}.png"
+                except ValueError:
+                    output_path = proj_dir / "img" / f"{prompt_id}.png"
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Skip neu da co
             if output_path.exists():
-                self._log(f"  [SKIP] Da co: {output_path.name}")
-                success_count += 1
+                with count_lock:
+                    success_count += 1
                 continue
 
-            # Goi API qua local server
+            pending_prompts.append({
+                'id': prompt_id,
+                'prompt': prompt_text,
+                'output_path': output_path,
+                'index': i,
+            })
+
+        self._log(f"[SKIP] Da co {success_count} anh | Con {len(pending_prompts)} can tao")
+
+        if not pending_prompts:
+            return {"success": True, "total": len(prompts), "generated": success_count, "failed": 0}
+
+        # Ham xu ly 1 prompt tren 1 server
+        def _process_one(prompt_info):
+            nonlocal success_count, failed_count
+            pid = prompt_info['id']
+            ptxt = prompt_info['prompt']
+            opath = prompt_info['output_path']
+            idx = prompt_info['index']
+
+            # Chon server tot nhat
+            server = pool.pick_best_server()
+            if not server:
+                self._log(f"  [{idx+1}] {pid}: Khong co server!", "error")
+                with count_lock:
+                    failed_count += 1
+                return False
+
+            # Tao API client cho server nay
+            api = GoogleFlowAPI(
+                bearer_token=bearer_token,
+                project_id=flow_project_id,
+                timeout=flow_timeout,
+                verbose=False,
+                proxy_api_token='',
+                use_proxy=True,
+                local_server_url=server.url,
+            )
+
+            self._log(f"  [{idx+1}/{len(prompts)}] {pid} → {server.name} (q={server.queue_size})")
+
             try:
                 ok, images, error = api.generate_images(
-                    prompt=prompt_text,
+                    prompt=ptxt,
                     count=1,
                     aspect_ratio=aspect_ratio,
                 )
@@ -3557,33 +3593,96 @@ class BrowserFlowGenerator:
                     # Luu anh
                     img_data = images[0]
                     if isinstance(img_data, bytes):
-                        with open(output_path, 'wb') as f:
+                        with open(opath, 'wb') as f:
                             f.write(img_data)
                     elif isinstance(img_data, str):
                         import base64
-                        with open(output_path, 'wb') as f:
+                        with open(opath, 'wb') as f:
                             f.write(base64.b64decode(img_data))
 
-                    self._log(f"  [OK] Saved: {output_path.name}")
-                    success_count += 1
+                    pool.mark_success(server)
+                    self._log(f"  [{idx+1}] {pid} [OK] → {opath.name} ({server.name})")
 
-                    # Cap nhat Excel status
-                    try:
-                        if prompt_id.startswith('nv') or prompt_id.startswith('loc'):
-                            workbook.update_character_status(prompt_id, "done", str(output_path))
-                        elif not prompt_id.startswith('thumb'):
-                            scene_id = int(prompt_id)
-                            workbook.update_scene_status(scene_id, status_img="done", img_path=str(output_path))
-                        workbook.save()
-                    except Exception as e:
-                        self._log(f"  [WARN] Excel update failed: {e}")
+                    # Cap nhat Excel (thread-safe)
+                    with excel_lock:
+                        try:
+                            if pid.startswith('nv') or pid.startswith('loc'):
+                                workbook.update_character_status(pid, "done", str(opath))
+                            elif not pid.startswith('thumb'):
+                                workbook.update_scene_status(int(pid), status_img="done", img_path=str(opath))
+                            workbook.save()
+                        except Exception as e:
+                            self._log(f"  [{idx+1}] Excel update failed: {e}", "warn")
+
+                    with count_lock:
+                        success_count += 1
+                    return True
                 else:
-                    self._log(f"  [FAIL] {error}")
-                    failed_count += 1
+                    pool.mark_failed(server, str(error))
+                    self._log(f"  [{idx+1}] {pid} [FAIL] {server.name}: {error}")
+
+                    # Retry tren server khac
+                    server2 = pool.pick_best_server()
+                    if server2 and server2.url != server.url:
+                        self._log(f"  [{idx+1}] {pid} [RETRY] → {server2.name}")
+                        api2 = GoogleFlowAPI(
+                            bearer_token=bearer_token, project_id=flow_project_id,
+                            timeout=flow_timeout, verbose=False,
+                            proxy_api_token='', use_proxy=True,
+                            local_server_url=server2.url,
+                        )
+                        ok2, images2, err2 = api2.generate_images(prompt=ptxt, count=1, aspect_ratio=aspect_ratio)
+                        if ok2 and images2:
+                            img_data = images2[0]
+                            if isinstance(img_data, bytes):
+                                with open(opath, 'wb') as f:
+                                    f.write(img_data)
+                            elif isinstance(img_data, str):
+                                import base64
+                                with open(opath, 'wb') as f:
+                                    f.write(base64.b64decode(img_data))
+                            pool.mark_success(server2)
+                            self._log(f"  [{idx+1}] {pid} [OK] retry → {opath.name} ({server2.name})")
+                            with excel_lock:
+                                try:
+                                    if pid.startswith('nv') or pid.startswith('loc'):
+                                        workbook.update_character_status(pid, "done", str(opath))
+                                    elif not pid.startswith('thumb'):
+                                        workbook.update_scene_status(int(pid), status_img="done", img_path=str(opath))
+                                    workbook.save()
+                                except:
+                                    pass
+                            with count_lock:
+                                success_count += 1
+                            return True
+
+                    with count_lock:
+                        failed_count += 1
+                    return False
 
             except Exception as e:
-                self._log(f"  [ERROR] {e}")
-                failed_count += 1
+                pool.mark_failed(server, str(e))
+                self._log(f"  [{idx+1}] {pid} [ERROR] {server.name}: {e}", "error")
+                with count_lock:
+                    failed_count += 1
+                return False
+
+        # Chay song song - so worker = so server kha dung
+        max_workers = min(num_servers, len(pending_prompts))
+        self._log(f"[START] {len(pending_prompts)} prompts x {max_workers} workers")
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_process_one, p): p for p in pending_prompts}
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    self._log(f"[ERROR] Thread exception: {e}", "error")
+
+        # Log stats
+        pool_stats = pool.get_stats()
+        for s in pool_stats.get('servers', []):
+            self._log(f"  Server {s['name']}: {s['completed']} OK, {s['failed']} fail")
 
         self._log(f"[LOCAL SERVER] Xong: {success_count} OK, {failed_count} fail")
         return {

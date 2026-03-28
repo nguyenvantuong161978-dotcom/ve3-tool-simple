@@ -56,11 +56,23 @@ proxy_api_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ODMsInJvbGUiOjMsIm
 proxy_api_url: https://flow-api.nanoai.pics/api/fix/create-video-veo3
 retry_count: 3
 use_proxy: true
-# Local Proxy Server - thay thế nanoai.pics bằng server riêng
-# Khi bật: VM gửi bearer token + prompt cho server, server dùng Chrome bypass captcha
-# Server chạy bằng: python -m server.app
+# Local Proxy Server - thay the nanoai.pics bang server rieng
+# Khi bat: VM gui bearer token + prompt cho server, server dung Chrome bypass captcha
+# Server chay bang: python -m server.app
 local_server_enabled: false
-local_server_url: ''
+local_server_url: ''  # backward compat: single server
+# Multi-server: VM phan bo task qua nhieu server song song
+# Moi server co nhieu Chrome (1 Chrome = 1 IPv6 + 1 tai khoan)
+# VM tu dong chon server it viec nhat (least-queue)
+local_server_list: []
+# Vd:
+# local_server_list:
+#   - url: 'http://192.168.88.146:5000'
+#     name: 'Server-1'
+#     enabled: true
+#   - url: 'http://192.168.88.147:5000'
+#     name: 'Server-2'
+#     enabled: true
 video_aspect_ratio: landscape
 video_compose_mode: fast
 video_count: full
