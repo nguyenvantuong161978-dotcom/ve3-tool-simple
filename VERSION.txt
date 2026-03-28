@@ -1,3 +1,14 @@
+1.0.519
+2026-03-29 (VN)
+Change: FIX API+Server mode - Buoc 1 FORCE chay API (Chrome local) truoc
+
+- BUG: Khi checkbox "BAT Local Server" bat + mode API+Server → gui thang qua server
+  * Buoc 1 goi generate_from_prompts_api() nhung ham nay check local_server_enabled
+  * Thay local_server_enabled=True → gui qua server ngay → KHONG chay API truoc
+- FIX: Tam tat local_server_enabled trong buoc 1 (try/finally dam bao khoi phuc)
+  * Buoc 1: FORCE DrissionPage (Chrome local) - khong gui qua server
+  * Buoc 2: Neu API fail → bat lai local_server_enabled → chuyen server
+
 1.0.518
 2026-03-29 (VN)
 Change: Dong bo popup/dialog/quota logic tu API mode sang Server mode

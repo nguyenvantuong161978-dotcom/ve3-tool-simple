@@ -2440,13 +2440,18 @@ class BrowserFlowGenerator:
 
         # v1.0.513: api+server mode - chay API truoc, tu dong chuyen server khi 403 lien tuc
         if mode == 'api+server':
-            self._log("[AUTO] API+SERVER mode: Bat dau bang API, chuyen Server neu 403 lien tuc")
-            # Buoc 1: Chay API mode
-            api_result = self.generate_from_prompts_api(
-                prompts=prompts,
-                excel_path=excel_path,
-                bearer_token=bearer_token
-            )
+            self._log("[AUTO] API+SERVER mode: Bat dau bang API (Chrome local), chuyen Server neu 403 lien tuc")
+            # v1.0.519: Buoc 1: FORCE chay API (DrissionPage) - TAT local_server de khong gui qua server
+            old_server_enabled_api = self.config.get('local_server_enabled', False)
+            self.config['local_server_enabled'] = False
+            try:
+                api_result = self.generate_from_prompts_api(
+                    prompts=prompts,
+                    excel_path=excel_path,
+                    bearer_token=bearer_token
+                )
+            finally:
+                self.config['local_server_enabled'] = old_server_enabled_api
             api_stats = api_result.get("stats", {})
             api_success = api_stats.get("success", 0)
             api_failed = api_stats.get("failed", 0)
