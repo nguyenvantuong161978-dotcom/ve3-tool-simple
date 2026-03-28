@@ -1,3 +1,14 @@
+1.0.510
+2026-03-29 (VN)
+Change: FIX media_id khong luu khi tao anh qua Local Server
+
+- Local server mode chi save status+path, KHONG save media_id → I2V fail
+- Them media_id=gen_img.media_name khi update_character() va update_scene()
+- Retry 3 lan khi Excel bi lock (reload workbook giua cac retry)
+- Pending write fallback neu 3 lan van fail
+- Giong het logic save Excel cua API mode (dong 4534-4628)
+
+---
 1.0.509
 2026-03-29 (VN)
 Change: FIX bug _handle_create_with_flow_page not found

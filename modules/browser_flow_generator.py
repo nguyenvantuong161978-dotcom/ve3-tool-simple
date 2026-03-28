@@ -3687,18 +3687,56 @@ class BrowserFlowGenerator:
                         return False
 
                     pool.mark_success(server)
-                    self._log(f"  [{idx+1}] {pid} [OK] → {opath.name} ({server.name})")
+                    # Lay media_name tu response (de luu vao Excel cho I2V)
+                    _media_name = getattr(gen_img, 'media_name', None) if gen_img else None
+                    self._log(f"  [{idx+1}] {pid} [OK] → {opath.name} ({server.name})" +
+                              (f" media_id={_media_name[:40]}..." if _media_name else ""))
 
-                    # Cap nhat Excel (thread-safe)
+                    # v1.0.510: Cap nhat Excel giong API mode - retry 3 lan + media_id + pending write
                     with excel_lock:
-                        try:
-                            if pid.startswith('nv') or pid.startswith('loc'):
-                                workbook.update_character(pid, status="done", image_file=str(opath))
-                            elif not pid.startswith('thumb'):
-                                workbook.update_scene(int(pid), status_img="done", img_path=str(opath))
-                            workbook.save()
-                        except Exception as e:
-                            self._log(f"  [{idx+1}] Excel update failed: {e}", "warn")
+                        _saved_ok = False
+                        for _sa in range(3):
+                            try:
+                                if pid.startswith('nv') or pid.startswith('loc'):
+                                    workbook.update_character(pid, status="done", image_file=str(opath),
+                                                              media_id=_media_name)
+                                elif not pid.startswith('thumb'):
+                                    workbook.update_scene(int(pid), status_img="done", img_path=str(opath),
+                                                          media_id=_media_name)
+                                if workbook.safe_save():
+                                    _saved_ok = True
+                                    break
+                                else:
+                                    workbook.save()
+                                    _saved_ok = True
+                                    break
+                            except Exception as e:
+                                if _sa < 2:
+                                    self._log(f"  [{idx+1}] Excel save retry {_sa+1}/3: {e}", "warn")
+                                    time.sleep(3)
+                                    try:
+                                        workbook = PromptWorkbook(excel_path)
+                                        workbook.load_or_create()
+                                    except:
+                                        pass
+                                else:
+                                    self._log(f"  [{idx+1}] Excel save FAILED after 3 attempts: {e}", "warn")
+                        # Pending write fallback
+                        if not _saved_ok:
+                            try:
+                                if pid.startswith('nv') or pid.startswith('loc'):
+                                    workbook._save_pending_write('character', char_id=pid,
+                                                                  media_id=_media_name, status="done")
+                                elif not pid.startswith('thumb'):
+                                    workbook._save_pending_write('scene', scene_id=pid,
+                                                                  img_path=str(opath), status_img="done",
+                                                                  media_id=_media_name)
+                                self._log(f"  [{idx+1}] [PENDING] Saved pending write for {pid}")
+                            except:
+                                pass
+                        # Log media_id for reference tracking
+                        if _media_name and (pid.startswith('nv') or pid.startswith('loc')):
+                            self._log(f"  [{idx+1}] [REF] {pid} media_id saved")
 
                     with count_lock:
                         success_count += 1
@@ -3750,16 +3788,50 @@ class BrowserFlowGenerator:
                                     failed_count += 1
                                 return False
                             pool.mark_success(server2)
-                            self._log(f"  [{idx+1}] {pid} [OK] retry → {opath.name} ({server2.name})")
+                            _media_name2 = getattr(gen_img2, 'media_name', None) if gen_img2 else None
+                            self._log(f"  [{idx+1}] {pid} [OK] retry → {opath.name} ({server2.name})" +
+                                      (f" media_id={_media_name2[:40]}..." if _media_name2 else ""))
+                            # v1.0.510: Retry save giong API mode
                             with excel_lock:
-                                try:
-                                    if pid.startswith('nv') or pid.startswith('loc'):
-                                        workbook.update_character(pid, status="done", image_file=str(opath))
-                                    elif not pid.startswith('thumb'):
-                                        workbook.update_scene(int(pid), status_img="done", img_path=str(opath))
-                                    workbook.save()
-                                except:
-                                    pass
+                                _saved_ok2 = False
+                                for _sa2 in range(3):
+                                    try:
+                                        if pid.startswith('nv') or pid.startswith('loc'):
+                                            workbook.update_character(pid, status="done", image_file=str(opath),
+                                                                      media_id=_media_name2)
+                                        elif not pid.startswith('thumb'):
+                                            workbook.update_scene(int(pid), status_img="done", img_path=str(opath),
+                                                                  media_id=_media_name2)
+                                        if workbook.safe_save():
+                                            _saved_ok2 = True
+                                            break
+                                        else:
+                                            workbook.save()
+                                            _saved_ok2 = True
+                                            break
+                                    except Exception as e:
+                                        if _sa2 < 2:
+                                            self._log(f"  [{idx+1}] Excel retry save {_sa2+1}/3: {e}", "warn")
+                                            time.sleep(3)
+                                            try:
+                                                workbook = PromptWorkbook(excel_path)
+                                                workbook.load_or_create()
+                                            except:
+                                                pass
+                                        else:
+                                            self._log(f"  [{idx+1}] Excel retry FAILED: {e}", "warn")
+                                if not _saved_ok2:
+                                    try:
+                                        if pid.startswith('nv') or pid.startswith('loc'):
+                                            workbook._save_pending_write('character', char_id=pid,
+                                                                          media_id=_media_name2, status="done")
+                                        elif not pid.startswith('thumb'):
+                                            workbook._save_pending_write('scene', scene_id=pid,
+                                                                          img_path=str(opath), status_img="done",
+                                                                          media_id=_media_name2)
+                                        self._log(f"  [{idx+1}] [PENDING] Saved pending write for {pid}")
+                                    except:
+                                        pass
                             with count_lock:
                                 success_count += 1
                             return True
