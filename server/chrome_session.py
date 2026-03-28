@@ -866,26 +866,27 @@ class ChromeSession:
             self.log(f"READY! Project: {self.project_url}", "OK")
             return True
 
-        # v1.0.506: Textarea không xuất hiện → có thể đang ở trang "Create with Flow"
-        # (giống API mode: đã login nhưng page chưa sẵn sàng)
+        # v1.0.509: Textarea không xuất hiện → thử click "Create with Flow" + tạo project lại
         self.log("Textarea khong xuat hien - check Create with Flow...", "WARN")
-        if self._handle_create_with_flow_page():
-            # Đã qua trang Create with Flow → thử tạo project mới
-            try:
-                current_url = self.page.url or ''
-                if '/project/' not in current_url:
-                    success = self._create_new_project()
-                    if not success:
-                        self.log("Khong tao duoc project sau Create with Flow!", "ERROR")
-                        return False
-            except:
-                pass
-            # Đợi textarea lần nữa
-            if self._wait_for_textarea():
-                self.ready = True
-                self.project_url = self.page.url
-                self.log(f"READY! Project: {self.project_url}", "OK")
-                return True
+        if self._click_create_with_flow():
+            self.log("Clicked 'Create with Flow' - thu tao project lai...", "OK")
+            time.sleep(2)
+        # Thử tạo project mới
+        try:
+            current_url = self.page.url or ''
+            if '/project/' not in current_url:
+                success = self._create_new_project()
+                if not success:
+                    self.log("Khong tao duoc project!", "ERROR")
+                    return False
+        except:
+            pass
+        # Đợi textarea lần nữa
+        if self._wait_for_textarea():
+            self.ready = True
+            self.project_url = self.page.url
+            self.log(f"READY! Project: {self.project_url}", "OK")
+            return True
 
         self.log("Textarea không xuất hiện!", "ERROR")
         return False

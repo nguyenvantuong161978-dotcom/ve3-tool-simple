@@ -1,12 +1,10 @@
-1.0.508
+1.0.509
 2026-03-29 (VN)
-Change: Server - Xu ly trang 'Create with Flow' giong API mode
+Change: FIX bug _handle_create_with_flow_page not found
 
-- Viet lai _create_new_project(): 1 vong lap 20 lan (giong API mode warmup)
-- Moi lan lap: dismiss popup + tim "Du an moi" + thu "Create with Flow"
-- Reload page moi 5 lan, doi 30s cho URL chuyen sang /project/
-- Sau _wait_for_textarea() fail: check lai Create with Flow + tao project
-- Tach _click_create_with_flow() va _dismiss_popups() thanh helper
+- setup() goi _handle_create_with_flow_page() nhung method da bi xoa o v1.0.508
+- Doi sang dung _click_create_with_flow() (method moi)
+- Chrome-0 bi loi "has no attribute '_handle_create_with_flow_page'" da fix
 
 ---
 1.0.505
