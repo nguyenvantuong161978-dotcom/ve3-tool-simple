@@ -1,6 +1,6 @@
-1.0.467
+1.0.468
 2026-03-28 (VN)
-Change: MULTI-CHROME SERVER - 5 Chrome song song, moi Chrome 1 account + 1 IPv6
+Change: FIX missing import threading trong browser_flow_generator.py
 
 Thay doi:
 - v1.0.467: MULTI-CHROME SERVER
