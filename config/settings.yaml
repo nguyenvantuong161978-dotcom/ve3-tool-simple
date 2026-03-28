@@ -7,13 +7,13 @@ chrome_path: C:\Program Files\Google\Chrome\Application\chrome.exe
 chrome_portable: ./GoogleChromePortable/GoogleChromePortable.exe
 chrome_portable_2: ./GoogleChromePortable - Copy/GoogleChromePortable.exe
 chrome_profile: ''
-deepseek_api_key: sk-0d427db6c9754e669a4f6392914d5766
+deepseek_api_key: sk-d4adad4ab13e4e0585a280ff734b562d
 deepseek_api_keys:
-- sk-0d427db6c9754e669a4f6392914d5766
+- sk-d4adad4ab13e4e0585a280ff734b562d
 early_video_start: 10
-excel_mode: small
-# topic: story | psychology (chu de noi dung)
-topic: story
+excel_mode: full
+# topic: story | psychology | finance_history (chu de noi dung)
+topic: finance_history
 flow_aspect_ratio: landscape
 flow_bearer_token: ''
 flow_delay: 3.0
@@ -47,7 +47,7 @@ log_level: INFO
 max_parallel_api: 10
 max_scene_duration: 8
 max_scenes_per_account: 50
-min_scene_duration: 5
+min_scene_duration: 4
 parallel_browsers: 1
 parallel_chrome: ''
 parallel_voices: 1
@@ -56,6 +56,11 @@ proxy_api_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ODMsInJvbGUiOjMsIm
 proxy_api_url: https://flow-api.nanoai.pics/api/fix/create-video-veo3
 retry_count: 3
 use_proxy: true
+# Local Proxy Server - thay thế nanoai.pics bằng server riêng
+# Khi bật: VM gửi bearer token + prompt cho server, server dùng Chrome bypass captcha
+# Server chạy bằng: python -m server.app
+local_server_enabled: false
+local_server_url: ''
 video_aspect_ratio: landscape
 video_compose_mode: fast
 video_count: full

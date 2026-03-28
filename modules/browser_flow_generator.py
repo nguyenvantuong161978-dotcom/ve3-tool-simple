@@ -2545,8 +2545,17 @@ class BrowserFlowGenerator:
         proxy_api_token = self.config.get('proxy_api_token', '')
         use_proxy = bool(proxy_api_token)
 
+        # Check local server mode (thay the nanoai.pics bang server rieng)
+        local_server_enabled = self.config.get('local_server_enabled', False)
+        local_server_url = self.config.get('local_server_url', '')
+        if local_server_enabled and local_server_url:
+            use_proxy = True  # Local server dung chung logic voi proxy
+
         if use_proxy:
-            self._log("Proxy API token co san - se su dung proxy de bypass captcha")
+            if local_server_enabled and local_server_url:
+                self._log(f"Local server mode: {local_server_url}")
+            else:
+                self._log("Proxy API token co san - se su dung proxy de bypass captcha")
 
         # Check bearer token
         if not bearer_token:
@@ -2577,19 +2586,22 @@ class BrowserFlowGenerator:
         flow_project_id = self.config.get('flow_project_id', self.project_code)
         self._log(f"Project ID: {flow_project_id}")
         self._log(f"Token: {bearer_token[:20]}...{bearer_token[-10:]}")
-        if use_proxy:
-            self._log(f"Proxy mode: ENABLED (nanoai.pics)")
+        if local_server_enabled and local_server_url:
+            self._log(f"Mode: LOCAL SERVER ({local_server_url})")
+        elif use_proxy:
+            self._log(f"Mode: PROXY (nanoai.pics)")
         else:
-            self._log(f"Proxy mode: DISABLED (direct API call)")
+            self._log(f"Mode: DIRECT API (khong proxy)")
 
-        # Create API client with proxy support
+        # Tao API client
         api = GoogleFlowAPI(
             bearer_token=bearer_token,
             project_id=flow_project_id,
             timeout=self.config.get('flow_timeout', 120),
             verbose=self.verbose,
             proxy_api_token=proxy_api_token,
-            use_proxy=use_proxy
+            use_proxy=use_proxy,
+            local_server_url=local_server_url if local_server_enabled else None
         )
 
         # Map aspect ratio
@@ -2811,10 +2823,19 @@ class BrowserFlowGenerator:
         proxy_api_token = self.config.get('proxy_api_token', '')
         use_proxy = bool(proxy_api_token)
 
-        if not use_proxy:
-            return {"success": False, "error": "Can proxy_api_token de tao video"}
+        # Check local server mode
+        local_server_enabled = self.config.get('local_server_enabled', False)
+        local_server_url = self.config.get('local_server_url', '')
+        if local_server_enabled and local_server_url:
+            use_proxy = True
 
-        self._log("Proxy API token co san - su dung proxy de tao video")
+        if not use_proxy:
+            return {"success": False, "error": "Can proxy_api_token hoac local_server de tao video"}
+
+        if local_server_enabled and local_server_url:
+            self._log(f"Local server mode: {local_server_url}")
+        else:
+            self._log("Proxy API token co san - su dung proxy de tao video")
 
         # Check bearer token
         if not bearer_token:
@@ -2845,14 +2866,15 @@ class BrowserFlowGenerator:
         self._log(f"Token: {bearer_token[:20]}...{bearer_token[-10:]}")
         self._log(f"Max videos: {max_videos}")
 
-        # Create API client with proxy support
+        # Tao API client
         api = GoogleFlowAPI(
             bearer_token=bearer_token,
             project_id=flow_project_id,
             timeout=self.config.get('flow_timeout', 300),  # Longer timeout for video
             verbose=self.verbose,
             proxy_api_token=proxy_api_token,
-            use_proxy=True
+            use_proxy=True,
+            local_server_url=local_server_url if local_server_enabled else None
         )
 
         # Map aspect ratio

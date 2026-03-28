@@ -291,6 +291,44 @@ class SettingsWindow(tk.Toplevel):
         tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
                   bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
 
+        # === LOCAL SERVER ===
+        server_frame = tk.LabelFrame(main_frame, text=" LOCAL PROXY SERVER ", bg='#16213e', fg='#ffd93d',
+                                      font=("Arial", 10, "bold"), padx=10, pady=10)
+        server_frame.pack(fill="x", pady=5)
+
+        tk.Label(server_frame, text="Gui anh qua server thay vi dung Chrome local.\n"
+                 "Server chay bang: python -m server.app",
+                 bg='#16213e', fg='#888', font=("Arial", 8), justify="left").pack(anchor="w")
+
+        # Checkbox bat/tat
+        self.local_server_enabled_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(server_frame, text="BAT Local Server Mode",
+                       variable=self.local_server_enabled_var,
+                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460',
+                       activebackground='#16213e', activeforeground='#00ff88',
+                       font=("Arial", 10, "bold"),
+                       command=self._toggle_server_fields).pack(anchor="w", pady=(8, 0))
+
+        # URL server
+        tk.Label(server_frame, text="Server URL:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
+        self.local_server_url_var = tk.StringVar()
+        self.server_url_entry = tk.Entry(server_frame, textvariable=self.local_server_url_var, width=60,
+                                          font=("Consolas", 10), bg='#0f3460', fg='white',
+                                          insertbackground='white')
+        self.server_url_entry.pack(fill="x", pady=2)
+        tk.Label(server_frame, text="Vi du: http://192.168.1.100:5000",
+                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
+
+        # Status label
+        self.server_status_lbl = tk.Label(server_frame, text="", bg='#16213e', fg='#888',
+                                           font=("Consolas", 9))
+        self.server_status_lbl.pack(anchor="w", pady=(5, 0))
+
+        # Nut kiem tra ket noi
+        tk.Button(server_frame, text="Kiem tra ket noi", command=self._check_server_connection,
+                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(anchor="w", pady=5)
+
         # === VEO3 ACCOUNTS (v1.0.108) ===
         account_frame = tk.LabelFrame(main_frame, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
                                        font=("Arial", 10, "bold"), padx=10, pady=10)
@@ -365,6 +403,9 @@ class SettingsWindow(tk.Toplevel):
                 self.proxy_token_var.set(config.get('proxy_api_token', ''))
                 self.chrome1_var.set(config.get('chrome_portable', ''))
                 self.chrome2_var.set(config.get('chrome_portable_2', ''))
+                self.local_server_enabled_var.set(config.get('local_server_enabled', False))
+                self.local_server_url_var.set(config.get('local_server_url', ''))
+                self._toggle_server_fields()
         except Exception as e:
             print(f"Error loading settings: {e}")
 
@@ -392,6 +433,8 @@ class SettingsWindow(tk.Toplevel):
             config['proxy_api_token'] = self.proxy_token_var.get().strip()
             config['chrome_portable'] = self.chrome1_var.get().strip()
             config['chrome_portable_2'] = self.chrome2_var.get().strip()
+            config['local_server_enabled'] = self.local_server_enabled_var.get()
+            config['local_server_url'] = self.local_server_url_var.get().strip()
 
             # Luu
             with open(settings_path, "w", encoding="utf-8") as f:
@@ -416,6 +459,50 @@ class SettingsWindow(tk.Toplevel):
         except Exception as e:
             from tkinter import messagebox
             messagebox.showerror("Loi", f"Khong the luu: {e}")
+
+    def _toggle_server_fields(self):
+        """Bat/tat truong URL khi checkbox thay doi."""
+        enabled = self.local_server_enabled_var.get()
+        state = "normal" if enabled else "disabled"
+        self.server_url_entry.config(state=state)
+        if enabled:
+            self.server_status_lbl.config(text="Da bat - VM se gui anh qua server", fg='#00ff88')
+        else:
+            self.server_status_lbl.config(text="Da tat - VM dung Chrome local", fg='#888')
+
+    def _check_server_connection(self):
+        """Kiem tra ket noi den local server."""
+        url = self.local_server_url_var.get().strip()
+        if not url:
+            self.server_status_lbl.config(text="Chua nhap URL server!", fg='#e94560')
+            return
+
+        self.server_status_lbl.config(text="Dang kiem tra...", fg='#ffd93d')
+        self.update_idletasks()
+
+        try:
+            import requests
+            resp = requests.get(f"{url.rstrip('/')}/api/status", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                chrome_ok = data.get('chrome_ready', False)
+                pending = data.get('pending_tasks', 0)
+                done = data.get('completed_tasks', 0)
+
+                if chrome_ok:
+                    self.server_status_lbl.config(
+                        text=f"KET NOI OK! Chrome san sang | Dang xu ly: {pending} | Xong: {done}",
+                        fg='#00ff88')
+                else:
+                    self.server_status_lbl.config(
+                        text=f"Ket noi OK nhung Chrome chua san sang",
+                        fg='#ffd93d')
+            else:
+                self.server_status_lbl.config(text=f"Loi: HTTP {resp.status_code}", fg='#e94560')
+        except requests.exceptions.ConnectionError:
+            self.server_status_lbl.config(text=f"Khong ket noi duoc! Server chua chay?", fg='#e94560')
+        except Exception as e:
+            self.server_status_lbl.config(text=f"Loi: {e}", fg='#e94560')
 
     def _load_account_info(self):
         """

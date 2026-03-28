@@ -1,0 +1,841 @@
+"""
+Chrome Session Manager - Quản lý Chrome cho proxy server.
+
+Tái sử dụng flow từ tool (drission_flow_api.py):
+1. Mở ChromePortable
+2. Vào labs.google/fx/tools/flow
+3. Tạo project mới
+4. Sẵn sàng nhận request
+
+Mỗi request:
+1. Inject interceptor (thay bearer token + projectId)
+2. Paste prompt → Enter
+3. Chờ response → trả kết quả
+4. Cleanup browser data → sẵn sàng cho request tiếp
+"""
+import sys
+import os
+import time
+import json
+import base64
+from pathlib import Path
+
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+TOOL_DIR = Path(__file__).parent.parent
+
+# ============================================================
+# Flow URL + Constants
+# ============================================================
+FLOW_URL = "https://labs.google/fx/vi/tools/flow"
+
+# Model name → index trong dropdown
+MODEL_INDEX_MAP = {
+    'GEM_PIX_2': 0,       # Nano Banana Pro (default)
+    'NARWHAL': 1,          # Nano Banana 2
+    'IMAGEN_3_5': 2,       # Imagen 4
+}
+
+# ============================================================
+# JavaScript snippets (từ drission_flow_api.py + test_local_proxy.py)
+# ============================================================
+
+JS_CLEANUP = """
+(function() {
+    try { localStorage.clear(); } catch(e) {}
+    try { sessionStorage.clear(); } catch(e) {}
+    try {
+        indexedDB.databases().then(function(dbs) {
+            dbs.forEach(function(db) { indexedDB.deleteDatabase(db.name); });
+        });
+    } catch(e) {}
+    try {
+        document.cookie.split(";").forEach(function(c) {
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+    } catch(e) {}
+    try {
+        caches.keys().then(function(names) {
+            names.forEach(function(name) { caches.delete(name); });
+        });
+    } catch(e) {}
+    try {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+            regs.forEach(function(r) { r.unregister(); });
+        });
+    } catch(e) {}
+    return 'CLEANED';
+})();
+"""
+
+JS_CLICK_NEW_PROJECT = """
+(function() {
+    // Tìm nút "Dự án mới" (có icon add_2)
+    var btns = document.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+        var t = btns[i].textContent.trim();
+        if (t.indexOf('add_2') >= 0 || t.indexOf('Dự án mới') >= 0 || t.indexOf('New project') >= 0) {
+            btns[i].click();
+            return 'CLICKED';
+        }
+    }
+
+    // Fallback: "Create with Flow" hoặc tương tự
+    var links = document.querySelectorAll('a');
+    for (var i = 0; i < links.length; i++) {
+        var t = links[i].textContent.trim();
+        if (t.indexOf('Create') >= 0 && t.indexOf('Flow') >= 0) {
+            links[i].click();
+            return 'CLICKED_LINK';
+        }
+    }
+
+    return 'NOT_FOUND';
+})();
+"""
+
+JS_SELECT_MODEL = """
+(function(modelIndex) {
+    window._modelSelectResult = 'PENDING';
+    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+    var btns = document.querySelectorAll('button');
+    var halfH = window.innerHeight * 0.5;
+    var btn1 = null;
+    for (var i = 0; i < btns.length; i++) {
+        var t = btns[i].textContent.trim();
+        var rect = btns[i].getBoundingClientRect();
+        if (rect.width > 50 && rect.y > halfH) {
+            for (var k = 0; k < keywords.length; k++) {
+                if (t.indexOf(keywords[k]) >= 0) { btn1 = btns[i]; break; }
+            }
+            if (btn1) break;
+        }
+    }
+    if (btn1) {
+        btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+    } else { window._modelSelectResult = 'NO_BUTTON'; return; }
+
+    setTimeout(function() {
+        var tab = document.querySelector('[id*="trigger-IMAGE"]');
+        if (tab) {
+            tab.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+            tab.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+            tab.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        }
+        setTimeout(function() {
+            var t169 = document.querySelector('[id*="trigger-LANDSCAPE"]');
+            if (t169) {
+                t169.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                t169.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                t169.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+            }
+            setTimeout(function() {
+                var x1 = document.querySelector('[id*="trigger-1"]');
+                if (x1) {
+                    x1.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                    x1.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                    x1.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                }
+                setTimeout(function() {
+                    var btns = document.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = btns[i].textContent.trim();
+                        if (t.indexOf('arrow_drop_down') >= 0 && btns[i].getBoundingClientRect().width > 0) {
+                            btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            break;
+                        }
+                    }
+                    setTimeout(function() {
+                        var items = document.querySelectorAll('[role="menuitem"]');
+                        if (items.length > modelIndex) {
+                            items[modelIndex].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                            items[modelIndex].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                            items[modelIndex].click();
+                            window._modelSelectResult = 'SELECTED_' + modelIndex;
+                        } else { window._modelSelectResult = 'NO_ITEMS'; }
+                        setTimeout(function() {
+                            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                            document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                        }, 500);
+                    }, 800);
+                }, 500);
+            }, 300);
+        }, 300);
+    }, 1500);
+})(MODEL_INDEX);
+"""
+
+
+def build_interceptor_js(client_bearer_token: str, client_project_id: str) -> str:
+    """
+    JS Interceptor - Thay bearer token + projectId trong fetch requests.
+
+    Flow:
+    1. Chrome gửi request với recaptchaToken hợp lệ
+    2. Interceptor THAY: bearer token → client's token, projectId → client's projectId
+    3. GIỮ NGUYÊN recaptchaToken từ Chrome
+    4. Google nhận: token khách + captcha hợp lệ → tạo ảnh dưới tài khoản khách
+    """
+    safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
+    safe_project = client_project_id.replace("\\", "\\\\").replace("'", "\\'")
+
+    return """
+window._response = null;
+window._responseError = null;
+window._requestPending = false;
+window._clientBearerToken = '""" + safe_token + """';
+window._clientProjectId = '""" + safe_project + """';
+
+(function() {
+    if (window.__proxyInterceptReady) return 'ALREADY';
+    window.__proxyInterceptReady = true;
+
+    var origFetch = window.fetch;
+    window.fetch = async function(url, opts) {
+        var urlStr = typeof url === 'string' ? url : url.url;
+
+        if (urlStr.includes('aisandbox') && (urlStr.includes('batchGenerate') || urlStr.includes('flowMedia'))) {
+            console.log('[PROXY] Caught request:', urlStr);
+
+            if (!window._response) {
+                window._requestPending = true;
+                window._response = null;
+                window._responseError = null;
+            }
+
+            // 1. THAY BEARER TOKEN
+            if (window._clientBearerToken && opts) {
+                if (!opts.headers) opts.headers = {};
+                if (opts.headers instanceof Headers) {
+                    opts.headers.set('Authorization', 'Bearer ' + window._clientBearerToken);
+                } else {
+                    opts.headers['Authorization'] = 'Bearer ' + window._clientBearerToken;
+                }
+                console.log('[PROXY] 1. Replaced bearer token');
+            }
+
+            // 2. THAY projectId trong body
+            if (window._clientProjectId && opts && opts.body) {
+                try {
+                    var body = JSON.parse(opts.body);
+                    if (body.clientContext) {
+                        body.clientContext.projectId = window._clientProjectId;
+                    }
+                    if (body.requests) {
+                        body.requests.forEach(function(req) {
+                            if (req.clientContext) {
+                                req.clientContext.projectId = window._clientProjectId;
+                            }
+                        });
+                    }
+                    // GIỮ recaptchaToken
+                    var recap = body.clientContext ? body.clientContext.recaptchaToken : '';
+                    console.log('[PROXY] 2. projectId replaced, recaptcha kept: ' + (recap ? recap.substring(0,20)+'...' : 'EMPTY'));
+                    opts.body = JSON.stringify(body);
+                } catch(e) {
+                    console.log('[PROXY] Parse body error:', e);
+                }
+            }
+
+            // 3. THAY projectId trong URL
+            if (window._clientProjectId) {
+                var newUrl = urlStr.replace(/projects\\/[^/]+/, 'projects/' + window._clientProjectId);
+                if (newUrl !== urlStr) {
+                    console.log('[PROXY] 3. URL project replaced');
+                    url = newUrl;
+                }
+            }
+
+            try {
+                var response = await origFetch.apply(this, [url, opts]);
+                var cloned = response.clone();
+                var data = await cloned.json();
+
+                console.log('[PROXY] Status:', response.status);
+
+                if (response.status === 200 && data.media) {
+                    window._response = data;
+                    console.log('[PROXY] SUCCESS! Got ' + data.media.length + ' images');
+                } else if (data.error) {
+                    window._response = {error: data.error};
+                    window._responseError = 'Error ' + (data.error.code || response.status) + ': ' + (data.error.message || '');
+                    console.log('[PROXY] ERROR:', window._responseError);
+                } else {
+                    window._response = data;
+                }
+
+                window._requestPending = false;
+                return response;
+            } catch(e) {
+                window._responseError = 'Fetch error: ' + e.message;
+                window._requestPending = false;
+                return origFetch.apply(this, [url, opts]);
+            }
+        }
+
+        return origFetch.apply(this, [url, opts]);
+    };
+
+    return 'PROXY_INTERCEPTOR_READY';
+})();
+"""
+
+
+def get_server_accounts() -> list:
+    """
+    Đọc danh sách tài khoản server từ Google Sheet.
+    Sheet: "SERVER", Cột B: tài khoản (format: email|password|2fa mỗi dòng)
+
+    Returns: [{"id": "email", "password": "pass", "totp_secret": "..."}, ...]
+    """
+    try:
+        sys.path.insert(0, str(TOOL_DIR))
+        from google_login import load_gsheet_client, parse_accounts_cell, col_letter_to_index
+
+        gc, spreadsheet_name = load_gsheet_client()
+        if not gc:
+            print("[SERVER] Khong load duoc Google Sheet client")
+            return []
+
+        ws = gc.open(spreadsheet_name).worksheet("SERVER")
+        all_data = ws.get_all_values()
+
+        if not all_data:
+            print("[SERVER] Sheet 'SERVER' trong!")
+            return []
+
+        # Cot B (index 1) chua tai khoan - doc tat ca dong
+        accounts = []
+        col_b = col_letter_to_index("B")  # = 1
+
+        for row_idx, row in enumerate(all_data, start=1):
+            if len(row) <= col_b:
+                continue
+
+            cell_value = str(row[col_b]).strip()
+            if not cell_value:
+                continue
+
+            # Parse tung dong trong cell (co the co nhieu tai khoan trong 1 cell)
+            parsed = parse_accounts_cell(cell_value)
+            if parsed:
+                accounts.extend(parsed)
+
+        if accounts:
+            print(f"[SERVER] Tim thay {len(accounts)} tai khoan tu sheet 'SERVER':")
+            for i, acc in enumerate(accounts):
+                has_2fa = " [2FA]" if acc.get('totp_secret') else ""
+                print(f"  {i+1}. {acc['id']}{has_2fa}")
+
+        return accounts
+
+    except Exception as e:
+        print(f"[SERVER] Loi doc sheet 'SERVER': {e}")
+        return []
+
+
+class ChromeSession:
+    """Quản lý Chrome session cho proxy server."""
+
+    def __init__(self, chrome_portable_path: str = None, port: int = 19222):
+        """
+        Args:
+            chrome_portable_path: Đường dẫn tới ChromePortable.exe
+                                  Mặc định: {tool_dir}/GoogleChromePortable/GoogleChromePortable.exe
+            port: Debug port cho Chrome (mặc định 19222 - không trùng với workers 9222/9223)
+        """
+        if chrome_portable_path:
+            self.chrome_path = Path(chrome_portable_path)
+        else:
+            self.chrome_path = TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe"
+
+        self.chrome_data = self.chrome_path.parent / "Data" / "profile"
+        self.port = port
+        self.page = None
+        self.ready = False
+        self.project_url = None
+        self._image_mode_selected = False
+        self._account = None  # Tai khoan dang dung
+
+    def log(self, msg: str, level: str = "INFO"):
+        prefix = {"INFO": "[INFO]", "OK": "[OK]", "WARN": "[WARN]", "ERROR": "[ERROR]"}
+        print(f"  {prefix.get(level, '[INFO]')} {msg}")
+
+    # ============================================================
+    # Setup - Khởi tạo Chrome + vào Flow + tạo project
+    # ============================================================
+
+    def setup(self) -> bool:
+        """
+        Full setup giống tool:
+        1. Mở Chrome Portable
+        2. Vào labs.google/fx/tools/flow
+        3. Tạo project mới
+        4. Đợi textarea sẵn sàng
+
+        Returns: True nếu sẵn sàng
+        """
+        print("\n[SETUP] Khởi tạo Chrome session...")
+
+        # 1. Check Chrome exists
+        if not self.chrome_path.exists():
+            self.log(f"Chrome not found: {self.chrome_path}", "ERROR")
+            return False
+
+        # 2. Mở Chrome
+        self.log(f"Mở Chrome: {self.chrome_path}")
+        self.log(f"Data: {self.chrome_data}")
+        self.log(f"Port: {self.port}")
+
+        from DrissionPage import ChromiumPage, ChromiumOptions
+
+        co = ChromiumOptions()
+        co.set_browser_path(str(self.chrome_path))
+        co.set_user_data_path(str(self.chrome_data))
+        co.set_address(f'127.0.0.1:{self.port}')
+
+        # Minimal flags cho Chrome Portable
+        co.set_argument('--no-first-run')
+        co.set_argument('--no-default-browser-check')
+
+        try:
+            self.page = ChromiumPage(co)
+            self.log(f"Chrome opened: {self.page.title}", "OK")
+        except Exception as e:
+            self.log(f"Chrome failed: {e}", "ERROR")
+            return False
+
+        # 3. Vào Flow page
+        self.log(f"Vao Flow: {FLOW_URL}")
+        self.page.get(FLOW_URL)
+        time.sleep(5)
+
+        current_url = self.page.url or ''
+        self.log(f"URL: {current_url}")
+
+        # Check login - tu dong dang nhap neu chua
+        if 'accounts.google.com' in current_url:
+            self.log("Chua dang nhap! Tu dong dang nhap...", "WARN")
+            login_ok = self._auto_login()
+            if not login_ok:
+                self.log("Dang nhap that bai!", "ERROR")
+                return False
+            # Vao lai Flow sau khi login
+            self.page.get(FLOW_URL)
+            time.sleep(5)
+            current_url = self.page.url or ''
+
+        # 4. Tạo project mới
+        if '/project/' not in current_url:
+            success = self._create_new_project()
+            if not success:
+                self.log("Không tạo được project mới!", "ERROR")
+                return False
+
+        # 5. Đợi textarea
+        if self._wait_for_textarea():
+            self.ready = True
+            self.project_url = self.page.url
+            self.log(f"READY! Project: {self.project_url}", "OK")
+            return True
+
+        self.log("Textarea không xuất hiện!", "ERROR")
+        return False
+
+    def _create_new_project(self) -> bool:
+        """Tạo project mới (giống _auto_setup_project)."""
+        self.log("Tạo project mới...")
+
+        for attempt in range(10):
+            # Dismiss popups ("Bắt đầu" / "Get started")
+            self.page.run_js("""
+                var btns = document.querySelectorAll('button');
+                for (var i = 0; i < btns.length; i++) {
+                    var t = btns[i].textContent.trim();
+                    if (t === 'Bắt đầu' || t === 'Get started' || t === 'Got it') {
+                        btns[i].click();
+                    }
+                }
+            """)
+            time.sleep(0.5)
+
+            # Click "Dự án mới"
+            result = self.page.run_js(JS_CLICK_NEW_PROJECT)
+            self.log(f"Click new project (attempt {attempt+1}): {result}")
+
+            if result and 'CLICKED' in str(result):
+                time.sleep(3)
+
+                current_url = self.page.url or ''
+                if '/project/' in current_url:
+                    self.log(f"Project created: {current_url}", "OK")
+                    return True
+
+            # Reload nếu không tìm thấy button
+            if attempt % 3 == 2:
+                self.log("Reload page...")
+                self.page.get(FLOW_URL)
+                time.sleep(5)
+
+        return False
+
+    def _wait_for_textarea(self, timeout: int = 30) -> bool:
+        """Đợi textarea/contenteditable xuất hiện."""
+        self.log("Đợi textarea...")
+
+        for i in range(timeout):
+            result = self.page.run_js("""
+                var ce = document.querySelector('[contenteditable="true"]');
+                var ta = document.querySelector('textarea:not([class*="recaptcha"])');
+                if (ce) return 'contenteditable';
+                if (ta) return 'textarea';
+                return 'not_found';
+            """)
+
+            if result and result != 'not_found':
+                self.log(f"Input ready: {result}", "OK")
+                return True
+
+            time.sleep(1)
+
+        return False
+
+    # ============================================================
+    # Generate Image - Tạo ảnh cho khách
+    # ============================================================
+
+    def generate_image(self, client_bearer_token: str, client_project_id: str,
+                       client_prompt: str, model_name: str = 'GEM_PIX_2',
+                       aspect_ratio: str = 'IMAGE_ASPECT_RATIO_LANDSCAPE',
+                       seed: int = None) -> dict:
+        """
+        Tạo ảnh cho khách bằng Chrome captcha bypass.
+
+        Flow:
+        1. Inject interceptor (thay bearer token + projectId)
+        2. Setup image mode + model
+        3. Paste prompt → Enter
+        4. Chờ response
+        5. Cleanup → sẵn sàng cho request tiếp
+
+        Returns: { media: [...] } hoặc { error: "..." }
+        """
+        if not self.page:
+            return {"error": "Chrome not initialized"}
+
+        self.log(f"=== Generate Image ===")
+        self.log(f"Token: {client_bearer_token[:20]}...{client_bearer_token[-10:]}")
+        self.log(f"ProjectId: {client_project_id}")
+        self.log(f"Prompt: {client_prompt[:60]}...")
+        self.log(f"Model: {model_name}")
+
+        try:
+            # 1. Reload page để clean state
+            if self.project_url:
+                self.page.get(self.project_url)
+            else:
+                self.page.get(FLOW_URL)
+            time.sleep(4)
+
+            # Đợi textarea
+            if not self._wait_for_textarea(timeout=20):
+                # Thử tạo project mới
+                self.log("Textarea not found, creating new project...", "WARN")
+                if not self._create_new_project():
+                    return {"error": "Cannot create project"}
+                if not self._wait_for_textarea(timeout=20):
+                    return {"error": "Textarea not found after project creation"}
+                self.project_url = self.page.url
+
+            # 2. Inject interceptor
+            self.log("Inject interceptor...")
+            js = build_interceptor_js(client_bearer_token, client_project_id)
+            r = self.page.run_js(js)
+            self.log(f"Interceptor: {r}")
+
+            # 3. Setup Image mode + model
+            model_index = MODEL_INDEX_MAP.get(model_name, 0)
+            self.log(f"Setup Image mode (model index: {model_index})...")
+            js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
+            self.page.run_js("window._modelSelectResult = 'PENDING';")
+            self.page.run_js(js_model)
+            time.sleep(7)
+
+            model_result = self.page.run_js("return window._modelSelectResult;")
+            self.log(f"Model result: {model_result}")
+
+            # 4. Paste prompt
+            self.log(f"Paste prompt...")
+            ok = self._paste_prompt(client_prompt)
+            if not ok:
+                return {"error": "Cannot paste prompt"}
+
+            # 5. Enter (gửi)
+            self.log("Đợi recaptcha (4s) → Enter...")
+            time.sleep(4)
+
+            from DrissionPage.common import Keys
+            self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+            self.log("Enter sent!")
+
+            # 6. Chờ response
+            result = self._wait_for_response(timeout=120)
+
+            # 7. Cleanup browser data
+            self.log("Cleanup browser data...")
+            try:
+                self.page.run_js(JS_CLEANUP)
+            except Exception:
+                pass
+
+            return result
+
+        except Exception as e:
+            self.log(f"Error: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
+            return {"error": str(e)}
+
+    def _paste_prompt(self, prompt: str) -> bool:
+        """Paste prompt bằng Ctrl+V (giống tool)."""
+        import pyperclip
+        from DrissionPage.common import Keys
+
+        # Focus input
+        input_type = self.page.run_js("""
+            var ce = document.querySelector('[contenteditable="true"]');
+            var ta = document.querySelector('textarea:not([class*="recaptcha"])');
+            if (ce) { ce.focus(); ce.click(); return 'contenteditable'; }
+            if (ta) { ta.focus(); ta.click(); return 'textarea'; }
+            return 'not_found';
+        """)
+
+        if input_type == 'not_found':
+            for _ in range(5):
+                time.sleep(1)
+                input_type = self.page.run_js("""
+                    var ce = document.querySelector('[contenteditable="true"]');
+                    var ta = document.querySelector('textarea:not([class*="recaptcha"])');
+                    if (ce) { ce.focus(); ce.click(); return 'contenteditable'; }
+                    if (ta) { ta.focus(); ta.click(); return 'textarea'; }
+                    return 'not_found';
+                """)
+                if input_type != 'not_found':
+                    break
+
+        if input_type == 'not_found':
+            self.log("Input not found!", "ERROR")
+            return False
+
+        self.log(f"Input type: {input_type}")
+        time.sleep(0.3)
+
+        # Ctrl+A → Ctrl+V
+        self.page.actions.key_down(Keys.CONTROL).key_down('a').key_up('a').key_up(Keys.CONTROL)
+        time.sleep(0.2)
+
+        pyperclip.copy(prompt)
+        self.page.actions.key_down(Keys.CONTROL).key_down('v').key_up('v').key_up(Keys.CONTROL)
+        time.sleep(0.5)
+
+        # Verify
+        actual = self.page.run_js("""
+            var ce = document.querySelector('[contenteditable="true"]');
+            if (ce) return ce.textContent.substring(0, 80);
+            var ta = document.querySelector('textarea:not([class*="recaptcha"])');
+            if (ta) return ta.value.substring(0, 80);
+            return '';
+        """)
+        self.log(f"Verified: '{actual}'")
+        return bool(actual and actual.strip())
+
+    def _wait_for_response(self, timeout: int = 120) -> dict:
+        """Chờ response từ interceptor."""
+        self.log(f"Chờ response ({timeout}s)...")
+        start = time.time()
+
+        while time.time() - start < timeout:
+            elapsed = time.time() - start
+
+            state = self.page.run_js("""
+                return {
+                    pending: window._requestPending,
+                    hasResponse: !!window._response,
+                    error: window._responseError
+                };
+            """)
+
+            if state and state.get('error'):
+                self.log(f"ERROR: {state['error']}", "ERROR")
+                data = self.page.run_js("return window._response;")
+                if data and isinstance(data, dict) and 'error' in data:
+                    return {"error": data['error']}
+                return {"error": state['error']}
+
+            if state and state.get('hasResponse') and not state.get('error'):
+                self.log(f"Response sau {elapsed:.1f}s!", "OK")
+                data = self.page.run_js("return window._response;")
+
+                if isinstance(data, dict) and 'media' in data:
+                    # Download images (convert fifeUrl → base64 nếu cần)
+                    media = data['media']
+                    for i, item in enumerate(media):
+                        gen_img = item.get('image', {}).get('generatedImage', {})
+                        encoded = gen_img.get('encodedImage', '')
+                        fife_url = gen_img.get('fifeUrl', '')
+
+                        # Nếu không có base64 nhưng có URL → download
+                        if not encoded and fife_url:
+                            try:
+                                import requests as req
+                                r = req.get(fife_url, timeout=30)
+                                if r.status_code == 200:
+                                    gen_img['encodedImage'] = base64.b64encode(r.content).decode()
+                                    self.log(f"Image {i+1} downloaded from URL ({len(r.content):,} bytes)", "OK")
+                            except Exception as e:
+                                self.log(f"Download failed: {e}", "WARN")
+
+                    self.log(f"Got {len(media)} images", "OK")
+                    return data
+
+                return data or {"error": "Empty response"}
+
+            if int(elapsed) % 15 == 0 and int(elapsed) > 0:
+                self.log(f"... chờ ({elapsed:.0f}s)")
+
+            time.sleep(1)
+
+        return {"error": f"Timeout {timeout}s"}
+
+    # ============================================================
+    # Auto Login - Doc tai khoan tu sheet "SERVER" cot B
+    # ============================================================
+
+    def _auto_login(self) -> bool:
+        """
+        Tu dong dang nhap Google bang tai khoan tu sheet SERVER cot B.
+
+        Flow:
+        1. Doc tai khoan tu Google Sheet (sheet "SERVER", cot B)
+        2. Goi login_google_chrome() tu google_login.py
+        3. Xoay vong tai khoan neu co nhieu
+        """
+        self.log("Doc tai khoan tu sheet 'SERVER' cot B...")
+
+        accounts = get_server_accounts()
+        if not accounts:
+            self.log("Khong tim thay tai khoan trong sheet 'SERVER'!", "ERROR")
+            self.log("Hay them tai khoan vao Google Sheet → sheet 'SERVER' → cot B", "ERROR")
+            self.log("Format: email|password|2fa_secret (moi dong 1 tai khoan)", "ERROR")
+            return False
+
+        # Xoay vong tai khoan (doc index tu file)
+        server_index_file = TOOL_DIR / "config" / ".server_account_index.json"
+        current_index = 0
+        try:
+            if server_index_file.exists():
+                data = json.loads(server_index_file.read_text(encoding='utf-8'))
+                current_index = data.get('index', 0)
+                if current_index >= len(accounts):
+                    current_index = 0
+        except Exception:
+            pass
+
+        account = accounts[current_index]
+        self.log(f"Dung tai khoan {current_index + 1}/{len(accounts)}: {account['id']}")
+        self._account = account
+
+        # Goi login
+        try:
+            sys.path.insert(0, str(TOOL_DIR))
+            from google_login import login_google_chrome
+
+            # Dong Chrome hien tai truoc khi login
+            if self.page:
+                try:
+                    self.page.quit()
+                except Exception:
+                    pass
+                self.page = None
+
+            success = login_google_chrome(
+                account_info=account,
+                chrome_portable=str(self.chrome_path),
+                profile_dir=str(self.chrome_data),
+                worker_id=99  # Port rieng cho server (9222 + 99 = 9321)
+            )
+
+            if success:
+                self.log(f"Dang nhap thanh cong: {account['id']}", "OK")
+
+                # Luu index + xoay vong cho lan sau
+                next_index = (current_index + 1) % len(accounts)
+                try:
+                    server_index_file.write_text(
+                        json.dumps({"index": next_index}, ensure_ascii=False),
+                        encoding='utf-8'
+                    )
+                except Exception:
+                    pass
+
+                # Mo lai Chrome voi DrissionPage
+                from DrissionPage import ChromiumPage, ChromiumOptions
+                co = ChromiumOptions()
+                co.set_browser_path(str(self.chrome_path))
+                co.set_user_data_path(str(self.chrome_data))
+                co.set_address(f'127.0.0.1:{self.port}')
+                co.set_argument('--no-first-run')
+                co.set_argument('--no-default-browser-check')
+
+                self.page = ChromiumPage(co)
+                self.log(f"Chrome mo lai: {self.page.title}", "OK")
+                return True
+            else:
+                self.log(f"Dang nhap that bai: {account['id']}", "ERROR")
+                # Thu tai khoan tiep theo
+                next_index = (current_index + 1) % len(accounts)
+                try:
+                    server_index_file.write_text(
+                        json.dumps({"index": next_index}, ensure_ascii=False),
+                        encoding='utf-8'
+                    )
+                except Exception:
+                    pass
+                return False
+
+        except Exception as e:
+            self.log(f"Loi dang nhap: {e}", "ERROR")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    # ============================================================
+    # Cleanup / Restart
+    # ============================================================
+
+    def restart_chrome(self):
+        """Restart Chrome (clear data + reopen)."""
+        self.log("Restarting Chrome...")
+        self.ready = False
+
+        try:
+            if self.page:
+                self.page.run_js(JS_CLEANUP)
+                time.sleep(1)
+        except Exception:
+            pass
+
+        # Re-setup
+        self.setup()
+
+    def close(self):
+        """Close Chrome."""
+        self.ready = False
+        try:
+            if self.page:
+                self.page.quit()
+        except Exception:
+            pass
+        self.page = None

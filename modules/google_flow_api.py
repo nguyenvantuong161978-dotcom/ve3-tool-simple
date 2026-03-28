@@ -204,7 +204,8 @@ class GoogleFlowAPI:
         proxy_api_token: Optional[str] = None,
         use_proxy: bool = False,
         paygate_tier: PaygateTier = PaygateTier.TIER_TWO,
-        extra_headers: Optional[Dict[str, str]] = None
+        extra_headers: Optional[Dict[str, str]] = None,
+        local_server_url: Optional[str] = None
     ):
         """
         Khởi tạo Google Flow API client.
@@ -219,6 +220,8 @@ class GoogleFlowAPI:
             extra_headers: Extra headers (x-browser-validation, etc.) from Chrome capture
             use_proxy: Sử dụng proxy API thay vì gọi trực tiếp
             paygate_tier: User paygate tier (TIER_ONE hoặc TIER_TWO)
+            local_server_url: URL local proxy server (thay thế nanoai.pics)
+                              Ví dụ: "http://192.168.1.100:5000"
         """
         self.bearer_token = bearer_token.strip()
         self.project_id = project_id or str(uuid.uuid4())
@@ -229,6 +232,16 @@ class GoogleFlowAPI:
         self.use_proxy = use_proxy
         self.paygate_tier = paygate_tier
         self.extra_headers = extra_headers or {}
+        self.local_server_url = local_server_url
+
+        # Khi có local_server_url → override proxy URLs + tự bật proxy mode
+        if self.local_server_url:
+            self.local_server_url = self.local_server_url.rstrip('/')
+            self.PROXY_IMAGE_API_URL = f"{self.local_server_url}/api/fix/create-image-veo3"
+            self.PROXY_VIDEO_API_URL = f"{self.local_server_url}/api/fix/create-video-veo3"
+            self.PROXY_TASK_STATUS_URL = f"{self.local_server_url}/api/fix/task-status"
+            self.use_proxy = True
+            self._log(f"Local server mode: {self.local_server_url}")
 
         # Validate token format
         if not self.bearer_token.startswith("ya29."):
@@ -372,8 +385,8 @@ class GoogleFlowAPI:
             "requests": requests_data
         }
 
-        # Route to proxy if enabled
-        if self.use_proxy and self.proxy_api_token:
+        # Route to proxy if enabled (local server hoặc nanoai.pics)
+        if self.use_proxy and (self.local_server_url or self.proxy_api_token):
             return self._generate_images_via_proxy(payload, prompt, aspect_ratio.value)
 
         # Direct API call
@@ -468,10 +481,13 @@ class GoogleFlowAPI:
         1. POST /create-image-veo3 → {"success": true, "taskId": "xxx"}
         2. GET /task-status?taskId=xxx → Poll cho đến khi có kết quả
         """
-        if not self.proxy_api_token:
+        # Local server không cần proxy_api_token
+        if not self.local_server_url and not self.proxy_api_token:
             return False, [], "Proxy API token required - set proxy_api_token"
 
-        self._log(f"POST {self.PROXY_IMAGE_API_URL} (via proxy)")
+        is_local = bool(self.local_server_url)
+        proxy_label = "local server" if is_local else "nanoai.pics"
+        self._log(f"POST {self.PROXY_IMAGE_API_URL} (via {proxy_label})")
 
         # Build proxy request - format giống direct Google API
         # QUAN TRONG: Dung payload goc de giu nguyen imageInputs (references)
@@ -485,16 +501,22 @@ class GoogleFlowAPI:
         }
 
         # Debug: log the full request
-        self._log(f"=== PROXY REQUEST ===")
+        self._log(f"=== PROXY REQUEST ({proxy_label}) ===")
         self._log(f"URL: {self.PROXY_IMAGE_API_URL}")
         self._log(f"flow_url: {proxy_payload['flow_url']}")
         self._log(f"body_json: {json.dumps(proxy_body)[:500]}")
 
         try:
-            proxy_headers = {
-                "Authorization": f"Bearer {self.proxy_api_token}",
-                "Content-Type": "application/json"
-            }
+            # Local server không cần Authorization header
+            if is_local:
+                proxy_headers = {
+                    "Content-Type": "application/json"
+                }
+            else:
+                proxy_headers = {
+                    "Authorization": f"Bearer {self.proxy_api_token}",
+                    "Content-Type": "application/json"
+                }
 
             # Step 1: Create task
             response = requests.post(
