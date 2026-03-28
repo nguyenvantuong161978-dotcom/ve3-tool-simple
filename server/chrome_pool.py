@@ -155,6 +155,8 @@ class ChromePool:
         self._log_fn = log_callback or (lambda msg, level="INFO": print(f"[ChromePool] {msg}"))
         self._ipv6_list: List[str] = []  # Tat ca IPv6 tu sheet SERVER col C
         self._ipv6_rotate_index = 0  # Vi tri hien tai trong _ipv6_list
+        self._all_accounts: List[Dict] = []  # Tat ca tai khoan tu sheet SERVER
+        self._account_usage: Dict[str, int] = {}  # email -> so lan da dung
 
     def _log(self, msg: str, level: str = "INFO"):
         self._log_fn(msg, level)
@@ -215,6 +217,60 @@ class ChromePool:
             acc_str = account["id"] if account else "no-account"
             ipv6_str = ipv6[:30] if ipv6 else "no-ipv6"
             self._log(f"  Worker {i}: {chrome_info['folder']} | {acc_str} | {ipv6_str}")
+
+        # Load tat ca tai khoan tu sheet de dung khi doi account (403 lan 5)
+        self.load_all_accounts()
+
+    def load_all_accounts(self):
+        """Load tat ca tai khoan tu sheet SERVER vao _all_accounts."""
+        try:
+            from server.chrome_session import get_server_accounts
+            accounts = get_server_accounts()
+            if accounts:
+                self._all_accounts = accounts
+                # Track usage: email dang duoc worker nao dung
+                for w in self.workers:
+                    if w.account:
+                        email = w.account['id']
+                        self._account_usage[email] = self._account_usage.get(email, 0) + 1
+                self._log(f"Loaded {len(accounts)} tai khoan tu sheet SERVER")
+            else:
+                self._log("Khong tim thay tai khoan nao tu sheet SERVER", "WARN")
+        except Exception as e:
+            self._log(f"Loi load tai khoan: {e}", "ERROR")
+
+    def get_next_account(self, current_email: str = "") -> Optional[Dict]:
+        """
+        Lay tai khoan it dung nhat, khac voi current_email.
+        Returns: account dict hoac None.
+        """
+        if not self._all_accounts:
+            return None
+
+        # Tim account it dung nhat, khac current
+        best = None
+        best_usage = float('inf')
+        for acc in self._all_accounts:
+            email = acc['id']
+            if email == current_email:
+                continue
+            # Khong dung account dang duoc worker khac dung
+            in_use = any(
+                w.account and w.account['id'] == email
+                for w in self.workers
+            )
+            usage = self._account_usage.get(email, 0)
+            # Uu tien: khong dang dung > it dung nhat
+            score = usage + (1000 if in_use else 0)
+            if score < best_usage:
+                best_usage = score
+                best = acc
+
+        if best:
+            self._account_usage[best['id']] = self._account_usage.get(best['id'], 0) + 1
+            self._log(f"Next account: {best['id']} (usage={best_usage})")
+
+        return best
 
     def get_next_ipv6(self, current_ipv6: str = "") -> str:
         """
@@ -419,21 +475,65 @@ class ChromePool:
                             err_str = f"Error {err_code}: {err_msg.get('message', str(err_msg))}"
                         else:
                             err_str = str(err_msg)
-                            err_code = 403 if '403' in err_str else 0
-                        tasks[task_id]['status'] = 'failed'
-                        tasks[task_id]['error'] = err_str
-                        stats['total_failed'] += 1
-                        worker.total_failed += 1
+                            if '403' in err_str:
+                                err_code = 403
+                            elif '400' in err_str:
+                                err_code = 400
+                            else:
+                                err_code = 0
                         worker.last_error = err_str[:100]
-                        self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
+
+                        # === 400: Bo qua luon, khong retry ===
+                        if err_code == 400:
+                            tasks[task_id]['status'] = 'failed'
+                            tasks[task_id]['error'] = err_str
+                            stats['total_failed'] += 1
+                            worker.total_failed += 1
+                            self._log(f"[{worker_name}] SKIP (400): {task_id[:8]}... | {err_str[:80]}", "WARN")
+                            if worker.session:
+                                worker.session._consecutive_403 = 0
+                        # === 403: Retry + recovery ===
+                        elif err_code == 403:
+                            # Track retry count cho task nay (toi da 10 lan = 2 vong x 5 lan)
+                            retry_count = tasks[task_id].get('_403_retries', 0)
+                            max_retries = 10  # 2 vong x 5 lan
+                            if retry_count < max_retries:
+                                tasks[task_id]['_403_retries'] = retry_count + 1
+                                tasks[task_id]['status'] = 'queued'
+                                tasks[task_id]['error'] = ''
+                                self._log(f"[{worker_name}] RE-QUEUE (403): {task_id[:8]}... | retry {retry_count + 1}/{max_retries}", "WARN")
+                                # Re-queue task de retry sau khi recovery
+                                with queue_lock:
+                                    task_queue.append(task_id)
+                            else:
+                                tasks[task_id]['status'] = 'failed'
+                                tasks[task_id]['error'] = f"403 x{max_retries} - het retry"
+                                stats['total_failed'] += 1
+                                worker.total_failed += 1
+                                self._log(f"[{worker_name}] FAIL (403 x{max_retries}): {task_id[:8]}... | Het retry!", "ERROR")
+                        else:
+                            tasks[task_id]['status'] = 'failed'
+                            tasks[task_id]['error'] = err_str
+                            stats['total_failed'] += 1
+                            worker.total_failed += 1
+                            self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
 
                         # === 403 RECOVERY ===
-                        # Moi lan 403 → DOI IPv6 + fingerprint moi + restart
+                        # Lan 1-3: DOI IPv6 + fingerprint moi (giu data, nhanh)
+                        # Lan 4:   CLEAR DATA + DOI IPv6 + login lai (cung account)
+                        # Lan 5+:  CLEAR DATA + DOI IPv6 + DOI ACCOUNT MOI + login
+                        # Counter chi reset khi TAO ANH THANH CONG hoac doi account
                         if err_code == 403 and worker.session:
                             worker.session._consecutive_403 += 1
                             c403 = worker.session._consecutive_403
 
-                            self._log(f"[{worker_name}] [403] Lan thu {c403} → DOI IPv6 + fingerprint moi", "WARN")
+                            if c403 <= 3:
+                                action = f"DOI IPv6 + fingerprint moi (lan {c403}/3)"
+                            elif c403 == 4:
+                                action = "CLEAR DATA + DOI IPv6 + LOGIN LAI"
+                            else:
+                                action = "CLEAR DATA + DOI IPv6 + DOI ACCOUNT MOI"
+                            self._log(f"[{worker_name}] [403] Lan thu {c403} → {action}", "WARN")
 
                             # Cleanup browser data ngay
                             try:
@@ -454,14 +554,44 @@ class ChromePool:
                                 else:
                                     self._log(f"[{worker_name}] [403] Khong co IPv6 khac", "WARN")
 
-                                # Restart + fingerprint moi
-                                ok = worker.session.restart_with_new_fingerprint(clear_data=False)
-                                worker.ready = ok
-                                if ok:
-                                    worker.session._consecutive_403 = 0
-                                    self._log(f"[{worker_name}] [403] Restart OK - IPv6 moi + fingerprint moi", "OK")
+                                if c403 <= 3:
+                                    # Lan 1-3: Restart + fingerprint moi (giu data)
+                                    ok = worker.session.restart_with_new_fingerprint(clear_data=False)
+                                    worker.ready = ok
+                                    if ok:
+                                        self._log(f"[{worker_name}] [403] Restart OK - IPv6 moi + fingerprint moi", "OK")
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Restart FAIL!", "ERROR")
+
+                                elif c403 == 4:
+                                    # Lan 4: CLEAR DATA + login lai (cung account)
+                                    ok = worker.session.restart_with_new_fingerprint(clear_data=True)
+                                    worker.ready = ok
+                                    if ok:
+                                        self._log(f"[{worker_name}] [403] Clear data + login lai OK", "OK")
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Clear data + login FAIL!", "ERROR")
+
                                 else:
-                                    self._log(f"[{worker_name}] [403] Restart FAIL!", "ERROR")
+                                    # Lan 5+: DOI ACCOUNT MOI + clear data + login
+                                    old_email = worker.account['id'] if worker.account else "?"
+                                    new_account = self.get_next_account(old_email)
+                                    if new_account:
+                                        self._log(f"[{worker_name}] [403] DOI ACCOUNT: {old_email} → {new_account['id']}", "WARN")
+                                        worker.account = new_account
+                                        worker.session._account = new_account
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Khong co account khac, giu {old_email}", "WARN")
+
+                                    ok = worker.session.restart_with_new_fingerprint(clear_data=True)
+                                    worker.ready = ok
+                                    if ok:
+                                        # Reset counter sau khi doi account
+                                        worker.session._consecutive_403 = 0
+                                        self._log(f"[{worker_name}] [403] Doi account + clear data + login OK → reset counter", "OK")
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Doi account + login FAIL!", "ERROR")
+
                             except Exception as re:
                                 self._log(f"[{worker_name}] [403] Recovery error: {re}", "ERROR")
 
