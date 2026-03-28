@@ -1,3 +1,11 @@
+1.0.497
+2026-03-29 (VN)
+Change: 403 → DOI IPv6 NGAY moi lan (khong doi 9 lan)
+
+Truoc: 403 x5 (model 0) → switch model → 403 x2 (model 1) → ... → 9 lan moi doi IPv6
+Sau: MOI LAN 403 → doi IPv6 + fingerprint moi + restart Chrome
+
+---
 1.0.496
 2026-03-29 (VN)
 Change: FIX WORKERS KHONG CHAY - Retry setup + khong bo worker khi fail

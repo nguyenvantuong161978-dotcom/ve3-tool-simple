@@ -431,20 +431,13 @@ class ChromePool:
                         worker.last_error = err_str[:100]
                         self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
 
-                        # === 403 RECOVERY (giong API mode) ===
-                        # Model 0: 5 lan 403 → switch model 1
-                        # Model 1: 2 lan 403 → switch model 2
-                        # Model 2: 2 lan 403 → clear data + reset model 0
-                        # Moi lan restart → fingerprint moi
+                        # === 403 RECOVERY ===
+                        # Moi lan 403 → DOI IPv6 + fingerprint moi + restart
                         if err_code == 403 and worker.session:
                             worker.session._consecutive_403 += 1
                             c403 = worker.session._consecutive_403
-                            current_model = getattr(worker.session, '_current_model_index', 0)
-                            model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
-                            model_threshold = 5 if current_model == 0 else 2
-                            cleared_flag = getattr(worker.session, '_cleared_data_for_403', False)
 
-                            self._log(f"[{worker_name}] [403] Model {model_names[current_model]}: {c403}/{model_threshold}", "WARN")
+                            self._log(f"[{worker_name}] [403] Lan thu {c403} → DOI IPv6 + fingerprint moi", "WARN")
 
                             # Cleanup browser data ngay
                             try:
@@ -454,57 +447,27 @@ class ChromePool:
                             except Exception:
                                 pass
 
-                            if c403 < model_threshold:
-                                # Chua du threshold → restart + fingerprint moi (KHONG xoa data)
-                                self._log(f"[{worker_name}] [403] Restart + fingerprint moi (giu data)...", "WARN")
-                                worker.ready = False
-                                try:
-                                    ok = worker.session.restart_with_new_fingerprint(clear_data=False)
-                                    worker.ready = ok
-                                    if ok:
-                                        self._log(f"[{worker_name}] [403] Restart OK", "OK")
-                                    else:
-                                        self._log(f"[{worker_name}] [403] Restart FAIL!", "ERROR")
-                                except Exception as re:
-                                    self._log(f"[{worker_name}] [403] Restart error: {re}", "ERROR")
+                            worker.ready = False
+                            try:
+                                # Doi IPv6
+                                new_ip = self.get_next_ipv6(worker.ipv6)
+                                if new_ip and new_ip != worker.ipv6:
+                                    self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6} → {new_ip}", "WARN")
+                                    worker.session.rotate_ipv6(new_ip)
+                                    worker.ipv6 = new_ip
+                                else:
+                                    self._log(f"[{worker_name}] [403] Khong co IPv6 khac", "WARN")
 
-                            elif current_model < 2:
-                                # Du threshold → switch model (KHONG xoa data)
-                                next_model = current_model + 1
-                                self._log(f"[{worker_name}] [403] SWITCH: {model_names[current_model]} → {model_names[next_model]}", "WARN")
-                                worker.session._current_model_index = next_model
-                                worker.session._consecutive_403 = 0
-                                worker.ready = False
-                                try:
-                                    ok = worker.session.restart_with_new_fingerprint(clear_data=False)
-                                    worker.ready = ok
-                                    if ok:
-                                        self._log(f"[{worker_name}] [403] Switch OK → {model_names[next_model]}", "OK")
-                                except Exception as re:
-                                    self._log(f"[{worker_name}] [403] Switch error: {re}", "ERROR")
-
-                            else:
-                                # Het 3 models (5+2+2=9 lan) → DOI IPv6 + XOA DATA + LOGIN LAI
-                                # Gop thanh 1 buoc: doi IP + xoa data + login (thay vi 2 buoc rieng)
-                                self._log(f"[{worker_name}] [403] Het 3 models → DOI IPv6 + XOA DATA + LOGIN LAI!", "WARN")
-                                worker.session._current_model_index = 0
-                                worker.session._consecutive_403 = 0
-                                worker.ready = False
-                                try:
-                                    # Doi IPv6 truoc khi xoa data
-                                    new_ip = self.get_next_ipv6(worker.ipv6)
-                                    if new_ip:
-                                        self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6[:20]}... → {new_ip[:20]}...", "WARN")
-                                        worker.session.rotate_ipv6(new_ip)
-                                        worker.ipv6 = new_ip
-                                    else:
-                                        self._log(f"[{worker_name}] [403] Khong co IPv6 khac, chi xoa data + restart", "WARN")
-                                    ok = worker.session.restart_with_new_fingerprint(clear_data=True)
-                                    worker.ready = ok
-                                    if ok:
-                                        self._log(f"[{worker_name}] [403] IPv6 + clear data + login OK", "OK")
-                                except Exception as re:
-                                    self._log(f"[{worker_name}] [403] Reset error: {re}", "ERROR")
+                                # Restart + fingerprint moi
+                                ok = worker.session.restart_with_new_fingerprint(clear_data=False)
+                                worker.ready = ok
+                                if ok:
+                                    worker.session._consecutive_403 = 0
+                                    self._log(f"[{worker_name}] [403] Restart OK - IPv6 moi + fingerprint moi", "OK")
+                                else:
+                                    self._log(f"[{worker_name}] [403] Restart FAIL!", "ERROR")
+                            except Exception as re:
+                                self._log(f"[{worker_name}] [403] Recovery error: {re}", "ERROR")
 
                         elif err_code != 403 and worker.session:
                             worker.session._consecutive_403 = 0
