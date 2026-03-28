@@ -464,14 +464,36 @@ class ChromePool:
                             err_str = str(err_msg)
                             if '403' in err_str:
                                 err_code = 403
+                            elif '429' in err_str or '253' in err_str or 'quota' in err_str.lower():
+                                err_code = 429
                             elif '400' in err_str:
                                 err_code = 400
                             else:
                                 err_code = 0
                         worker.last_error = err_str[:100]
 
+                        # === 429/QUOTA: Switch model ngay (giong API mode) ===
+                        if err_code == 429:
+                            tasks[task_id]['status'] = 'queued'
+                            tasks[task_id]['error'] = ''
+                            retry_count = tasks[task_id].get('_quota_retries', 0)
+                            if retry_count < 3 and worker.session:
+                                tasks[task_id]['_quota_retries'] = retry_count + 1
+                                # Switch sang model tiep theo
+                                old_idx = worker.session._current_model_index
+                                worker.session._current_model_index = (old_idx + 1) % 3
+                                self._log(f"[{worker_name}] [QUOTA] Model {old_idx} → {worker.session._current_model_index} | retry {retry_count + 1}/3", "WARN")
+                                with queue_lock:
+                                    task_queue.append(task_id)
+                            else:
+                                tasks[task_id]['status'] = 'failed'
+                                tasks[task_id]['error'] = f"Quota exhausted - all models tried"
+                                stats['total_failed'] += 1
+                                worker.total_failed += 1
+                                self._log(f"[{worker_name}] FAIL (QUOTA): {task_id[:8]}... | Het model!", "ERROR")
+
                         # === 400: Bo qua luon, khong retry ===
-                        if err_code == 400:
+                        elif err_code == 400:
                             tasks[task_id]['status'] = 'failed'
                             tasks[task_id]['error'] = err_str
                             stats['total_failed'] += 1

@@ -1,3 +1,14 @@
+1.0.518
+2026-03-29 (VN)
+Change: Dong bo popup/dialog/quota logic tu API mode sang Server mode
+
+- Server: Them "Da hieu"/"I understand" vao dismiss_popups (giong API mode)
+- Server: Them dialog "Toi dong y"/"Agree"/"Accept" bang JS (giong API line 5746-5760)
+- Server: Them empty point fallback khi dismiss popup
+- Server: Them _is_logged_out() detect logout (giong API mode)
+- Server: Them quota/429 error handling - switch model ngay (giong API mode)
+- API mode: Them "Da hieu"/"I understand" vao tat ca 4 vi tri dismiss popup
+
 1.0.517
 2026-03-29 (VN)
 Change: GUI - Day LOCAL SERVER len tren cho de quan sat

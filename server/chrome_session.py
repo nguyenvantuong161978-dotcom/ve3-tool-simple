@@ -859,11 +859,13 @@ class ChromeSession:
         return False
 
     def _dismiss_popups(self):
-        """Dismiss popup thông báo (Bắt đầu / Get started / Got it). (giống API mode)"""
+        """Dismiss popup thông báo (Bắt đầu / Get started / Got it / Tôi đồng ý). (giống API mode)"""
         try:
+            # 1. Button popups (Bắt đầu / Get started / Got it / Dismiss)
             for sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
                         'tag:button@@text():Bắt Đầu', 'tag:button@@text():Got it',
-                        'tag:button@@text():Dismiss']:
+                        'tag:button@@text():Dismiss',
+                        'tag:button@@text():Đã hiểu', 'tag:button@@text():I understand']:
                 try:
                     btn = self.page.ele(sel, timeout=0.5)
                     if btn:
@@ -873,6 +875,44 @@ class ChromeSession:
                         return True
                 except:
                     continue
+
+            # 2. Dialog "Tôi đồng ý" / "Agree" / "Accept" (giống API mode line 5746-5760)
+            self.page.run_js("""
+                var dialog = document.querySelector('[role="dialog"]');
+                if (dialog) {
+                    var btns = dialog.querySelectorAll('button');
+                    for (var i = 0; i < btns.length; i++) {
+                        var text = btns[i].textContent.trim();
+                        if (text.indexOf('đồng ý') > -1 || text.indexOf('Agree') > -1 ||
+                            text.indexOf('Accept') > -1 || text.indexOf('Đã hiểu') > -1 ||
+                            text.indexOf('I understand') > -1) {
+                            btns[i].click();
+                            break;
+                        }
+                    }
+                }
+            """)
+
+            # 3. Fallback: Click diem trong de dismiss popup (giong API mode line 1831)
+            self.page.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
+        except:
+            pass
+        return False
+
+    def _is_logged_out(self) -> bool:
+        """Detect logout - check URL redirect ve trang login Google. (giong API mode)"""
+        try:
+            url = self.page.url or ''
+            logout_indicators = [
+                "accounts.google.com/signin",
+                "accounts.google.com/v3/signin",
+                "accounts.google.com/ServiceLogin",
+                "accounts.google.com/AccountChooser",
+            ]
+            for indicator in logout_indicators:
+                if indicator in url:
+                    self.log(f"[LOGOUT] Detected: {indicator}", "WARN")
+                    return True
         except:
             pass
         return False

@@ -1732,6 +1732,8 @@ class DrissionFlowAPI:
                         'tag:button@@text():Bắt Đầu',
                         'tag:button@@text():Got it',
                         'tag:button@@text():Dismiss',
+                        'tag:button@@text():Đã hiểu',
+                        'tag:button@@text():I understand',
                     ]
                     for sel in dismiss_selectors:
                         try:
@@ -1813,7 +1815,8 @@ class DrissionFlowAPI:
                     # v1.0.321: Lâu quá → thử dismiss popup
                     try:
                         for _sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
-                                     'tag:button@@text():Got it']:
+                                     'tag:button@@text():Got it', 'tag:button@@text():Đã hiểu',
+                                     'tag:button@@text():I understand']:
                             try:
                                 _btn = self.driver.ele(_sel, timeout=1)
                                 if _btn:
@@ -1846,7 +1849,8 @@ class DrissionFlowAPI:
                         self.driver.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
                         time.sleep(1)
                         # Thử click "Bắt đầu" lần nữa (popup có thể hiện lại)
-                        for sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started']:
+                        for sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
+                                    'tag:button@@text():Đã hiểu', 'tag:button@@text():I understand']:
                             try:
                                 popup_btn = self.driver.ele(sel, timeout=1)
                                 if popup_btn:
@@ -3609,7 +3613,8 @@ class DrissionFlowAPI:
                 # Popup xuất hiện SAU khi click "Create with Flow", che nút "Dự án mới"
                 try:
                     for _dismiss_sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
-                                         'tag:button@@text():Got it']:
+                                         'tag:button@@text():Got it', 'tag:button@@text():Đã hiểu',
+                                         'tag:button@@text():I understand']:
                         try:
                             _dismiss_btn = self.driver.ele(_dismiss_sel, timeout=0.5)
                             if _dismiss_btn:
