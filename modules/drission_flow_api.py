@@ -1365,8 +1365,9 @@ class DrissionFlowAPI:
         self._t2v_mode_selected = False  # True = đã chọn T2V mode + Lower Priority model
         self._image_mode_selected = False  # True = đã chọn Image mode
 
-        # Fingerprint spoof: 0 = khong spoof, >0 = spoof active (seed)
-        self._fingerprint_seed = 0
+        # v1.0.512: LUON tao fingerprint tu dau, khong doi 403
+        from modules.fingerprint_data import get_unique_seed
+        self._fingerprint_seed = get_unique_seed()
 
     def log(self, msg: str, level: str = "INFO"):
         """Log message - chỉ dùng 1 trong 2: callback hoặc print."""
@@ -1384,8 +1385,8 @@ class DrissionFlowAPI:
 
     def activate_fingerprint_spoof(self):
         """Bat fingerprint spoof voi seed moi (moi lan 403 goi 1 lan)."""
-        import random
-        self._fingerprint_seed = random.randint(10000, 99999)
+        from modules.fingerprint_data import get_unique_seed
+        self._fingerprint_seed = get_unique_seed()
         self.log(f"[SPOOF] Activated fingerprint spoof (seed={self._fingerprint_seed})")
         self._inject_fingerprint()
 
@@ -1399,8 +1400,8 @@ class DrissionFlowAPI:
         if self._fingerprint_seed <= 0 or not self.driver:
             return
         try:
-            from server.chrome_session import _build_fingerprint_js
-            js = _build_fingerprint_js(self._fingerprint_seed)
+            from modules.fingerprint_data import build_fingerprint_js
+            js = build_fingerprint_js(self._fingerprint_seed)
 
             # 1. CDP: Inject cho TAT CA page loads sau nay (TRUOC khi scripts chay)
             try:
@@ -1444,53 +1445,13 @@ class DrissionFlowAPI:
             self.log(f"[SPOOF] Inject error: {e}", "WARN")
 
     def _inject_fingerprint_fallback(self):
-        """Fallback inject khi khong import duoc server module."""
-        import random
-        r = random.Random(self._fingerprint_seed)
-        gpus = [
-            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
-        ]
-        screens = [(1920,1080),(2560,1440),(1366,768),(1536,864),(1440,900)]
-        cores_list = [4,6,8,12,16]
-        mem_list = [4,8,16,32]
-
-        vendor, renderer = r.choice(gpus)
-        sw, sh = r.choice(screens)
-        cores = r.choice(cores_list)
-        mem = r.choice(mem_list)
-        nr, ng, nb = r.randint(1,5), r.randint(1,5), r.randint(1,5)
-        audio = r.uniform(-0.1, 0.1)
-
-        js = f"""
-        (function(){{
-            var V="{vendor}",R="{renderer}";
-            var gp=WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter=function(p){{
-                if(p===37445||p===0x9245)return V;if(p===37446||p===0x9246)return R;return gp.call(this,p);}};
-            if(typeof WebGL2RenderingContext!=='undefined'){{
-                var gp2=WebGL2RenderingContext.prototype.getParameter;
-                WebGL2RenderingContext.prototype.getParameter=function(p){{
-                    if(p===37445||p===0x9245)return V;if(p===37446||p===0x9246)return R;return gp2.call(this,p);}};}}
-            var otd=HTMLCanvasElement.prototype.toDataURL;
-            HTMLCanvasElement.prototype.toDataURL=function(t){{
-                try{{var c=this.getContext('2d');if(c){{var d=c.getImageData(0,0,Math.min(this.width,2),1);
-                if(d.data.length>=4){{d.data[0]=(d.data[0]+{nr})%256;d.data[1]=(d.data[1]+{ng})%256;d.data[2]=(d.data[2]+{nb})%256;c.putImageData(d,0,0);}}}}}}catch(e){{}}
-                return otd.call(this,t);}};
-            try{{Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores},configurable:true}});}}catch(e){{}}
-            try{{Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem},configurable:true}});}}catch(e){{}}
-            try{{Object.defineProperty(screen,'width',{{get:()=>{sw},configurable:true}});}}catch(e){{}}
-            try{{Object.defineProperty(screen,'height',{{get:()=>{sh},configurable:true}});}}catch(e){{}}
-            try{{Object.defineProperty(screen,'availWidth',{{get:()=>{sw},configurable:true}});}}catch(e){{}}
-            try{{Object.defineProperty(screen,'availHeight',{{get:()=>{sh}-40,configurable:true}});}}catch(e){{}}
-            var ogf=AnalyserNode.prototype.getFloatFrequencyData;
-            AnalyserNode.prototype.getFloatFrequencyData=function(a){{ogf.call(this,a);for(var i=0;i<Math.min(a.length,10);i++)a[i]+={audio:.6f};}};
-            console.log('[SPOOF] seed={self._fingerprint_seed}');
-        }})();
-        """
+        """Fallback inject khi khong import duoc server module - dung fingerprint_data truc tiep."""
+        try:
+            from modules.fingerprint_data import build_fingerprint_js
+            js = build_fingerprint_js(self._fingerprint_seed)
+        except ImportError:
+            self.log("[SPOOF] Cannot import fingerprint_data module!", "ERROR")
+            return
         try:
             self.driver.run_js(js)
             self.log(f"[SPOOF] Injected fallback (seed={self._fingerprint_seed})")

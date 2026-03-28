@@ -1,3 +1,12 @@
+1.0.512
+2026-03-29 (VN)
+Change: Mo rong fingerprint pool 53M+ combos + khong trung lap + fix mat giua chung
+
+- Tach modules/fingerprint_data.py: 65 GPU x 15 screen x 11 cores x 5 mem x 1000 canvas = 53M+ combos
+- get_unique_seed(): Dam bao moi lan doi fingerprint KHONG trung lap (track 50k seeds)
+- Fix: LUON inject fingerprint tu dau (khong doi 403 moi inject)
+- Fix: Xoa duplicate hardcode pool o drission_flow_api.py, import tu fingerprint_data.py
+
 1.0.511
 2026-03-29 (VN)
 Change: Tang Excel save retry tu 3 len 10 lan cho tat ca mode

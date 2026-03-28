@@ -68,78 +68,15 @@ JS_CLEANUP = """
 })();
 """
 
-# Fingerprint spoof data
-_FAKE_GPUS = [
-    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2070 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (AMD)", "renderer": "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (AMD)", "renderer": "ANGLE (AMD, AMD Radeon RX 5700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (Intel)", "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (Intel)", "renderer": "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
-]
-_FAKE_SCREENS = [
-    {"width": 1920, "height": 1080},
-    {"width": 2560, "height": 1440},
-    {"width": 1366, "height": 768},
-    {"width": 1536, "height": 864},
-    {"width": 1440, "height": 900},
-]
-_FAKE_CORES = [4, 6, 8, 12, 16]
-_FAKE_MEMORY = [4, 8, 16, 32]
-
-
-def _build_fingerprint_js(seed: int) -> str:
-    """Tao JS spoof WebGL/Canvas/Hardware fingerprint tu seed."""
-    import random as _rng
-    r = _rng.Random(seed)
-    gpu = r.choice(_FAKE_GPUS)
-    scr = r.choice(_FAKE_SCREENS)
-    cores = r.choice(_FAKE_CORES)
-    mem = r.choice(_FAKE_MEMORY)
-    nr, ng, nb = r.randint(1, 5), r.randint(1, 5), r.randint(1, 5)
-    audio_noise = r.uniform(-0.1, 0.1)
-
-    return f"""
-    (function(){{
-        // WebGL spoof
-        var V="{gpu['vendor']}",R="{gpu['renderer']}";
-        var gp=WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.getParameter=function(p){{
-            if(p===37445||p===0x9245)return V;
-            if(p===37446||p===0x9246)return R;
-            return gp.call(this,p);
-        }};
-        if(typeof WebGL2RenderingContext!=='undefined'){{
-            var gp2=WebGL2RenderingContext.prototype.getParameter;
-            WebGL2RenderingContext.prototype.getParameter=function(p){{
-                if(p===37445||p===0x9245)return V;
-                if(p===37446||p===0x9246)return R;
-                return gp2.call(this,p);
-            }};
-        }}
-        // Canvas noise
-        var otd=HTMLCanvasElement.prototype.toDataURL;
-        HTMLCanvasElement.prototype.toDataURL=function(t){{
-            try{{var c=this.getContext('2d');if(c){{var d=c.getImageData(0,0,Math.min(this.width,2),1);
-            if(d.data.length>=4){{d.data[0]=(d.data[0]+{nr})%256;d.data[1]=(d.data[1]+{ng})%256;d.data[2]=(d.data[2]+{nb})%256;c.putImageData(d,0,0);}}}}}}catch(e){{}}
-            return otd.call(this,t);
-        }};
-        // Hardware (try/catch vi CDP co the da inject truoc)
-        try{{Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores},configurable:true}});}}catch(e){{}}
-        try{{Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem},configurable:true}});}}catch(e){{}}
-        // Screen
-        try{{Object.defineProperty(screen,'width',{{get:()=>{scr['width']},configurable:true}});}}catch(e){{}}
-        try{{Object.defineProperty(screen,'height',{{get:()=>{scr['height']},configurable:true}});}}catch(e){{}}
-        try{{Object.defineProperty(screen,'availWidth',{{get:()=>{scr['width']},configurable:true}});}}catch(e){{}}
-        try{{Object.defineProperty(screen,'availHeight',{{get:()=>{scr['height']}-40,configurable:true}});}}catch(e){{}}
-        // Audio
-        var ogf=AnalyserNode.prototype.getFloatFrequencyData;
-        AnalyserNode.prototype.getFloatFrequencyData=function(a){{ogf.call(this,a);for(var i=0;i<Math.min(a.length,10);i++)a[i]+={audio_noise:.6f};}};
-        console.log('[SPOOF] seed={seed} gpu={gpu["renderer"][:30]}...');
-    }})();
-    """
+# v1.0.512: Import tu fingerprint_data.py (pool 65 GPU, 15 screen, 53M+ combos)
+from modules.fingerprint_data import (
+    FAKE_GPUS as _FAKE_GPUS,
+    FAKE_SCREENS as _FAKE_SCREENS,
+    FAKE_CORES as _FAKE_CORES,
+    FAKE_MEMORY as _FAKE_MEMORY,
+    build_fingerprint_js as _build_fingerprint_js,
+    get_unique_seed as _get_unique_seed,
+)
 
 
 JS_CLICK_NEW_PROJECT = """
@@ -464,7 +401,8 @@ class ChromeSession:
         self.project_url = None
         self._image_mode_selected = False
         self._account = None  # Tai khoan dang dung
-        self._fingerprint_seed = 0  # 0 = no spoof, >0 = spoof active
+        # v1.0.512: LUON tao fingerprint tu dau, khong doi 403
+        self._fingerprint_seed = _get_unique_seed()
         self._consecutive_403 = 0   # Dem 403 lien tiep
         self._current_model_index = 0  # 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
         self._cleared_data_for_403 = False  # Da clear data chua
@@ -599,8 +537,7 @@ class ChromeSession:
 
         Returns: True neu restart thanh cong.
         """
-        import random
-        self._fingerprint_seed = random.randint(10000, 99999)
+        self._fingerprint_seed = _get_unique_seed()
         action = "RESTART + CLEAR DATA" if clear_data else "RESTART (giu data)"
         self.log(f"[SPOOF] === {action} voi fingerprint moi (seed={self._fingerprint_seed}) ===")
 
