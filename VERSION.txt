@@ -1,9 +1,15 @@
-1.0.475
+1.0.476
 2026-03-28 (VN)
-Change: Dashboard Settings - chon IPv6/Chrome count truoc khi start
+Change: Server GUI - Giao dien cai dat + quan ly Chrome Server
 
 Thay doi:
-- v1.0.475: DASHBOARD SETTINGS
+- v1.0.476: SERVER GUI (Tkinter)
+  * server/server_gui.py: Giao dien cai dat + monitor
+    - Trang 1: Cai dat IPv6 ON/OFF, so Chrome (1-5/tat ca)
+    - Bam START → khoi dong Flask + Chrome workers
+    - Trang 2: Hien trang thai workers, stats, logs realtime
+  * START_SERVER.bat → chay server_gui.py
+- v1.0.475: DASHBOARD SETTINGS (web)
   * Mo dashboard → thay panel cai dat truoc khi start
   * Toggle IPv6 ON/OFF (default: ON)
   * Chon so Chrome: 1/2/3/4/5/tat ca
