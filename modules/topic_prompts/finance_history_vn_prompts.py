@@ -514,7 +514,16 @@ Return JSON only:
                              batch_size: int) -> str:
         return f"""Create detailed CARTOON ILLUSTRATION prompts with VIETNAMESE AESTHETIC for these {batch_size} scenes.
 
-IMPORTANT: Each scene becomes a VIDEO CLIP. Prompts must create visuals that MATCH the narration closely.
+#1 PRIORITY - CONTENT MATCHING (QUAN TRONG NHAT):
+- The img_prompt MUST illustrate EXACTLY what the narrator is SAYING in the "Text" field
+- Read the "Text" field carefully - this is what viewers HEAR. The image MUST match what they hear.
+- If Text talks about "tăng trưởng GDP thập niên 1990" → image MUST show 1990s Vietnamese economic scene
+- If Text talks about "khủng hoảng tài chính" → image MUST show financial crisis scene
+- If Text talks about "xuất khẩu gạo" → image MUST show rice export/trade scene
+- DO NOT create generic "narrator ngồi ở quán cà phê" images for every scene
+- Each scene's image must be SPECIFIC to its narration content
+- "Visual moment" is a GUIDE, but "Text" is the TRUTH - if they conflict, follow "Text"
+- The narrator can appear IN the historical scene (not always at cafe)
 
 VISUAL STYLE - VIETNAMESE AESTHETIC (MUST follow for ALL scenes):
 {context_lock}
@@ -549,10 +558,10 @@ SCENES TO PROCESS ({batch_size} scenes - create EXACTLY {batch_size} prompts):
 
 CRITICAL REQUIREMENTS:
 1. Create EXACTLY {batch_size} scene prompts
-2. Each img_prompt MUST be UNIQUE and match the scene's narration
+2. #1 PRIORITY: Each img_prompt MUST illustrate the SPECIFIC content from the "Text" field - NOT generic "narrator ở quán cà phê"
 3. Include the FULL character description (from character_lock) in every prompt where character appears
 4. Describe data visualizations as ACTUAL OBJECTS in the scene
-5. CRITICAL: NO TEXT/WORDS/LABELS in image prompts - use NUMBERS, ARROWS, CURRENCY SYMBOLS, PERCENTAGE SIGNS instead
+5. NO TEXT/WORDS/LABELS in image prompts - use NUMBERS, ARROWS, CURRENCY SYMBOLS, PERCENTAGE SIGNS instead
 6. End every prompt with: "detailed cartoon illustration style, Vietnamese aesthetic, warm earthy tones, soft lighting"
 
 For each scene, create:

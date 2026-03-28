@@ -356,6 +356,13 @@ Return JSON only:
                              batch_size: int) -> str:
         return f"""Create detailed image prompts for these {batch_size} scenes.
 
+#1 PRIORITY - CONTENT MATCHING (MOST IMPORTANT):
+- The img_prompt MUST illustrate EXACTLY what the narrator is SAYING in the "Text" field
+- Read the "Text" field carefully - this is what viewers HEAR. The image MUST match what they hear.
+- DO NOT create generic/abstract images that could match ANY scene
+- Each scene's image must be SPECIFIC to its narration content
+- "Visual moment" is a GUIDE, but "Text" is the TRUTH - if they conflict, follow "Text"
+
 VISUAL CONTEXT (use as prefix):
 {context_lock}
 

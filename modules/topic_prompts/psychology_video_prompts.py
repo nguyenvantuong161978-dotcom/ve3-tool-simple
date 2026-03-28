@@ -343,7 +343,13 @@ Return JSON only:
                              batch_size: int) -> str:
         return f"""Create detailed TEXT-TO-VIDEO prompts for these {batch_size} scenes.
 
-VIDEO-ONLY MODE: Each prompt will generate a VIDEO directly (no image first).
+#1 PRIORITY - CONTENT MATCHING (QUAN TRONG NHAT):
+- The video_prompt MUST illustrate EXACTLY what the narrator is SAYING in the "Text" field
+- Read the "Text" field carefully - this is what viewers HEAR. The video MUST match what they hear.
+- DO NOT create generic/abstract videos. Each video must be SPECIFIC to its narration content.
+- "Visual moment" is a GUIDE, but "Text" is the TRUTH - follow "Text" if they conflict.
+
+VIDEO-ONLY MODE: Each prompt generates a VIDEO directly (no image first).
 The video_prompt must be SELF-CONTAINED with FULL character description and scene details.
 
 VISUAL STYLE:

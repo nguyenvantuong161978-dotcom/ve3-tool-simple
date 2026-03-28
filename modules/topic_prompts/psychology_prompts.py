@@ -563,12 +563,20 @@ Return JSON only:
                              batch_size: int) -> str:
         return f"""Create detailed CARTOON ILLUSTRATION prompts for these {batch_size} scenes.
 
-IMPORTANT: Each scene becomes a VIDEO CLIP. Prompts must create visuals that MATCH the narration closely.
+#1 PRIORITY - CONTENT MATCHING (QUAN TRONG NHAT):
+- The img_prompt MUST illustrate EXACTLY what the narrator is SAYING in the "Text" field
+- Read the "Text" field carefully - this is what viewers HEAR. The image MUST match what they hear.
+- If Text says "người ta thường so sánh bản thân với người khác" → image MUST show character comparing with others
+- If Text says "não bộ tiết ra dopamine" → image MUST show brain with dopamine visualization
+- If Text says "mối quan hệ độc hại" → image MUST show toxic relationship visual metaphor
+- DO NOT create generic/abstract images that could match ANY scene
+- Each scene's image must be SPECIFIC to its narration content
+- "Visual moment" is a GUIDE, but "Text" is the TRUTH - if they conflict, follow "Text"
 
 VISUAL STYLE (MUST follow for ALL scenes):
 {context_lock}
 
-CRITICAL ILLUSTRATION STYLE RULES:
+ILLUSTRATION STYLE RULES:
 - Clean minimalist cartoon illustration with clean black outlines
 - Paper texture background
 - Main character: use the FULL character_lock description from reference
@@ -592,10 +600,10 @@ SCENES TO PROCESS ({batch_size} scenes - create EXACTLY {batch_size} prompts):
 
 CRITICAL REQUIREMENTS:
 1. Create EXACTLY {batch_size} scene prompts
-2. Each img_prompt MUST be UNIQUE and match the scene's narration
+2. #1 PRIORITY: Each img_prompt MUST illustrate the SPECIFIC content from the "Text" field - NOT generic images
 3. Include the FULL character description (from character_lock) in every prompt where character appears
 4. Describe visual metaphors as ACTUAL OBJECTS in the scene, NOT as meta-instructions
-5. CRITICAL: NO TEXT/WORDS/LABELS in image prompts - AI generates text with spelling errors. Use ICONS (heart, question mark, arrows, checkmark, X) and SYMBOLS instead
+5. NO TEXT/WORDS/LABELS in image prompts - use ICONS and SYMBOLS instead
 6. End every prompt with: "clean black outline illustration style, paper texture background"
 
 For each scene, create:
