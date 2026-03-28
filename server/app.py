@@ -467,6 +467,7 @@ def create_image():
         model_name = req.get('imageModelName', 'GEM_PIX_2')
         aspect_ratio = req.get('imageAspectRatio', 'IMAGE_ASPECT_RATIO_LANDSCAPE')
         seed = req.get('seed', None)
+        image_inputs = req.get('imageInputs', [])  # Reference images (media IDs)
 
         task_id = str(uuid.uuid4())
         with task_lock:
@@ -481,6 +482,7 @@ def create_image():
                 'model_name': model_name,
                 'aspect_ratio': aspect_ratio,
                 'seed': seed,
+                'image_inputs': image_inputs,
                 'vm_id': vm_id,
                 'worker': None,
             }

@@ -343,6 +343,7 @@ class ChromePool:
                     model_name=task.get('model_name', 'GEM_PIX_2'),
                     aspect_ratio=task.get('aspect_ratio', 'IMAGE_ASPECT_RATIO_LANDSCAPE'),
                     seed=task.get('seed'),
+                    image_inputs=task.get('image_inputs', []),
                 )
 
                 with task_lock:

@@ -168,18 +168,27 @@ JS_SELECT_MODEL = """
 """
 
 
-def build_interceptor_js(client_bearer_token: str, client_project_id: str) -> str:
+def build_interceptor_js(client_bearer_token: str, client_project_id: str,
+                         image_inputs: list = None) -> str:
     """
-    JS Interceptor - THAY bearer token + projectId (giống test_local_proxy.py).
+    JS Interceptor - THAY bearer token + projectId + inject imageInputs.
 
     Flow:
     1. Chrome gửi request với recaptchaToken hợp lệ
     2. Interceptor THAY: bearer token → client's token, projectId → client's projectId
-    3. GIỮ NGUYÊN recaptchaToken từ Chrome
-    4. Google nhận: token khách + captcha hợp lệ → tạo ảnh dưới tài khoản khách
+    3. Inject imageInputs (reference images) nếu có
+    4. GIỮ NGUYÊN recaptchaToken từ Chrome
+    5. Google nhận: token khách + captcha hợp lệ → tạo ảnh dưới tài khoản khách
     """
     safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
     safe_project = client_project_id.replace("\\", "\\\\").replace("'", "\\'")
+
+    # imageInputs JSON (hoặc null nếu không có)
+    if image_inputs and len(image_inputs) > 0:
+        import json
+        image_inputs_json = json.dumps(image_inputs)
+    else:
+        image_inputs_json = "null"
 
     return """
 window._response = null;
@@ -187,6 +196,7 @@ window._responseError = null;
 window._requestPending = false;
 window._clientBearerToken = '""" + safe_token + """';
 window._clientProjectId = '""" + safe_project + """';
+window._imageInputs = """ + image_inputs_json + """;
 
 (function() {
     if (window.__proxyInterceptReady) return 'ALREADY';
@@ -216,22 +226,33 @@ window._clientProjectId = '""" + safe_project + """';
                 console.log('[PROXY] 1. Replaced bearer token');
             }
 
-            // 2. THAY projectId trong body
-            if (window._clientProjectId && opts && opts.body) {
+            // 2. THAY projectId + inject imageInputs trong body
+            if (opts && opts.body) {
                 try {
                     var body = JSON.parse(opts.body);
-                    if (body.clientContext) {
-                        body.clientContext.projectId = window._clientProjectId;
+                    if (window._clientProjectId) {
+                        if (body.clientContext) {
+                            body.clientContext.projectId = window._clientProjectId;
+                        }
+                        if (body.requests) {
+                            body.requests.forEach(function(req) {
+                                if (req.clientContext) {
+                                    req.clientContext.projectId = window._clientProjectId;
+                                }
+                            });
+                        }
+                        var recap = body.clientContext ? body.clientContext.recaptchaToken : '';
+                        console.log('[PROXY] 2. projectId replaced, recaptcha kept: ' + (recap ? recap.substring(0,20)+'...' : 'EMPTY'));
                     }
-                    if (body.requests) {
+
+                    // 2b. Inject imageInputs (reference images) nếu có
+                    if (window._imageInputs && body.requests) {
                         body.requests.forEach(function(req) {
-                            if (req.clientContext) {
-                                req.clientContext.projectId = window._clientProjectId;
-                            }
+                            req.imageInputs = window._imageInputs;
                         });
+                        console.log('[PROXY] 2b. Injected ' + window._imageInputs.length + ' reference images');
                     }
-                    var recap = body.clientContext ? body.clientContext.recaptchaToken : '';
-                    console.log('[PROXY] 2. projectId replaced, recaptcha kept: ' + (recap ? recap.substring(0,20)+'...' : 'EMPTY'));
+
                     opts.body = JSON.stringify(body);
                 } catch(e) {
                     console.log('[PROXY] Parse body error:', e);
@@ -777,7 +798,7 @@ class ChromeSession:
     def generate_image(self, client_bearer_token: str, client_project_id: str,
                        client_prompt: str, model_name: str = 'GEM_PIX_2',
                        aspect_ratio: str = 'IMAGE_ASPECT_RATIO_LANDSCAPE',
-                       seed: int = None) -> dict:
+                       seed: int = None, image_inputs: list = None) -> dict:
         """
         Tạo ảnh - giống y hệt test_local_proxy.py (đã hoạt động).
 
@@ -817,7 +838,9 @@ class ChromeSession:
 
             # 2. Inject interceptor (giống test step 3)
             self.log("Inject interceptor...")
-            js = build_interceptor_js(client_bearer_token, client_project_id)
+            if image_inputs:
+                self.log(f"Reference images: {len(image_inputs)} media ID(s)")
+            js = build_interceptor_js(client_bearer_token, client_project_id, image_inputs)
             r = self.page.run_js(js)
             self.log(f"Interceptor: {r}")
 

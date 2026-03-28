@@ -1,8 +1,16 @@
-1.0.477
+1.0.478
 2026-03-28 (VN)
-Change: FIX 403 - Interceptor giong y het test_local_proxy.py
+Change: REFERENCE IMAGES - Server ho tro imageInputs (tham chieu)
 
 Thay doi:
+- v1.0.478: REFERENCE IMAGES (imageInputs)
+  * server/chrome_session.py: build_interceptor_js() nhan image_inputs
+    - Inject imageInputs vao body.requests[] khi gui Google
+    - generate_image() nhan image_inputs parameter
+  * server/chrome_pool.py: Truyen image_inputs tu task xuong generate_image()
+  * server/app.py: Lay imageInputs tu request VM, luu vao task
+  * Test OK: 3/3 anh (1 goc + 2 co reference) thanh cong
+  * imageInputType = "IMAGE_INPUT_TYPE_REFERENCE" (giong tool)
 - v1.0.477: FIX 403 - GIONG TEST FILE
   * generate_image() copy y het flow tu test_local_proxy.py (da hoat dong)
   * Bo JS_CLEANUP truoc request (pha reCAPTCHA state → 403)
