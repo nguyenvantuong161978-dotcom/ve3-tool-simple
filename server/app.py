@@ -39,8 +39,12 @@ TOOL_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(TOOL_DIR))
 
 from flask import Flask, request, jsonify, Response
+import logging
 
 app = Flask(__name__)
+
+# Tat Flask request log (spam qua nhieu dong)
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 # ============================================================
 # Shared State
