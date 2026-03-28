@@ -397,11 +397,58 @@ class ChromeSession:
                 pass
         self.log("Chrome data cleared", "OK")
 
+    def _check_current_account(self) -> str:
+        """
+        Check email dang login trong Chrome hien tai.
+        Mo myaccount.google.com → doc email.
+        Returns: email string hoac "" neu chua login.
+        """
+        try:
+            if not self.page:
+                return ""
+            self.page.get("https://myaccount.google.com")
+            time.sleep(3)
+
+            current_url = self.page.url or ''
+            # Neu redirect ve accounts.google.com → chua login
+            if 'accounts.google.com' in current_url:
+                return ""
+
+            # Doc email tu page
+            email = self.page.run_js("""
+                // Tim email trong page
+                var els = document.querySelectorAll('[data-email]');
+                if (els.length > 0) return els[0].getAttribute('data-email');
+
+                // Fallback: tim text co @ trong header area
+                var all = document.querySelectorAll('header *');
+                for (var i = 0; i < all.length; i++) {
+                    var t = all[i].textContent.trim();
+                    if (t.indexOf('@') > 0 && t.indexOf('.') > 0 && t.length < 60) {
+                        return t;
+                    }
+                }
+
+                // Fallback 2: tim trong aria-label
+                var btns = document.querySelectorAll('[aria-label*="@"]');
+                if (btns.length > 0) {
+                    var label = btns[0].getAttribute('aria-label');
+                    var match = label.match(/[\\w.-]+@[\\w.-]+/);
+                    if (match) return match[0];
+                }
+
+                return '';
+            """)
+            return str(email or '').strip().lower()
+        except Exception as e:
+            self.log(f"Check account error: {e}", "WARN")
+            return ""
+
     def setup(self) -> bool:
         """
-        Full setup giống tool:
-        1. Nếu có _account → clear data + force login
-        2. Mở Chrome Portable
+        Full setup:
+        1. Mở Chrome → check account hiện tại
+        2. Nếu sai account → clear data + login đúng account
         3. Vào labs.google/fx/tools/flow
         4. Tạo project mới
         5. Đợi textarea sẵn sàng
@@ -415,16 +462,7 @@ class ChromeSession:
             self.log(f"Chrome not found: {self.chrome_path}", "ERROR")
             return False
 
-        # 1b. Nếu có account được assign → clear data + force login trước
-        if self._account:
-            self.log(f"Account assigned: {self._account['id']} → clear data + login")
-            self._clear_chrome_data()
-            login_ok = self._auto_login()
-            if not login_ok:
-                self.log(f"Dang nhap that bai: {self._account['id']}", "ERROR")
-                return False
-
-        # 2. Mở Chrome
+        # 2. Mở Chrome trước để check account
         self.log(f"Mở Chrome: {self.chrome_path}")
         self.log(f"Data: {self.chrome_data}")
         self.log(f"Port: {self.port}")
@@ -435,8 +473,6 @@ class ChromeSession:
         co.set_browser_path(str(self.chrome_path))
         co.set_user_data_path(str(self.chrome_data))
         co.set_address(f'127.0.0.1:{self.port}')
-
-        # Minimal flags cho Chrome Portable
         co.set_argument('--no-first-run')
         co.set_argument('--no-default-browser-check')
 
@@ -447,7 +483,54 @@ class ChromeSession:
             self.log(f"Chrome failed: {e}", "ERROR")
             return False
 
-        # 3. Vào Flow page
+        # 3. Check account hien tai
+        need_login = False
+        if self._account:
+            target_email = self._account['id'].strip().lower()
+            current_email = self._check_current_account()
+            self.log(f"Account hien tai: {current_email or '(chua login)'}")
+            self.log(f"Account can dung: {target_email}")
+
+            if current_email == target_email:
+                self.log("Account DUNG → khong can login lai", "OK")
+            else:
+                self.log(f"Account SAI hoac chua login → clear data + login", "WARN")
+                need_login = True
+        else:
+            # Khong co account assign → chi check da login chua
+            pass
+
+        # 4. Login neu can
+        if need_login:
+            # Dong Chrome hien tai
+            try:
+                self.page.quit()
+            except Exception:
+                pass
+            self.page = None
+
+            # Clear data + login
+            self._clear_chrome_data()
+            login_ok = self._auto_login()
+            if not login_ok:
+                self.log(f"Dang nhap that bai: {self._account['id']}", "ERROR")
+                return False
+
+            # Mo lai Chrome sau login
+            co2 = ChromiumOptions()
+            co2.set_browser_path(str(self.chrome_path))
+            co2.set_user_data_path(str(self.chrome_data))
+            co2.set_address(f'127.0.0.1:{self.port}')
+            co2.set_argument('--no-first-run')
+            co2.set_argument('--no-default-browser-check')
+            try:
+                self.page = ChromiumPage(co2)
+                self.log(f"Chrome mo lai: {self.page.title}", "OK")
+            except Exception as e:
+                self.log(f"Chrome restart failed: {e}", "ERROR")
+                return False
+
+        # 5. Vào Flow page
         self.log(f"Vao Flow: {FLOW_URL}")
         self.page.get(FLOW_URL)
         time.sleep(5)
@@ -455,7 +538,7 @@ class ChromeSession:
         current_url = self.page.url or ''
         self.log(f"URL: {current_url}")
 
-        # Check login - tu dong dang nhap neu chua (fallback cho truong hop khong co _account)
+        # Check login fallback (cho truong hop khong co _account)
         if 'accounts.google.com' in current_url:
             self.log("Chua dang nhap! Tu dong dang nhap...", "WARN")
             login_ok = self._auto_login()
@@ -467,14 +550,14 @@ class ChromeSession:
             time.sleep(5)
             current_url = self.page.url or ''
 
-        # 4. Tạo project mới
+        # 6. Tạo project mới
         if '/project/' not in current_url:
             success = self._create_new_project()
             if not success:
                 self.log("Không tạo được project mới!", "ERROR")
                 return False
 
-        # 5. Đợi textarea
+        # 7. Đợi textarea
         if self._wait_for_textarea():
             self.ready = True
             self.project_url = self.page.url

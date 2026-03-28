@@ -1,6 +1,6 @@
-1.0.469
+1.0.470
 2026-03-28 (VN)
-Change: FIX multi-Chrome login - moi Chrome dang nhap account rieng
+Change: SMART LOGIN - chi login khi account sai, khong clear data khi dung roi
 
 Thay doi:
 - v1.0.467: MULTI-CHROME SERVER
