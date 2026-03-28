@@ -1,6 +1,6 @@
-1.0.456
+1.0.457
 2026-03-28 (VN)
-Change: Fix server _create_new_project - robust nhu tool chinh
+Change: FIX VM khong gui anh qua local server
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN

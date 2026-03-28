@@ -1959,17 +1959,25 @@ class SmartEngine:
                 self.log(f"[Worker{worker_id}] Dùng pre-fetched token (project: {prefetched_project_id[:8] if prefetched_project_id else 'N/A'}...)")
 
         # Load settings.yaml for proxy_token và fallback
+        local_server_enabled = False
+        local_server_url = ''
         try:
             with open(settings_path, 'r', encoding='utf-8') as f:
                 cfg = yaml.safe_load(f) or {}
             proxy_token = cfg.get('proxy_api_token', '')
+            local_server_enabled = cfg.get('local_server_enabled', False)
+            local_server_url = cfg.get('local_server_url', '')
             # Only use settings.yaml bearer_token if no pre-fetched token
             if not bearer_token:
                 bearer_token = cfg.get('flow_bearer_token', '')
         except:
             pass
 
-        if not proxy_token:
+        # Local server mode: khong can proxy_token
+        if local_server_enabled and local_server_url:
+            self.log(f"[LOCAL SERVER] Mode: {local_server_url}")
+            self.log(f"[LOCAL SERVER] VM gui anh qua server, khong dung Chrome local")
+        elif not proxy_token:
             self.log("THIEU proxy_api_token trong settings.yaml!", "ERROR")
             self.log("API mode can proxy token tu nanoai.pics", "ERROR")
             return {"success": 0, "failed": len(prompts)}

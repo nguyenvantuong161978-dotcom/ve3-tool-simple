@@ -2398,9 +2398,19 @@ class BrowserFlowGenerator:
 
         # Check proxy support for API mode
         proxy_api_token = self.config.get('proxy_api_token', '')
+        local_server_enabled = self.config.get('local_server_enabled', False)
+        local_server_url = self.config.get('local_server_url', '')
+        has_local_server = local_server_enabled and local_server_url
 
         if mode == 'api':
-            if proxy_api_token:
+            if has_local_server:
+                self._log(f"[AUTO] API mode voi LOCAL SERVER - gui anh qua {local_server_url}")
+                return self.generate_from_prompts_api(
+                    prompts=prompts,
+                    excel_path=excel_path,
+                    bearer_token=bearer_token
+                )
+            elif proxy_api_token:
                 self._log("[AUTO] API mode voi proxy support - su dung proxy de bypass captcha")
                 # Use API mode with proxy for prompts
                 return self.generate_from_prompts_api(
