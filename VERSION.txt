@@ -1,6 +1,6 @@
-1.0.452
+1.0.454
 2026-03-28 (VN)
-Change: CRITICAL FIX - srt_text va visual_moment bi MAT khi luu Excel
+Change: Local Proxy Server + Fix UPDATE copy server/
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
