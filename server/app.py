@@ -66,6 +66,14 @@ stats = {
     'start_time': time.time(),
 }
 
+# External workers (separate process mode)
+external_workers = {}
+external_workers_lock = threading.Lock()
+
+# Stored configs (populated by _do_start_workers for /internal/worker-config)
+_stored_server_configs = []
+_stored_chromes = []
+
 
 def server_log(msg: str, level: str = "INFO"):
     """Log + luu cho dashboard."""
@@ -82,6 +90,11 @@ def _get_queue_position(task_id: str) -> int:
     if chrome_pool:
         for w in chrome_pool.workers:
             if w.current_task_id == task_id:
+                return 0
+    # Check external workers
+    with external_workers_lock:
+        for wid, ew in external_workers.items():
+            if ew.get("current_task_id") == task_id:
                 return 0
     with queue_lock:
         try:
@@ -201,6 +214,14 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: 
                 </label>
             </div>
             <div class="hint">BAT: Moi Chrome dung IPv6 rieng (chong 403). TAT: Dung IPv4 chung.</div>
+        </div>
+        <div class="setup-row">
+            <label>Che do (Mode)</label>
+            <select id="cfg-mode">
+                <option value="gop">Gop - Chrome chung process (mac dinh)</option>
+                <option value="tach">Tach - Chrome chay CMD rieng</option>
+            </select>
+            <div class="hint">GOP: Chrome threads trong server. TACH: Flask only, workers chay process rieng.</div>
         </div>
         <div class="setup-row">
             <label>So luong Chrome</label>
@@ -378,6 +399,7 @@ async function checkSetup() {
             document.getElementById('setup-overlay').style.display = 'flex';
             document.getElementById('cfg-ipv6').checked = s.use_ipv6;
             document.getElementById('cfg-chrome').value = s.chrome_count;
+            document.getElementById('cfg-mode').value = s.mode || 'gop';
         } else {
             document.getElementById('setup-overlay').style.display = 'none';
         }
@@ -391,12 +413,13 @@ async function startServer() {
 
     let ipv6 = document.getElementById('cfg-ipv6').checked;
     let chrome = parseInt(document.getElementById('cfg-chrome').value);
+    let mode = document.getElementById('cfg-mode').value;
 
     // Save settings
     await fetch('/api/settings', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({use_ipv6: ipv6, chrome_count: chrome})
+        body: JSON.stringify({use_ipv6: ipv6, chrome_count: chrome, mode: mode})
     });
 
     // Start
@@ -558,6 +581,20 @@ def server_status():
                     "task": w.current_task_id[:8] + "...",
                 })
 
+    # Include external workers
+    with external_workers_lock:
+        for wid, ew in external_workers.items():
+            total_workers += 1
+            if ew["status"] in ("ready", "busy"):
+                ready_workers += 1
+            if ew["status"] == "ready":
+                available_workers += 1
+            if ew["status"] == "busy" and ew.get("current_task_id"):
+                processing.append({
+                    "worker": f"ext-{ew['index']}",
+                    "task": ew["current_task_id"][:8] + "...",
+                })
+
     return jsonify({
         "status": "running",
         "chrome_count": total_workers,
@@ -577,14 +614,46 @@ def server_status():
 
 @app.route('/api/workers', methods=['GET'])
 def workers_info():
-    if not chrome_pool:
-        return jsonify({"workers": [], "total": 0, "ready": 0, "available": 0})
+    pool_stats = []
+    pool_total = 0
+    pool_ready = 0
+    pool_available = 0
+
+    if chrome_pool:
+        pool_total = len(chrome_pool.workers)
+        pool_ready = chrome_pool.total_ready()
+        pool_available = chrome_pool.available_count()
+        pool_stats = chrome_pool.get_stats()
+
+    # Include external workers
+    ext_stats = []
+    with external_workers_lock:
+        for wid, ew in external_workers.items():
+            pool_total += 1
+            is_ready = ew["status"] in ("ready", "busy")
+            is_available = ew["status"] == "ready"
+            if is_ready:
+                pool_ready += 1
+            if is_available:
+                pool_available += 1
+            ext_stats.append({
+                "index": f"ext-{ew['index']}",
+                "ready": is_ready,
+                "busy": ew["status"] == "busy",
+                "status": ew["status"],
+                "current_task": ew["current_task_id"][:8] + "..." if ew.get("current_task_id") else None,
+                "account": ew.get("account"),
+                "ipv6": ew.get("ipv6") or None,
+                "completed": ew.get("total_completed", 0),
+                "failed": ew.get("total_failed", 0),
+                "last_error": ew.get("last_error") or None,
+            })
 
     return jsonify({
-        "total": len(chrome_pool.workers),
-        "ready": chrome_pool.total_ready(),
-        "available": chrome_pool.available_count(),
-        "workers": chrome_pool.get_stats(),
+        "total": pool_total,
+        "ready": pool_ready,
+        "available": pool_available,
+        "workers": pool_stats + ext_stats,
     })
 
 
@@ -615,6 +684,20 @@ def queue_info():
                     t = tasks.get(tid, {})
                 processing.append({
                     "worker": w.index,
+                    "taskId": tid[:8] + "...",
+                    "vm_id": t.get('vm_id', '?'),
+                    "prompt_preview": t.get('prompt', '')[:60],
+                })
+
+    # Include external workers in processing
+    with external_workers_lock:
+        for wid, ew in external_workers.items():
+            tid = ew.get("current_task_id")
+            if ew["status"] == "busy" and tid:
+                with task_lock:
+                    t = tasks.get(tid, {})
+                processing.append({
+                    "worker": f"ext-{ew['index']}",
                     "taskId": tid[:8] + "...",
                     "vm_id": t.get('vm_id', '?'),
                     "prompt_preview": t.get('prompt', '')[:60],
@@ -654,6 +737,7 @@ def cleanup_old_tasks():
 server_settings = {
     'use_ipv6': True,       # Dung IPv6 cho Chrome (default: True)
     'chrome_count': 0,      # 0 = tat ca Chrome tim thay, >0 = gioi han so luong
+    'mode': 'gop',          # 'gop' = Chrome threads, 'tach' = separate processes
     'started': False,       # Da bat dau setup chua
 }
 settings_lock = threading.Lock()
@@ -675,7 +759,9 @@ def update_settings():
             server_settings['use_ipv6'] = bool(data['use_ipv6'])
         if 'chrome_count' in data:
             server_settings['chrome_count'] = max(0, int(data['chrome_count']))
-    server_log(f"Settings updated: IPv6={server_settings['use_ipv6']}, Chrome={server_settings['chrome_count'] or 'ALL'}")
+        if 'mode' in data:
+            server_settings['mode'] = data['mode'] if data['mode'] in ('gop', 'tach') else 'gop'
+    server_log(f"Settings updated: IPv6={server_settings['use_ipv6']}, Chrome={server_settings['chrome_count'] or 'ALL'}, Mode={server_settings['mode']}")
     return jsonify(server_settings)
 
 
@@ -691,9 +777,205 @@ def start_server_workers():
     return jsonify({"status": "starting"})
 
 
+# ============================================================
+# Internal APIs (for separate worker processes)
+# ============================================================
+
+@app.route('/internal/worker-config', methods=['GET'])
+def worker_config():
+    """Return config for worker N (chrome_path, port, account, ipv6)."""
+    index = int(request.args.get('index', 0))
+
+    from server.chrome_pool import CHROME_FOLDERS, BASE_PORT
+
+    # Use stored chromes/configs if available
+    chromes = _stored_chromes
+    configs = _stored_server_configs
+
+    # If not yet populated, discover chromes now
+    if not chromes:
+        from server.chrome_pool import ChromePool
+        pool = ChromePool()
+        chromes = pool.discover_chromes()
+
+    if index < 0 or index >= len(chromes):
+        return jsonify({"error": f"Worker index {index} out of range (have {len(chromes)} chromes)"}), 404
+
+    chrome_info = chromes[index]
+    cfg = configs[index] if index < len(configs) else {}
+
+    result = {
+        "chrome_path": chrome_info.get("path", ""),
+        "chrome_folder": chrome_info.get("folder", ""),
+        "port": chrome_info.get("port", BASE_PORT + index),
+        "account": cfg.get("account"),
+        "ipv6": cfg.get("ipv6", ""),
+    }
+    return jsonify(result)
+
+
+@app.route('/internal/register', methods=['POST'])
+def register_worker():
+    """Register/update an external worker."""
+    data = request.get_json() or {}
+    index = data.get('index', 0)
+    worker_id = f"ext-chrome-{index}"
+
+    with external_workers_lock:
+        if worker_id not in external_workers:
+            external_workers[worker_id] = {
+                "worker_id": worker_id,
+                "index": index,
+                "account": data.get("account", ""),
+                "port": data.get("port", 0),
+                "status": data.get("status", "starting"),
+                "total_completed": 0,
+                "total_failed": 0,
+                "current_task_id": None,
+                "last_error": "",
+                "last_seen": time.time(),
+                "ipv6": data.get("ipv6", ""),
+            }
+        else:
+            w = external_workers[worker_id]
+            w["status"] = data.get("status", w["status"])
+            w["account"] = data.get("account", w["account"])
+            w["port"] = data.get("port", w["port"])
+            w["last_seen"] = time.time()
+            if "total_completed" in data:
+                w["total_completed"] = data["total_completed"]
+            if "total_failed" in data:
+                w["total_failed"] = data["total_failed"]
+            if "ipv6" in data:
+                w["ipv6"] = data["ipv6"]
+
+    return jsonify({"worker_id": worker_id})
+
+
+@app.route('/internal/next-task', methods=['GET'])
+def next_task():
+    """Pop next task from queue for an external worker."""
+    worker_id = request.args.get('worker_id', '')
+
+    task_id = None
+    with queue_lock:
+        if task_queue:
+            task_id = task_queue.pop(0)
+
+    if task_id is None:
+        return jsonify({"task": None})
+
+    with task_lock:
+        task = tasks.get(task_id)
+        if not task:
+            return jsonify({"task": None})
+        task['status'] = 'processing'
+        task['started_at'] = time.time()
+        task['worker'] = worker_id
+
+    # Track current task in external worker
+    with external_workers_lock:
+        if worker_id in external_workers:
+            external_workers[worker_id]["current_task_id"] = task_id
+            external_workers[worker_id]["status"] = "busy"
+
+    server_log(f"[EXT] Task {task_id[:8]}... → {worker_id}")
+
+    return jsonify({
+        "task": {
+            "task_id": task_id,
+            "prompt": task.get("prompt", ""),
+            "bearer_token": task.get("bearer_token", ""),
+            "project_id": task.get("project_id", ""),
+            "model_name": task.get("model_name", "GEM_PIX_2"),
+            "aspect_ratio": task.get("aspect_ratio", "IMAGE_ASPECT_RATIO_LANDSCAPE"),
+            "seed": task.get("seed"),
+            "image_inputs": task.get("image_inputs", []),
+            "vm_id": task.get("vm_id", "?"),
+        }
+    })
+
+
+@app.route('/internal/task-done', methods=['POST'])
+def task_done():
+    """Report task completion from external worker."""
+    data = request.get_json() or {}
+    task_id = data.get('task_id', '')
+    success = data.get('success', False)
+    worker_id = data.get('worker_id', '')
+
+    with task_lock:
+        task = tasks.get(task_id)
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+
+        if success:
+            task['status'] = 'completed'
+            task['result'] = data.get('result')
+            task['completed_at'] = time.time()
+            stats['total_completed'] += 1
+            duration = time.time() - task.get('started_at', time.time())
+            server_log(f"[EXT] OK: {task_id[:8]}... | {worker_id} | {duration:.1f}s", "OK")
+        else:
+            task['status'] = 'failed'
+            task['error'] = data.get('error', 'Unknown error')
+            stats['total_failed'] += 1
+            server_log(f"[EXT] FAIL: {task_id[:8]}... | {worker_id} | {data.get('error', '')[:80]}", "ERROR")
+
+    # Update external worker state
+    with external_workers_lock:
+        if worker_id in external_workers:
+            w = external_workers[worker_id]
+            w["current_task_id"] = None
+            w["status"] = "ready"
+            if success:
+                w["total_completed"] = w.get("total_completed", 0) + 1
+            else:
+                w["total_failed"] = w.get("total_failed", 0) + 1
+                w["last_error"] = data.get('error', '')[:100]
+
+    return jsonify({"ok": True})
+
+
+@app.route('/internal/heartbeat', methods=['POST'])
+def worker_heartbeat():
+    """Update worker heartbeat."""
+    data = request.get_json() or {}
+    worker_id = data.get('worker_id', '')
+
+    with external_workers_lock:
+        if worker_id in external_workers:
+            external_workers[worker_id]["last_seen"] = time.time()
+            if data.get('status'):
+                external_workers[worker_id]["status"] = data['status']
+
+    return jsonify({"ok": True})
+
+
+@app.route('/internal/next-ipv6', methods=['GET'])
+def next_ipv6():
+    """Get next IPv6 from the pool's list (for 403 rotation)."""
+    current = request.args.get('current', '')
+
+    if chrome_pool:
+        new_ip = chrome_pool.get_next_ipv6(current)
+        return jsonify({"ipv6": new_ip})
+
+    # Fallback: use stored configs
+    ipv6_list = [cfg.get('ipv6', '') for cfg in _stored_server_configs if cfg.get('ipv6', '').strip()]
+    if not ipv6_list:
+        return jsonify({"ipv6": ""})
+
+    # Find next different from current
+    for ip in ipv6_list:
+        if ip != current:
+            return jsonify({"ipv6": ip})
+    return jsonify({"ipv6": ipv6_list[0] if ipv6_list else ""})
+
+
 def _do_start_workers():
     """Setup Chrome workers (chay trong background thread)."""
-    global chrome_pool
+    global chrome_pool, _stored_server_configs, _stored_chromes
 
     from server.chrome_pool import ChromePool, get_server_config
 
@@ -701,6 +983,7 @@ def _do_start_workers():
         use_ipv6 = server_settings['use_ipv6']
         chrome_count = server_settings['chrome_count']
         extra_ipv6 = server_settings.get('extra_ipv6', [])
+        mode = server_settings.get('mode', 'gop')  # 'gop' or 'tach'
 
     server_log("Doc cau hinh tu Google Sheet 'SERVER'...")
     server_configs = []
@@ -713,6 +996,9 @@ def _do_start_workers():
     except Exception as e:
         server_log(f"Loi doc sheet: {e}", "ERROR")
 
+    # Store configs globally for /internal/worker-config
+    _stored_server_configs = list(server_configs)
+
     # Tat IPv6 neu user chon
     if not use_ipv6:
         server_log("IPv6: TAT - Chrome se dung IPv4", "WARN")
@@ -723,6 +1009,10 @@ def _do_start_workers():
         server_log(msg, level)
 
     chrome_pool = ChromePool(log_callback=pool_log)
+
+    # Discover chromes and store globally for /internal/worker-config
+    _stored_chromes = chrome_pool.discover_chromes()
+
     chrome_pool.init_workers(server_configs)
 
     # Them IPv6 bo sung tu GUI (neu co)
@@ -736,6 +1026,20 @@ def _do_start_workers():
         chrome_pool.workers = chrome_pool.workers[:chrome_count]
         server_log(f"Gioi han: chi dung {chrome_count} Chrome (bo {removed})")
 
+    # TACH mode: Flask only, no Chrome threads - workers run as separate processes
+    if mode == 'tach':
+        server_log("=" * 50)
+        server_log("CHE DO TACH: Flask server ONLY (khong co Chrome threads)", "WARN")
+        server_log("Chay workers bang CMD rieng:", "WARN")
+        for i, chrome_info in enumerate(_stored_chromes):
+            if chrome_count > 0 and i >= chrome_count:
+                break
+            server_log(f"  CMD {i+1}: python server/worker.py --index {i}", "WARN")
+        server_log("=" * 50)
+        # Don't start any Chrome threads - external workers will connect via internal APIs
+        return
+
+    # GOP mode (default): start Chrome worker threads in same process
     if chrome_pool.workers:
         server_log(f"Setup {len(chrome_pool.workers)} Chrome workers SONG SONG...")
 
@@ -798,16 +1102,21 @@ if __name__ == '__main__':
     parser.add_argument('--no-ipv6', action='store_true', help='Tat IPv6, dung IPv4')
     parser.add_argument('--chrome', type=int, default=0, help='So Chrome (0=tat ca)')
     parser.add_argument('--auto', action='store_true', help='Tu dong start (khong doi dashboard)')
+    parser.add_argument('--mode', choices=['gop', 'tach'], default='gop',
+                        help='gop=Chrome threads trong process, tach=Flask only (workers chay rieng)')
     args = parser.parse_args()
 
     # Apply args to settings
     server_settings['use_ipv6'] = not args.no_ipv6
     server_settings['chrome_count'] = args.chrome
+    server_settings['mode'] = args.mode
 
+    mode_label = "GOP (threads)" if server_settings['mode'] == 'gop' else "TACH (separate processes)"
     print("=" * 60)
-    print("  CHROME SERVER v4.0 - Single Process + Web Dashboard")
+    print("  CHROME SERVER v4.0 - Web Dashboard")
     print("=" * 60)
     print()
+    print(f"  Mode:   {mode_label}")
     print(f"  IPv6:   {'BAT' if server_settings['use_ipv6'] else 'TAT'}")
     print(f"  Chrome: {server_settings['chrome_count'] or 'TAT CA'}")
     print()

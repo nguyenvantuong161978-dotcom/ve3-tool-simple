@@ -105,6 +105,95 @@ def send_heartbeat(worker_id: str, status: str = "ready"):
         pass
 
 
+def get_next_ipv6(current_ipv6: str) -> str:
+    """Get next IPv6 from server's pool."""
+    try:
+        r = http_requests.get(f"{SERVER_URL}/internal/next-ipv6?current={current_ipv6}", timeout=10)
+        if r.status_code == 200:
+            return r.json().get("ipv6", "")
+    except Exception:
+        pass
+    return ""
+
+
+def handle_403(session, worker_id: str, index: int, account: dict,
+               chrome_path: str, port: int, ipv6: str):
+    """
+    Handle 403 error with model switching pattern (same as chrome_pool.py).
+
+    Model 0 (5x 403) -> switch Model 1
+    Model 1 (2x 403) -> switch Model 2
+    Model 2 (2x 403) -> clear data + reset Model 0 + login
+    Still 403 -> get new IPv6 from server -> restart
+    """
+    model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+
+    session._consecutive_403 = getattr(session, '_consecutive_403', 0) + 1
+    c403 = session._consecutive_403
+    current_model = getattr(session, '_current_model_index', 0)
+    model_threshold = 5 if current_model == 0 else 2
+    cleared_flag = getattr(session, '_cleared_data_for_403', False)
+
+    log(f"[403] Model {model_names[current_model]}: {c403}/{model_threshold}", "WARN")
+
+    # Cleanup browser data immediately
+    try:
+        from server.chrome_session import JS_CLEANUP
+        session.page.run_js(JS_CLEANUP)
+        log("[403] Cleanup browser data OK")
+    except Exception:
+        pass
+
+    if c403 < model_threshold:
+        # Not enough 403s yet -> restart + fingerprint moi (KHONG xoa data)
+        log("[403] Restart + fingerprint moi (giu data)...", "WARN")
+        try:
+            ok = session.restart_with_new_fingerprint(clear_data=False)
+            if ok:
+                log("[403] Restart OK", "OK")
+                return True
+            else:
+                log("[403] Restart FAIL!", "ERROR")
+        except Exception as e:
+            log(f"[403] Restart error: {e}", "ERROR")
+
+    elif current_model < 2:
+        # Enough 403s -> switch to next model (KHONG xoa data)
+        next_model = current_model + 1
+        log(f"[403] SWITCH: {model_names[current_model]} -> {model_names[next_model]}", "WARN")
+        session._current_model_index = next_model
+        session._consecutive_403 = 0
+        try:
+            ok = session.restart_with_new_fingerprint(clear_data=False)
+            if ok:
+                log(f"[403] Switch OK -> {model_names[next_model]}", "OK")
+                return True
+        except Exception as e:
+            log(f"[403] Switch error: {e}", "ERROR")
+
+    else:
+        # Het 3 models (5+2+2=9 lan) -> DOI IPv6 + XOA DATA + LOGIN LAI (1 buoc)
+        log("[403] Het 3 models -> DOI IPv6 + XOA DATA + LOGIN LAI!", "WARN")
+        session._current_model_index = 0
+        session._consecutive_403 = 0
+        try:
+            new_ip = get_next_ipv6(ipv6)
+            if new_ip:
+                log(f"[403] IPv6: {ipv6[:20]}... -> {new_ip[:20]}...", "WARN")
+                session.rotate_ipv6(new_ip)
+                register(index, account.get('id', '') if account else '', port, 'ready', ipv6=new_ip)
+            else:
+                log("[403] Khong co IPv6 khac, chi xoa data + restart", "WARN")
+            ok = session.restart_with_new_fingerprint(clear_data=True)
+            if ok:
+                log("[403] IPv6 + clear data + login OK", "OK")
+                return True
+        except Exception as e:
+            log(f"[403] Reset error: {e}", "ERROR")
+
+    return False
+
+
 def main():
     global SERVER_URL
 
@@ -234,16 +323,28 @@ def main():
                 duration = "?"
                 log(f"OK: {task_id[:8]}... | Done: {total_completed}", "OK")
                 report_done(worker_id, task_id, success=True, result=result)
+                # Reset 403 counter on success
+                if session:
+                    session._consecutive_403 = 0
             elif result and 'error' in result:
                 total_failed += 1
                 err_raw = result.get('error', '')
                 if isinstance(err_raw, dict):
-                    err = f"Error {err_raw.get('code', '?')}: {err_raw.get('message', str(err_raw))}"
+                    err_code = err_raw.get('code', 0)
+                    err = f"Error {err_code}: {err_raw.get('message', str(err_raw))}"
                 else:
                     err = str(err_raw)
+                    err_code = 403 if '403' in err else 0
                 err = err[:200]
                 log(f"FAIL: {task_id[:8]}... | {err[:100]}", "ERROR")
                 report_done(worker_id, task_id, success=False, error=err)
+
+                # 403 recovery
+                if err_code == 403 and session:
+                    handle_403(session, worker_id, index, account,
+                               chrome_path, port, ipv6)
+                elif err_code != 403 and session:
+                    session._consecutive_403 = 0
             else:
                 total_failed += 1
                 log(f"FAIL: {task_id[:8]}... | No media", "ERROR")

@@ -1,3 +1,30 @@
+1.0.494
+2026-03-28 (VN)
+Change: FIX 403 LOGIC + FINGERPRINT SPOOF TIMING + GOP BUOC XOA DATA
+
+Fix 403 Logic (CRITICAL):
+- restart_with_new_fingerprint(clear_data=False): KHONG xoa Chrome data mac dinh
+  * Truoc: MOI lan 403 → xoa data → login lai (~2 phut downtime) = SAI!
+  * Sau: Chi restart Chrome + fingerprint moi (nhanh, giu login)
+  * clear_data=True CHI KHI da het 3 models
+- Gop buoc: Het 3 models → DOI IPv6 + XOA DATA + LOGIN LAI (1 buoc thay vi 2)
+  * Truoc: 2 buoc rieng: (1) xoa data + login, (2) doi IPv6 + xoa data + login = THUA
+  * Sau: 1 buoc: doi IPv6 truoc → xoa data → login lai
+  * Ap dung cho: chrome_pool.py, worker.py, drission_flow_api.py (ca image + video)
+
+Fix Fingerprint Spoof:
+- Truoc: run_js() inject SAU page load → Google thay fingerprint THAT truoc
+- Sau: CDP Page.addScriptToEvaluateOnNewDocument inject TRUOC page scripts
+  * Inject NGAY SAU khi mo Chrome, TRUOC khi navigate toi Google
+  * Google chi thay fingerprint GIA tu dau den cuoi
+  * Ap dung cho CA server mode (chrome_session.py) VA api mode (drission_flow_api.py)
+
+Flow 403 moi:
+  403 x1-4: cleanup browser data → restart Chrome (GIU DATA) + fingerprint moi
+  403 x5:   switch model (model 0→1→2)
+  Het 3 models: DOI IPv6 + XOA DATA + LOGIN LAI (1 buoc)
+
+---
 1.0.492
 2026-03-28 (VN)
 Change: FIX Bind warning spam + /api/queue crash

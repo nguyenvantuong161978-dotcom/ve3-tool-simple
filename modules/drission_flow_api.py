@@ -1390,16 +1390,55 @@ class DrissionFlowAPI:
         self._inject_fingerprint()
 
     def _inject_fingerprint(self):
-        """Inject fingerprint JS vao page hien tai."""
+        """
+        Inject fingerprint JS.
+
+        Su dung CDP Page.addScriptToEvaluateOnNewDocument de inject TRUOC khi
+        page scripts chay → Google khong thay fingerprint that.
+        """
         if self._fingerprint_seed <= 0 or not self.driver:
             return
         try:
             from server.chrome_session import _build_fingerprint_js
             js = _build_fingerprint_js(self._fingerprint_seed)
+
+            # 1. CDP: Inject cho TAT CA page loads sau nay (TRUOC khi scripts chay)
+            try:
+                if hasattr(self, '_spoof_script_id') and self._spoof_script_id:
+                    try:
+                        self.driver.run_cdp('Page.removeScriptToEvaluateOnNewDocument',
+                                            identifier=self._spoof_script_id)
+                    except Exception:
+                        pass
+                result = self.driver.run_cdp('Page.addScriptToEvaluateOnNewDocument',
+                                              source=js)
+                self._spoof_script_id = result.get('identifier', '')
+                self.log(f"[SPOOF] CDP pre-load inject OK (seed={self._fingerprint_seed})")
+            except Exception as e:
+                self.log(f"[SPOOF] CDP inject failed ({e}), fallback run_js", "WARN")
+
+            # 2. run_js: Cho page HIEN TAI (da load roi)
             self.driver.run_js(js)
-            self.log(f"[SPOOF] Injected (seed={self._fingerprint_seed})")
+
+            # 3. VERIFY: Kiem tra fingerprint co hoat dong khong
+            try:
+                verify = self.driver.run_js("""
+                    var c = navigator.hardwareConcurrency;
+                    var m = navigator.deviceMemory || 'N/A';
+                    var w = screen.width;
+                    var h = screen.height;
+                    var gl = null;
+                    try {
+                        var canvas = document.createElement('canvas');
+                        var ctx = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                        if (ctx) gl = ctx.getParameter(37446);
+                    } catch(e) {}
+                    return 'cores=' + c + ' mem=' + m + ' screen=' + w + 'x' + h + ' gpu=' + (gl || 'N/A').substring(0, 40);
+                """)
+                self.log(f"[SPOOF] VERIFY: {verify}")
+            except Exception:
+                pass
         except ImportError:
-            # Fallback: build JS truc tiep neu khong import duoc server module
             self._inject_fingerprint_fallback()
         except Exception as e:
             self.log(f"[SPOOF] Inject error: {e}", "WARN")
@@ -1528,9 +1567,11 @@ class DrissionFlowAPI:
             saved_url = getattr(self, '_current_project_url', None)
             return self.setup(project_url=saved_url, skip_403_reset=True)
 
-        elif not cleared_flag:
-            # Du 5 lan, chua clear data → CLEAR DATA + LOGIN LAI (het luot 1)
-            self.log(f"[{tag}] [403] 5 lan → RESET PROFILE + LOGIN LAI!", "WARN")
+        else:
+            # Du 5 lan → DOI IPv6 + XOA DATA + LOGIN LAI (1 buoc)
+            self.log(f"[{tag}] [403] 5 lan → DOI IPv6 + RESET PROFILE + LOGIN LAI!", "WARN")
+            self._rotate_ipv6(tag)
+            self._consecutive_403 = 0
             self.activate_fingerprint_spoof()
             self.reset_chrome_profile()
             time.sleep(1)
@@ -1540,22 +1581,7 @@ class DrissionFlowAPI:
             if saved_url:
                 self.driver.get(saved_url)
                 time.sleep(3)
-            self._cleared_data_for_403 = True
-            self._consecutive_403 = 0
             return True
-
-        else:
-            # Da clear data van 403 → DOI IPv6 + restart lai tu dau (luot 2)
-            self.log(f"[{tag}] [403] Da clear data van 403 → DOI IPv6!", "WARN")
-            self._rotate_ipv6(tag)
-            self._cleared_data_for_403 = False
-            self._consecutive_403 = 0
-            self._kill_chrome()
-            self.close()
-            time.sleep(2)
-            self.activate_fingerprint_spoof()
-            saved_url = getattr(self, '_current_project_url', None)
-            return self.setup(project_url=saved_url, skip_403_reset=True)
 
     def _handle_image_403(self, tag: str = "IMAGE") -> bool:
         """
@@ -1622,9 +1648,14 @@ class DrissionFlowAPI:
                 saved_url = getattr(self, '_current_project_url', None)
                 return self.setup(project_url=saved_url, skip_403_reset=True)
 
-        elif not cleared_flag:
-            # Het 3 models (5+2+2=9 lan) → XOA DATA + reset ve model 0 + login lai (het luot 1)
-            self.log(f"[{tag}] [403] Het 3 models → RESET PROFILE + FINGERPRINT MOI + DANG NHAP LAI!", "WARN")
+        else:
+            # Het 3 models (5+2+2=9 lan) → DOI IPv6 + XOA DATA + LOGIN LAI (1 buoc)
+            self.log(f"[{tag}] [403] Het 3 models → DOI IPv6 + RESET PROFILE + DANG NHAP LAI!", "WARN")
+            self._rotate_ipv6(tag)
+            self._consecutive_403 = 0
+            self._current_model_index = 0  # Reset ve model dau
+            if tracker:
+                tracker.reset_after_rotation()
             self.activate_fingerprint_spoof()
             self.reset_chrome_profile()
             time.sleep(1)
@@ -1635,28 +1666,7 @@ class DrissionFlowAPI:
                 self.log(f"[{tag}] [403] Quay lai project URL...")
                 self.driver.get(saved_url)
                 time.sleep(3)
-            self._cleared_data_for_403 = True
-            self._consecutive_403 = 0
-            self._current_model_index = 0  # Reset ve model dau
-            if tracker:
-                tracker.mark_cleared_data(self.worker_id)
             return True
-
-        else:
-            # Da clear data van 403 → DOI IPv6 + restart lai tu dau (luot 2)
-            self.log(f"[{tag}] [403] Da clear data van 403 → DOI IPv6!", "WARN")
-            self._rotate_ipv6(tag)
-            self._cleared_data_for_403 = False
-            self._consecutive_403 = 0
-            self._current_model_index = 0
-            if tracker:
-                tracker.reset_after_rotation()
-            self._kill_chrome()
-            self.close()
-            time.sleep(2)
-            self.activate_fingerprint_spoof()
-            saved_url = getattr(self, '_current_project_url', None)
-            return self.setup(project_url=saved_url, skip_403_reset=True)
 
     def reset_to_pro_model(self):
         """Reset về model pro (GEM_PIX_2) - gọi khi bắt đầu project mới."""
@@ -3271,6 +3281,11 @@ class DrissionFlowAPI:
             # Setup proxy auth nếu cần (CDP-based)
             if self._use_webshare and hasattr(self, '_proxy_auth') and self._proxy_auth:
                 self._setup_proxy_auth()
+
+            # Inject fingerprint NGAY SAU khi mo Chrome, TRUOC khi navigate
+            # CDP addScriptToEvaluateOnNewDocument chay TRUOC moi page load
+            if self._fingerprint_seed > 0:
+                self._inject_fingerprint()
 
         except Exception as e:
             self.log(f"[x] Chrome error: {e}", "ERROR")

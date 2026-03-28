@@ -99,6 +99,26 @@ class ServerGUI(tk.Tk):
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
 
+        # Mode toggle (Gop / Tach)
+        row_mode = tk.Frame(card, bg=BG2)
+        row_mode.pack(fill='x', padx=20, pady=(0, 10))
+
+        tk.Label(row_mode, text="Che do (Mode)", font=("Segoe UI", 13, "bold"),
+                 bg=BG2, fg=FG).pack(side='left')
+
+        self.mode_var = tk.StringVar(value="gop")
+        self.mode_btn = tk.Button(row_mode, text="GOP", font=("Segoe UI", 11, "bold"),
+                                  bg=BLUE, fg='white', width=6, relief='flat',
+                                  command=self._toggle_mode)
+        self.mode_btn.pack(side='right')
+
+        self.mode_hint = tk.Label(card, text="GOP: Chrome chay chung voi server (mac dinh).  TACH: Chrome chay CMD rieng.",
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2)
+        self.mode_hint.pack(padx=20, anchor='w')
+
+        # Separator
+        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
+
         # Chrome count
         row2 = tk.Frame(card, bg=BG2)
         row2.pack(fill='x', padx=20, pady=(0, 10))
@@ -143,6 +163,15 @@ class ServerGUI(tk.Tk):
         else:
             self.ipv6_btn.config(text="TAT", bg='#475569')
 
+    def _toggle_mode(self):
+        current = self.mode_var.get()
+        if current == "gop":
+            self.mode_var.set("tach")
+            self.mode_btn.config(text="TACH", bg=ORANGE)
+        else:
+            self.mode_var.set("gop")
+            self.mode_btn.config(text="GOP", bg=BLUE)
+
     def _get_chrome_count(self):
         val = self.chrome_combo.get()
         if val == "Tat ca":
@@ -164,6 +193,7 @@ class ServerGUI(tk.Tk):
 
         use_ipv6 = self.ipv6_var.get()
         chrome_count = self._get_chrome_count()
+        mode = self.mode_var.get()  # 'gop' or 'tach'
 
         # Thu thap IPv6 bo sung tu text box
         extra_ipv6_text = self.ipv6_text.get("1.0", "end").strip()
@@ -173,20 +203,20 @@ class ServerGUI(tk.Tk):
         ]
 
         # Switch to monitor page
-        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6))
+        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6, mode))
 
-    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None):
+    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None, mode='gop'):
         self.setup_frame.destroy()
         self._build_monitor_page()
 
         # Start server in background
         threading.Thread(
             target=self._start_server,
-            args=(use_ipv6, chrome_count, extra_ipv6 or []),
+            args=(use_ipv6, chrome_count, extra_ipv6 or [], mode),
             daemon=True,
         ).start()
 
-    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None):
+    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None, mode='gop'):
         """Start Flask + Chrome workers in background."""
         self._add_log("Khoi dong server...", "INFO")
 
@@ -201,6 +231,7 @@ class ServerGUI(tk.Tk):
             server_settings['use_ipv6'] = use_ipv6
             server_settings['chrome_count'] = chrome_count
             server_settings['extra_ipv6'] = extra_ipv6 or []
+            server_settings['mode'] = mode
             server_settings['started'] = True
 
         # Redirect server_log to our GUI
@@ -314,15 +345,25 @@ class ServerGUI(tk.Tk):
 
     def _update_stats(self):
         try:
-            from server.app import chrome_pool, task_queue, queue_lock, stats
+            from server.app import chrome_pool, task_queue, queue_lock, stats, external_workers, external_workers_lock
+            ready = 0
+            total = 0
             if chrome_pool:
                 ready = chrome_pool.total_ready()
                 total = len(chrome_pool.workers)
-                self.stat_labels['workers'].config(text=f"{ready}/{total}")
-                if ready > 0:
-                    self.header_status.config(text=f"{ready} workers ready", fg=GREEN)
-                else:
-                    self.header_status.config(text="Setting up...", fg=YELLOW)
+
+            # Include external workers
+            with external_workers_lock:
+                for wid, ew in external_workers.items():
+                    total += 1
+                    if ew["status"] in ("ready", "busy"):
+                        ready += 1
+
+            self.stat_labels['workers'].config(text=f"{ready}/{total}")
+            if ready > 0:
+                self.header_status.config(text=f"{ready} workers ready", fg=GREEN)
+            elif total > 0:
+                self.header_status.config(text="Setting up...", fg=YELLOW)
 
             with queue_lock:
                 self.stat_labels['queue'].config(text=str(len(task_queue)))
@@ -334,51 +375,94 @@ class ServerGUI(tk.Tk):
 
     def _update_workers_display(self):
         try:
-            from server.app import chrome_pool
-            if not chrome_pool:
-                return
+            from server.app import chrome_pool, external_workers, external_workers_lock
 
-            workers = chrome_pool.workers
-            for w in workers:
-                wid = f"w{w.index}"
-                if wid not in self.worker_labels:
-                    # Create worker card
-                    frame = tk.Frame(self.workers_container, bg=BG, highlightbackground=BORDER,
-                                     highlightthickness=1, padx=8, pady=4)
-                    frame.pack(side='left', padx=4, fill='y')
+            # Internal workers (from chrome_pool)
+            if chrome_pool:
+                workers = chrome_pool.workers
+                for w in workers:
+                    wid = f"w{w.index}"
+                    if wid not in self.worker_labels:
+                        frame = tk.Frame(self.workers_container, bg=BG, highlightbackground=BORDER,
+                                         highlightthickness=1, padx=8, pady=4)
+                        frame.pack(side='left', padx=4, fill='y')
 
-                    name_lbl = tk.Label(frame, text=f"Chrome-{w.index}", font=("Segoe UI", 10, "bold"),
-                                        bg=BG, fg=FG)
-                    name_lbl.pack(anchor='w')
+                        name_lbl = tk.Label(frame, text=f"Chrome-{w.index}", font=("Segoe UI", 10, "bold"),
+                                            bg=BG, fg=FG)
+                        name_lbl.pack(anchor='w')
 
-                    status_lbl = tk.Label(frame, text="SETUP", font=("Segoe UI", 9),
-                                          bg=BG, fg=YELLOW)
-                    status_lbl.pack(anchor='w')
+                        status_lbl = tk.Label(frame, text="SETUP", font=("Segoe UI", 9),
+                                              bg=BG, fg=YELLOW)
+                        status_lbl.pack(anchor='w')
 
-                    info_lbl = tk.Label(frame, text="", font=("Segoe UI", 8),
-                                        bg=BG, fg=FG2)
-                    info_lbl.pack(anchor='w')
+                        info_lbl = tk.Label(frame, text="", font=("Segoe UI", 8),
+                                            bg=BG, fg=FG2)
+                        info_lbl.pack(anchor='w')
 
-                    self.worker_labels[wid] = {
-                        'frame': frame,
-                        'status': status_lbl,
-                        'info': info_lbl,
-                    }
+                        self.worker_labels[wid] = {
+                            'frame': frame,
+                            'status': status_lbl,
+                            'info': info_lbl,
+                        }
 
-                # Update
-                labels = self.worker_labels[wid]
-                if w.busy:
-                    labels['status'].config(text="BUSY", fg=ORANGE)
-                    labels['frame'].config(highlightbackground=ORANGE)
-                elif w.ready:
-                    labels['status'].config(text="READY", fg=GREEN)
-                    labels['frame'].config(highlightbackground=GREEN)
-                else:
-                    labels['status'].config(text="SETUP", fg=YELLOW)
-                    labels['frame'].config(highlightbackground=YELLOW)
+                    labels = self.worker_labels[wid]
+                    if w.busy:
+                        labels['status'].config(text="BUSY", fg=ORANGE)
+                        labels['frame'].config(highlightbackground=ORANGE)
+                    elif w.ready:
+                        labels['status'].config(text="READY", fg=GREEN)
+                        labels['frame'].config(highlightbackground=GREEN)
+                    else:
+                        labels['status'].config(text="SETUP", fg=YELLOW)
+                        labels['frame'].config(highlightbackground=YELLOW)
 
-                acc = w.account['id'].split('@')[0] if w.account else ""
-                labels['info'].config(text=f"{acc}\nDone:{w.total_completed} Fail:{w.total_failed}")
+                    acc = w.account['id'].split('@')[0] if w.account else ""
+                    labels['info'].config(text=f"{acc}\nDone:{w.total_completed} Fail:{w.total_failed}")
+
+            # External workers (separate processes)
+            with external_workers_lock:
+                for ewid, ew in external_workers.items():
+                    wid = f"ext{ew['index']}"
+                    if wid not in self.worker_labels:
+                        frame = tk.Frame(self.workers_container, bg=BG, highlightbackground=BORDER,
+                                         highlightthickness=1, padx=8, pady=4)
+                        frame.pack(side='left', padx=4, fill='y')
+
+                        name_lbl = tk.Label(frame, text=f"Ext-{ew['index']}", font=("Segoe UI", 10, "bold"),
+                                            bg=BG, fg=FG)
+                        name_lbl.pack(anchor='w')
+
+                        status_lbl = tk.Label(frame, text="EXT", font=("Segoe UI", 9),
+                                              bg=BG, fg=YELLOW)
+                        status_lbl.pack(anchor='w')
+
+                        info_lbl = tk.Label(frame, text="", font=("Segoe UI", 8),
+                                            bg=BG, fg=FG2)
+                        info_lbl.pack(anchor='w')
+
+                        self.worker_labels[wid] = {
+                            'frame': frame,
+                            'status': status_lbl,
+                            'info': info_lbl,
+                        }
+
+                    labels = self.worker_labels[wid]
+                    status = ew.get("status", "starting")
+                    if status == "busy":
+                        labels['status'].config(text="BUSY", fg=ORANGE)
+                        labels['frame'].config(highlightbackground=ORANGE)
+                    elif status == "ready":
+                        labels['status'].config(text="READY", fg=GREEN)
+                        labels['frame'].config(highlightbackground=GREEN)
+                    elif status == "failed":
+                        labels['status'].config(text="FAIL", fg=RED)
+                        labels['frame'].config(highlightbackground=RED)
+                    else:
+                        labels['status'].config(text="SETUP", fg=YELLOW)
+                        labels['frame'].config(highlightbackground=YELLOW)
+
+                    acc = str(ew.get('account', '')).split('@')[0] if ew.get('account') else ""
+                    labels['info'].config(text=f"{acc}\nDone:{ew.get('total_completed',0)} Fail:{ew.get('total_failed',0)}")
 
         except:
             pass

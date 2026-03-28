@@ -478,13 +478,56 @@ class ChromeSession:
     # ============================================================
 
     def inject_fingerprint_spoof(self):
-        """Inject fingerprint spoof JS vao page hien tai."""
+        """
+        Inject fingerprint spoof JS.
+
+        Su dung CDP Page.addScriptToEvaluateOnNewDocument de inject TRUOC khi
+        page scripts chay → Google khong thay fingerprint that.
+        Dong thoi chay run_js() cho page hien tai.
+        """
         if self._fingerprint_seed <= 0 or not self.page:
             return
         try:
             js = _build_fingerprint_js(self._fingerprint_seed)
+
+            # 1. CDP: Inject cho TAT CA page loads sau nay (TRUOC khi scripts chay)
+            try:
+                # Xoa script cu (neu co)
+                if hasattr(self, '_spoof_script_id') and self._spoof_script_id:
+                    try:
+                        self.page.run_cdp('Page.removeScriptToEvaluateOnNewDocument',
+                                          identifier=self._spoof_script_id)
+                    except Exception:
+                        pass
+
+                result = self.page.run_cdp('Page.addScriptToEvaluateOnNewDocument',
+                                            source=js)
+                self._spoof_script_id = result.get('identifier', '')
+                self.log(f"[SPOOF] CDP pre-load inject OK (seed={self._fingerprint_seed})")
+            except Exception as e:
+                self.log(f"[SPOOF] CDP inject failed ({e}), fallback run_js", "WARN")
+
+            # 2. run_js: Cho page HIEN TAI (da load roi)
             self.page.run_js(js)
-            self.log(f"[SPOOF] Injected fingerprint (seed={self._fingerprint_seed})")
+
+            # 3. VERIFY: Kiem tra fingerprint co hoat dong khong
+            try:
+                verify = self.page.run_js("""
+                    var c = navigator.hardwareConcurrency;
+                    var m = navigator.deviceMemory || 'N/A';
+                    var w = screen.width;
+                    var h = screen.height;
+                    var gl = null;
+                    try {
+                        var canvas = document.createElement('canvas');
+                        var ctx = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                        if (ctx) gl = ctx.getParameter(37446);
+                    } catch(e) {}
+                    return 'cores=' + c + ' mem=' + m + ' screen=' + w + 'x' + h + ' gpu=' + (gl || 'N/A').substring(0, 40);
+                """)
+                self.log(f"[SPOOF] VERIFY: {verify}")
+            except Exception:
+                pass
         except Exception as e:
             self.log(f"[SPOOF] Inject error: {e}", "WARN")
 
@@ -545,15 +588,21 @@ class ChromeSession:
             self.log(f"[IPv6] Rotate error: {e}", "WARN")
             return False
 
-    def restart_with_new_fingerprint(self) -> bool:
+    def restart_with_new_fingerprint(self, clear_data: bool = False) -> bool:
         """
         Restart Chrome voi fingerprint moi.
         Goi khi bi 403 lien tiep.
+
+        Args:
+            clear_data: True = xoa Chrome data (force re-login).
+                        False = chi restart Chrome (giu login, nhanh hon).
+
         Returns: True neu restart thanh cong.
         """
         import random
         self._fingerprint_seed = random.randint(10000, 99999)
-        self.log(f"[SPOOF] === RESTART voi fingerprint moi (seed={self._fingerprint_seed}) ===")
+        action = "RESTART + CLEAR DATA" if clear_data else "RESTART (giu data)"
+        self.log(f"[SPOOF] === {action} voi fingerprint moi (seed={self._fingerprint_seed}) ===")
 
         # 1. Dong Chrome hien tai
         try:
@@ -564,11 +613,12 @@ class ChromeSession:
         self.page = None
         self.ready = False
 
-        # 2. Clear Chrome data
-        self._clear_chrome_data()
+        # 2. Clear Chrome data CHI KHI duoc yeu cau
+        if clear_data:
+            self._clear_chrome_data()
 
         # 3. Setup lai (setup() se goi inject_fingerprint_spoof)
-        ok = self.setup()
+        ok = self.setup(skip_403_reset=True)
         if ok:
             self.log(f"[SPOOF] Restart OK - fingerprint moi active", "OK")
         else:
@@ -656,7 +706,7 @@ class ChromeSession:
             self.log(f"Check account error: {e}", "WARN")
             return ""
 
-    def setup(self) -> bool:
+    def setup(self, skip_403_reset: bool = False) -> bool:
         """
         Full setup:
         1. Mở Chrome → check account hiện tại
@@ -664,6 +714,9 @@ class ChromeSession:
         3. Vào labs.google/fx/tools/flow
         4. Tạo project mới
         5. Đợi textarea sẵn sàng
+
+        Args:
+            skip_403_reset: True = khong reset 403 counter (khi restart tu 403 handler)
 
         Returns: True nếu sẵn sàng
         """
@@ -716,6 +769,12 @@ class ChromeSession:
             self.log(f"Chrome failed: {e}", "ERROR")
             return False
 
+        # 2b. Inject fingerprint NGAY SAU khi mo Chrome, TRUOC khi navigate
+        # CDP addScriptToEvaluateOnNewDocument se chay TRUOC moi page load
+        # → Google chi thay fingerprint gia tu dau
+        if self._fingerprint_seed > 0:
+            self.inject_fingerprint_spoof()
+
         # 3. Check account hien tai
         need_login = False
         if self._account:
@@ -766,6 +825,10 @@ class ChromeSession:
             except Exception as e:
                 self.log(f"Chrome restart failed: {e}", "ERROR")
                 return False
+
+            # Inject fingerprint NGAY sau khi mo lai Chrome
+            if self._fingerprint_seed > 0:
+                self.inject_fingerprint_spoof()
 
         # 5. Vào Flow page
         self.log(f"Vao Flow: {FLOW_URL}")
@@ -1186,8 +1249,11 @@ class ChromeSession:
 
                 return data or {"error": "Empty response"}
 
-            if int(elapsed) % 15 == 0 and int(elapsed) > 0:
-                self.log(f"... chờ ({elapsed:.0f}s)")
+            # Log moi 30s (tranh spam)
+            elapsed_int = int(elapsed)
+            if elapsed_int > 0 and elapsed_int % 30 == 0 and elapsed_int != getattr(self, '_last_wait_log', 0):
+                self._last_wait_log = elapsed_int
+                self.log(f"... chờ ({elapsed_int}s/{timeout}s)")
 
             time.sleep(1)
 
