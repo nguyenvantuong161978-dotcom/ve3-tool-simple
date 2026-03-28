@@ -466,6 +466,8 @@ class ChromeSession:
         self._account = None  # Tai khoan dang dung
         self._fingerprint_seed = 0  # 0 = no spoof, >0 = spoof active
         self._consecutive_403 = 0   # Dem 403 lien tiep
+        self._current_model_index = 0  # 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+        self._cleared_data_for_403 = False  # Da clear data chua
 
     def log(self, msg: str, level: str = "INFO"):
         prefix = {"INFO": "[INFO]", "OK": "[OK]", "WARN": "[WARN]", "ERROR": "[ERROR]"}
@@ -980,7 +982,8 @@ class ChromeSession:
             self.log(f"Interceptor: {r}")
 
             # 3. Setup Image mode + model (giống test step 4)
-            model_index = MODEL_INDEX_MAP.get(model_name, 0)
+            # v1.0.487: Dung _current_model_index khi da switch model do 403
+            model_index = self._current_model_index if self._current_model_index > 0 else MODEL_INDEX_MAP.get(model_name, 0)
             self.log(f"Setup Image mode (model index: {model_index})...")
             js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
             self.page.run_js("window._modelSelectResult = 'PENDING';")

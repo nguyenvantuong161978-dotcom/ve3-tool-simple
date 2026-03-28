@@ -375,26 +375,86 @@ class ChromePool:
                         worker.last_error = err_str[:100]
                         self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
 
-                        # === 403 RECOVERY: Restart Chrome voi fingerprint moi ===
+                        # === 403 RECOVERY (giong API mode) ===
+                        # Model 0: 5 lan 403 → switch model 1
+                        # Model 1: 2 lan 403 → switch model 2
+                        # Model 2: 2 lan 403 → clear data + reset model 0
+                        # Moi lan restart → fingerprint moi
                         if err_code == 403 and worker.session:
                             worker.session._consecutive_403 += 1
                             c403 = worker.session._consecutive_403
-                            self._log(f"[{worker_name}] 403 count: {c403}/3", "WARN")
-                            if c403 >= 3:
-                                self._log(f"[{worker_name}] === 403 x{c403} → RESTART voi fingerprint moi ===", "WARN")
+                            current_model = getattr(worker.session, '_current_model_index', 0)
+                            model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+                            model_threshold = 5 if current_model == 0 else 2
+                            cleared_flag = getattr(worker.session, '_cleared_data_for_403', False)
+
+                            self._log(f"[{worker_name}] [403] Model {model_names[current_model]}: {c403}/{model_threshold}", "WARN")
+
+                            # Cleanup browser data ngay
+                            try:
+                                from server.chrome_session import JS_CLEANUP
+                                worker.session.page.run_js(JS_CLEANUP)
+                                self._log(f"[{worker_name}] [403] Cleanup browser data OK")
+                            except Exception:
+                                pass
+
+                            if c403 < model_threshold:
+                                # Chua du threshold → restart + fingerprint moi
+                                self._log(f"[{worker_name}] [403] Restart + fingerprint moi...", "WARN")
                                 worker.ready = False
                                 try:
                                     ok = worker.session.restart_with_new_fingerprint()
+                                    worker.ready = ok
                                     if ok:
-                                        worker.ready = True
-                                        worker.session._consecutive_403 = 0
-                                        self._log(f"[{worker_name}] Restart OK - fingerprint moi active", "OK")
+                                        self._log(f"[{worker_name}] [403] Restart OK", "OK")
                                     else:
-                                        self._log(f"[{worker_name}] Restart FAIL!", "ERROR")
+                                        self._log(f"[{worker_name}] [403] Restart FAIL!", "ERROR")
                                 except Exception as re:
-                                    self._log(f"[{worker_name}] Restart error: {re}", "ERROR")
+                                    self._log(f"[{worker_name}] [403] Restart error: {re}", "ERROR")
+
+                            elif current_model < 2:
+                                # Du threshold → switch model
+                                next_model = current_model + 1
+                                self._log(f"[{worker_name}] [403] SWITCH: {model_names[current_model]} → {model_names[next_model]}", "WARN")
+                                worker.session._current_model_index = next_model
+                                worker.session._consecutive_403 = 0
+                                # Restart voi model moi + fingerprint moi
+                                worker.ready = False
+                                try:
+                                    ok = worker.session.restart_with_new_fingerprint()
+                                    worker.ready = ok
+                                    if ok:
+                                        self._log(f"[{worker_name}] [403] Switch OK → {model_names[next_model]}", "OK")
+                                except Exception as re:
+                                    self._log(f"[{worker_name}] [403] Switch error: {re}", "ERROR")
+
+                            elif not cleared_flag:
+                                # Het 3 models → clear data + reset model 0 + login lai
+                                self._log(f"[{worker_name}] [403] Het 3 models → CLEAR DATA + LOGIN LAI!", "WARN")
+                                worker.session._current_model_index = 0
+                                worker.session._consecutive_403 = 0
+                                worker.session._cleared_data_for_403 = True
+                                worker.ready = False
+                                try:
+                                    ok = worker.session.restart_with_new_fingerprint()
+                                    worker.ready = ok
+                                    if ok:
+                                        self._log(f"[{worker_name}] [403] Reset + login OK", "OK")
+                                except Exception as re:
+                                    self._log(f"[{worker_name}] [403] Reset error: {re}", "ERROR")
+                            else:
+                                # Da clear data roi ma van 403 → chi restart + fingerprint
+                                self._log(f"[{worker_name}] [403] Da clear data, restart + fingerprint moi...", "WARN")
+                                worker.session._consecutive_403 = 0
+                                worker.session._cleared_data_for_403 = False
+                                worker.ready = False
+                                try:
+                                    ok = worker.session.restart_with_new_fingerprint()
+                                    worker.ready = ok
+                                except Exception:
+                                    pass
+
                         elif err_code != 403 and worker.session:
-                            # Reset 403 counter khi loi khac (khong phai 403)
                             worker.session._consecutive_403 = 0
                     else:
                         tasks[task_id]['status'] = 'failed'

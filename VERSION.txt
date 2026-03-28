@@ -1,8 +1,16 @@
-1.0.486
+1.0.487
 2026-03-28 (VN)
-Change: FINGERPRINT SPOOF - Doi WebGL/Canvas/Hardware khi bi 403
+Change: SERVER 403 LOGIC GIONG API MODE - switch model + fingerprint
 
 Thay doi:
+- v1.0.487: SERVER 403 GIONG API MODE
+  * Server 403 logic giong het API mode (drission_flow_api.py)
+  * Model 0 (Nano Banana Pro): 5 lan 403 → switch model 1
+  * Model 1 (Nano Banana 2): 2 lan 403 → switch model 2
+  * Model 2 (Imagen 4): 2 lan 403 → clear data + reset model 0 + login lai
+  * Moi lan restart → fingerprint moi (seed random)
+  * Cleanup browser data ngay khi gap 403
+  * generate_image() dung _current_model_index khi da switch
 - v1.0.486: FINGERPRINT SPOOF KHI 403
   * Moi lan bi 403 → thay doi WebGL renderer, Canvas noise, CPU cores, RAM, Screen
   * Google nhan dien may qua fingerprint → doi IP khong du → can doi fingerprint
