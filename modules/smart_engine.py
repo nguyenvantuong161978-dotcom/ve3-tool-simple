@@ -6083,6 +6083,13 @@ class SmartEngine:
         local_server_url = cfg.get('local_server_url', '')
         if local_server_enabled and local_server_url:
             self.log(f"[THUMB] LOCAL SERVER MODE: {local_server_url}")
+            # Load media_ids tu Excel (nv1 → media_id, loc1 → media_id)
+            try:
+                excel_media_ids = wb.get_media_ids()
+                self.log(f"[THUMB] Loaded {len(excel_media_ids)} media_ids")
+            except Exception as e:
+                self.log(f"[THUMB] WARN: get_media_ids failed: {e}", "WARN")
+                excel_media_ids = {}
             return self._generate_thumbnails_via_server(
                 thumbnails, wb, proj_dir, thumb_dir, excel_media_ids, cfg
             )

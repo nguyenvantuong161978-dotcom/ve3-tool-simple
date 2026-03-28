@@ -588,9 +588,10 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                 log(f"  [v] Validator ready!")
 
             except Exception as e:
-                log(f"  [ERROR] Failed to setup validator: {e}", "error")
-                import traceback
-                traceback.print_exc()
+                if "SKIP_VALIDATOR" not in str(e):
+                    log(f"  [ERROR] Failed to setup validator: {e}", "error")
+                    import traceback
+                    traceback.print_exc()
                 # Skip validation
                 validated_refs = set(refs_to_validate)
 

@@ -1,8 +1,22 @@
-1.0.483
+1.0.485
 2026-03-28 (VN)
-Change: FIX REFERENCES - local server khong truyen imageInputs
+Change: FIX 3 BUGS - Chrome 1+2 cung tao giong nhau, thumbnail loi, SKIP_VALIDATOR
 
 Thay doi:
+- v1.0.485: FIX 3 BUGS TRONG LOCAL SERVER MODE
+  * BUG 1 (CRITICAL): Chrome 1 va Chrome 2 cung tao GIONG NHAU (khong chia chan/le)
+    - Root cause: Logic filter chan/le nam SAU redirect local server → khong bao gio chay
+    - Fix: Di chuyen parallel filter LEN TRUOC local server redirect
+    - Chrome 0 (Chrome 1): scenes chan (2,4,6...) + references (nv/loc)
+    - Chrome 1 (Chrome 2): scenes le (1,3,5...)
+  * BUG 2: Thumbnail loi "cannot access local variable 'excel_media_ids'"
+    - Root cause: excel_media_ids chua duoc load truoc khi goi _generate_thumbnails_via_server
+    - Fix: Them wb.get_media_ids() truoc khi goi server
+  * BUG 3: SKIP_VALIDATOR hien ERROR voi traceback (khong dep)
+    - Fix: Check "SKIP_VALIDATOR" trong except truoc khi log error
+- v1.0.484: TANG TIMEOUT - VM polling 60 → 90 attempts (120s → 180s)
+  * Van de: Server cho Google 120s + queue wait → VM polling 120s co the het truoc
+  * Fix: Tang max_attempts tu 60 → 90 (= 180s) du buffer cho queue + network
 - v1.0.483: FIX CRITICAL - References bi mat trong local server mode
   * BUG: _generate_via_local_server KHONG truyen image_inputs khi goi api.generate_images()
     - pending_prompts khong luu reference_files tu prompt data

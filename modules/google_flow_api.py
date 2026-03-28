@@ -571,7 +571,7 @@ class GoogleFlowAPI:
         prompt: str,
         aspect_ratio: str,
         headers: Dict[str, str],
-        max_attempts: int = 60,
+        max_attempts: int = 90,
         poll_interval: float = 2.0
     ) -> Tuple[bool, List[GeneratedImage], str]:
         """Poll proxy task status until complete."""

@@ -3821,6 +3821,45 @@ class BrowserFlowGenerator:
         self._log("API MODE - TAO ANH TU PROMPTS")
         self._log("=" * 60)
 
+        # === PARALLEL CHROME: Filter chẵn/lẻ TRƯỚC KHI chọn mode ===
+        worker_id = getattr(self, 'worker_id', 0) or 0
+        total_workers = getattr(self, 'total_workers', 1) or 1
+
+        if total_workers <= 1:
+            parallel_chrome = os.environ.get('PARALLEL_CHROME', '') or str(self.config.get('parallel_chrome', ''))
+            if parallel_chrome and '/' in parallel_chrome:
+                try:
+                    parts = parallel_chrome.split('/')
+                    worker_id = int(parts[0])
+                    total_workers = int(parts[1])
+                except:
+                    pass
+
+        if total_workers > 1:
+            all_are_references = all(
+                str(p.get('id', '')).lower().startswith('nv') or str(p.get('id', '')).lower().startswith('loc')
+                for p in prompts
+            ) if prompts else False
+
+            if not all_are_references:
+                filtered = []
+                for i, prompt_data in enumerate(prompts):
+                    pid = str(prompt_data.get('id', i + 1))
+                    is_ref = pid.lower().startswith('nv') or pid.lower().startswith('loc')
+                    if is_ref:
+                        if worker_id == 0:
+                            filtered.append(prompt_data)
+                    else:
+                        try:
+                            scene_num = int(pid)
+                            if (scene_num % total_workers) == (worker_id % total_workers):
+                                filtered.append(prompt_data)
+                        except ValueError:
+                            filtered.append(prompt_data)
+
+                self._log(f"[PARALLEL] Chrome {worker_id}/{total_workers} - {len(filtered)}/{len(prompts)} prompts")
+                prompts = filtered
+
         # === LOCAL SERVER MODE: Dùng GoogleFlowAPI thay DrissionPage ===
         local_server_enabled = self.config.get('local_server_enabled', False)
         local_server_url = self.config.get('local_server_url', '')
