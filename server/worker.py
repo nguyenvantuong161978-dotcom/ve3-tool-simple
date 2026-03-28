@@ -106,12 +106,13 @@ def send_heartbeat(worker_id: str, status: str = "ready"):
 
 
 def main():
+    global SERVER_URL
+
     parser = argparse.ArgumentParser(description="Chrome Worker Process")
     parser.add_argument("--index", type=int, required=True, help="Worker index (0-4)")
     parser.add_argument("--server", type=str, default=SERVER_URL, help="Server URL")
     args = parser.parse_args()
 
-    global SERVER_URL
     SERVER_URL = args.server
     index = args.index
 
