@@ -1341,6 +1341,9 @@ class DrissionFlowAPI:
         self._consecutive_403 = 0
         self._cleared_data_for_403 = False  # True = da clear data trong luot 403 hien tai
         self._current_model_index = 0  # 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+        # v1.0.513: Track reset profile count cho api+server mode
+        self._profile_reset_count = 0  # So lan reset_chrome_profile() lien tiep khong co anh thanh cong
+        self._images_since_last_reset = 0  # So anh thanh cong tu lan reset cuoi
 
         # IPv6 rotation: Đọc từ settings.yaml
         self._ipv6_activated = False  # True = đã bật IPv6 proxy
@@ -2721,6 +2724,10 @@ class DrissionFlowAPI:
             self._consecutive_403 = 0
             self._cleared_data_for_403 = False
             self.driver = None
+            # v1.0.513: Track cho api+server mode
+            self._profile_reset_count = getattr(self, '_profile_reset_count', 0) + 1
+            self._images_since_last_reset = 0
+            self.log(f"  [RESET] Profile reset count: {self._profile_reset_count}")
 
             self.log("[v] Chrome TRẮNG - cần đăng nhập lại!")
             return True

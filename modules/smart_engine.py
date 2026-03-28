@@ -1423,7 +1423,7 @@ class SmartEngine:
                     self.log(f"[PARALLEL] {'Lần đầu' if retry == 0 else f'Retry {retry}'}: Còn {len(char_prompts)} characters cần tạo...")
 
                     # Generate using correct mode
-                    if generation_mode == 'api':
+                    if generation_mode in ('api', 'api+server'):
                         results = self.generate_images_api(char_prompts, proj_dir)
                     elif generation_mode == 'chrome':
                         results = self.generate_images_chrome(char_prompts, proj_dir)
@@ -1567,7 +1567,7 @@ class SmartEngine:
                     pass
 
                 # Generate using correct mode
-                if generation_mode == 'api':
+                if generation_mode in ('api', 'api+server'):
                     self.log("[PARALLEL-SCENES] Dùng API MODE...")
                     results = self.generate_images_api(scene_prompts, proj_dir)
                 else:
@@ -3025,7 +3025,7 @@ class SmartEngine:
         except:
             pass
 
-        mode_display = {"api": "API MODE", "browser": "BROWSER JS MODE", "chrome": "CHROME MODE"}.get(generation_mode, "BROWSER JS MODE")
+        mode_display = {"api": "API MODE", "browser": "BROWSER JS MODE", "chrome": "CHROME MODE", "api+server": "API + SERVER MODE"}.get(generation_mode, "BROWSER JS MODE")
 
         self.log("="*50)
         self.log(f"VE3 TOOL v{__version__} - {mode_display}")
@@ -3432,8 +3432,9 @@ class SmartEngine:
             scene_results = {"success": 0, "failed": 0}
 
             if image_prompts:
-                if generation_mode == 'api':
-                    self.log("[STEP 5] Tao images bang API MODE...")
+                if generation_mode in ('api', 'api+server'):
+                    mode_label = "API + SERVER" if generation_mode == 'api+server' else "API"
+                    self.log(f"[STEP 5] Tao images bang {mode_label} MODE...")
                     scene_results = self.generate_images_api(image_prompts, proj_dir)
                 elif generation_mode == 'chrome':
                     self.log("[STEP 5] Tao images bang CHROME MODE (khong API)...")

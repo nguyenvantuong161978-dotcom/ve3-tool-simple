@@ -178,7 +178,7 @@ class SettingsWindow(tk.Toplevel):
         tk.Label(gen_row, text="Generation Mode:", bg='#16213e', fg='white',
                  font=("Arial", 10)).pack(side="left", padx=(0, 10))
         self.gen_mode_var = tk.StringVar(value="api")
-        gen_modes = [("API (mac dinh)", "api"), ("Browser", "browser"), ("Chrome UI", "chrome")]
+        gen_modes = [("API (mac dinh)", "api"), ("Browser", "browser"), ("Chrome UI", "chrome"), ("API + Server", "api+server")]
         for text, val in gen_modes:
             tk.Radiobutton(gen_row, text=text, variable=self.gen_mode_var, value=val,
                            bg='#16213e', fg='white', selectcolor='#0f3460',
@@ -196,6 +196,8 @@ class SettingsWindow(tk.Toplevel):
                            bg='#16213e', fg='white', selectcolor='#0f3460',
                            font=("Arial", 10)).pack(side="left", padx=10)
 
+        tk.Label(gen_lf, text="API+Server: Chay API truoc, neu 403 lien tiep khong tao duoc anh → tu dong chuyen sang Server mode.",
+                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
         tk.Label(gen_lf, text="Chrome UI: Tao anh/video truc tiep qua Chrome (khong dung API). Model chi ap dung cho Chrome mode.",
                  bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 

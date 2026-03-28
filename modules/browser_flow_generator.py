@@ -2433,6 +2433,62 @@ class BrowserFlowGenerator:
         local_server_url = self.config.get('local_server_url', '')
         has_local_server = local_server_enabled and local_server_url
 
+        # v1.0.513: api+server mode - chay API truoc, tu dong chuyen server khi 403 lien tuc
+        if mode == 'api+server':
+            self._log("[AUTO] API+SERVER mode: Bat dau bang API, chuyen Server neu 403 lien tuc")
+            # Buoc 1: Chay API mode
+            api_result = self.generate_from_prompts_api(
+                prompts=prompts,
+                excel_path=excel_path,
+                bearer_token=bearer_token
+            )
+            api_stats = api_result.get("stats", {})
+            api_success = api_stats.get("success", 0)
+            api_failed = api_stats.get("failed", 0)
+
+            # Kiem tra co nen chuyen sang server khong
+            # Dieu kien: co anh failed VA khong co anh thanh cong nao (tuc la 403 lien tuc)
+            # HOAC: reset profile >= 2 lan ma khong tao duoc anh nao
+            should_switch = False
+            if api_failed > 0 and api_success == 0:
+                should_switch = True
+                self._log(f"[API+SERVER] API failed het {api_failed} anh, khong co anh nao thanh cong → CHUYEN SERVER")
+            elif api_failed > 0 and local_server_url:
+                # Co 1 so anh failed → thu lai bang server
+                should_switch = True
+                self._log(f"[API+SERVER] API: {api_success} OK, {api_failed} fail → thu lai anh failed bang SERVER")
+
+            if should_switch and local_server_url:
+                self._log(f"[API+SERVER] === CHUYEN SANG SERVER MODE: {local_server_url} ===")
+                # Tam bat local_server cho config
+                old_server_enabled = self.config.get('local_server_enabled', False)
+                self.config['local_server_enabled'] = True
+                if not self.config.get('local_server_url'):
+                    self.config['local_server_url'] = local_server_url
+
+                # Chay lai - generate_from_prompts_api se tu dong dung server
+                # Chi chay nhung anh chua thanh cong (da skip trong ham)
+                server_result = self.generate_from_prompts_api(
+                    prompts=prompts,
+                    excel_path=excel_path,
+                    bearer_token=bearer_token
+                )
+                # Khoi phuc config
+                self.config['local_server_enabled'] = old_server_enabled
+
+                server_stats = server_result.get("stats", {})
+                # Merge stats
+                combined_stats = {
+                    "success": api_success + server_stats.get("success", 0),
+                    "failed": server_stats.get("failed", 0),  # Chi con failed cua server
+                    "skipped": api_stats.get("skipped", 0) + server_stats.get("skipped", 0),
+                }
+                return {"success": True, "stats": combined_stats}
+            elif should_switch and not local_server_url:
+                self._log("[API+SERVER] Muon chuyen Server nhung chua cau hinh Server URL!", "WARN")
+
+            return api_result
+
         if mode == 'api':
             if has_local_server:
                 self._log(f"[AUTO] API mode voi LOCAL SERVER - gui anh qua {local_server_url}")
