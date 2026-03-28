@@ -2430,8 +2430,13 @@ class BrowserFlowGenerator:
         # Check proxy support for API mode
         proxy_api_token = self.config.get('proxy_api_token', '')
         local_server_enabled = self.config.get('local_server_enabled', False)
+        # v1.0.516: Ho tro nhieu server - uu tien list, fallback single URL
+        server_list = self.config.get('local_server_list', [])
         local_server_url = self.config.get('local_server_url', '')
-        has_local_server = local_server_enabled and local_server_url
+        if not local_server_url and server_list:
+            first = server_list[0]
+            local_server_url = first.get('url', first) if isinstance(first, dict) else str(first)
+        has_local_server = local_server_enabled and (local_server_url or server_list)
 
         # v1.0.513: api+server mode - chay API truoc, tu dong chuyen server khi 403 lien tuc
         if mode == 'api+server':
@@ -2455,17 +2460,21 @@ class BrowserFlowGenerator:
                 should_switch = True
                 self._log(f"[API+SERVER] API khong tao duoc anh moi nao ({api_failed} fail, {api_stats.get('skipped', 0)} skip) → CHUYEN SERVER")
 
-            # v1.0.514: Validate server URL
+            # v1.0.516: Validate server URL hoac server list
             local_server_url = (local_server_url or '').strip()
-            if should_switch and local_server_url and local_server_url.startswith('http'):
-                self._log(f"[API+SERVER] === CHUYEN SANG SERVER MODE: {local_server_url} ===")
-                # v1.0.514: Luu va khoi phuc config an toan bang try/finally
+            has_server = (local_server_url and local_server_url.startswith('http')) or bool(server_list)
+            if should_switch and has_server:
+                self._log(f"[API+SERVER] === CHUYEN SANG SERVER MODE ({len(server_list) or 1} servers) ===")
+                # Luu va khoi phuc config an toan bang try/finally
                 old_server_enabled = self.config.get('local_server_enabled', False)
                 old_server_url = self.config.get('local_server_url', '')
+                old_server_list = self.config.get('local_server_list', [])
                 server_result = None
                 try:
                     self.config['local_server_enabled'] = True
                     self.config['local_server_url'] = local_server_url
+                    if server_list:
+                        self.config['local_server_list'] = server_list
 
                     # Server tu skip anh da co tren disk (check output_path.exists())
                     server_result = self.generate_from_prompts_api(
@@ -2480,6 +2489,7 @@ class BrowserFlowGenerator:
                     # LUON khoi phuc config du co loi
                     self.config['local_server_enabled'] = old_server_enabled
                     self.config['local_server_url'] = old_server_url
+                    self.config['local_server_list'] = old_server_list
 
                 server_stats = server_result.get("stats", {})
                 # LUU Y: Switch chi xay ra khi api_success == 0 (API khong tao anh MOI nao)
@@ -2500,7 +2510,7 @@ class BrowserFlowGenerator:
                           f"that bai {server_failed} | Tong: {combined_stats['success']} OK, {server_failed} fail")
                 return {"success": True, "stats": combined_stats}
             elif should_switch:
-                self._log("[API+SERVER] Muon chuyen Server nhung chua cau hinh Server URL hop le!", "WARN")
+                self._log("[API+SERVER] Muon chuyen Server nhung chua cau hinh Server URL/list!", "WARN")
 
             return api_result
 

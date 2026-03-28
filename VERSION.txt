@@ -1,3 +1,14 @@
+1.0.516
+2026-03-29 (VN)
+Change: NHIEU SERVER - Nhieu VM dung chung nhieu server (load balancing)
+
+- GUI: Doi o nhap 1 URL → Text box nhieu dong (moi dong 1 server URL)
+- Luu local_server_list (list) + local_server_url (backward compat)
+- Kiem tra ket noi: Test tat ca server, hien popup chi tiet
+- ServerPool (da co san): Tu dong chia tai least-queue (server it viec nhat)
+- API+Server mode: Ho tro nhieu server khi chuyen tu API sang Server
+- Nhieu VM nhap cung danh sach server → tu dong phan bo tai
+
 1.0.515
 2026-03-29 (VN)
 Change: FIX stats key cho TAT CA return paths - dam bao API+Server khong vo logic

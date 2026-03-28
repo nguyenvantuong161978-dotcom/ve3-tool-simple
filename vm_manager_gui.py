@@ -311,15 +311,14 @@ class SettingsWindow(tk.Toplevel):
                        font=("Arial", 10, "bold"),
                        command=self._toggle_server_fields).pack(anchor="w", pady=(8, 0))
 
-        # URL server
-        tk.Label(server_frame, text="Server URL:", bg='#16213e', fg='white',
+        # Server URLs (multi-line: moi dong 1 server)
+        tk.Label(server_frame, text="Server URLs (moi dong 1 server):", bg='#16213e', fg='white',
                  font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
-        self.local_server_url_var = tk.StringVar()
-        self.server_url_entry = tk.Entry(server_frame, textvariable=self.local_server_url_var, width=60,
-                                          font=("Consolas", 10), bg='#0f3460', fg='white',
-                                          insertbackground='white')
-        self.server_url_entry.pack(fill="x", pady=2)
-        tk.Label(server_frame, text="Vi du: http://192.168.1.100:5000",
+        self.server_urls_text = tk.Text(server_frame, height=3, width=60,
+                                         font=("Consolas", 10), bg='#0f3460', fg='white',
+                                         insertbackground='white')
+        self.server_urls_text.pack(fill="x", pady=2)
+        tk.Label(server_frame, text="Vi du: http://192.168.1.100:5000  (nhieu VM cung nhap chung → tu dong chia tai)",
                  bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 
         # Status label
@@ -406,7 +405,17 @@ class SettingsWindow(tk.Toplevel):
                 self.chrome1_var.set(config.get('chrome_portable', ''))
                 self.chrome2_var.set(config.get('chrome_portable_2', ''))
                 self.local_server_enabled_var.set(config.get('local_server_enabled', False))
-                self.local_server_url_var.set(config.get('local_server_url', ''))
+                # Load server URLs: uu tien list, fallback single URL
+                server_list = config.get('local_server_list', [])
+                if server_list:
+                    urls_text = '\n'.join(
+                        s.get('url', s) if isinstance(s, dict) else str(s)
+                        for s in server_list
+                    )
+                else:
+                    urls_text = config.get('local_server_url', '')
+                self.server_urls_text.delete('1.0', 'end')
+                self.server_urls_text.insert('1.0', urls_text)
                 self._toggle_server_fields()
         except Exception as e:
             print(f"Error loading settings: {e}")
@@ -436,7 +445,18 @@ class SettingsWindow(tk.Toplevel):
             config['chrome_portable'] = self.chrome1_var.get().strip()
             config['chrome_portable_2'] = self.chrome2_var.get().strip()
             config['local_server_enabled'] = self.local_server_enabled_var.get()
-            config['local_server_url'] = self.local_server_url_var.get().strip()
+            # Parse server URLs tu text box → list
+            raw_urls = self.server_urls_text.get('1.0', 'end').strip()
+            server_list = []
+            first_url = ''
+            for line in raw_urls.splitlines():
+                url = line.strip()
+                if url and url.startswith('http'):
+                    server_list.append({'url': url, 'name': url, 'enabled': True})
+                    if not first_url:
+                        first_url = url
+            config['local_server_list'] = server_list
+            config['local_server_url'] = first_url  # backward compat
 
             # Luu
             with open(settings_path, "w", encoding="utf-8") as f:
@@ -466,45 +486,62 @@ class SettingsWindow(tk.Toplevel):
         """Bat/tat truong URL khi checkbox thay doi."""
         enabled = self.local_server_enabled_var.get()
         state = "normal" if enabled else "disabled"
-        self.server_url_entry.config(state=state)
+        self.server_urls_text.config(state=state)
         if enabled:
             self.server_status_lbl.config(text="Da bat - VM se gui anh qua server", fg='#00ff88')
         else:
             self.server_status_lbl.config(text="Da tat - VM dung Chrome local", fg='#888')
 
+    def _get_server_urls(self) -> list:
+        """Lay danh sach server URLs tu text box."""
+        raw = self.server_urls_text.get('1.0', 'end').strip()
+        urls = []
+        for line in raw.splitlines():
+            url = line.strip()
+            if url and url.startswith('http'):
+                urls.append(url)
+        return urls
+
     def _check_server_connection(self):
-        """Kiem tra ket noi den local server."""
-        url = self.local_server_url_var.get().strip()
-        if not url:
+        """Kiem tra ket noi den tat ca servers."""
+        urls = self._get_server_urls()
+        if not urls:
             self.server_status_lbl.config(text="Chua nhap URL server!", fg='#e94560')
             return
 
-        self.server_status_lbl.config(text="Dang kiem tra...", fg='#ffd93d')
+        self.server_status_lbl.config(text=f"Dang kiem tra {len(urls)} server...", fg='#ffd93d')
         self.update_idletasks()
 
-        try:
-            import requests
-            resp = requests.get(f"{url.rstrip('/')}/api/status", timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                chrome_ok = data.get('chrome_ready', False)
-                pending = data.get('pending_tasks', 0)
-                done = data.get('completed_tasks', 0)
-
-                if chrome_ok:
-                    self.server_status_lbl.config(
-                        text=f"KET NOI OK! Chrome san sang | Dang xu ly: {pending} | Xong: {done}",
-                        fg='#00ff88')
+        import requests
+        results = []
+        for url in urls:
+            try:
+                resp = requests.get(f"{url.rstrip('/')}/api/status", timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    chrome_ok = data.get('chrome_ready', False)
+                    pending = data.get('pending_tasks', 0)
+                    done = data.get('completed_tasks', 0)
+                    if chrome_ok:
+                        results.append(f"{url}: OK (q={pending}, done={done})")
+                    else:
+                        results.append(f"{url}: Chrome chua san sang")
                 else:
-                    self.server_status_lbl.config(
-                        text=f"Ket noi OK nhung Chrome chua san sang",
-                        fg='#ffd93d')
-            else:
-                self.server_status_lbl.config(text=f"Loi: HTTP {resp.status_code}", fg='#e94560')
-        except requests.exceptions.ConnectionError:
-            self.server_status_lbl.config(text=f"Khong ket noi duoc! Server chua chay?", fg='#e94560')
-        except Exception as e:
-            self.server_status_lbl.config(text=f"Loi: {e}", fg='#e94560')
+                    results.append(f"{url}: HTTP {resp.status_code}")
+            except requests.exceptions.ConnectionError:
+                results.append(f"{url}: FAIL - khong ket noi")
+            except Exception as e:
+                results.append(f"{url}: FAIL - {e}")
+
+        ok_count = sum(1 for r in results if ': OK' in r)
+        color = '#00ff88' if ok_count == len(urls) else '#ffd93d' if ok_count > 0 else '#e94560'
+        status = f"{ok_count}/{len(urls)} server OK"
+        self.server_status_lbl.config(text=status, fg=color)
+
+        # Show detail popup
+        from tkinter import messagebox
+        detail = '\n'.join(results)
+        messagebox.showinfo("Server Status", f"{status}\n\n{detail}")
 
     def _load_account_info(self):
         """
