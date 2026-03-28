@@ -3563,10 +3563,7 @@ class BrowserFlowGenerator:
             elif prompt_id.startswith('thumb'):
                 output_path = proj_dir / "thumb" / f"{prompt_id}.png"
             else:
-                try:
-                    output_path = proj_dir / "img" / f"scene_{int(prompt_id):03d}.png"
-                except ValueError:
-                    output_path = proj_dir / "img" / f"{prompt_id}.png"
+                output_path = proj_dir / "img" / f"{prompt_id}.png"
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -3624,15 +3621,39 @@ class BrowserFlowGenerator:
                 )
 
                 if ok and images:
-                    # Luu anh
-                    img_data = images[0]
-                    if isinstance(img_data, bytes):
-                        with open(opath, 'wb') as f:
-                            f.write(img_data)
-                    elif isinstance(img_data, str):
+                    # Luu anh - images[0] la GeneratedImage object
+                    gen_img = images[0]
+                    saved = False
+                    if hasattr(gen_img, 'base64_data') and gen_img.base64_data:
                         import base64
                         with open(opath, 'wb') as f:
-                            f.write(base64.b64decode(img_data))
+                            f.write(base64.b64decode(gen_img.base64_data))
+                        saved = True
+                    elif hasattr(gen_img, 'url') and gen_img.url:
+                        import requests as req
+                        try:
+                            r = req.get(gen_img.url, timeout=30)
+                            if r.status_code == 200:
+                                with open(opath, 'wb') as f:
+                                    f.write(r.content)
+                                saved = True
+                        except Exception as dl_err:
+                            self._log(f"  [{idx+1}] {pid} Download error: {dl_err}", "warn")
+                    elif isinstance(gen_img, bytes):
+                        with open(opath, 'wb') as f:
+                            f.write(gen_img)
+                        saved = True
+                    elif isinstance(gen_img, str):
+                        import base64
+                        with open(opath, 'wb') as f:
+                            f.write(base64.b64decode(gen_img))
+                        saved = True
+
+                    if not saved:
+                        self._log(f"  [{idx+1}] {pid} [FAIL] Khong luu duoc anh!", "error")
+                        with count_lock:
+                            failed_count += 1
+                        return False
 
                     pool.mark_success(server)
                     self._log(f"  [{idx+1}] {pid} [OK] → {opath.name} ({server.name})")
@@ -3641,9 +3662,9 @@ class BrowserFlowGenerator:
                     with excel_lock:
                         try:
                             if pid.startswith('nv') or pid.startswith('loc'):
-                                workbook.update_character_status(pid, "done", str(opath))
+                                workbook.update_character(pid, status="done", image_file=str(opath))
                             elif not pid.startswith('thumb'):
-                                workbook.update_scene_status(int(pid), status_img="done", img_path=str(opath))
+                                workbook.update_scene(int(pid), status_img="done", img_path=str(opath))
                             workbook.save()
                         except Exception as e:
                             self._log(f"  [{idx+1}] Excel update failed: {e}", "warn")
@@ -3667,22 +3688,44 @@ class BrowserFlowGenerator:
                         )
                         ok2, images2, err2 = api2.generate_images(prompt=ptxt, count=1, aspect_ratio=aspect_ratio)
                         if ok2 and images2:
-                            img_data = images2[0]
-                            if isinstance(img_data, bytes):
-                                with open(opath, 'wb') as f:
-                                    f.write(img_data)
-                            elif isinstance(img_data, str):
+                            gen_img2 = images2[0]
+                            saved2 = False
+                            if hasattr(gen_img2, 'base64_data') and gen_img2.base64_data:
                                 import base64
                                 with open(opath, 'wb') as f:
-                                    f.write(base64.b64decode(img_data))
+                                    f.write(base64.b64decode(gen_img2.base64_data))
+                                saved2 = True
+                            elif hasattr(gen_img2, 'url') and gen_img2.url:
+                                import requests as req
+                                try:
+                                    r = req.get(gen_img2.url, timeout=30)
+                                    if r.status_code == 200:
+                                        with open(opath, 'wb') as f:
+                                            f.write(r.content)
+                                        saved2 = True
+                                except:
+                                    pass
+                            elif isinstance(gen_img2, bytes):
+                                with open(opath, 'wb') as f:
+                                    f.write(gen_img2)
+                                saved2 = True
+                            elif isinstance(gen_img2, str):
+                                import base64
+                                with open(opath, 'wb') as f:
+                                    f.write(base64.b64decode(gen_img2))
+                                saved2 = True
+                            if not saved2:
+                                with count_lock:
+                                    failed_count += 1
+                                return False
                             pool.mark_success(server2)
                             self._log(f"  [{idx+1}] {pid} [OK] retry → {opath.name} ({server2.name})")
                             with excel_lock:
                                 try:
                                     if pid.startswith('nv') or pid.startswith('loc'):
-                                        workbook.update_character_status(pid, "done", str(opath))
+                                        workbook.update_character(pid, status="done", image_file=str(opath))
                                     elif not pid.startswith('thumb'):
-                                        workbook.update_scene_status(int(pid), status_img="done", img_path=str(opath))
+                                        workbook.update_scene(int(pid), status_img="done", img_path=str(opath))
                                     workbook.save()
                                 except:
                                     pass

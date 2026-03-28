@@ -1,8 +1,19 @@
-1.0.479
+1.0.480
 2026-03-28 (VN)
-Change: REFERENCE IMAGES + Fix interceptor reset
+Change: FIX VM Local Server - anh khong luu duoc
 
 Thay doi:
+- v1.0.480: FIX 3 BUGS TRONG _generate_via_local_server
+  * BUG 1: Anh khong luu - images[0] la GeneratedImage object, KHONG phai bytes/str
+    - Code cu: isinstance(img_data, bytes) → KHONG BAO GIO match → anh mat
+    - Fix: Dung gen_img.base64_data hoac gen_img.url de luu anh
+  * BUG 2: Ten file sai - scene_095.png → 95.png (giong smart_engine.py)
+    - Code cu: f"scene_{int(prompt_id):03d}.png"
+    - Fix: f"{prompt_id}.png" (giong cac cho khac trong codebase)
+  * BUG 3: Excel error - 'PromptWorkbook' has no attribute 'update_scene_status'
+    - Code cu: workbook.update_scene_status() / update_character_status()
+    - Fix: workbook.update_scene() / update_character() (methods thuc su co)
+- v1.0.479: Fix interceptor reset
 - v1.0.478: REFERENCE IMAGES (imageInputs)
   * server/chrome_session.py: build_interceptor_js() nhan image_inputs
     - Inject imageInputs vao body.requests[] khi gui Google
