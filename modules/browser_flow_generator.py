@@ -3303,7 +3303,7 @@ class BrowserFlowGenerator:
             self._log(f"Khong import duoc DrissionFlowAPI: {e}", "error")
             return None
 
-        # Chrome Portable path
+        # Chrome Portable path - dung dung chrome cua worker nay
         chrome_portable = self.config.get('chrome_portable', '')
         if not chrome_portable:
             self._log("Khong co chrome_portable trong config!", "error")
@@ -3318,6 +3318,7 @@ class BrowserFlowGenerator:
             return None
 
         self._log(f"ChromePortable: {cp_path}")
+        self._log(f"Worker ID: {self.worker_id}")
 
         # Project URL tu Excel
         project_url = ''
@@ -3331,11 +3332,11 @@ class BrowserFlowGenerator:
             except Exception as e:
                 self._log(f"Khong doc duoc Excel config: {e}", "warn")
 
-        # Tao DrissionFlowAPI
+        # Tao DrissionFlowAPI - dung worker_id de tranh conflict port
         drission = DrissionFlowAPI(
             chrome_portable=str(cp_path),
-            worker_id=0,
-            total_workers=1,
+            worker_id=self.worker_id,
+            total_workers=self.total_workers,
             headless=False,  # Can hien thi de Google khong block
             verbose=self.verbose,
             log_callback=lambda msg, level="info": self._log(f"[Drission] {msg}", level),
@@ -3460,8 +3461,28 @@ class BrowserFlowGenerator:
             except:
                 pass
         if not bearer_token:
-            self._log("Khong co bearer token, dung DrissionPage de lay...")
-            bearer_token = self._extract_token_via_drission(excel_path)
+            # Chrome 2 (worker_id > 0): doi Chrome 1 extract token truoc
+            if self.worker_id > 0:
+                import time
+                self._log(f"[Worker {self.worker_id}] Doi Chrome 1 lay token (check Excel moi 10s)...")
+                for wait_i in range(18):  # Doi toi da 3 phut
+                    time.sleep(10)
+                    try:
+                        wb_tmp2 = PromptWorkbook(excel_path)
+                        wb_tmp2.load_or_create()
+                        bearer_token = wb_tmp2.get_config_value('flow_bearer_token')
+                        if bearer_token:
+                            self._log(f"[Worker {self.worker_id}] Token tu Excel (Chrome 1 da luu): {bearer_token[:20]}...")
+                            break
+                    except:
+                        pass
+                    if (wait_i + 1) % 6 == 0:
+                        self._log(f"[Worker {self.worker_id}] Van doi token... ({(wait_i+1)*10}s)")
+
+            # Neu van chua co → tu extract (Chrome 1 hoac fallback)
+            if not bearer_token:
+                self._log("Khong co bearer token, dung DrissionPage de lay...")
+                bearer_token = self._extract_token_via_drission(excel_path)
         if not bearer_token:
             return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc."}
 

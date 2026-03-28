@@ -1,6 +1,6 @@
-1.0.461
+1.0.462
 2026-03-28 (VN)
-Change: Lay token bang DrissionPage thay ChromeAutoToken (khong can F12)
+Change: Chrome 1+2 deu gui qua server + Chrome 2 doi token tu Chrome 1
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
