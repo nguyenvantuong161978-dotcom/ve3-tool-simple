@@ -355,12 +355,18 @@ class ChromePool:
                         duration = time.time() - tasks[task_id].get('started_at', time.time())
                         self._log(f"[{worker_name}] OK: {task_id[:8]}... | VM: {vm_id} | {duration:.1f}s", "OK")
                     elif result and 'error' in result:
+                        err_msg = result['error']
+                        # error co the la dict ({"code": 403, "message": "..."}) hoac string
+                        if isinstance(err_msg, dict):
+                            err_str = f"Error {err_msg.get('code', '?')}: {err_msg.get('message', str(err_msg))}"
+                        else:
+                            err_str = str(err_msg)
                         tasks[task_id]['status'] = 'failed'
-                        tasks[task_id]['error'] = result['error']
+                        tasks[task_id]['error'] = err_str
                         stats['total_failed'] += 1
                         worker.total_failed += 1
-                        worker.last_error = str(result['error'])[:100]
-                        self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {result['error'][:80]}", "ERROR")
+                        worker.last_error = err_str[:100]
+                        self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
                     else:
                         tasks[task_id]['status'] = 'failed'
                         tasks[task_id]['error'] = 'No media in response'

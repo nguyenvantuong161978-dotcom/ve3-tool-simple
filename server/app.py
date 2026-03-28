@@ -1,37 +1,39 @@
 """
-Local Proxy Server - Multi-Chrome Queue System cho nhieu VM
+Local Proxy Server - Multi-Chrome Queue System v3.0
 
-v2.0: Multi-Chrome - Chay N Chrome song song (thay vi 1)
-- Moi Chrome: 1 account rieng + 1 IPv6 rieng + 1 queue worker thread rieng
-- 5 Chrome Portable: GoogleChromePortable, - Copy, - Copy (2), - Copy (3), - Copy (4)
-- Account + IPv6 doc tu Google Sheet "SERVER" (col B = account, col C = IPv6)
-- Shared queue: task vao queue chung, worker nao ranh se lay
+v3.0: Multi-Process - Moi Chrome chay 1 CMD rieng
+- Main CMD: Flask server + queue management (khoi dong NGAY, khong doi Chrome)
+- N Worker CMDs: Moi Chrome 1 process rieng, setup song song
+- Workers giao tiep voi server qua HTTP internal API
 
-Flow:
-1. Server khoi dong → doc accounts tu Sheet SERVER → mo N Chrome → dang nhap → san sang
-2. VM gui POST /api/fix/create-image-veo3 voi {body_json, flow_auth_token, flow_url}
-3. Server xep vao hang doi FIFO → worker ranh lay task tu queue
-4. Chrome tao recaptchaToken → Google nhan token khach + captcha hop le → tao anh
-5. VM poll GET /api/fix/task-status?taskId=xxx → nhan ket qua
+Architecture:
+  ┌─────────────────────────────────────────────┐
+  │ Main CMD (server/app.py)                     │
+  │  - Flask server (port 5000)                  │
+  │  - Task queue (FIFO)                         │
+  │  - Worker registry                           │
+  │  - KHOI DONG NGAY → san sang nhan request    │
+  └──────────────┬──────────────────────────────┘
+                 │ HTTP internal API
+    ┌────────────┼────────────┬────────────┐
+    ▼            ▼            ▼            ▼
+  Worker-0    Worker-1    Worker-2    Worker-3
+  (CMD rieng) (CMD rieng) (CMD rieng) (CMD rieng)
+  Chrome-0    Chrome-1    Chrome-2    Chrome-3
+  Port 19222  Port 19223  Port 19224  Port 19225
 
-API Contract:
+Internal API (cho workers):
+  POST /internal/register       - Worker dang ky voi server
+  GET  /internal/next-task      - Worker lay task tiep theo
+  POST /internal/task-done      - Worker bao hoan thanh task
+  GET  /internal/worker-config  - Worker lay config (account, ipv6)
+
+External API (cho VMs - khong doi):
   POST /api/fix/create-image-veo3
-    Body: { body_json: {...}, flow_auth_token: "ya29.xxx", flow_url: "https://..." }
-    Response: { success: true, taskId: "uuid", queue_position: 3 }
-
-  GET /api/fix/task-status?taskId=xxx
-    Response: { success: true, status: "queued", queue_position: 2 }
-    Response: { success: true, status: "processing" }
-    Response: { success: true, result: { media: [...] } }
-
-  GET /api/status
-    Response: { status: "running", chrome_count: 5, chrome_ready: 3, queue_size: 10, ... }
-
-  GET /api/queue
-    Response: { queue: [{taskId, vm_id, prompt_preview, status, position}, ...] }
-
-  GET /api/workers
-    Response: { workers: [{index, ready, busy, account, completed, failed}, ...] }
+  GET  /api/fix/task-status?taskId=xxx
+  GET  /api/status
+  GET  /api/queue
+  GET  /api/workers
 """
 import sys
 import os
@@ -55,16 +57,18 @@ app = Flask(__name__)
 # ============================================================
 # Shared Queue + Task Storage
 # ============================================================
-# Task storage: taskId -> task_data
 tasks = {}
 task_lock = threading.Lock()
 
-# Queue: list of task_ids (FIFO)
 task_queue = []
 queue_lock = threading.Lock()
 
-# Chrome Pool (initialized in main)
-chrome_pool = None
+# ============================================================
+# Worker Registry (thay the ChromePool)
+# ============================================================
+# worker_id -> worker_info
+workers = {}
+worker_lock = threading.Lock()
 
 # Stats
 stats = {
@@ -74,42 +78,246 @@ stats = {
     'start_time': time.time(),
 }
 
+# Server configs (doc tu Sheet)
+server_configs = []
+
 
 def _get_queue_position(task_id: str) -> int:
     """Tra ve vi tri trong queue (1-based). 0 = dang processing. -1 = khong trong queue."""
-    # Check if any worker is processing this task
-    if chrome_pool:
-        for w in chrome_pool.workers:
-            if w.current_task_id == task_id:
-                return 0  # Dang xu ly
+    with worker_lock:
+        for wid, w in workers.items():
+            if w.get('current_task_id') == task_id:
+                return 0
 
     with queue_lock:
         try:
             return task_queue.index(task_id) + 1
         except ValueError:
-            return -1  # Khong trong queue (da xong hoac loi)
+            return -1
 
 
 # ============================================================
-# API Endpoints
+# Internal API - Cho Workers
+# ============================================================
+
+@app.route('/internal/worker-config', methods=['GET'])
+def worker_config():
+    """
+    Worker lay config cua minh (account, ipv6, chrome path, port).
+    GET /internal/worker-config?index=0
+    """
+    index = int(request.args.get('index', -1))
+    if index < 0:
+        return jsonify({"error": "Missing index"}), 400
+
+    cfg = server_configs[index] if index < len(server_configs) else {}
+
+    from server.chrome_pool import CHROME_FOLDERS, BASE_PORT
+    chrome_folders = CHROME_FOLDERS
+
+    # Tim chrome folder cho index nay
+    chrome_path = ""
+    found_chromes = []
+    for i, folder in enumerate(chrome_folders):
+        chrome_dir = TOOL_DIR / folder
+        chrome_exe = chrome_dir / "GoogleChromePortable.exe"
+        if chrome_exe.exists():
+            found_chromes.append({
+                "index": i,
+                "path": str(chrome_exe),
+                "folder": folder,
+                "port": BASE_PORT + i,
+            })
+
+    if index < len(found_chromes):
+        chrome_info = found_chromes[index]
+    else:
+        return jsonify({"error": f"No Chrome found for index {index}"}), 404
+
+    return jsonify({
+        "index": index,
+        "chrome_path": chrome_info["path"],
+        "chrome_folder": chrome_info["folder"],
+        "port": chrome_info["port"],
+        "account": cfg.get("account"),
+        "ipv6": cfg.get("ipv6", ""),
+    })
+
+
+@app.route('/internal/register', methods=['POST'])
+def register_worker():
+    """
+    Worker dang ky voi server.
+    POST /internal/register
+    Body: { "index": 0, "account": "email", "port": 19222, "status": "ready" }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON"}), 400
+
+    index = data.get('index', -1)
+    worker_id = f"chrome-{index}"
+
+    with worker_lock:
+        workers[worker_id] = {
+            'index': index,
+            'account': data.get('account', ''),
+            'port': data.get('port', 0),
+            'status': data.get('status', 'starting'),
+            'ready': data.get('status') == 'ready',
+            'busy': False,
+            'current_task_id': None,
+            'total_completed': data.get('total_completed', 0),
+            'total_failed': data.get('total_failed', 0),
+            'last_error': data.get('last_error', ''),
+            'registered_at': time.time(),
+            'last_heartbeat': time.time(),
+        }
+
+    status = data.get('status', 'starting')
+    print(f"[WORKER] Chrome-{index} registered: {status} | Account: {data.get('account', '?')}")
+    return jsonify({"success": True, "worker_id": worker_id})
+
+
+@app.route('/internal/next-task', methods=['GET'])
+def next_task():
+    """
+    Worker lay task tiep theo tu queue.
+    GET /internal/next-task?worker_id=chrome-0
+    """
+    worker_id = request.args.get('worker_id', '')
+    if not worker_id:
+        return jsonify({"task": None, "error": "Missing worker_id"}), 400
+
+    # Check worker registered
+    with worker_lock:
+        w = workers.get(worker_id)
+        if not w or not w.get('ready'):
+            return jsonify({"task": None})
+
+    # Lay task tu queue
+    task_id = None
+    with queue_lock:
+        if task_queue:
+            task_id = task_queue.pop(0)
+
+    if not task_id:
+        return jsonify({"task": None})
+
+    # Mark worker busy
+    with worker_lock:
+        if worker_id in workers:
+            workers[worker_id]['busy'] = True
+            workers[worker_id]['current_task_id'] = task_id
+
+    # Update task status
+    with task_lock:
+        task = tasks.get(task_id)
+        if task:
+            task['status'] = 'processing'
+            task['started_at'] = time.time()
+            task['worker'] = w.get('index', -1)
+
+    vm_id = task.get('vm_id', '?') if task else '?'
+    prompt = task.get('prompt', '')[:50] if task else ''
+    print(f"[DISPATCH] {worker_id} ← Task {task_id[:8]}... | VM: {vm_id} | Prompt: {prompt}...")
+
+    return jsonify({
+        "task": {
+            "task_id": task_id,
+            "bearer_token": task.get('bearer_token', ''),
+            "project_id": task.get('project_id', ''),
+            "prompt": task.get('prompt', ''),
+            "model_name": task.get('model_name', 'GEM_PIX_2'),
+            "aspect_ratio": task.get('aspect_ratio', 'IMAGE_ASPECT_RATIO_LANDSCAPE'),
+            "seed": task.get('seed'),
+            "vm_id": vm_id,
+        }
+    })
+
+
+@app.route('/internal/task-done', methods=['POST'])
+def task_done():
+    """
+    Worker bao hoan thanh hoac loi.
+    POST /internal/task-done
+    Body: { "worker_id": "chrome-0", "task_id": "xxx", "success": true, "result": {...} }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON"}), 400
+
+    worker_id = data.get('worker_id', '')
+    task_id = data.get('task_id', '')
+    success = data.get('success', False)
+    result = data.get('result')
+    error = data.get('error', '')
+
+    # Update task
+    with task_lock:
+        task = tasks.get(task_id)
+        if task:
+            if success and result:
+                task['status'] = 'completed'
+                task['result'] = result
+                task['completed_at'] = time.time()
+                stats['total_completed'] += 1
+            else:
+                task['status'] = 'failed'
+                task['error'] = error or 'Unknown error'
+                stats['total_failed'] += 1
+
+    # Update worker
+    with worker_lock:
+        w = workers.get(worker_id)
+        if w:
+            w['busy'] = False
+            w['current_task_id'] = None
+            w['last_heartbeat'] = time.time()
+            if success:
+                w['total_completed'] = w.get('total_completed', 0) + 1
+                w['last_error'] = ''
+            else:
+                w['total_failed'] = w.get('total_failed', 0) + 1
+                w['last_error'] = str(error)[:100]
+
+    vm_id = ''
+    with task_lock:
+        t = tasks.get(task_id, {})
+        vm_id = t.get('vm_id', '?')
+        duration = time.time() - t.get('started_at', time.time())
+
+    if success:
+        print(f"[DONE] {worker_id} | Task {task_id[:8]}... | VM: {vm_id} | {duration:.1f}s | OK")
+    else:
+        print(f"[FAIL] {worker_id} | Task {task_id[:8]}... | VM: {vm_id} | {error[:80]}")
+
+    return jsonify({"success": True})
+
+
+@app.route('/internal/heartbeat', methods=['POST'])
+def heartbeat():
+    """Worker gui heartbeat de bao van song."""
+    data = request.get_json() or {}
+    worker_id = data.get('worker_id', '')
+    with worker_lock:
+        w = workers.get(worker_id)
+        if w:
+            w['last_heartbeat'] = time.time()
+            # Update status neu co
+            if 'status' in data:
+                w['status'] = data['status']
+                w['ready'] = data['status'] == 'ready'
+    return jsonify({"ok": True})
+
+
+# ============================================================
+# External API - Cho VMs (khong thay doi)
 # ============================================================
 
 @app.route('/api/fix/create-image-veo3', methods=['POST'])
 def create_image():
-    """
-    Tao task sinh anh - xep vao hang doi.
-
-    Body JSON:
-    {
-        "body_json": {
-            "clientContext": { "projectId": "uuid", ... },
-            "requests": [{ "prompt": "...", "imageModelName": "GEM_PIX_2", ... }]
-        },
-        "flow_auth_token": "ya29.xxx",
-        "flow_url": "https://aisandbox-pa.googleapis.com/v1/projects/{id}/flowMedia:batchGenerateImages",
-        "vm_id": "TA6-T1"  // Optional: de biet task tu VM nao
-    }
-    """
+    """Tao task sinh anh - xep vao hang doi."""
     try:
         data = request.get_json()
         if not data:
@@ -125,7 +333,7 @@ def create_image():
         if not flow_auth_token:
             return jsonify({"success": False, "error": "Missing flow_auth_token"}), 400
 
-        # Extract prompt tu body_json
+        # Extract prompt
         prompt = ""
         if 'requests' in body_json and body_json['requests']:
             prompt = body_json['requests'][0].get('prompt', '')
@@ -133,7 +341,7 @@ def create_image():
         if not prompt:
             return jsonify({"success": False, "error": "No prompt in body_json.requests[0].prompt"}), 400
 
-        # Extract project ID tu body_json hoac flow_url
+        # Extract project ID
         project_id = ""
         if body_json.get('clientContext', {}).get('projectId'):
             project_id = body_json['clientContext']['projectId']
@@ -151,7 +359,7 @@ def create_image():
         aspect_ratio = req.get('imageAspectRatio', 'IMAGE_ASPECT_RATIO_LANDSCAPE')
         seed = req.get('seed', None)
 
-        # Tao task va xep vao queue
+        # Tao task
         task_id = str(uuid.uuid4())
         with task_lock:
             tasks[task_id] = {
@@ -166,7 +374,7 @@ def create_image():
                 'aspect_ratio': aspect_ratio,
                 'seed': seed,
                 'vm_id': vm_id,
-                'worker': None,  # Worker index se xu ly task nay
+                'worker': None,
             }
             stats['total_received'] += 1
 
@@ -175,9 +383,9 @@ def create_image():
             queue_position = len(task_queue)
 
         # Log
-        ready = chrome_pool.total_ready() if chrome_pool else 0
-        avail = chrome_pool.available_count() if chrome_pool else 0
-        print(f"[QUEUE] +Task {task_id[:8]}... | VM: {vm_id} | Pos: {queue_position} | Workers: {avail}/{ready} free | Prompt: {prompt[:50]}...")
+        ready_count = sum(1 for w in workers.values() if w.get('ready'))
+        avail_count = sum(1 for w in workers.values() if w.get('ready') and not w.get('busy'))
+        print(f"[QUEUE] +Task {task_id[:8]}... | VM: {vm_id} | Pos: {queue_position} | Workers: {avail_count}/{ready_count} free | Prompt: {prompt[:50]}...")
 
         return jsonify({
             "success": True,
@@ -191,11 +399,7 @@ def create_image():
 
 @app.route('/api/fix/task-status', methods=['GET'])
 def task_status():
-    """
-    Poll task status + vi tri trong queue.
-
-    GET /api/fix/task-status?taskId=xxx
-    """
+    """Poll task status."""
     task_id = request.args.get('taskId', '')
     if not task_id:
         return jsonify({"success": False, "error": "Missing taskId"}), 400
@@ -211,7 +415,6 @@ def task_status():
     elif task['status'] == 'failed':
         return jsonify({"success": False, "error": task['error']})
     else:
-        # queued hoac processing
         position = _get_queue_position(task_id)
         response = {"success": True, "status": task['status']}
         if position > 0:
@@ -230,7 +433,6 @@ def server_status():
     with queue_lock:
         queue_size = len(task_queue)
 
-    # Danh sach VM dang co task
     vm_tasks = {}
     with task_lock:
         for tid, t in tasks.items():
@@ -238,19 +440,17 @@ def server_status():
             if t['status'] in ('queued', 'processing'):
                 vm_tasks[vm] = vm_tasks.get(vm, 0) + 1
 
-    # Worker stats
-    total_workers = len(chrome_pool.workers) if chrome_pool else 0
-    ready_workers = chrome_pool.total_ready() if chrome_pool else 0
-    available_workers = chrome_pool.available_count() if chrome_pool else 0
+    with worker_lock:
+        total_workers = len(workers)
+        ready_workers = sum(1 for w in workers.values() if w.get('ready'))
+        available_workers = sum(1 for w in workers.values() if w.get('ready') and not w.get('busy'))
 
-    # Processing tasks
-    processing = []
-    if chrome_pool:
-        for w in chrome_pool.workers:
-            if w.busy and w.current_task_id:
+        processing = []
+        for wid, w in workers.items():
+            if w.get('busy') and w.get('current_task_id'):
                 processing.append({
-                    "worker": w.index,
-                    "task": w.current_task_id[:8] + "...",
+                    "worker": w['index'],
+                    "task": w['current_task_id'][:8] + "...",
                 })
 
     return jsonify({
@@ -273,14 +473,27 @@ def server_status():
 @app.route('/api/workers', methods=['GET'])
 def workers_info():
     """Chi tiet tung Chrome worker."""
-    if not chrome_pool:
-        return jsonify({"workers": [], "error": "ChromePool not initialized"})
+    with worker_lock:
+        worker_list = [
+            {
+                "index": w['index'],
+                "ready": w.get('ready', False),
+                "busy": w.get('busy', False),
+                "current_task": w['current_task_id'][:8] + "..." if w.get('current_task_id') else None,
+                "account": w.get('account'),
+                "completed": w.get('total_completed', 0),
+                "failed": w.get('total_failed', 0),
+                "last_error": w.get('last_error') or None,
+                "status": w.get('status', '?'),
+            }
+            for wid, w in sorted(workers.items(), key=lambda x: x[1].get('index', 0))
+        ]
 
     return jsonify({
-        "total": len(chrome_pool.workers),
-        "ready": chrome_pool.total_ready(),
-        "available": chrome_pool.available_count(),
-        "workers": chrome_pool.get_stats(),
+        "total": len(worker_list),
+        "ready": sum(1 for w in worker_list if w['ready']),
+        "available": sum(1 for w in worker_list if w['ready'] and not w['busy']),
+        "workers": worker_list,
     })
 
 
@@ -304,16 +517,15 @@ def queue_info():
             "wait_time": round(time.time() - t.get('created_at', time.time()), 1),
         })
 
-    # Processing tasks
     processing = []
-    if chrome_pool:
-        for w in chrome_pool.workers:
-            if w.busy and w.current_task_id:
+    with worker_lock:
+        for wid, w in workers.items():
+            if w.get('busy') and w.get('current_task_id'):
                 with task_lock:
-                    t = tasks.get(w.current_task_id, {})
+                    t = tasks.get(w['current_task_id'], {})
                 processing.append({
-                    "worker": w.index,
-                    "taskId": w.current_task_id[:8] + "...",
+                    "worker": w['index'],
+                    "taskId": w['current_task_id'][:8] + "...",
                     "vm_id": t.get('vm_id', '?'),
                     "prompt_preview": t.get('prompt', '')[:60],
                 })
@@ -332,7 +544,7 @@ def queue_info():
 def cleanup_old_tasks():
     """Xoa tasks cu hon 1 gio."""
     while True:
-        time.sleep(300)  # Check moi 5 phut
+        time.sleep(300)
         cutoff = time.time() - 3600
         with task_lock:
             old_ids = [tid for tid, t in tasks.items()
@@ -343,71 +555,73 @@ def cleanup_old_tasks():
             print(f"[CLEANUP] Removed {len(old_ids)} old tasks")
 
 
+def check_dead_workers():
+    """Check workers khong gui heartbeat > 60s → mark dead."""
+    while True:
+        time.sleep(30)
+        now = time.time()
+        with worker_lock:
+            for wid, w in workers.items():
+                if w.get('ready') and now - w.get('last_heartbeat', now) > 60:
+                    w['ready'] = False
+                    w['status'] = 'dead'
+                    # Tra lai task neu dang xu ly
+                    tid = w.get('current_task_id')
+                    if tid:
+                        w['current_task_id'] = None
+                        w['busy'] = False
+                        with queue_lock:
+                            task_queue.insert(0, tid)  # Them lai dau queue
+                        with task_lock:
+                            t = tasks.get(tid)
+                            if t:
+                                t['status'] = 'queued'
+                        print(f"[DEAD] {wid} died, task {tid[:8]}... returned to queue")
+
+
 # ============================================================
 # Main
 # ============================================================
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("  LOCAL PROXY SERVER - Multi-Chrome Queue System")
+    print("  LOCAL PROXY SERVER v3.0 - Multi-Process Architecture")
     print("=" * 60)
     print()
-    print("Endpoints:")
+    print("External API (cho VMs):")
     print("  POST /api/fix/create-image-veo3  - Tao anh (xep hang doi)")
-    print("  GET  /api/fix/task-status         - Poll ket qua + vi tri queue")
-    print("  GET  /api/status                  - Server status + queue info")
-    print("  GET  /api/workers                 - Chi tiet tung Chrome worker")
-    print("  GET  /api/queue                   - Xem chi tiet hang doi")
+    print("  GET  /api/fix/task-status         - Poll ket qua")
+    print("  GET  /api/status                  - Server status")
+    print("  GET  /api/workers                 - Chi tiet workers")
+    print("  GET  /api/queue                   - Xem hang doi")
+    print()
+    print("Internal API (cho Chrome workers):")
+    print("  GET  /internal/worker-config      - Lay config")
+    print("  POST /internal/register           - Dang ky worker")
+    print("  GET  /internal/next-task           - Lay task")
+    print("  POST /internal/task-done           - Bao hoan thanh")
     print()
 
-    # Start cleanup thread
-    cleanup_thread = threading.Thread(target=cleanup_old_tasks, daemon=True)
-    cleanup_thread.start()
+    # Start cleanup threads
+    threading.Thread(target=cleanup_old_tasks, daemon=True).start()
+    threading.Thread(target=check_dead_workers, daemon=True).start()
 
-    # ============================================================
-    # Init Chrome Pool
-    # ============================================================
-    from server.chrome_pool import ChromePool, get_server_config
-
-    print("[INIT] Doc cau hinh tu Google Sheet 'SERVER'...")
-    server_configs = []
+    # Doc configs tu Sheet (de worker-config endpoint tra ve)
     try:
+        from server.chrome_pool import get_server_config
+        print("[INIT] Doc cau hinh tu Google Sheet 'SERVER'...")
         server_configs = get_server_config()
         if server_configs:
             print(f"[INIT] Tim thay {len(server_configs)} accounts/IPv6")
         else:
-            print("[INIT] Khong tim thay config trong sheet 'SERVER'")
-            print("[INIT] Server se chay voi Chrome da dang nhap san")
+            print("[INIT] Khong tim thay config → workers se dung Chrome da login san")
     except Exception as e:
         print(f"[INIT] Loi doc sheet: {e}")
-        print("[INIT] Server se chay voi Chrome da dang nhap san")
 
     print()
-    print("[INIT] Khoi tao Chrome Pool...")
-    chrome_pool = ChromePool()
-    chrome_pool.init_workers(server_configs)
-
-    if not chrome_pool.workers:
-        print("[INIT] KHONG TIM THAY Chrome Portable nao!")
-        print("[INIT] Can it nhat 1 folder: GoogleChromePortable/GoogleChromePortable.exe")
-        print("[INIT] Server se chay nhung KHONG THE tao anh!")
-    else:
-        print()
-        print(f"[INIT] Setup {len(chrome_pool.workers)} Chrome workers...")
-        ready_count = chrome_pool.setup_all()
-
-        if ready_count > 0:
-            print()
-            print(f"[INIT] {ready_count} Chrome workers READY!")
-            # Start worker threads
-            chrome_pool.start_workers(task_queue, queue_lock, tasks, task_lock, stats)
-            print(f"[INIT] {ready_count} worker threads started!")
-        else:
-            print("[INIT] KHONG CO Chrome worker nao san sang!", )
-            print("[INIT] Server se chay nhung KHONG THE tao anh!")
-
+    print("Server READY - dang cho workers dang ky...")
+    print("Chay 'python server/worker.py --index N' de khoi dong worker")
     print()
     print(f"Server starting on http://0.0.0.0:5000")
-    print(f"Chrome workers: {chrome_pool.total_ready() if chrome_pool else 0}")
     print("=" * 60)
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

@@ -3483,6 +3483,16 @@ class BrowserFlowGenerator:
                 bearer_token = wb_tmp.get_config_value('flow_bearer_token')
                 if bearer_token:
                     self._log(f"Bearer token tu Excel config: {bearer_token[:20]}...")
+                    self.config['flow_bearer_token'] = bearer_token
+                # Doc luon project_id va project_url tu Excel (tranh phai tao anh test)
+                excel_project_id = wb_tmp.get_config_value('flow_project_id')
+                if excel_project_id and not self.config.get('flow_project_id'):
+                    self.config['flow_project_id'] = excel_project_id
+                    self._log(f"Project ID tu Excel config: {excel_project_id}")
+                excel_project_url = wb_tmp.get_config_value('flow_project_url')
+                if excel_project_url and not self.config.get('flow_project_url'):
+                    self.config['flow_project_url'] = excel_project_url
+                    self._log(f"Project URL tu Excel config: {excel_project_url[:60]}...")
             except:
                 pass
         if not bearer_token:

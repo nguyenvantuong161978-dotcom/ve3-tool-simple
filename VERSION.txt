@@ -1,156 +1,29 @@
-1.0.470
+1.0.471
 2026-03-28 (VN)
-Change: SMART LOGIN - chi login khi account sai, khong clear data khi dung roi
+Change: MULTI-PROCESS SERVER + FIX TOKEN EXTRACTION + FIX ERROR DICT BUG
 
 Thay doi:
-- v1.0.467: MULTI-CHROME SERVER
-  * server/chrome_pool.py: ChromePool quan ly N Chrome instances song song
-  * ChromeWorker: moi Chrome co folder rieng, port rieng (19222-19226), account rieng, IPv6 rieng
-  * get_server_config(): doc accounts (col B) + IPv6 (col C) tu Google Sheet "SERVER"
-  * Shared queue: tat ca workers pull tu 1 queue chung (worker nao ranh lay task)
-  * 5 Chrome Portable: GoogleChromePortable, -Copy, -Copy (2), -Copy (3), -Copy (4)
-  * server/app.py v2.0: dung ChromePool thay vi single ChromeSession
-  * Them endpoint GET /api/workers: xem chi tiet tung Chrome worker
-  * GET /api/status: them chrome_count, chrome_ready, chrome_available, processing list
-  * Truoc: 1 Chrome = xu ly tuan tu 1 anh/lan
-  * Sau: N Chrome = xu ly N anh song song (N = so Chrome co san + accounts)
-- v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
-  * BUG GOC: save_director_plan() doc field "text" nhung Step 5 tao "srt_text" → LUON TRONG
-  * BUG 2: visual_moment, camera, lighting KHONG CO TRONG director_plan columns → mat data
-  * Step 7 nhan duoc: "- Text: " (trong!) + "- Visual moment: " (trong!) → hinh generic
-  * FIX 1: save_director_plan() doc "srt_text" thay vi "text"
-  * FIX 2: Them 3 columns moi: visual_moment, camera, lighting vao director_plan
-  * FIX 3: get_director_plan() ho tro ca format cu (11 cols) va moi (14 cols)
-  * FIX 4: Step 5 dam bao moi scene co srt_text (fallback tu SRT entries neu API thieu)
-  * FIX 5: update_director_plan_status() detect format cu/moi de cap nhat dung cot
-  * Truoc: Step 7 tao hinh KHONG KHOP vi khong co noi dung SRT + visual_moment
-  * Sau: Step 7 co day du "Text" + "Visual moment" → hinh minh hoa dung noi dung
-- v1.0.451: FIX CONTENT MATCHING - HINH ANH PHAI MINH HOA NOI DUNG
-  * Them #1 PRIORITY CONTENT MATCHING vao tat ca 6 chu de
-  * img_prompt PHAI minh hoa CHINH XAC noi dung SRT - KHONG tao hinh chung chung
-- v1.0.450: Them predefined character cho psychology topic
-- v1.0.449: PREDEFINED CHARACTER + GOOGLE SHEET CHARACTER TEMPLATE
-  * Finance topics: nhan vat mac dinh co dinh (intellectual historian, Studio Ghibli style)
-  * Finance VN: phien ban nguoi Viet (da ngam, toc den, ao polo xanh)
-  * get_default_character(): skip API call Step 3, dung nhan vat mac dinh
-  * Tham so hoa: doc col L sheet THONG TIN tu Google Sheet
-  * Neu col L co gia tri → override nhan vat mac dinh
-  * Cache trong _CLAIMED dong 6 → truyen vao settings.yaml → progressive_prompts
-  * Uu tien: (1) Google Sheet col L > (2) default tu topic prompts > (3) API
-- v1.0.448: FIX VIDEO_PROMPT STYLE - GIU PHONG CACH CARTOON/HOAT HINH
-  * FIX: video_prompt cua psychology PHAI co "clean minimalist cartoon animation style, paper texture background"
-  * FIX: video_prompt cua finance_history PHAI co "detailed cartoon animation style, warm color palette"
-  * FIX: video_prompt cua finance_history_vn PHAI co "detailed cartoon animation style, Vietnamese aesthetic"
-  * Them huong dan: character description day du, KHONG tao video realistic/photorealistic
-  * Cap nhat example video_prompt voi full style cho ca 3 chu de
-  * Truoc: video_prompt chi co "camera movement, action" → AI tao video thuc te nguoi that
-  * Sau: video_prompt co full style + character description → giu phong cach hoat hinh
-- v1.0.447: FIX VIDEO LAM LAI + JS MENU CLICK SAI + TIMEOUT + COMPLETION
-  * FIX: Video tao xong KHONG ghi status_vid=done vao Excel → restart lam lai het
-  * FIX: Check .mp4 thuc te tren disk truoc khi queue va tao video
-  * 2 lop bao ve: (1) file .mp4 tren disk, (2) status_vid trong Excel
-  * FIX: JS menu dung positive keywords thay vi negative filter (tranh click nham)
-  * FIX: failed count chi dem SAU KHI het retry (khong dem trong vong for)
-  * Tang video timeout: 180s → 360s (6 phut) cho tat ca ham generate_video
-  * FIX: Dem .mp4 vao images_done (truoc chi dem .png → video xong xoa png → ti le giam)
-  * Ti le completion = (anh .png + video .mp4 + .SKIP) / total_scenes
-- v1.0.446: VIDEO-ONLY MODE + FIX T2V JS MENU
-  * Them psychology_video va finance_video topics (chi tao video, khong anh)
-  * Topic moi: is_video_only=True → Step 4 skip locations, Step 7 chi co video_prompt
-  * progressive_prompts.py: xu ly video-only (skip locations, status_img="skip")
-  * smart_engine.py _load_prompts(): detect video-only scenes (khong img_prompt, co video_prompt)
-  * smart_engine.py run(): tach video_only prompts → goi _generate_videos_t2v()
-  * Them _generate_videos_t2v(): tao video truc tiep bang T2V, khong can anh
-  * FIX JS_SWITCH_TO_T2V_MODE: them .focus() + MouseEvent + .click() de mo menu
-  * FIX JS_SELECT_MODEL_BY_INDEX: cung fix tuong tu
-  * Truoc: JS chi dispatch PointerEvent → menu khong mo
-  * Sau: focus + PointerEvent + MouseEvent + click() → menu mo thanh cong
-  * GUI: them VIDEO ONLY row voi 2 topic moi (mau hong)
-  * run_excel_api.py: them mapping cho video-only topics
-- v1.0.445: FIX T2V MODE SWITCH
-  * Them _wait_for_page_ready() - doi page load xong truoc khi thao tac UI
-  * Tang retry tu 3 len 5 lan
-  * Tu dong refresh page khi page chua load hoac sau 2 lan fail
-  * _execute_video_t2v_mode: refresh + retry khi switch_to_t2v_mode() fail
-  * Truoc: page chua load → JS khong tim thay element → PENDING → fail
-  * Sau: doi page ready → chay JS → neu fail thi refresh → retry
-- v1.0.444: FINANCE HISTORY VN (Phong cach Viet Nam)
-  * Them finance_history_vn_prompts.py - phong cach gan gui khan gia Viet
-  * Nhan vat Viet Nam: da ngam, toc den, trang phuc Viet (ao so mi, polo)
-  * Boi canh Viet: quan ca phe, pho co, cho, nha pho, kien truc Phap thuoc dia
-  * Mau sac Viet: do gach, vang dong, xanh ngoc, trang kem
-  * Van giu phien ban phong cach My (finance_history) nguyen ven
-  * Them vao GUI topic selector
-  * AUTO-CONFIG: _CLAIMED dong 5 = topic tu Google Sheet col S
-  * VM tu dong doi topic + excel_mode khi import project
-  * Mapping: truyen→story/small, tam ly→psychology/full, tai chinh→finance_history/full
-  * robust_copy.py: _get_topic_from_sheet() doc col S, ghi vao _CLAIMED dong 5
-  * run_excel_api.py: doc _CLAIMED dong 5 → update settings.yaml
-- v1.0.443: FIX SMALL MODE SCENE COUNT
-  * Skip SPLIT/MERGE duration enforcement khi excel_mode=small
-  * Small mode: giu nguyen key moment scenes (20-30s) khong bi chia nho
-  * Truoc: small mode tao it scenes roi SPLIT lai pha ra nhieu → vo hieu hoa small
-  * Sau: small mode giu dung so scenes nhu Step 2 da tinh
-- v1.0.442: EXCEL SAVE DIRECT OVERWRITE
-  * Khi os.rename(original, .bak) fail (file bi lock): dung shutil.copy2 ghi de truc tiep
-  * Giam retry: save() 3 lan (tu 5), safe_save() 3 lan (tu 5)
-  * Tong thoi gian cho toi da: ~30s thay vi ~3 phut
-  * Pending writes van la safety net cuoi cung
-- v1.0.441: DURATION + VIDEO MODE + EXCEL WRITE RELIABILITY
-  * SPLIT scenes qua dai (>8s) thanh nhieu scenes nho
-  * MERGE scenes qua ngan (<4s) voi scene ke ben (multi-pass)
-  * Duration tinh tu SRT timestamps thuc te (content-based)
-  * FIX video_mode=full: doi video xong moi "done" (truoc: copy master khi chi co anh)
-  * EXCEL WRITE RELIABILITY: safe_save() retry 5 lan, pending writes queue
-  * Khi Excel bi lock (2 Chrome ghi cung luc): luu .pending_writes.json
-  * Load Excel se tu dong flush pending writes
-  * RECONCILIATION: check file anh tren disk khi Excel status bi mat
-  * Fix save_scene_planning filter None values
-- v1.0.440: FINANCE HISTORY QUALITY FIX + MIN DURATION
-  * NO TEXT rule manh hon: them ABSOLUTE RULE, nhieu BAD examples cu the
-  * Chi 1 narrator (khong tao nhieu narrator gay nham lan)
-  * Enforce min duration 4s trong Step 5 cho tat ca topics
-  * Split scene min 4s thay vi 3s cho tat ca topics
-- v1.0.439: FINANCE HISTORY TOPIC
-  * Them finance_history_prompts.py - phong cach hoat hinh chi tiet (editorial illustration)
-  * Nhan vat cartoon chi tiet (khong minimalist), background giau chi tiet
-  * Data visualizations: charts, maps, graphs voi so lieu (khong text)
-  * Historical scenes: nha may, thanh pho, quoc hoi cartoon
-  * Them vao GUI topic selector
-- v1.0.438: UPDATE giu nguyen settings VM
-  * Bo logic force reset video_mode/excel_mode ve "small" khi update
-  * VM chon Full thi update xong van la Full
-- v1.0.437: FIX media_id "None" string
-  * str(None) = "None" (string) pass qua "if not media_id" check
-  * Chrome 2 validate khi Chrome 1 chua tao xong reference
-  * Fix: dung "or" pattern: str(data.get("media_id", "") or "")
-- v1.0.436: FIX UPDATE copy modules subdirectories
-  * ZIP update chi copy modules/*.py, KHONG copy subdirectories
-  * Them logic copy subdirectories (modules/topic_prompts/, etc.)
-  * Day la nguyen nhan VM bi loi "No module named modules.topic_prompts"
-- v1.0.435: FIX IMPORT topic_prompts
-  * Them fallback import (relative import) khi absolute import fail
-  * Fix loi "No module named modules.topic_prompts" tren VM
-- v1.0.434: PSYCHOLOGY PROMPTS QUALITY FIX
-  * NO TEXT/WORDS trong scene prompts (AI tao text sai chinh ta)
-  * Thay text bang ICONS, SYMBOLS, visual metaphors
-  * Thumbnail VAN co text (de tang CTR)
-  * Character_lock bat buoc co: top + bottom + footwear + distinctive feature
-  * Them SPLIT SCREEN va TRIPLE PANEL composition examples
-  * Nhan vat chinh xuat hien >= 80% scenes
-  * Bo "visual metaphor:" va "floating text label:" meta-labels
-- v1.0.433: STEP 8 THUMBNAIL TOPIC-AWARE
-  * Them step8_thumbnail() vao psychology_prompts.py (cartoon style)
-  * Hook Step 8 trong progressive_prompts.py dung self.topic_prompts.step8_thumbnail()
-  * Tat ca 8 steps da topic-aware: fallback, narrator, split_scene, step1-8
-- v1.0.432: PSYCHOLOGY PROMPTS REWRITE
-  * Step 1: Khong hardcode character design - de API tu quyet dinh
-  * Step 3: character_lock day du de copy-paste vao moi prompt
-  * Step 5-7: Visual metaphor, floating text, split screen, diagrams
-  * Step 7: Full character description trong moi prompt, paper texture background
-  * Silhouette people cho nhan vat phu (khong tao character rieng)
-  * Tham khao: Social_Media_Psychology_Video_Analysis.xlsx
-- v1.0.431: TOPIC PROMPTS SYSTEM
-  * Tach prompts thanh file rieng moi chu de
-- v1.0.430: TOPIC SELECTOR (GUI)
-- v1.0.429: XOA LOGIC CLAIM EXPIRED
+- v1.0.471: MULTI-PROCESS SERVER + FIXES
+  * server/app.py v3.0: Multi-Process Architecture
+    - Server khoi dong NGAY (khong doi Chrome setup)
+    - Internal API cho workers: /internal/register, /internal/next-task, /internal/task-done
+    - Worker registry thay ChromePool (workers tu dang ky qua HTTP)
+    - Dead worker detection (heartbeat 60s) + task recovery
+  * server/worker.py (MOI): Chrome worker chay trong CMD rieng
+    - Lay config tu server → setup Chrome → loop lay task
+    - Moi Chrome 1 process rieng → setup SONG SONG (5 Chrome cung luc)
+    - Truoc: 5 Chrome x 3 phut = 15 phut TUAN TU
+    - Sau: 5 Chrome setup cung luc = ~3 phut SONG SONG
+  * server/start_server.py (MOI): Launcher khoi dong 1 Server + N Workers
+    - Auto-detect so Chrome Portable co san
+    - Moi CMD rieng: 1 Main + N Workers
+  * START_SERVER.bat (MOI): Khoi dong nhanh
+  * FIX chrome_pool.py: result['error'] co the la dict (khong chi string)
+    - Bug: TypeError: unhashable type: 'slice' khi error la dict
+    - Fix: convert dict error sang string truoc khi slice
+  * FIX browser_flow_generator.py: Doc flow_project_id + flow_project_url tu Excel
+    - Truoc: chi doc flow_bearer_token tu Excel, project_id chi tu config
+    - Sau: doc ca 3 fields tu Excel → khong can tao anh test de lay project_id
+    - Skip token extraction khi Excel da co du data
+- v1.0.470: SMART LOGIN - chi login khi account sai
+- v1.0.467: MULTI-CHROME SERVER (ChromePool, single process)
