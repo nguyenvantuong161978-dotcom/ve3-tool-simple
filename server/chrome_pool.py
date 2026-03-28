@@ -243,32 +243,28 @@ class ChromePool:
         # Tat ca deu giong current → tra ve cai dau tien
         return self._ipv6_list[0]
 
-    def setup_all(self) -> int:
-        """
-        Setup tat ca Chrome workers (mo Chrome, login, tao project).
-        Chay TUAN TU de tranh xung dot port.
-
-        Returns: so workers ready.
-        """
+    def _setup_single_worker(self, worker: 'ChromeWorker') -> bool:
+        """Setup 1 Chrome worker (co retry). Tra ve True neu thanh cong."""
         from server.chrome_session import ChromeSession
+        worker_name = f"Chrome-{worker.index}"
+        max_retries = 3
 
-        for worker in self.workers:
+        for attempt in range(max_retries):
             try:
-                self._log(f"[Chrome-{worker.index}] Bat dau setup...")
-                self._log(f"  Path: {worker.chrome_path}")
-                self._log(f"  Port: {worker.port}")
-                if worker.account:
-                    self._log(f"  Account: {worker.account['id']}")
-                if worker.ipv6:
-                    self._log(f"  IPv6: {worker.ipv6}")
+                if attempt == 0:
+                    self._log(f"[{worker_name}] Bat dau setup...")
+                    if worker.account:
+                        self._log(f"[{worker_name}] Account: {worker.account['id']}")
+                    if worker.ipv6:
+                        self._log(f"[{worker_name}] IPv6: {worker.ipv6}")
+                else:
+                    self._log(f"[{worker_name}] Retry setup ({attempt + 1}/{max_retries})...", "WARN")
 
                 session = ChromeSession(
                     chrome_portable_path=worker.chrome_path,
                     port=worker.port,
                     ipv6=worker.ipv6,
                 )
-
-                # Set account de auto-login khi can
                 if worker.account:
                     session._account = worker.account
 
@@ -276,15 +272,41 @@ class ChromePool:
                 if ok:
                     worker.session = session
                     worker.ready = True
-                    self._log(f"[Chrome-{worker.index}] READY! Project: {session.project_url}", "OK")
+                    self._log(f"[{worker_name}] READY!", "OK")
+                    return True
                 else:
-                    self._log(f"[Chrome-{worker.index}] Setup FAILED!", "ERROR")
+                    self._log(f"[{worker_name}] Setup FAILED (attempt {attempt + 1})", "ERROR")
             except Exception as e:
-                self._log(f"[Chrome-{worker.index}] Setup error: {e}", "ERROR")
-                traceback.print_exc()
+                self._log(f"[{worker_name}] Setup error: {e}", "ERROR")
 
-            # Doi giua cac Chrome de tranh xung dot
-            time.sleep(3)
+            # Doi truoc khi retry
+            if attempt < max_retries - 1:
+                time.sleep(5)
+
+        self._log(f"[{worker_name}] Setup FAILED sau {max_retries} lan!", "ERROR")
+        return False
+
+    def setup_all(self) -> int:
+        """
+        Setup tat ca Chrome workers SONG SONG.
+        Moi worker chay trong thread rieng, khong doi nhau.
+
+        Returns: so workers ready.
+        """
+        threads = []
+        for worker in self.workers:
+            t = threading.Thread(
+                target=self._setup_single_worker,
+                args=(worker,),
+                daemon=True,
+            )
+            t.start()
+            threads.append(t)
+            time.sleep(1)  # Delay nhe giua cac Chrome
+
+        # Doi tat ca setup xong
+        for t in threads:
+            t.join(timeout=180)  # Max 3 phut moi worker
 
         ready_count = sum(1 for w in self.workers if w.ready)
         self._log(f"Setup hoan tat: {ready_count}/{len(self.workers)} workers ready")
@@ -293,26 +315,18 @@ class ChromePool:
     def start_workers(self, task_queue: list, queue_lock: threading.Lock,
                       tasks: dict, task_lock: threading.Lock, stats: dict):
         """
-        Khoi dong worker threads.
-        Moi worker co 1 thread rieng, tat ca pull tu chung 1 queue.
-
-        Args:
-            task_queue: Shared task queue (list of task_ids)
-            queue_lock: Lock cho task_queue
-            tasks: Shared task storage (dict: task_id -> task_data)
-            task_lock: Lock cho tasks
-            stats: Shared stats dict
+        Khoi dong worker threads cho TAT CA workers (ke ca chua ready).
+        Worker chua ready se tu retry setup trong loop.
         """
         for worker in self.workers:
-            if worker.ready:
-                t = threading.Thread(
-                    target=self._worker_loop,
-                    args=(worker, task_queue, queue_lock, tasks, task_lock, stats),
-                    daemon=True,
-                    name=f"ChromeWorker-{worker.index}",
-                )
-                t.start()
-                self._log(f"[Chrome-{worker.index}] Worker thread started")
+            t = threading.Thread(
+                target=self._worker_loop,
+                args=(worker, task_queue, queue_lock, tasks, task_lock, stats),
+                daemon=True,
+                name=f"ChromeWorker-{worker.index}",
+            )
+            t.start()
+            self._log(f"[Chrome-{worker.index}] Worker thread started" + (" (chua ready, se retry)" if not worker.ready else ""))
 
     def _worker_loop(self, worker: ChromeWorker, task_queue: list,
                      queue_lock: threading.Lock, tasks: dict,
@@ -320,8 +334,23 @@ class ChromePool:
         """
         Worker loop - pull tasks tu shared queue va xu ly.
         Moi worker chay doc lap, lay task khi ranh.
+        Neu chua ready → tu retry setup.
         """
         worker_name = f"Chrome-{worker.index}"
+
+        # Neu chua ready → retry setup trong loop
+        if not worker.ready:
+            self._log(f"[{worker_name}] Chua ready, retry setup...", "WARN")
+            for retry in range(3):
+                time.sleep(10)  # Doi 10s giua cac retry
+                ok = self._setup_single_worker(worker)
+                if ok:
+                    break
+                self._log(f"[{worker_name}] Retry {retry + 2}/3 setup...", "WARN")
+            if not worker.ready:
+                self._log(f"[{worker_name}] Setup THAT BAI vinh vien! Worker dung.", "ERROR")
+                return
+
         self._log(f"[{worker_name}] Worker loop started - doi task...")
 
         while True:
@@ -355,17 +384,11 @@ class ChromePool:
             self._log(f"[{worker_name}] Processing: {task_id[:8]}... | VM: {vm_id} | Prompt: {prompt_preview}...")
 
             try:
-                # Check session ready
+                # Check session ready - retry setup neu can
                 if not worker.session or not worker.session.ready:
                     self._log(f"[{worker_name}] Session not ready, re-setup...", "WARN")
-                    from server.chrome_session import ChromeSession
-                    worker.session = ChromeSession(
-                        chrome_portable_path=worker.chrome_path,
-                        port=worker.port,
-                    )
-                    if worker.account:
-                        worker.session._account = worker.account
-                    if not worker.session.setup():
+                    ok = self._setup_single_worker(worker)
+                    if not ok:
                         raise RuntimeError("Chrome session setup failed")
 
                 # Tao anh

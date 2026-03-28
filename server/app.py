@@ -1044,43 +1044,57 @@ def _do_start_workers():
         server_log(f"Setup {len(chrome_pool.workers)} Chrome workers SONG SONG...")
 
         def setup_worker_thread(worker):
-            """Setup 1 worker trong thread rieng. Xong → start worker loop ngay."""
+            """Setup 1 worker trong thread rieng. Retry neu fail. Xong → start worker loop."""
             from server.chrome_session import ChromeSession
             worker_name = f"Chrome-{worker.index}"
-            try:
-                pool_log(f"[{worker_name}] Bat dau setup...")
-                if worker.account:
-                    pool_log(f"[{worker_name}] Account: {worker.account['id']}")
-                if worker.ipv6:
-                    pool_log(f"[{worker_name}] IPv6: {worker.ipv6}")
+            max_retries = 3
 
-                session = ChromeSession(
-                    chrome_portable_path=worker.chrome_path,
-                    port=worker.port,
-                    ipv6=worker.ipv6,
-                )
-                if worker.account:
-                    session._account = worker.account
+            for attempt in range(max_retries):
+                try:
+                    if attempt == 0:
+                        pool_log(f"[{worker_name}] Bat dau setup...")
+                        if worker.account:
+                            pool_log(f"[{worker_name}] Account: {worker.account['id']}")
+                        if worker.ipv6:
+                            pool_log(f"[{worker_name}] IPv6: {worker.ipv6}")
+                    else:
+                        pool_log(f"[{worker_name}] Retry setup ({attempt + 1}/{max_retries})...", "WARN")
 
-                ok = session.setup()
-                if ok:
-                    worker.session = session
-                    worker.ready = True
-                    pool_log(f"[{worker_name}] READY! Project: {session.project_url}", "OK")
-
-                    t = threading.Thread(
-                        target=chrome_pool._worker_loop,
-                        args=(worker, task_queue, queue_lock, tasks, task_lock, stats),
-                        daemon=True,
-                        name=f"ChromeWorker-{worker.index}",
+                    session = ChromeSession(
+                        chrome_portable_path=worker.chrome_path,
+                        port=worker.port,
+                        ipv6=worker.ipv6,
                     )
-                    t.start()
-                    pool_log(f"[{worker_name}] Worker loop STARTED!", "OK")
-                else:
-                    pool_log(f"[{worker_name}] Setup FAILED!", "ERROR")
-            except Exception as e:
-                pool_log(f"[{worker_name}] Setup error: {e}", "ERROR")
-                traceback.print_exc()
+                    if worker.account:
+                        session._account = worker.account
+
+                    ok = session.setup()
+                    if ok:
+                        worker.session = session
+                        worker.ready = True
+                        pool_log(f"[{worker_name}] READY!", "OK")
+
+                        # Start worker loop ngay
+                        t = threading.Thread(
+                            target=chrome_pool._worker_loop,
+                            args=(worker, task_queue, queue_lock, tasks, task_lock, stats),
+                            daemon=True,
+                            name=f"ChromeWorker-{worker.index}",
+                        )
+                        t.start()
+                        pool_log(f"[{worker_name}] Worker loop STARTED!", "OK")
+                        return  # Thanh cong → thoat
+                    else:
+                        pool_log(f"[{worker_name}] Setup FAILED (lan {attempt + 1})", "ERROR")
+                except Exception as e:
+                    pool_log(f"[{worker_name}] Setup error: {e}", "ERROR")
+
+                # Doi truoc khi retry
+                if attempt < max_retries - 1:
+                    pool_log(f"[{worker_name}] Doi 10s truoc khi retry...", "WARN")
+                    time.sleep(10)
+
+            pool_log(f"[{worker_name}] Setup THAT BAI sau {max_retries} lan! Worker se khong chay.", "ERROR")
 
         for worker in chrome_pool.workers:
             t = threading.Thread(

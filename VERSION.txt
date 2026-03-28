@@ -1,3 +1,20 @@
+1.0.496
+2026-03-29 (VN)
+Change: FIX WORKERS KHONG CHAY - Retry setup + khong bo worker khi fail
+
+Fix:
+- app.py: Setup fail → RETRY 3 lan (truoc: fail 1 lan → bo luon worker)
+- app.py: Doi 10s giua cac retry (cho Chrome oi dinh)
+- chrome_pool.py: setup_all() chay SONG SONG (truoc: tuan tu, 1 fail → block het)
+- chrome_pool.py: start_workers() khoi dong TAT CA workers (truoc: chi ready moi start)
+- chrome_pool.py: Worker loop tu retry setup neu chua ready
+
+---
+1.0.495
+2026-03-29 (VN)
+Change: Bo nut TACH/GOP khoi GUI server - fix START bi che
+
+---
 1.0.494
 2026-03-28 (VN)
 Change: FIX 403 LOGIC + FINGERPRINT SPOOF TIMING + GOP BUOC XOA DATA
