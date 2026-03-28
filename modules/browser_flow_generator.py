@@ -2034,7 +2034,23 @@ class BrowserFlowGenerator:
                 return None
 
         # Lay chrome_path tu config
-        chrome_path = self.config.get('chrome_path', '')
+        # UU TIEN: chrome_portable (VM dung ChromePortable, khong co system Chrome)
+        chrome_path = self.config.get('chrome_portable', '')
+        if chrome_path:
+            # Resolve relative path (vd: ./GoogleChromePortable/GoogleChromePortable.exe)
+            chrome_p = Path(chrome_path)
+            if not chrome_p.is_absolute():
+                root_dir_cp = Path(__file__).parent.parent
+                chrome_p = root_dir_cp / chrome_path
+            if chrome_p.exists():
+                chrome_path = str(chrome_p)
+                self._log(f"Su dung ChromePortable: {chrome_path}")
+            else:
+                self._log(f"[WARN] ChromePortable khong ton tai: {chrome_p}", "warn")
+                chrome_path = ''  # Fallback sang system Chrome
+
+        if not chrome_path:
+            chrome_path = self.config.get('chrome_path', '')
         if not chrome_path:
             # Default paths
             import platform
@@ -2044,14 +2060,27 @@ class BrowserFlowGenerator:
                 chrome_path = "/usr/bin/google-chrome"
 
         # Lay profile path
-        # Uu tien: 1. chrome_profiles/ directory (GUI tao)
+        # Uu tien: 0. ChromePortable Data/profile (neu dung ChromePortable)
+        #          1. chrome_profiles/ directory (GUI tao)
         #          2. chrome_profiles tu accounts.json
         #          3. chrome_profile tu settings.yaml (fallback)
         #          4. browser_profiles_dir/profile_name (fallback cuoi)
         chrome_profile = ''
         root_dir = Path(__file__).parent.parent
 
-        # 1. UU TIEN NHAT: chrome_profiles/ directory (tao tu GUI)
+        # 0. UU TIEN CAO NHAT: ChromePortable Data/profile
+        chrome_portable_cfg = self.config.get('chrome_portable', '')
+        if chrome_portable_cfg:
+            cp_path = Path(chrome_portable_cfg)
+            if not cp_path.is_absolute():
+                cp_path = root_dir / chrome_portable_cfg
+            # ChromePortable/Data/profile la user data dir
+            cp_data_profile = cp_path.parent / "Data" / "profile"
+            if cp_data_profile.exists():
+                chrome_profile = str(cp_data_profile)
+                self._log(f"Got chrome_profile from ChromePortable: {chrome_profile}")
+
+        # 1. UU TIEN NHAT: chrome_profiles/ directory (GUI tao)
         profiles_dir = root_dir / "chrome_profiles"
         if profiles_dir.exists():
             for profile_path in sorted(profiles_dir.iterdir()):
