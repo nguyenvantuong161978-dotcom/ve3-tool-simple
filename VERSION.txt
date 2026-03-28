@@ -1,8 +1,13 @@
-1.0.476
+1.0.477
 2026-03-28 (VN)
-Change: Server GUI - Giao dien cai dat + quan ly Chrome Server
+Change: FIX 403 - Interceptor giong y het test_local_proxy.py
 
 Thay doi:
+- v1.0.477: FIX 403 - GIONG TEST FILE
+  * generate_image() copy y het flow tu test_local_proxy.py (da hoat dong)
+  * Bo JS_CLEANUP truoc request (pha reCAPTCHA state → 403)
+  * Giam recaptcha wait 8s → 4s (giong test)
+  * Giu interceptor thay token + projectId (giong test - da chay OK)
 - v1.0.476: SERVER GUI (Tkinter)
   * server/server_gui.py: Giao dien cai dat + monitor
     - Trang 1: Cai dat IPv6 ON/OFF, so Chrome (1-5/tat ca)

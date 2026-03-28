@@ -170,7 +170,7 @@ JS_SELECT_MODEL = """
 
 def build_interceptor_js(client_bearer_token: str, client_project_id: str) -> str:
     """
-    JS Interceptor - Thay bearer token + projectId trong fetch requests.
+    JS Interceptor - THAY bearer token + projectId (giống test_local_proxy.py).
 
     Flow:
     1. Chrome gửi request với recaptchaToken hợp lệ
@@ -230,7 +230,6 @@ window._clientProjectId = '""" + safe_project + """';
                             }
                         });
                     }
-                    // GIỮ recaptchaToken
                     var recap = body.clientContext ? body.clientContext.recaptchaToken : '';
                     console.log('[PROXY] 2. projectId replaced, recaptcha kept: ' + (recap ? recap.substring(0,20)+'...' : 'EMPTY'));
                     opts.body = JSON.stringify(body);
@@ -257,7 +256,7 @@ window._clientProjectId = '""" + safe_project + """';
 
                 if (response.status === 200 && data.media) {
                     window._response = data;
-                    console.log('[PROXY] SUCCESS! Got ' + data.media.length + ' images');
+                    console.log('[PROXY] OK! ' + data.media.length + ' images');
                 } else if (data.error) {
                     window._response = {error: data.error};
                     window._responseError = 'Error ' + (data.error.code || response.status) + ': ' + (data.error.message || '');
@@ -780,14 +779,14 @@ class ChromeSession:
                        aspect_ratio: str = 'IMAGE_ASPECT_RATIO_LANDSCAPE',
                        seed: int = None) -> dict:
         """
-        Tạo ảnh cho khách bằng Chrome captcha bypass.
+        Tạo ảnh - giống y hệt test_local_proxy.py (đã hoạt động).
 
-        Flow:
-        1. Inject interceptor (thay bearer token + projectId)
-        2. Setup image mode + model
-        3. Paste prompt → Enter
-        4. Chờ response
-        5. Cleanup → sẵn sàng cho request tiếp
+        Flow (copy từ test):
+        1. Vào project URL
+        2. Inject interceptor (thay token + projectId)
+        3. Setup image mode + model
+        4. Paste prompt → đợi 4s recaptcha → Enter
+        5. Chờ response → trả base64
 
         Returns: { media: [...] } hoặc { error: "..." }
         """
@@ -798,33 +797,31 @@ class ChromeSession:
         self.log(f"Token: {client_bearer_token[:20]}...{client_bearer_token[-10:]}")
         self.log(f"ProjectId: {client_project_id}")
         self.log(f"Prompt: {client_prompt[:60]}...")
-        self.log(f"Model: {model_name}")
 
         try:
-            # 1. Reload page để clean state
+            # 1. Vào project (giống test step 2)
             if self.project_url:
                 self.page.get(self.project_url)
             else:
                 self.page.get(FLOW_URL)
-            time.sleep(4)
+            time.sleep(5)
 
             # Đợi textarea
             if not self._wait_for_textarea(timeout=20):
-                # Thử tạo project mới
-                self.log("Textarea not found, creating new project...", "WARN")
+                self.log("Textarea not found, tao project moi...", "WARN")
                 if not self._create_new_project():
                     return {"error": "Cannot create project"}
                 if not self._wait_for_textarea(timeout=20):
                     return {"error": "Textarea not found after project creation"}
                 self.project_url = self.page.url
 
-            # 2. Inject interceptor
+            # 2. Inject interceptor (giống test step 3)
             self.log("Inject interceptor...")
             js = build_interceptor_js(client_bearer_token, client_project_id)
             r = self.page.run_js(js)
             self.log(f"Interceptor: {r}")
 
-            # 3. Setup Image mode + model
+            # 3. Setup Image mode + model (giống test step 4)
             model_index = MODEL_INDEX_MAP.get(model_name, 0)
             self.log(f"Setup Image mode (model index: {model_index})...")
             js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
@@ -835,36 +832,22 @@ class ChromeSession:
             model_result = self.page.run_js("return window._modelSelectResult;")
             self.log(f"Model result: {model_result}")
 
-            # 4. Paste prompt
+            # 4. Paste prompt (giống test step 5)
             self.log(f"Paste prompt...")
             ok = self._paste_prompt(client_prompt)
             if not ok:
                 return {"error": "Cannot paste prompt"}
 
-            # 5. Doi recaptcha load xong truoc khi Enter
-            self.log("Doi recaptcha (8s)...")
-            time.sleep(8)
-
-            # Check recaptcha da load chua
-            recap_check = self.page.run_js("""
-                var frames = document.querySelectorAll('iframe[src*="recaptcha"]');
-                return frames.length > 0 ? 'RECAPTCHA_FOUND_' + frames.length : 'NO_RECAPTCHA';
-            """)
-            self.log(f"reCAPTCHA: {recap_check}")
+            # 5. Đợi recaptcha 4s → Enter (giống test step 6)
+            self.log("Doi recaptcha (4s)...")
+            time.sleep(4)
 
             from DrissionPage.common import Keys
             self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
             self.log("Enter sent!")
 
-            # 6. Chờ response
+            # 6. Chờ response (giống test step 7)
             result = self._wait_for_response(timeout=120)
-
-            # 7. Cleanup browser data
-            self.log("Cleanup browser data...")
-            try:
-                self.page.run_js(JS_CLEANUP)
-            except Exception:
-                pass
 
             return result
 
