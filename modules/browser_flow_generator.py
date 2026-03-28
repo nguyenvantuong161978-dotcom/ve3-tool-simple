@@ -3362,12 +3362,27 @@ class BrowserFlowGenerator:
             test_prompt = "a simple red circle on white background"
             capture_ok = drission._capture_tokens(test_prompt, timeout=30)
 
-            if not capture_ok or not drission.bearer_token:
+            # Cho local server, CHI CAN bearer token (server tu tao recaptcha)
+            # _capture_tokens() doi ca recaptcha nen co the fail
+            # → doc window._tk truc tiep
+            token = None
+            if capture_ok and drission.bearer_token:
+                token = drission.bearer_token
+            else:
+                # Thu doc _tk truc tiep tu JS
+                self._log("_capture_tokens fail (thieu recaptcha), thu doc _tk truc tiep...")
+                try:
+                    tk = drission.driver.run_js("return window._tk")
+                    if tk:
+                        token = f"Bearer {tk}"
+                        self._log(f"[OK] Lay _tk truc tiep thanh cong!")
+                except Exception as e:
+                    self._log(f"Khong doc duoc _tk: {e}", "error")
+
+            if not token:
                 self._log("Khong capture duoc token!", "error")
                 return None
 
-            # Token thanh cong
-            token = drission.bearer_token
             if token.startswith("Bearer "):
                 token = token[7:]
 
@@ -3381,6 +3396,14 @@ class BrowserFlowGenerator:
                 except:
                     pass
             captured_project_id = drission.project_id or ''
+            # Fallback: doc _pj truc tiep
+            if not captured_project_id:
+                try:
+                    pj = drission.driver.run_js("return window._pj")
+                    if pj:
+                        captured_project_id = pj
+                except:
+                    pass
 
             self._log(f"Project ID: {captured_project_id}")
             self._log(f"Project URL: {captured_project_url[:60]}..." if captured_project_url else "Project URL: N/A")
