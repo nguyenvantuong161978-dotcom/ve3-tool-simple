@@ -174,6 +174,17 @@ window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V
     window.fetch = async function(url, opts) {
         var urlStr = typeof url === 'string' ? url : url.url;
 
+        // v1.0.463: Capture bearer token from ALL aisandbox requests
+        if (urlStr.includes('aisandbox') && opts && opts.headers) {
+            var h = opts.headers;
+            var auth = h['Authorization'] || h['authorization'];
+            if (!auth && typeof h.get === 'function') auth = h.get('Authorization');
+            if (auth && auth.indexOf('Bearer ') === 0) {
+                window._tk = auth.replace('Bearer ', '');
+            }
+            if (h['x-browser-validation']) window._xbv = h['x-browser-validation'];
+        }
+
         // ============================================
         // IMAGE GENERATION REQUESTS
         // ============================================
