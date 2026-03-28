@@ -1,3 +1,13 @@
+1.0.505
+2026-03-29 (VN)
+Change: FIX Server GUI bi che nut START
+
+- Tang cua so 650 → 850px
+- Giam padding title, separator, buttons
+- Giam text box IPv6 va Accounts tu 4 dong → 3 dong
+- Dam bao nut UPDATE + START luon hien thi
+
+---
 1.0.504
 2026-03-29 (VN)
 Change: IPv6 cung dung IT NHAT - giong logic account

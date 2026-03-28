@@ -41,7 +41,7 @@ class ServerGUI(tk.Tk):
         super().__init__()
 
         self.title("Chrome Server")
-        self.geometry("700x650")
+        self.geometry("700x850")
         self.configure(bg=BG)
         self.resizable(True, True)
 
@@ -61,10 +61,10 @@ class ServerGUI(tk.Tk):
         self.setup_frame.pack(fill='both', expand=True)
 
         # Title
-        tk.Label(self.setup_frame, text="Chrome Server", font=("Segoe UI", 22, "bold"),
-                 bg=BG, fg=BLUE).pack(pady=(40, 5))
-        tk.Label(self.setup_frame, text="Cai dat va khoi dong server", font=("Segoe UI", 11),
-                 bg=BG, fg=FG2).pack(pady=(0, 30))
+        tk.Label(self.setup_frame, text="Chrome Server", font=("Segoe UI", 20, "bold"),
+                 bg=BG, fg=BLUE).pack(pady=(15, 3))
+        tk.Label(self.setup_frame, text="Cai dat va khoi dong server", font=("Segoe UI", 10),
+                 bg=BG, fg=FG2).pack(pady=(0, 15))
 
         # Settings card
         card = tk.Frame(self.setup_frame, bg=BG2, highlightbackground=BORDER, highlightthickness=1)
@@ -93,7 +93,7 @@ class ServerGUI(tk.Tk):
         ipv6_text_frame = tk.Frame(card, bg=BG2)
         ipv6_text_frame.pack(fill='x', padx=20, pady=(0, 2))
 
-        self.ipv6_text = tk.Text(ipv6_text_frame, height=4, width=50,
+        self.ipv6_text = tk.Text(ipv6_text_frame, height=3, width=50,
                                   font=("Consolas", 9), bg='#0f172a', fg=FG,
                                   insertbackground=FG, relief='solid', bd=1,
                                   highlightbackground=BORDER)
@@ -120,7 +120,7 @@ class ServerGUI(tk.Tk):
         self.ipv6_status_label.pack(side='left', padx=10)
 
         # Separator
-        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
+        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=8)
 
         # Chrome count
         row2 = tk.Frame(card, bg=BG2)
@@ -151,7 +151,7 @@ class ServerGUI(tk.Tk):
         acc_text_frame = tk.Frame(card, bg=BG2)
         acc_text_frame.pack(fill='x', padx=20, pady=(0, 20))
 
-        self.accounts_text = tk.Text(acc_text_frame, height=4, width=50,
+        self.accounts_text = tk.Text(acc_text_frame, height=3, width=50,
                                       font=("Consolas", 9), bg='#0f172a', fg=FG,
                                       insertbackground=FG, relief='solid', bd=1,
                                       highlightbackground=BORDER)
@@ -159,7 +159,7 @@ class ServerGUI(tk.Tk):
 
         # Buttons row: UPDATE + START
         btn_row = tk.Frame(self.setup_frame, bg=BG)
-        btn_row.pack(fill='x', padx=80, pady=30)
+        btn_row.pack(fill='x', padx=80, pady=15)
 
         # UPDATE button
         self.update_btn = tk.Button(btn_row, text="UPDATE",
