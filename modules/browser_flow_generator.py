@@ -2447,45 +2447,52 @@ class BrowserFlowGenerator:
             api_failed = api_stats.get("failed", 0)
 
             # Kiem tra co nen chuyen sang server khong
-            # Dieu kien: co anh failed VA khong co anh thanh cong nao (tuc la 403 lien tuc)
-            # HOAC: reset profile >= 2 lan ma khong tao duoc anh nao
+            # Drission mode: success = anh TAO MOI OK, skipped = anh da co, failed = that bai
+            # Dieu kien chuyen: co anh failed VA KHONG tao duoc anh MOI nao (success == 0)
             should_switch = False
             if api_failed > 0 and api_success == 0:
+                # 403 lien tuc: co anh failed nhung KHONG tao duoc anh MOI nao
                 should_switch = True
-                self._log(f"[API+SERVER] API failed het {api_failed} anh, khong co anh nao thanh cong → CHUYEN SERVER")
-            elif api_failed > 0 and local_server_url:
-                # Co 1 so anh failed → thu lai bang server
-                should_switch = True
-                self._log(f"[API+SERVER] API: {api_success} OK, {api_failed} fail → thu lai anh failed bang SERVER")
+                self._log(f"[API+SERVER] API khong tao duoc anh moi nao ({api_failed} fail, {api_stats.get('skipped', 0)} skip) → CHUYEN SERVER")
 
-            if should_switch and local_server_url:
+            # v1.0.514: Validate server URL
+            local_server_url = (local_server_url or '').strip()
+            if should_switch and local_server_url and local_server_url.startswith('http'):
                 self._log(f"[API+SERVER] === CHUYEN SANG SERVER MODE: {local_server_url} ===")
-                # Tam bat local_server cho config
+                # v1.0.514: Luu va khoi phuc config an toan bang try/finally
                 old_server_enabled = self.config.get('local_server_enabled', False)
-                self.config['local_server_enabled'] = True
-                if not self.config.get('local_server_url'):
+                old_server_url = self.config.get('local_server_url', '')
+                try:
+                    self.config['local_server_enabled'] = True
                     self.config['local_server_url'] = local_server_url
 
-                # Chay lai - generate_from_prompts_api se tu dong dung server
-                # Chi chay nhung anh chua thanh cong (da skip trong ham)
-                server_result = self.generate_from_prompts_api(
-                    prompts=prompts,
-                    excel_path=excel_path,
-                    bearer_token=bearer_token
-                )
-                # Khoi phuc config
-                self.config['local_server_enabled'] = old_server_enabled
+                    # Chay lai - generate_from_prompts_api se tu dong dung server
+                    # Server tu skip anh da co tren disk (check output_path.exists())
+                    server_result = self.generate_from_prompts_api(
+                        prompts=prompts,
+                        excel_path=excel_path,
+                        bearer_token=bearer_token
+                    )
+                finally:
+                    # LUON khoi phuc config du co loi
+                    self.config['local_server_enabled'] = old_server_enabled
+                    self.config['local_server_url'] = old_server_url
 
                 server_stats = server_result.get("stats", {})
-                # Merge stats
+                # server_stats.success = anh SERVER tao moi
+                # server_stats.skipped = anh da co file (API tao truoc hoac skip cu)
+                # server_stats.failed = anh server cung khong lam duoc
+                # Tong success = API tao + Server tao = skipped (file cu) + success (moi)
                 combined_stats = {
-                    "success": api_success + server_stats.get("success", 0),
-                    "failed": server_stats.get("failed", 0),  # Chi con failed cua server
-                    "skipped": api_stats.get("skipped", 0) + server_stats.get("skipped", 0),
+                    "success": server_stats.get("success", 0) + server_stats.get("skipped", 0),
+                    "failed": server_stats.get("failed", 0),
+                    "skipped": 0,
                 }
+                self._log(f"[API+SERVER] Ket qua: API tao {api_success}, Server tao {server_stats.get('success', 0)}, "
+                          f"Tong: {combined_stats['success']} OK, {combined_stats['failed']} fail")
                 return {"success": True, "stats": combined_stats}
-            elif should_switch and not local_server_url:
-                self._log("[API+SERVER] Muon chuyen Server nhung chua cau hinh Server URL!", "WARN")
+            elif should_switch:
+                self._log("[API+SERVER] Muon chuyen Server nhung chua cau hinh Server URL hop le!", "WARN")
 
             return api_result
 
@@ -3612,6 +3619,7 @@ class BrowserFlowGenerator:
 
         success_count = 0
         failed_count = 0
+        skipped_count = 0  # v1.0.514: Tach rieng skip khoi success
         count_lock = threading.Lock()
         proj_dir = Path(self.project_path)
 
@@ -3635,7 +3643,7 @@ class BrowserFlowGenerator:
 
             if output_path.exists():
                 with count_lock:
-                    success_count += 1
+                    skipped_count += 1
                 continue
 
             pending_prompts.append({
@@ -3920,12 +3928,18 @@ class BrowserFlowGenerator:
         for s in pool_stats.get('servers', []):
             self._log(f"  Server {s['name']}: {s['completed']} OK, {s['failed']} fail")
 
-        self._log(f"[LOCAL SERVER] Xong: {success_count} OK, {failed_count} fail")
+        self._log(f"[LOCAL SERVER] Xong: {success_count} OK, {failed_count} fail, {skipped_count} skip")
         return {
             "success": True,
             "total": len(prompts),
             "generated": success_count,
             "failed": failed_count,
+            # v1.0.514: "stats" dong bo voi drission mode (success = TAO MOI, skipped = rieng)
+            "stats": {
+                "success": success_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+            },
         }
 
     def generate_from_prompts_api(
@@ -4005,12 +4019,14 @@ class BrowserFlowGenerator:
             video_count = 0
 
         if not prompts and video_count <= 0:
-            return {"success": False, "error": "Khong co prompts va video_count=0"}
+            return {"success": False, "error": "Khong co prompts va video_count=0",
+                    "stats": {"success": 0, "failed": 0, "skipped": 0}}
 
         try:
             from modules.drission_flow_api import DrissionFlowAPI
         except ImportError as e:
-            return {"success": False, "error": f"Khong import duoc DrissionFlowAPI: {e}. Cài đặt: pip install DrissionPage"}
+            return {"success": False, "stats": {"success": 0, "failed": len(prompts), "skipped": 0},
+                    "error": f"Khong import duoc DrissionFlowAPI: {e}. Cài đặt: pip install DrissionPage"}
 
         # Webshare proxy config (nested dict from GUI settings)
         # IPv6 proxy đã bị bỏ - chỉ dùng Webshare

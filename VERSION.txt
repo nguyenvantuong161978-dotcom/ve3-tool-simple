@@ -1,3 +1,14 @@
+1.0.514
+2026-03-29 (VN)
+Change: FIX logic API+Server mode - sua 5 bugs
+
+- FIX: Stats key mismatch - local server return thieu "stats" key → merge stats sai
+- FIX: Config mutation khong restore - dung try/finally dam bao khoi phuc
+- FIX: proxy_token check chan api+server mode (drission khong can proxy_token)
+- FIX: generation_mode chua doc trong generate_images_api() → NameError
+- FIX: Tach rieng skipped khoi success trong local server stats
+- Dieu kien switch: chi khi API KHONG tao duoc anh MOI nao (success==0 AND failed>0)
+
 1.0.513
 2026-03-29 (VN)
 Change: Them mode API+Server - chay API truoc, tu dong chuyen Server khi 403 lien tuc

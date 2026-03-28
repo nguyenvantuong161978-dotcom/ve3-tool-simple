@@ -1961,12 +1961,14 @@ class SmartEngine:
         # Load settings.yaml for proxy_token và fallback
         local_server_enabled = False
         local_server_url = ''
+        generation_mode = 'api'  # v1.0.514: Doc generation_mode cho api+server check
         try:
             with open(settings_path, 'r', encoding='utf-8') as f:
                 cfg = yaml.safe_load(f) or {}
             proxy_token = cfg.get('proxy_api_token', '')
             local_server_enabled = cfg.get('local_server_enabled', False)
             local_server_url = cfg.get('local_server_url', '')
+            generation_mode = cfg.get('generation_mode', 'api')
             # Only use settings.yaml bearer_token if no pre-fetched token
             if not bearer_token:
                 bearer_token = cfg.get('flow_bearer_token', '')
@@ -1977,6 +1979,9 @@ class SmartEngine:
         if local_server_enabled and local_server_url:
             self.log(f"[LOCAL SERVER] Mode: {local_server_url}")
             self.log(f"[LOCAL SERVER] VM gui anh qua server, khong dung Chrome local")
+        elif generation_mode == 'api+server':
+            # v1.0.514: api+server khong can proxy_token (dung Chrome drission + fallback server)
+            self.log(f"[API+SERVER] Chay API truoc, server fallback: {cfg.get('local_server_url', 'N/A')}")
         elif not proxy_token:
             self.log("THIEU proxy_api_token trong settings.yaml!", "ERROR")
             self.log("API mode can proxy token tu nanoai.pics", "ERROR")
