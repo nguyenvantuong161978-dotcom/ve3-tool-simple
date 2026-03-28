@@ -227,31 +227,39 @@ window._imageInputs = """ + image_inputs_json + """;
             }
 
             // 2. THAY projectId + inject imageInputs trong body
-            if (opts && opts.body) {
+            // QUAN TRONG: Chi xu ly khi co clientProjectId (giong test file)
+            if (window._clientProjectId && opts && opts.body) {
                 try {
                     var body = JSON.parse(opts.body);
-                    if (window._clientProjectId) {
-                        if (body.clientContext) {
-                            body.clientContext.projectId = window._clientProjectId;
-                        }
-                        if (body.requests) {
-                            body.requests.forEach(function(req) {
-                                if (req.clientContext) {
-                                    req.clientContext.projectId = window._clientProjectId;
-                                }
-                            });
-                        }
-                        var recap = body.clientContext ? body.clientContext.recaptchaToken : '';
-                        console.log('[PROXY] 2. projectId replaced, recaptcha kept: ' + (recap ? recap.substring(0,20)+'...' : 'EMPTY'));
+
+                    // Thay projectId trong clientContext
+                    if (body.clientContext) {
+                        var oldProjId = body.clientContext.projectId;
+                        body.clientContext.projectId = window._clientProjectId;
+                        console.log('[PROXY] 2a. Body projectId: ' + oldProjId + ' → ' + window._clientProjectId);
                     }
 
-                    // 2b. Inject imageInputs (reference images) nếu có
+                    // Thay projectId trong mỗi request
+                    if (body.requests) {
+                        body.requests.forEach(function(req) {
+                            if (req.clientContext) {
+                                req.clientContext.projectId = window._clientProjectId;
+                            }
+                            console.log('[PROXY] 2b. Prompt: ' + (req.prompt || '').substring(0, 60));
+                        });
+                    }
+
+                    // Inject imageInputs (reference images) nếu có
                     if (window._imageInputs && body.requests) {
                         body.requests.forEach(function(req) {
                             req.imageInputs = window._imageInputs;
                         });
-                        console.log('[PROXY] 2b. Injected ' + window._imageInputs.length + ' reference images');
+                        console.log('[PROXY] 2c. Injected ' + window._imageInputs.length + ' reference images');
                     }
+
+                    // GIỮ NGUYÊN recaptchaToken từ Chrome!
+                    var recaptcha = body.clientContext ? body.clientContext.recaptchaToken : '';
+                    console.log('[PROXY] 2d. recaptchaToken kept: ' + (recaptcha ? recaptcha.substring(0, 20) + '...' : 'EMPTY'));
 
                     opts.body = JSON.stringify(body);
                 } catch(e) {
