@@ -445,40 +445,157 @@ class ChromeSession:
         return False
 
     def _create_new_project(self) -> bool:
-        """Tạo project mới (giống _auto_setup_project)."""
+        """Tạo project mới (copy logic từ drission_flow_api._auto_setup_project)."""
         self.log("Tạo project mới...")
+        time.sleep(2)
 
-        for attempt in range(10):
-            # Dismiss popups ("Bắt đầu" / "Get started")
-            self.page.run_js("""
-                var btns = document.querySelectorAll('button');
-                for (var i = 0; i < btns.length; i++) {
-                    var t = btns[i].textContent.trim();
-                    if (t === 'Bắt đầu' || t === 'Get started' || t === 'Got it') {
-                        btns[i].click();
-                    }
-                }
-            """)
-            time.sleep(0.5)
+        MAX_REFRESH = 6
+        for refresh_count in range(MAX_REFRESH):
+            # Dismiss popups ("Bắt đầu" / "Get started" / "Got it")
+            if refresh_count == 0:
+                try:
+                    dismiss_selectors = [
+                        'tag:button@@text():Bắt đầu',
+                        'tag:button@@text():Get started',
+                        'tag:button@@text():Bắt Đầu',
+                        'tag:button@@text():Got it',
+                        'tag:button@@text():Dismiss',
+                    ]
+                    for sel in dismiss_selectors:
+                        try:
+                            popup_btn = self.page.ele(sel, timeout=1)
+                            if popup_btn:
+                                popup_btn.click()
+                                self.log(f"Dismissed popup: {sel.split(':')[-1]}")
+                                time.sleep(1)
+                                break
+                        except:
+                            continue
+                except:
+                    pass
 
-            # Click "Dự án mới"
-            result = self.page.run_js(JS_CLICK_NEW_PROJECT)
-            self.log(f"Click new project (attempt {attempt+1}): {result}")
+            # Tim button trong 10s
+            clicked_success = False
+            for i in range(10):
+                # Check URL - co the da vao project roi
+                try:
+                    current_url = self.page.url or ''
+                    if '/project/' in current_url:
+                        self.log(f"Da vao project: {current_url}", "OK")
+                        return True
+                except:
+                    pass
 
-            if result and 'CLICKED' in str(result):
+                # Thu 1: DrissionPage selector (add_2 = icon button)
+                try:
+                    btn = self.page.ele('tag:button@@text():add_2', timeout=1)
+                    if btn:
+                        btn.click()
+                        self.log("Clicked 'Du an moi' (add_2 selector)", "OK")
+                        clicked_success = True
+                        time.sleep(3)
+                        try:
+                            if '/project/' in (self.page.url or ''):
+                                self.log(f"Project created: {self.page.url}", "OK")
+                                return True
+                        except:
+                            pass
+                        break
+                except:
+                    pass
+
+                # Thu 2: JS click
+                try:
+                    result = self.page.run_js(JS_CLICK_NEW_PROJECT)
+                    if result and 'CLICKED' in str(result):
+                        self.log(f"Clicked 'Du an moi' (JS): {result}", "OK")
+                        clicked_success = True
+                        time.sleep(3)
+                        try:
+                            if '/project/' in (self.page.url or ''):
+                                self.log(f"Project created: {self.page.url}", "OK")
+                                return True
+                        except:
+                            pass
+                        break
+                except Exception as e:
+                    if "ContextLost" in str(type(e).__name__) or "refresh" in str(e).lower():
+                        self.log("Page dang refresh, doi...")
+                        time.sleep(2)
+                        try:
+                            if '/project/' in (self.page.url or ''):
+                                return True
+                        except:
+                            pass
+                        continue
+
+                time.sleep(1)
+
+                # Giua chung: thu dismiss popup
+                if i == 4:
+                    self.log("  ... doi button 'Du an moi' xuat hien...")
+                    try:
+                        for _sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
+                                     'tag:button@@text():Got it']:
+                            try:
+                                _btn = self.page.ele(_sel, timeout=1)
+                                if _btn:
+                                    _btn.click()
+                                    self.log(f"Dismissed popup: {_sel.split(':')[-1]}")
+                                    time.sleep(1)
+                                    break
+                            except:
+                                continue
+                        else:
+                            # Click diem trong de dismiss overlay
+                            self.page.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
+                            self.log("Clicked diem trong de dismiss popup")
+                            time.sleep(1)
+                    except:
+                        pass
+            else:
+                # Khong tim thay button → check URL truoc khi F5
+                try:
+                    if '/project/' in (self.page.url or ''):
+                        return True
+                except:
+                    pass
+
+                # Thu click diem trong truoc khi refresh
+                if refresh_count < 2:
+                    try:
+                        self.page.run_js('document.elementFromPoint(window.innerWidth/2, 50).click()')
+                        time.sleep(1)
+                    except:
+                        pass
+
+                # F5 refresh
+                self.log(f"Khong thay button - F5 refresh ({refresh_count + 1}/{MAX_REFRESH})...", "WARN")
+                try:
+                    self.page.get(FLOW_URL)
+                    time.sleep(5)
+                except:
+                    pass
+                continue
+
+            if clicked_success:
+                # Da click, doi them
                 time.sleep(3)
+                try:
+                    if '/project/' in (self.page.url or ''):
+                        self.log(f"Project created: {self.page.url}", "OK")
+                        return True
+                except:
+                    pass
 
-                current_url = self.page.url or ''
-                if '/project/' in current_url:
-                    self.log(f"Project created: {current_url}", "OK")
-                    return True
+        # Lan cuoi: check URL
+        try:
+            if '/project/' in (self.page.url or ''):
+                return True
+        except:
+            pass
 
-            # Reload nếu không tìm thấy button
-            if attempt % 3 == 2:
-                self.log("Reload page...")
-                self.page.get(FLOW_URL)
-                time.sleep(5)
-
+        self.log(f"Khong tao duoc project sau {MAX_REFRESH} lan refresh!", "ERROR")
         return False
 
     def _wait_for_textarea(self, timeout: int = 30) -> bool:
