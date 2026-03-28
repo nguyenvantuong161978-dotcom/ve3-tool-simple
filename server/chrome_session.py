@@ -869,10 +869,122 @@ class ChromeSession:
         self.log("Textarea không xuất hiện!", "ERROR")
         return False
 
+    def _handle_create_with_flow_page(self) -> bool:
+        """
+        v1.0.506: Xử lý trang "Create with Flow" (sync từ API mode).
+        Trang này xuất hiện khi vào Flow lần đầu hoặc sau clear data + login lại.
+        Cần click nút "Create with Flow" / "Tạo với Flow" để vào trang có nút "Dự án mới".
+
+        Returns: True nếu đã qua trang này (hoặc không cần), False nếu thất bại.
+        """
+        # Check có đang ở trang "Create with Flow" không
+        try:
+            is_create_page = self.page.run_js('''
+                (function() {
+                    var url = window.location.href;
+                    if (url.includes('/tools/flow') && !url.includes('/project/')) {
+                        var btns = document.querySelectorAll('button');
+                        for (var b of btns) {
+                            var text = (b.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                return 'HAS_CREATE_BUTTON';
+                            }
+                        }
+                        var spans = document.querySelectorAll('span');
+                        for (var s of spans) {
+                            var text = (s.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                return 'HAS_CREATE_BUTTON';
+                            }
+                        }
+                    }
+                    return 'NOT_CREATE_PAGE';
+                })();
+            ''')
+        except Exception:
+            return True  # Lỗi check → bỏ qua, tiếp tục flow bình thường
+
+        if is_create_page != 'HAS_CREATE_BUTTON':
+            return True  # Không phải trang Create with Flow → OK
+
+        self.log("Dang o trang 'Create with Flow'! Click de tiep tuc...", "WARN")
+
+        # Retry 20 lần, reload mỗi 5 lần (giống API mode)
+        for attempt in range(20):
+            # Dismiss popup ("Bắt đầu" / "Get started") - popup xuất hiện SAU khi click
+            try:
+                for _sel in ['tag:button@@text():Bắt đầu', 'tag:button@@text():Get started',
+                             'tag:button@@text():Got it']:
+                    try:
+                        _btn = self.page.ele(_sel, timeout=0.5)
+                        if _btn:
+                            _btn.click()
+                            self.log(f"Dismissed popup: {_sel.split(':')[-1]}")
+                            time.sleep(1)
+                            break
+                    except:
+                        continue
+            except:
+                pass
+
+            # Mục tiêu: tìm nút "Dự án mới" (add_2) = đã qua trang Create with Flow
+            try:
+                btn = self.page.ele('tag:button@@text():add_2', timeout=1)
+                if btn:
+                    self.log(f"'Du an moi' da xuat hien! (attempt {attempt+1})", "OK")
+                    return True
+            except:
+                pass
+
+            # Click "Create with Flow" nếu có
+            try:
+                click_result = self.page.run_js('''
+                    (function() {
+                        var btns = document.querySelectorAll('button');
+                        for (var b of btns) {
+                            var text = (b.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                b.click();
+                                return 'CLICKED';
+                            }
+                        }
+                        var spans = document.querySelectorAll('span');
+                        for (var s of spans) {
+                            var text = (s.textContent || '').trim();
+                            if (text.includes('Create with Flow') || text.includes('Tạo với Flow')) {
+                                var btn = s.closest('button');
+                                if (btn) { btn.click(); return 'CLICKED_VIA_SPAN'; }
+                            }
+                        }
+                        return 'NOT_FOUND';
+                    })();
+                ''')
+                if click_result and 'CLICKED' in str(click_result):
+                    self.log(f"Clicked 'Create with Flow' ({attempt+1}/20)")
+                    time.sleep(1)
+                    continue  # Check lại ngay
+            except:
+                pass
+
+            # Reload page mỗi 5 lần
+            if attempt > 0 and attempt % 5 == 0:
+                self.log(f"Reload Flow page ({attempt}/20)...", "WARN")
+                self.page.get(FLOW_URL)
+                time.sleep(2)
+
+            time.sleep(0.5)
+
+        self.log("Khong qua duoc trang 'Create with Flow' sau 20 lan!", "ERROR")
+        return False
+
     def _create_new_project(self) -> bool:
         """Tạo project mới (copy logic từ drission_flow_api._auto_setup_project)."""
         self.log("Tạo project mới...")
         time.sleep(2)
+
+        # v1.0.506: Xử lý trang "Create with Flow" trước (sync từ API mode)
+        if not self._handle_create_with_flow_page():
+            return False
 
         MAX_REFRESH = 6
         for refresh_count in range(MAX_REFRESH):
