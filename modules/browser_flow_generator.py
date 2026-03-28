@@ -3254,6 +3254,146 @@ class BrowserFlowGenerator:
             "stats": self.stats.copy()
         }
 
+    def _generate_via_local_server(
+        self,
+        prompts: List[Dict],
+        excel_path: Optional[Path] = None,
+        bearer_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Tao anh qua Local Proxy Server (dung GoogleFlowAPI).
+        Server dung Chrome cua server de bypass captcha,
+        VM chi can gui bearer token + prompt.
+        """
+        local_server_url = self.config.get('local_server_url', '')
+
+        try:
+            from modules.google_flow_api import GoogleFlowAPI, AspectRatio
+        except ImportError as e:
+            return {"success": False, "error": f"Khong import duoc GoogleFlowAPI: {e}"}
+
+        # Bearer token - lay tu config hoac Chrome
+        if not bearer_token:
+            bearer_token = self.config.get('flow_bearer_token', '')
+        if not bearer_token:
+            self._log("Khong co bearer token, thu tu dong lay...")
+            bearer_token = self._auto_extract_token()
+        if not bearer_token:
+            return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc."}
+
+        # Excel
+        if excel_path is None:
+            excel_path = self._find_excel_file()
+        if excel_path is None or not excel_path.exists():
+            return {"success": False, "error": "Khong tim thay file Excel"}
+
+        # Project ID
+        flow_project_id = self.config.get('flow_project_id', self.project_code)
+        self._log(f"Project ID: {flow_project_id}")
+        self._log(f"Token: {bearer_token[:20]}...{bearer_token[-10:]}")
+        self._log(f"Server: {local_server_url}")
+        self._log(f"Prompts: {len(prompts)}")
+
+        # Tao GoogleFlowAPI voi local server
+        api = GoogleFlowAPI(
+            bearer_token=bearer_token,
+            project_id=flow_project_id,
+            timeout=self.config.get('flow_timeout', 120),
+            verbose=self.verbose,
+            proxy_api_token='',  # Local server khong can proxy token
+            use_proxy=True,
+            local_server_url=local_server_url
+        )
+
+        ar_setting = self.config.get('flow_aspect_ratio', 'landscape')
+        ar_map = {
+            'landscape': AspectRatio.LANDSCAPE,
+            'portrait': AspectRatio.PORTRAIT,
+            'square': AspectRatio.SQUARE,
+        }
+        aspect_ratio = ar_map.get(ar_setting, AspectRatio.LANDSCAPE)
+
+        # Load Excel de cap nhat status
+        workbook = PromptWorkbook(excel_path)
+        workbook.load_or_create()
+
+        success_count = 0
+        failed_count = 0
+        proj_dir = Path(self.project_path)
+
+        for i, prompt_data in enumerate(prompts):
+            prompt_id = prompt_data.get('id', str(i + 1))
+            prompt_text = prompt_data.get('prompt', '')
+            if not prompt_text:
+                continue
+
+            self._log(f"[{i+1}/{len(prompts)}] ID: {prompt_id}")
+            self._log(f"  Prompt: {prompt_text[:60]}...")
+
+            # Xac dinh output path
+            if prompt_id.startswith('nv') or prompt_id.startswith('loc'):
+                output_path = proj_dir / "nv" / f"{prompt_id}.png"
+            elif prompt_id.startswith('thumb'):
+                output_path = proj_dir / "thumb" / f"{prompt_id}.png"
+            else:
+                output_path = proj_dir / "img" / f"scene_{int(prompt_id):03d}.png"
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Skip neu da co
+            if output_path.exists():
+                self._log(f"  [SKIP] Da co: {output_path.name}")
+                success_count += 1
+                continue
+
+            # Goi API qua local server
+            try:
+                ok, images, error = api.generate_images(
+                    prompt=prompt_text,
+                    count=1,
+                    aspect_ratio=aspect_ratio,
+                )
+
+                if ok and images:
+                    # Luu anh
+                    img_data = images[0]
+                    if isinstance(img_data, bytes):
+                        with open(output_path, 'wb') as f:
+                            f.write(img_data)
+                    elif isinstance(img_data, str):
+                        import base64
+                        with open(output_path, 'wb') as f:
+                            f.write(base64.b64decode(img_data))
+
+                    self._log(f"  [OK] Saved: {output_path.name}")
+                    success_count += 1
+
+                    # Cap nhat Excel status
+                    try:
+                        if prompt_id.startswith('nv') or prompt_id.startswith('loc'):
+                            workbook.update_character_status(prompt_id, "done", str(output_path))
+                        elif not prompt_id.startswith('thumb'):
+                            scene_id = int(prompt_id)
+                            workbook.update_scene_status(scene_id, status_img="done", img_path=str(output_path))
+                        workbook.save()
+                    except Exception as e:
+                        self._log(f"  [WARN] Excel update failed: {e}")
+                else:
+                    self._log(f"  [FAIL] {error}")
+                    failed_count += 1
+
+            except Exception as e:
+                self._log(f"  [ERROR] {e}")
+                failed_count += 1
+
+        self._log(f"[LOCAL SERVER] Xong: {success_count} OK, {failed_count} fail")
+        return {
+            "success": True,
+            "total": len(prompts),
+            "generated": success_count,
+            "failed": failed_count,
+        }
+
     def generate_from_prompts_api(
         self,
         prompts: List[Dict],
@@ -3274,6 +3414,13 @@ class BrowserFlowGenerator:
         self._log("=" * 60)
         self._log("API MODE - TAO ANH TU PROMPTS")
         self._log("=" * 60)
+
+        # === LOCAL SERVER MODE: Dùng GoogleFlowAPI thay DrissionPage ===
+        local_server_enabled = self.config.get('local_server_enabled', False)
+        local_server_url = self.config.get('local_server_url', '')
+        if local_server_enabled and local_server_url:
+            self._log(f"[LOCAL SERVER] Gui anh qua server: {local_server_url}")
+            return self._generate_via_local_server(prompts, excel_path, bearer_token)
 
         # === DRISSION MODE ONLY ===
         # Sử dụng DrissionPage + Interceptor để tạo ảnh

@@ -1,6 +1,6 @@
-1.0.457
+1.0.458
 2026-03-28 (VN)
-Change: FIX VM khong gui anh qua local server
+Change: FIX VM local server - dung GoogleFlowAPI thay DrissionPage
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
