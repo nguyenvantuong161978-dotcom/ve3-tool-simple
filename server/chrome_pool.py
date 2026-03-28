@@ -153,8 +153,8 @@ class ChromePool:
     def __init__(self, log_callback: Callable = None):
         self.workers: List[ChromeWorker] = []
         self._log_fn = log_callback or (lambda msg, level="INFO": print(f"[ChromePool] {msg}"))
-        self._ipv6_list: List[str] = []  # Tat ca IPv6 tu sheet SERVER col C
-        self._ipv6_rotate_index = 0  # Vi tri hien tai trong _ipv6_list
+        self._ipv6_list: List[str] = []  # Tat ca IPv6
+        self._ipv6_usage: Dict[str, int] = {}  # ipv6 -> so lan da dung
         self._all_accounts: List[Dict] = []  # Tat ca tai khoan
         self._account_usage: Dict[str, int] = {}  # email -> so lan da dung
 
@@ -254,23 +254,30 @@ class ChromePool:
 
     def get_next_ipv6(self, current_ipv6: str = "") -> str:
         """
-        Lay IPv6 tiep theo tu danh sach (sheet SERVER col C).
-        Bo qua IPv6 dang dung. Quay vong khi het list.
-
-        Args:
-            current_ipv6: IPv6 hien tai cua worker (de bo qua)
+        Lay IPv6 IT DUNG NHAT, khac voi current_ipv6.
+        Tranh trung voi IPv6 dang duoc worker khac dung.
 
         Returns: IPv6 moi, hoac "" neu khong co
         """
         if not self._ipv6_list:
             return ""
 
-        # Tim IPv6 khac voi current, bat dau tu vi tri rotate hien tai
-        for _ in range(len(self._ipv6_list)):
-            self._ipv6_rotate_index = (self._ipv6_rotate_index + 1) % len(self._ipv6_list)
-            candidate = self._ipv6_list[self._ipv6_rotate_index]
-            if candidate != current_ipv6:
-                return candidate
+        best = None
+        best_score = float('inf')
+        for ip in self._ipv6_list:
+            if ip == current_ipv6:
+                continue
+            usage = self._ipv6_usage.get(ip, 0)
+            # Phat diem neu dang duoc worker khac dung
+            in_use = any(w.ipv6 == ip for w in self.workers)
+            score = usage + (1000 if in_use else 0)
+            if score < best_score:
+                best_score = score
+                best = ip
+
+        if best:
+            self._ipv6_usage[best] = self._ipv6_usage.get(best, 0) + 1
+            return best
 
         # Tat ca deu giong current → tra ve cai dau tien
         return self._ipv6_list[0]

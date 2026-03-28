@@ -1,3 +1,13 @@
+1.0.504
+2026-03-29 (VN)
+Change: IPv6 cung dung IT NHAT - giong logic account
+
+- get_next_ipv6(): chon IPv6 it dung nhat (khong phai xoay vong)
+- Tranh chon IPv6 dang duoc worker khac dung
+- Track so lan dung moi IPv6 (_ipv6_usage)
+- Ca account va IPv6 deu uu tien cai moi/it dung
+
+---
 1.0.503
 2026-03-29 (VN)
 Change: Account rotation - dung IT NHAT + tranh trung worker
