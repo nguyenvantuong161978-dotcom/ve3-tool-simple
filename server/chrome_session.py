@@ -836,10 +836,13 @@ class ChromeSession:
                     return {"error": "Textarea not found after project creation"}
                 self.project_url = self.page.url
 
-            # 2. Inject interceptor (giống test step 3)
+            # 2. Inject interceptor (giống test file - reset trước khi inject)
             self.log("Inject interceptor...")
             if image_inputs:
                 self.log(f"Reference images: {len(image_inputs)} media ID(s)")
+            # Reset state trước (giống test file)
+            self.page.run_js("window.__proxyInterceptReady = false; window._response = null; window._responseError = null; window._requestPending = false;")
+            time.sleep(0.5)
             js = build_interceptor_js(client_bearer_token, client_project_id, image_inputs)
             r = self.page.run_js(js)
             self.log(f"Interceptor: {r}")
