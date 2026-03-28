@@ -3284,6 +3284,144 @@ class BrowserFlowGenerator:
             "stats": self.stats.copy()
         }
 
+    def _extract_token_via_drission(self, excel_path: Optional[Path] = None) -> Optional[str]:
+        """
+        Lay bearer token bang DrissionPage (khong can DevTools/F12).
+        Mo ChromePortable da login → vao project URL tu Excel → inject interceptor
+        → gui 1 prompt → capture token → luu vao Excel.
+
+        Returns:
+            Bearer token (ya29.xxx) hoac None
+        """
+        import time
+
+        self._log("=== LAY TOKEN BANG DRISSION PAGE ===")
+
+        try:
+            from modules.drission_flow_api import DrissionFlowAPI, JS_INTERCEPTOR
+        except ImportError as e:
+            self._log(f"Khong import duoc DrissionFlowAPI: {e}", "error")
+            return None
+
+        # Chrome Portable path
+        chrome_portable = self.config.get('chrome_portable', '')
+        if not chrome_portable:
+            self._log("Khong co chrome_portable trong config!", "error")
+            return None
+
+        root_dir = Path(__file__).parent.parent
+        cp_path = Path(chrome_portable)
+        if not cp_path.is_absolute():
+            cp_path = root_dir / chrome_portable
+        if not cp_path.exists():
+            self._log(f"ChromePortable khong ton tai: {cp_path}", "error")
+            return None
+
+        self._log(f"ChromePortable: {cp_path}")
+
+        # Project URL tu Excel
+        project_url = ''
+        if excel_path and excel_path.exists():
+            try:
+                workbook = PromptWorkbook(excel_path)
+                workbook.load_or_create()
+                project_url = workbook.get_config_value('flow_project_url')
+                if project_url:
+                    self._log(f"Project URL tu Excel: {project_url[:60]}...")
+            except Exception as e:
+                self._log(f"Khong doc duoc Excel config: {e}", "warn")
+
+        # Tao DrissionFlowAPI
+        drission = DrissionFlowAPI(
+            chrome_portable=str(cp_path),
+            worker_id=0,
+            total_workers=1,
+            headless=False,  # Can hien thi de Google khong block
+            verbose=self.verbose,
+            log_callback=lambda msg, level="info": self._log(f"[Drission] {msg}", level),
+            webshare_enabled=False,  # Khong can proxy cho viec lay token
+        )
+
+        try:
+            # Setup Chrome - inject interceptor
+            self._log("Mo Chrome va inject interceptor...")
+            setup_ok = drission.setup(
+                wait_for_project=True,
+                timeout=60,
+                warm_up=False,
+                project_url=project_url or None,
+            )
+
+            if not setup_ok:
+                self._log("DrissionPage setup that bai!", "error")
+                return None
+
+            # Gui 1 prompt test de capture token
+            self._log("Gui prompt test de capture token...")
+            test_prompt = "a simple red circle on white background"
+            capture_ok = drission._capture_tokens(test_prompt, timeout=30)
+
+            if not capture_ok or not drission.bearer_token:
+                self._log("Khong capture duoc token!", "error")
+                return None
+
+            # Token thanh cong
+            token = drission.bearer_token
+            if token.startswith("Bearer "):
+                token = token[7:]
+
+            self._log(f"[OK] Token: {token[:20]}...{token[-10:]}")
+
+            # Lay project URL va ID
+            captured_project_url = drission.captured_url or ''
+            if not captured_project_url:
+                try:
+                    captured_project_url = drission.driver.url
+                except:
+                    pass
+            captured_project_id = drission.project_id or ''
+
+            self._log(f"Project ID: {captured_project_id}")
+            self._log(f"Project URL: {captured_project_url[:60]}..." if captured_project_url else "Project URL: N/A")
+
+            # Luu vao Excel config
+            if excel_path and excel_path.exists():
+                try:
+                    workbook = PromptWorkbook(excel_path)
+                    workbook.load_or_create()
+                    workbook.set_config_value('flow_bearer_token', token)
+                    if captured_project_url:
+                        workbook.set_config_value('flow_project_url', captured_project_url)
+                    if captured_project_id:
+                        workbook.set_config_value('flow_project_id', captured_project_id)
+                    workbook.save()
+                    self._log("[OK] Token da luu vao Excel config!")
+                except Exception as e:
+                    self._log(f"Luu Excel that bai: {e}", "warn")
+
+            # Luu vao settings config (de reuse trong session)
+            self.config['flow_bearer_token'] = token
+            if captured_project_id:
+                self.config['flow_project_id'] = captured_project_id
+            self._cached_bearer_token = token
+            self._cached_token_time = time.time()
+
+            return token
+
+        except Exception as e:
+            self._log(f"Loi extract token: {e}", "error")
+            import traceback
+            traceback.print_exc()
+            return None
+
+        finally:
+            # Dong Chrome
+            try:
+                drission.close()
+                self._log("Chrome dong thanh cong")
+            except:
+                pass
+
     def _generate_via_local_server(
         self,
         prompts: List[Dict],
@@ -3302,20 +3440,30 @@ class BrowserFlowGenerator:
         except ImportError as e:
             return {"success": False, "error": f"Khong import duoc GoogleFlowAPI: {e}"}
 
-        # Bearer token - lay tu config hoac Chrome
-        if not bearer_token:
-            bearer_token = self.config.get('flow_bearer_token', '')
-        if not bearer_token:
-            self._log("Khong co bearer token, thu tu dong lay...")
-            bearer_token = self._auto_extract_token()
-        if not bearer_token:
-            return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc."}
-
-        # Excel
+        # Excel (can truoc de doc token tu Excel config)
         if excel_path is None:
             excel_path = self._find_excel_file()
         if excel_path is None or not excel_path.exists():
             return {"success": False, "error": "Khong tim thay file Excel"}
+
+        # Bearer token - uu tien: param > config > Excel > DrissionPage
+        if not bearer_token:
+            bearer_token = self.config.get('flow_bearer_token', '')
+        if not bearer_token and excel_path:
+            # Thu doc tu Excel config
+            try:
+                wb_tmp = PromptWorkbook(excel_path)
+                wb_tmp.load_or_create()
+                bearer_token = wb_tmp.get_config_value('flow_bearer_token')
+                if bearer_token:
+                    self._log(f"Bearer token tu Excel config: {bearer_token[:20]}...")
+            except:
+                pass
+        if not bearer_token:
+            self._log("Khong co bearer token, dung DrissionPage de lay...")
+            bearer_token = self._extract_token_via_drission(excel_path)
+        if not bearer_token:
+            return {"success": False, "error": "Can bearer token. VM phai dang nhap Google truoc."}
 
         # Project ID
         flow_project_id = self.config.get('flow_project_id', self.project_code)
