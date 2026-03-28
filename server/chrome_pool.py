@@ -354,21 +354,48 @@ class ChromePool:
                         stats['total_completed'] += 1
                         worker.total_completed += 1
                         worker.last_error = ""
+                        # Reset 403 counter khi thanh cong
+                        if worker.session:
+                            worker.session._consecutive_403 = 0
                         duration = time.time() - tasks[task_id].get('started_at', time.time())
                         self._log(f"[{worker_name}] OK: {task_id[:8]}... | VM: {vm_id} | {duration:.1f}s", "OK")
                     elif result and 'error' in result:
                         err_msg = result['error']
                         # error co the la dict ({"code": 403, "message": "..."}) hoac string
                         if isinstance(err_msg, dict):
-                            err_str = f"Error {err_msg.get('code', '?')}: {err_msg.get('message', str(err_msg))}"
+                            err_code = err_msg.get('code', 0)
+                            err_str = f"Error {err_code}: {err_msg.get('message', str(err_msg))}"
                         else:
                             err_str = str(err_msg)
+                            err_code = 403 if '403' in err_str else 0
                         tasks[task_id]['status'] = 'failed'
                         tasks[task_id]['error'] = err_str
                         stats['total_failed'] += 1
                         worker.total_failed += 1
                         worker.last_error = err_str[:100]
                         self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
+
+                        # === 403 RECOVERY: Restart Chrome voi fingerprint moi ===
+                        if err_code == 403 and worker.session:
+                            worker.session._consecutive_403 += 1
+                            c403 = worker.session._consecutive_403
+                            self._log(f"[{worker_name}] 403 count: {c403}/3", "WARN")
+                            if c403 >= 3:
+                                self._log(f"[{worker_name}] === 403 x{c403} → RESTART voi fingerprint moi ===", "WARN")
+                                worker.ready = False
+                                try:
+                                    ok = worker.session.restart_with_new_fingerprint()
+                                    if ok:
+                                        worker.ready = True
+                                        worker.session._consecutive_403 = 0
+                                        self._log(f"[{worker_name}] Restart OK - fingerprint moi active", "OK")
+                                    else:
+                                        self._log(f"[{worker_name}] Restart FAIL!", "ERROR")
+                                except Exception as re:
+                                    self._log(f"[{worker_name}] Restart error: {re}", "ERROR")
+                        elif err_code != 403 and worker.session:
+                            # Reset 403 counter khi loi khac (khong phai 403)
+                            worker.session._consecutive_403 = 0
                     else:
                         tasks[task_id]['status'] = 'failed'
                         tasks[task_id]['error'] = 'No media in response'

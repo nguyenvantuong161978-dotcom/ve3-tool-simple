@@ -68,6 +68,80 @@ JS_CLEANUP = """
 })();
 """
 
+# Fingerprint spoof data
+_FAKE_GPUS = [
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 2070 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (AMD)", "renderer": "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (AMD)", "renderer": "ANGLE (AMD, AMD Radeon RX 5700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (Intel)", "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (Intel)", "renderer": "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+    {"vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)"},
+]
+_FAKE_SCREENS = [
+    {"width": 1920, "height": 1080},
+    {"width": 2560, "height": 1440},
+    {"width": 1366, "height": 768},
+    {"width": 1536, "height": 864},
+    {"width": 1440, "height": 900},
+]
+_FAKE_CORES = [4, 6, 8, 12, 16]
+_FAKE_MEMORY = [4, 8, 16, 32]
+
+
+def _build_fingerprint_js(seed: int) -> str:
+    """Tao JS spoof WebGL/Canvas/Hardware fingerprint tu seed."""
+    import random as _rng
+    r = _rng.Random(seed)
+    gpu = r.choice(_FAKE_GPUS)
+    scr = r.choice(_FAKE_SCREENS)
+    cores = r.choice(_FAKE_CORES)
+    mem = r.choice(_FAKE_MEMORY)
+    nr, ng, nb = r.randint(1, 5), r.randint(1, 5), r.randint(1, 5)
+    audio_noise = r.uniform(-0.1, 0.1)
+
+    return f"""
+    (function(){{
+        // WebGL spoof
+        var V="{gpu['vendor']}",R="{gpu['renderer']}";
+        var gp=WebGLRenderingContext.prototype.getParameter;
+        WebGLRenderingContext.prototype.getParameter=function(p){{
+            if(p===37445||p===0x9245)return V;
+            if(p===37446||p===0x9246)return R;
+            return gp.call(this,p);
+        }};
+        if(typeof WebGL2RenderingContext!=='undefined'){{
+            var gp2=WebGL2RenderingContext.prototype.getParameter;
+            WebGL2RenderingContext.prototype.getParameter=function(p){{
+                if(p===37445||p===0x9245)return V;
+                if(p===37446||p===0x9246)return R;
+                return gp2.call(this,p);
+            }};
+        }}
+        // Canvas noise
+        var otd=HTMLCanvasElement.prototype.toDataURL;
+        HTMLCanvasElement.prototype.toDataURL=function(t){{
+            try{{var c=this.getContext('2d');if(c){{var d=c.getImageData(0,0,Math.min(this.width,2),1);
+            if(d.data.length>=4){{d.data[0]=(d.data[0]+{nr})%256;d.data[1]=(d.data[1]+{ng})%256;d.data[2]=(d.data[2]+{nb})%256;c.putImageData(d,0,0);}}}}}}catch(e){{}}
+            return otd.call(this,t);
+        }};
+        // Hardware
+        Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores}}});
+        Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem}}});
+        // Screen
+        Object.defineProperty(screen,'width',{{get:()=>{scr['width']}}});
+        Object.defineProperty(screen,'height',{{get:()=>{scr['height']}}});
+        Object.defineProperty(screen,'availWidth',{{get:()=>{scr['width']}}});
+        Object.defineProperty(screen,'availHeight',{{get:()=>{scr['height']}-40}});
+        // Audio
+        var ogf=AnalyserNode.prototype.getFloatFrequencyData;
+        AnalyserNode.prototype.getFloatFrequencyData=function(a){{ogf.call(this,a);for(var i=0;i<Math.min(a.length,10);i++)a[i]+={audio_noise:.6f};}};
+        console.log('[SPOOF] seed={seed} gpu={gpu["renderer"][:30]}...');
+    }})();
+    """
+
+
 JS_CLICK_NEW_PROJECT = """
 (function() {
     // Tìm nút "Dự án mới" (có icon add_2)
@@ -390,10 +464,57 @@ class ChromeSession:
         self.project_url = None
         self._image_mode_selected = False
         self._account = None  # Tai khoan dang dung
+        self._fingerprint_seed = 0  # 0 = no spoof, >0 = spoof active
+        self._consecutive_403 = 0   # Dem 403 lien tiep
 
     def log(self, msg: str, level: str = "INFO"):
         prefix = {"INFO": "[INFO]", "OK": "[OK]", "WARN": "[WARN]", "ERROR": "[ERROR]"}
         print(f"  {prefix.get(level, '[INFO]')} {msg}")
+
+    # ============================================================
+    # Fingerprint Spoof - Doi fingerprint khi bi 403
+    # ============================================================
+
+    def inject_fingerprint_spoof(self):
+        """Inject fingerprint spoof JS vao page hien tai."""
+        if self._fingerprint_seed <= 0 or not self.page:
+            return
+        try:
+            js = _build_fingerprint_js(self._fingerprint_seed)
+            self.page.run_js(js)
+            self.log(f"[SPOOF] Injected fingerprint (seed={self._fingerprint_seed})")
+        except Exception as e:
+            self.log(f"[SPOOF] Inject error: {e}", "WARN")
+
+    def restart_with_new_fingerprint(self) -> bool:
+        """
+        Restart Chrome voi fingerprint moi.
+        Goi khi bi 403 lien tiep.
+        Returns: True neu restart thanh cong.
+        """
+        import random
+        self._fingerprint_seed = random.randint(10000, 99999)
+        self.log(f"[SPOOF] === RESTART voi fingerprint moi (seed={self._fingerprint_seed}) ===")
+
+        # 1. Dong Chrome hien tai
+        try:
+            if self.page:
+                self.page.quit()
+        except Exception:
+            pass
+        self.page = None
+        self.ready = False
+
+        # 2. Clear Chrome data
+        self._clear_chrome_data()
+
+        # 3. Setup lai (setup() se goi inject_fingerprint_spoof)
+        ok = self.setup()
+        if ok:
+            self.log(f"[SPOOF] Restart OK - fingerprint moi active", "OK")
+        else:
+            self.log(f"[SPOOF] Restart FAIL!", "ERROR")
+        return ok
 
     # ============================================================
     # Setup - Khởi tạo Chrome + vào Flow + tạo project
@@ -591,6 +712,7 @@ class ChromeSession:
         self.log(f"Vao Flow: {FLOW_URL}")
         self.page.get(FLOW_URL)
         time.sleep(5)
+        self.inject_fingerprint_spoof()
 
         current_url = self.page.url or ''
         self.log(f"URL: {current_url}")
@@ -605,6 +727,7 @@ class ChromeSession:
             # Vao lai Flow sau khi login
             self.page.get(FLOW_URL)
             time.sleep(5)
+            self.inject_fingerprint_spoof()
             current_url = self.page.url or ''
 
         # 6. Tạo project mới
@@ -834,6 +957,7 @@ class ChromeSession:
             else:
                 self.page.get(FLOW_URL)
             time.sleep(5)
+            self.inject_fingerprint_spoof()
 
             # Đợi textarea
             if not self._wait_for_textarea(timeout=20):

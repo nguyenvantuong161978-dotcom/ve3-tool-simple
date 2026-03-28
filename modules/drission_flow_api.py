@@ -1361,6 +1361,9 @@ class DrissionFlowAPI:
         self._t2v_mode_selected = False  # True = đã chọn T2V mode + Lower Priority model
         self._image_mode_selected = False  # True = đã chọn Image mode
 
+        # Fingerprint spoof: 0 = khong spoof, >0 = spoof active (seed)
+        self._fingerprint_seed = 0
+
     def log(self, msg: str, level: str = "INFO"):
         """Log message - chỉ dùng 1 trong 2: callback hoặc print."""
         if self.log_callback:
@@ -1370,6 +1373,86 @@ class DrissionFlowAPI:
             # Fallback: print trực tiếp nếu không có callback
             timestamp = datetime.now().strftime("%H:%M:%S")
             print(f"[{timestamp}] [{level}] {msg}")
+
+    # ============================================================
+    # Fingerprint Spoof - Doi fingerprint khi bi 403
+    # ============================================================
+
+    def activate_fingerprint_spoof(self):
+        """Bat fingerprint spoof voi seed moi (moi lan 403 goi 1 lan)."""
+        import random
+        self._fingerprint_seed = random.randint(10000, 99999)
+        self.log(f"[SPOOF] Activated fingerprint spoof (seed={self._fingerprint_seed})")
+        self._inject_fingerprint()
+
+    def _inject_fingerprint(self):
+        """Inject fingerprint JS vao page hien tai."""
+        if self._fingerprint_seed <= 0 or not self.driver:
+            return
+        try:
+            from server.chrome_session import _build_fingerprint_js
+            js = _build_fingerprint_js(self._fingerprint_seed)
+            self.driver.run_js(js)
+            self.log(f"[SPOOF] Injected (seed={self._fingerprint_seed})")
+        except ImportError:
+            # Fallback: build JS truc tiep neu khong import duoc server module
+            self._inject_fingerprint_fallback()
+        except Exception as e:
+            self.log(f"[SPOOF] Inject error: {e}", "WARN")
+
+    def _inject_fingerprint_fallback(self):
+        """Fallback inject khi khong import duoc server module."""
+        import random
+        r = random.Random(self._fingerprint_seed)
+        gpus = [
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+            ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)"),
+        ]
+        screens = [(1920,1080),(2560,1440),(1366,768),(1536,864),(1440,900)]
+        cores_list = [4,6,8,12,16]
+        mem_list = [4,8,16,32]
+
+        vendor, renderer = r.choice(gpus)
+        sw, sh = r.choice(screens)
+        cores = r.choice(cores_list)
+        mem = r.choice(mem_list)
+        nr, ng, nb = r.randint(1,5), r.randint(1,5), r.randint(1,5)
+        audio = r.uniform(-0.1, 0.1)
+
+        js = f"""
+        (function(){{
+            var V="{vendor}",R="{renderer}";
+            var gp=WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter=function(p){{
+                if(p===37445||p===0x9245)return V;if(p===37446||p===0x9246)return R;return gp.call(this,p);}};
+            if(typeof WebGL2RenderingContext!=='undefined'){{
+                var gp2=WebGL2RenderingContext.prototype.getParameter;
+                WebGL2RenderingContext.prototype.getParameter=function(p){{
+                    if(p===37445||p===0x9245)return V;if(p===37446||p===0x9246)return R;return gp2.call(this,p);}};}}
+            var otd=HTMLCanvasElement.prototype.toDataURL;
+            HTMLCanvasElement.prototype.toDataURL=function(t){{
+                try{{var c=this.getContext('2d');if(c){{var d=c.getImageData(0,0,Math.min(this.width,2),1);
+                if(d.data.length>=4){{d.data[0]=(d.data[0]+{nr})%256;d.data[1]=(d.data[1]+{ng})%256;d.data[2]=(d.data[2]+{nb})%256;c.putImageData(d,0,0);}}}}}}catch(e){{}}
+                return otd.call(this,t);}};
+            Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores}}});
+            Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem}}});
+            Object.defineProperty(screen,'width',{{get:()=>{sw}}});
+            Object.defineProperty(screen,'height',{{get:()=>{sh}}});
+            Object.defineProperty(screen,'availWidth',{{get:()=>{sw}}});
+            Object.defineProperty(screen,'availHeight',{{get:()=>{sh}-40}});
+            var ogf=AnalyserNode.prototype.getFloatFrequencyData;
+            AnalyserNode.prototype.getFloatFrequencyData=function(a){{ogf.call(this,a);for(var i=0;i<Math.min(a.length,10);i++)a[i]+={audio:.6f};}};
+            console.log('[SPOOF] seed={self._fingerprint_seed}');
+        }})();
+        """
+        try:
+            self.driver.run_js(js)
+            self.log(f"[SPOOF] Injected fallback (seed={self._fingerprint_seed})")
+        except Exception as e:
+            self.log(f"[SPOOF] Fallback inject error: {e}", "WARN")
 
     def reset_to_pro_model(self):
         """Reset về model pro (GEM_PIX_2) - gọi khi bắt đầu project mới."""
@@ -3546,6 +3629,10 @@ class DrissionFlowAPI:
         # v1.0.213: Reset model flag để chọn lại model khi generate đầu tiên
         self._model_selected = False
 
+        # v1.0.486: Inject fingerprint spoof nếu đang active
+        if self._fingerprint_seed > 0:
+            self._inject_fingerprint()
+
         self._ready = True
         return True
 
@@ -4936,10 +5023,12 @@ class DrissionFlowAPI:
 
                     if self._consecutive_403 < model_threshold:
                         # Chưa đủ threshold → restart Chrome và setup lại
-                        self.log(f"[403] Restart Chrome...", "WARN")
+                        self.log(f"[403] Restart Chrome + fingerprint mới...", "WARN")
                         self._kill_chrome()
                         self.close()
                         time.sleep(2)
+                        # v1.0.486: Fingerprint spoof mỗi lần 403
+                        self.activate_fingerprint_spoof()
                         # v1.0.183: Setup với project_url đã lưu (không làm warm up)
                         # v1.0.195: skip_403_reset=True để giữ counter
                         saved_url = getattr(self, '_current_project_url', None)
@@ -4957,19 +5046,19 @@ class DrissionFlowAPI:
                             self._consecutive_403 = 0  # Reset counter
                             self.log(f"[403] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
                         else:
-                            self.log(f"[403] Không switch được model, restart Chrome", "WARN")
-                            # v1.0.197: Cleanup đã chạy ở trên rồi, không cần flag
+                            self.log(f"[403] Không switch được model, restart Chrome + fingerprint mới", "WARN")
                             self._kill_chrome()
                             self.close()
                             time.sleep(2)
-                            # v1.0.183: Setup với project_url đã lưu (không làm warm up)
-                            # v1.0.195: skip_403_reset=True để giữ counter
+                            # v1.0.486: Fingerprint spoof
+                            self.activate_fingerprint_spoof()
                             saved_url = getattr(self, '_current_project_url', None)
                             self.setup(project_url=saved_url, skip_403_reset=True)
 
                     elif not cleared_flag:
-                        # Hết 3 models (9 lần 403) → XÓA DATA + reset về model 0
-                        self.log(f"[403] Hết 3 models → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
+                        # Hết 3 models (9 lần 403) → XÓA DATA + reset về model 0 + fingerprint mới
+                        self.log(f"[403] Hết 3 models → RESET PROFILE + FINGERPRINT MỚI + ĐĂNG NHẬP LẠI!", "WARN")
+                        self.activate_fingerprint_spoof()
                         self.reset_chrome_profile()
                         time.sleep(1)
                         self._auto_login_google()

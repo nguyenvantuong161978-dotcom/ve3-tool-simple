@@ -1,8 +1,16 @@
-1.0.485
+1.0.486
 2026-03-28 (VN)
-Change: FIX 3 BUGS - Chrome 1+2 cung tao giong nhau, thumbnail loi, SKIP_VALIDATOR
+Change: FINGERPRINT SPOOF - Doi WebGL/Canvas/Hardware khi bi 403
 
 Thay doi:
+- v1.0.486: FINGERPRINT SPOOF KHI 403
+  * Moi lan bi 403 → thay doi WebGL renderer, Canvas noise, CPU cores, RAM, Screen
+  * Google nhan dien may qua fingerprint → doi IP khong du → can doi fingerprint
+  * SERVER: chrome_session.py + chrome_pool.py - 403 x3 → restart voi fingerprint moi
+  * TOOL (API mode): drission_flow_api.py - moi lan 403 restart → fingerprint moi
+  * Danh sach GPU gia: RTX 3060/4060, GTX 1660, RX 580/5700XT, UHD 770, Iris Xe
+  * Moi lan 403 seed khac nhau → fingerprint khac nhau hoan toan
+  * Test: test_fingerprint_spoof.py (chay doc lap de verify)
 - v1.0.485: FIX 3 BUGS TRONG LOCAL SERVER MODE
   * BUG 1 (CRITICAL): Chrome 1 va Chrome 2 cung tao GIONG NHAU (khong chia chan/le)
     - Root cause: Logic filter chan/le nam SAU redirect local server → khong bao gio chay
