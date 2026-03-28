@@ -1,29 +1,20 @@
-1.0.471
+1.0.472
 2026-03-28 (VN)
-Change: MULTI-PROCESS SERVER + FIX TOKEN EXTRACTION + FIX ERROR DICT BUG
+Change: Web Dashboard + Single Process + Fix worker spam/error
 
 Thay doi:
+- v1.0.472: WEB DASHBOARD + SINGLE PROCESS
+  * server/app.py v4.0: Single process + Web Dashboard
+    - Web dashboard tai http://server:5000/ (dark theme, auto-refresh 2s)
+    - Hien thi: workers status, queue, processing, logs
+    - Chrome setup SONG SONG bang threads (khong can CMD rieng)
+    - Flask khoi dong NGAY, Chrome setup phia sau
+    - 1 CMD duy nhat thay vi 6 CMD
+  * server/worker.py: Fix polling qua nhanh (1s -> 3s)
+  * server/worker.py: Fix error dict -> string conversion
 - v1.0.471: MULTI-PROCESS SERVER + FIXES
-  * server/app.py v3.0: Multi-Process Architecture
-    - Server khoi dong NGAY (khong doi Chrome setup)
-    - Internal API cho workers: /internal/register, /internal/next-task, /internal/task-done
-    - Worker registry thay ChromePool (workers tu dang ky qua HTTP)
-    - Dead worker detection (heartbeat 60s) + task recovery
-  * server/worker.py (MOI): Chrome worker chay trong CMD rieng
-    - Lay config tu server → setup Chrome → loop lay task
-    - Moi Chrome 1 process rieng → setup SONG SONG (5 Chrome cung luc)
-    - Truoc: 5 Chrome x 3 phut = 15 phut TUAN TU
-    - Sau: 5 Chrome setup cung luc = ~3 phut SONG SONG
-  * server/start_server.py (MOI): Launcher khoi dong 1 Server + N Workers
-    - Auto-detect so Chrome Portable co san
-    - Moi CMD rieng: 1 Main + N Workers
-  * START_SERVER.bat (MOI): Khoi dong nhanh
-  * FIX chrome_pool.py: result['error'] co the la dict (khong chi string)
-    - Bug: TypeError: unhashable type: 'slice' khi error la dict
-    - Fix: convert dict error sang string truoc khi slice
-  * FIX browser_flow_generator.py: Doc flow_project_id + flow_project_url tu Excel
-    - Truoc: chi doc flow_bearer_token tu Excel, project_id chi tu config
-    - Sau: doc ca 3 fields tu Excel → khong can tao anh test de lay project_id
-    - Skip token extraction khi Excel da co du data
+  * FIX chrome_pool.py: result['error'] la dict -> TypeError crash
+  * FIX browser_flow_generator.py: Doc flow_project_id tu Excel
+  * server/worker.py + start_server.py: Multi-process mode (backup)
 - v1.0.470: SMART LOGIN - chi login khi account sai
-- v1.0.467: MULTI-CHROME SERVER (ChromePool, single process)
+- v1.0.467: MULTI-CHROME SERVER (ChromePool)
