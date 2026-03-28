@@ -1,8 +1,12 @@
-1.0.473
+1.0.474
 2026-03-28 (VN)
-Change: IPv6 SOCKS5 proxy cho moi Chrome worker
+Change: Chrome xong setup → nhan request NGAY (khong doi worker khac)
 
 Thay doi:
+- v1.0.474: INSTANT WORKER START
+  * Chrome nao setup xong → start worker loop NGAY
+  * Khong doi tat ca worker setup xong moi bat dau
+  * Worker cham khong block worker nhanh
 - v1.0.473: IPv6 SUPPORT - Moi Chrome dung IPv6 rieng
   * server/chrome_session.py: Nhan ipv6 param, tao SOCKS5 proxy tu dong
     - Moi Chrome co 1 SOCKS5 proxy rieng (port = debug_port + 200)

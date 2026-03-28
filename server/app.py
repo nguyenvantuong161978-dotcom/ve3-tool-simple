@@ -596,15 +596,17 @@ if __name__ == '__main__':
     if chrome_pool.workers:
         server_log(f"Setup {len(chrome_pool.workers)} Chrome workers SONG SONG...")
 
-        # Setup SONG SONG bang threads (khong tuan tu nua)
+        # Setup SONG SONG bang threads - moi worker xong setup → nhan request NGAY
         def setup_worker_thread(worker):
-            """Setup 1 worker trong thread rieng."""
+            """Setup 1 worker trong thread rieng. Xong → start worker loop ngay."""
             from server.chrome_session import ChromeSession
             worker_name = f"Chrome-{worker.index}"
             try:
                 pool_log(f"[{worker_name}] Bat dau setup...")
                 if worker.account:
                     pool_log(f"[{worker_name}] Account: {worker.account['id']}")
+                if worker.ipv6:
+                    pool_log(f"[{worker_name}] IPv6: {worker.ipv6}")
 
                 session = ChromeSession(
                     chrome_portable_path=worker.chrome_path,
@@ -619,6 +621,16 @@ if __name__ == '__main__':
                     worker.session = session
                     worker.ready = True
                     pool_log(f"[{worker_name}] READY! Project: {session.project_url}", "OK")
+
+                    # Start worker loop NGAY - khong doi worker khac
+                    t = threading.Thread(
+                        target=chrome_pool._worker_loop,
+                        args=(worker, task_queue, queue_lock, tasks, task_lock, stats),
+                        daemon=True,
+                        name=f"ChromeWorker-{worker.index}",
+                    )
+                    t.start()
+                    pool_log(f"[{worker_name}] Worker loop STARTED - san sang nhan request!", "OK")
                 else:
                     pool_log(f"[{worker_name}] Setup FAILED!", "ERROR")
             except Exception as e:
@@ -626,7 +638,6 @@ if __name__ == '__main__':
                 traceback.print_exc()
 
         # Khoi dong tat ca setup threads CUNG LUC
-        setup_threads = []
         for worker in chrome_pool.workers:
             t = threading.Thread(
                 target=setup_worker_thread,
@@ -634,30 +645,8 @@ if __name__ == '__main__':
                 daemon=True,
                 name=f"Setup-Chrome-{worker.index}",
             )
-            setup_threads.append(t)
-
-        # Start all setup threads
-        for t in setup_threads:
             t.start()
             time.sleep(1)  # Gian cach 1s de tranh conflict
-
-        # Doi tat ca setup xong (NHUNG Flask da chay truoc do)
-        def wait_and_start_workers():
-            """Doi setup xong roi start worker loops."""
-            for t in setup_threads:
-                t.join(timeout=300)  # Max 5 phut moi worker
-
-            ready_count = chrome_pool.total_ready()
-            server_log(f"Setup xong: {ready_count}/{len(chrome_pool.workers)} workers READY", "OK")
-
-            if ready_count > 0:
-                chrome_pool.start_workers(task_queue, queue_lock, tasks, task_lock, stats)
-                server_log(f"{ready_count} worker threads started!", "OK")
-            else:
-                server_log("KHONG CO worker nao san sang!", "ERROR")
-
-        # Chay wait trong thread rieng de Flask khong bi block
-        threading.Thread(target=wait_and_start_workers, daemon=True).start()
     else:
         server_log("Khong tim thay Chrome Portable nao!", "ERROR")
 
