@@ -126,14 +126,14 @@ def _build_fingerprint_js(seed: int) -> str:
             if(d.data.length>=4){{d.data[0]=(d.data[0]+{nr})%256;d.data[1]=(d.data[1]+{ng})%256;d.data[2]=(d.data[2]+{nb})%256;c.putImageData(d,0,0);}}}}}}catch(e){{}}
             return otd.call(this,t);
         }};
-        // Hardware
-        Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores}}});
-        Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem}}});
+        // Hardware (try/catch vi CDP co the da inject truoc)
+        try{{Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores},configurable:true}});}}catch(e){{}}
+        try{{Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem},configurable:true}});}}catch(e){{}}
         // Screen
-        Object.defineProperty(screen,'width',{{get:()=>{scr['width']}}});
-        Object.defineProperty(screen,'height',{{get:()=>{scr['height']}}});
-        Object.defineProperty(screen,'availWidth',{{get:()=>{scr['width']}}});
-        Object.defineProperty(screen,'availHeight',{{get:()=>{scr['height']}-40}});
+        try{{Object.defineProperty(screen,'width',{{get:()=>{scr['width']},configurable:true}});}}catch(e){{}}
+        try{{Object.defineProperty(screen,'height',{{get:()=>{scr['height']},configurable:true}});}}catch(e){{}}
+        try{{Object.defineProperty(screen,'availWidth',{{get:()=>{scr['width']},configurable:true}});}}catch(e){{}}
+        try{{Object.defineProperty(screen,'availHeight',{{get:()=>{scr['height']}-40,configurable:true}});}}catch(e){{}}
         // Audio
         var ogf=AnalyserNode.prototype.getFloatFrequencyData;
         AnalyserNode.prototype.getFloatFrequencyData=function(a){{ogf.call(this,a);for(var i=0;i<Math.min(a.length,10);i++)a[i]+={audio_noise:.6f};}};

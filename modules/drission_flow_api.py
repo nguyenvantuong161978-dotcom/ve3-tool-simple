@@ -1480,12 +1480,12 @@ class DrissionFlowAPI:
                 try{{var c=this.getContext('2d');if(c){{var d=c.getImageData(0,0,Math.min(this.width,2),1);
                 if(d.data.length>=4){{d.data[0]=(d.data[0]+{nr})%256;d.data[1]=(d.data[1]+{ng})%256;d.data[2]=(d.data[2]+{nb})%256;c.putImageData(d,0,0);}}}}}}catch(e){{}}
                 return otd.call(this,t);}};
-            Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores}}});
-            Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem}}});
-            Object.defineProperty(screen,'width',{{get:()=>{sw}}});
-            Object.defineProperty(screen,'height',{{get:()=>{sh}}});
-            Object.defineProperty(screen,'availWidth',{{get:()=>{sw}}});
-            Object.defineProperty(screen,'availHeight',{{get:()=>{sh}-40}});
+            try{{Object.defineProperty(navigator,'hardwareConcurrency',{{get:()=>{cores},configurable:true}});}}catch(e){{}}
+            try{{Object.defineProperty(navigator,'deviceMemory',{{get:()=>{mem},configurable:true}});}}catch(e){{}}
+            try{{Object.defineProperty(screen,'width',{{get:()=>{sw},configurable:true}});}}catch(e){{}}
+            try{{Object.defineProperty(screen,'height',{{get:()=>{sh},configurable:true}});}}catch(e){{}}
+            try{{Object.defineProperty(screen,'availWidth',{{get:()=>{sw},configurable:true}});}}catch(e){{}}
+            try{{Object.defineProperty(screen,'availHeight',{{get:()=>{sh}-40,configurable:true}});}}catch(e){{}}
             var ogf=AnalyserNode.prototype.getFloatFrequencyData;
             AnalyserNode.prototype.getFloatFrequencyData=function(a){{ogf.call(this,a);for(var i=0;i<Math.min(a.length,10);i++)a[i]+={audio:.6f};}};
             console.log('[SPOOF] seed={self._fingerprint_seed}');
