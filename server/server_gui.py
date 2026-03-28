@@ -83,6 +83,19 @@ class ServerGUI(tk.Tk):
         tk.Label(card, text="BAT: Moi Chrome dung IPv6 rieng (chong 403).  TAT: Dung IPv4 chung.",
                  font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
 
+        # IPv6 list input (optional - bo sung them IPv6 ngoai sheet)
+        tk.Label(card, text="IPv6 bo sung (moi dong 1 IP, de trong neu chi dung sheet):",
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w', pady=(8, 2))
+
+        ipv6_text_frame = tk.Frame(card, bg=BG2)
+        ipv6_text_frame.pack(fill='x', padx=20, pady=(0, 5))
+
+        self.ipv6_text = tk.Text(ipv6_text_frame, height=3, width=50,
+                                  font=("Consolas", 9), bg='#0f172a', fg=FG,
+                                  insertbackground=FG, relief='solid', bd=1,
+                                  highlightbackground=BORDER)
+        self.ipv6_text.pack(fill='x')
+
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=15)
 
@@ -152,21 +165,28 @@ class ServerGUI(tk.Tk):
         use_ipv6 = self.ipv6_var.get()
         chrome_count = self._get_chrome_count()
 
-        # Switch to monitor page
-        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count))
+        # Thu thap IPv6 bo sung tu text box
+        extra_ipv6_text = self.ipv6_text.get("1.0", "end").strip()
+        extra_ipv6 = [
+            line.strip() for line in extra_ipv6_text.split('\n')
+            if line.strip() and ':' in line.strip()  # IPv6 phai co dau ':'
+        ]
 
-    def _switch_to_monitor(self, use_ipv6, chrome_count):
+        # Switch to monitor page
+        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6))
+
+    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None):
         self.setup_frame.destroy()
         self._build_monitor_page()
 
         # Start server in background
         threading.Thread(
             target=self._start_server,
-            args=(use_ipv6, chrome_count),
+            args=(use_ipv6, chrome_count, extra_ipv6 or []),
             daemon=True,
         ).start()
 
-    def _start_server(self, use_ipv6, chrome_count):
+    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None):
         """Start Flask + Chrome workers in background."""
         self._add_log("Khoi dong server...", "INFO")
 
@@ -180,6 +200,7 @@ class ServerGUI(tk.Tk):
         with settings_lock:
             server_settings['use_ipv6'] = use_ipv6
             server_settings['chrome_count'] = chrome_count
+            server_settings['extra_ipv6'] = extra_ipv6 or []
             server_settings['started'] = True
 
         # Redirect server_log to our GUI

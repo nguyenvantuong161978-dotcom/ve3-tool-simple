@@ -1337,8 +1337,12 @@ class DrissionFlowAPI:
         # Model fallback: khi quota exceeded (429), chuyển từ GEM_PIX_2 (Pro) sang GEM_PIX
         self._use_fallback_model = False  # True = dùng nano banana (GEM_PIX) thay vì pro (GEM_PIX_2)
 
-        # IPv6 rotation: Đọc từ settings.yaml
+        # 403 recovery state
         self._consecutive_403 = 0
+        self._cleared_data_for_403 = False  # True = da clear data trong luot 403 hien tai
+        self._current_model_index = 0  # 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+
+        # IPv6 rotation: Đọc từ settings.yaml
         self._ipv6_activated = False  # True = đã bật IPv6 proxy
         self._ipv6_rotator = None  # IPv6Rotator instance
 
@@ -1453,6 +1457,206 @@ class DrissionFlowAPI:
             self.log(f"[SPOOF] Injected fallback (seed={self._fingerprint_seed})")
         except Exception as e:
             self.log(f"[SPOOF] Fallback inject error: {e}", "WARN")
+
+    def _rotate_ipv6(self, tag: str = "403") -> bool:
+        """
+        Doi IPv6 de giam 403. Goi khi da het 1 luot 403 ma van bi.
+        Chi Chrome 1 (worker_id=0) moi rotate, Chrome 2+ dung IP do Chrome 1 set.
+        Returns: True neu rotate thanh cong hoac khong can rotate
+        """
+        # Activate IPv6 neu chua bat
+        if not self._ipv6_activated:
+            self.log(f"[{tag}] [IPv6] Chua bat IPv6, dang activate...", "WARN")
+            if self._activate_ipv6():
+                self.log(f"[{tag}] [IPv6] Activate OK", "SUCCESS")
+            else:
+                self.log(f"[{tag}] [IPv6] Khong activate duoc IPv6", "WARN")
+                return False
+
+        # Chi worker_id=0 rotate, worker khac dung IP hien tai
+        if self.worker_id != 0:
+            self.log(f"[{tag}] [IPv6] Worker{self.worker_id} skip rotate (Chrome 1 quan ly)")
+            return True
+
+        try:
+            from modules.ipv6_rotator import get_ipv6_rotator
+            rotator = get_ipv6_rotator()
+            if rotator and rotator.enabled:
+                new_ip = rotator.rotate()
+                if new_ip:
+                    self.log(f"[{tag}] [IPv6] Rotated to: {new_ip}", "SUCCESS")
+                    if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
+                        self._ipv6_proxy.set_ipv6(new_ip)
+                    return True
+                else:
+                    self.log(f"[{tag}] [IPv6] Khong rotate duoc!", "WARN")
+                    return False
+            else:
+                self.log(f"[{tag}] [IPv6] Rotator khong available", "WARN")
+                return False
+        except Exception as e:
+            self.log(f"[{tag}] [IPv6] Rotate error: {e}", "WARN")
+            return False
+
+    def _handle_video_403(self, tag: str = "VIDEO") -> bool:
+        """
+        Xu ly 403 cho VIDEO (KHONG switch model).
+
+        LUOT 1:
+          403 x1-4: restart + cleanup + fingerprint moi
+          403 x5:   clear data + login lai + fingerprint moi
+
+        LUOT 2 (sau clear data van 403):
+          DOI IPv6 → restart lai tu dau
+
+        Returns: True neu restart thanh cong (caller nen continue)
+        """
+        self._consecutive_403 += 1
+        cleared_flag = self._cleared_data_for_403
+        self.log(f"[{tag}] [403] Count: {self._consecutive_403}/5 | cleared={cleared_flag}", "WARN")
+
+        # Cleanup browser data ngay
+        self.cleanup_browser_data()
+
+        if self._consecutive_403 < 5:
+            # Chua du 5 lan → restart + fingerprint moi
+            self.log(f"[{tag}] [403] Restart + fingerprint moi...", "WARN")
+            self._kill_chrome()
+            self.close()
+            time.sleep(2)
+            self.activate_fingerprint_spoof()
+            saved_url = getattr(self, '_current_project_url', None)
+            return self.setup(project_url=saved_url, skip_403_reset=True)
+
+        elif not cleared_flag:
+            # Du 5 lan, chua clear data → CLEAR DATA + LOGIN LAI (het luot 1)
+            self.log(f"[{tag}] [403] 5 lan → RESET PROFILE + LOGIN LAI!", "WARN")
+            self.activate_fingerprint_spoof()
+            self.reset_chrome_profile()
+            time.sleep(1)
+            self._auto_login_google()
+            self._warmup_after_login()
+            saved_url = getattr(self, '_current_project_url', None)
+            if saved_url:
+                self.driver.get(saved_url)
+                time.sleep(3)
+            self._cleared_data_for_403 = True
+            self._consecutive_403 = 0
+            return True
+
+        else:
+            # Da clear data van 403 → DOI IPv6 + restart lai tu dau (luot 2)
+            self.log(f"[{tag}] [403] Da clear data van 403 → DOI IPv6!", "WARN")
+            self._rotate_ipv6(tag)
+            self._cleared_data_for_403 = False
+            self._consecutive_403 = 0
+            self._kill_chrome()
+            self.close()
+            time.sleep(2)
+            self.activate_fingerprint_spoof()
+            saved_url = getattr(self, '_current_project_url', None)
+            return self.setup(project_url=saved_url, skip_403_reset=True)
+
+    def _handle_image_403(self, tag: str = "IMAGE") -> bool:
+        """
+        Xu ly 403 cho IMAGE (co switch model).
+
+        LUOT 1:
+          Model 0 (Nano Banana Pro): 5 lan 403 → switch Model 1
+          Model 1 (Nano Banana 2):   2 lan 403 → switch Model 2
+          Model 2 (Imagen 4):        2 lan 403 → clear data + reset Model 0 + login lai
+
+        LUOT 2 (sau clear data van 403):
+          DOI IPv6 → restart lai tu dau (model 0)
+
+        Returns: True neu restart/switch thanh cong (caller nen continue)
+        """
+        self._consecutive_403 += 1
+        current_model = self._current_model_index
+        model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
+        cleared_flag = self._cleared_data_for_403
+
+        # Tinh threshold cho model hien tai
+        model_threshold = 5 if current_model == 0 else 2
+
+        # Get shared tracker
+        tracker = None
+        try:
+            from modules.shared_403_tracker import get_403_tracker
+            tracker = get_403_tracker(total_workers=self._total_workers)
+            tracker.mark_403(self.worker_id)
+        except Exception as e:
+            self.log(f"[{tag}] [403] Tracker error: {e}", "WARN")
+
+        self.log(f"[{tag}] [403] Model {model_names[current_model]}: {self._consecutive_403}/{model_threshold} | cleared={cleared_flag}", "WARN")
+
+        # Cleanup NGAY SAU 403 (truoc khi restart)
+        self.cleanup_browser_data()
+
+        if self._consecutive_403 < model_threshold:
+            # Chua du threshold → restart Chrome va setup lai
+            self.log(f"[{tag}] [403] Restart Chrome + fingerprint moi...", "WARN")
+            self._kill_chrome()
+            self.close()
+            time.sleep(2)
+            self.activate_fingerprint_spoof()
+            saved_url = getattr(self, '_current_project_url', None)
+            return self.setup(project_url=saved_url, skip_403_reset=True)
+
+        elif current_model < 2:
+            # Du threshold nhung chua het model → SWITCH MODEL
+            next_model = current_model + 1
+            self.log(f"[{tag}] [403] Du {model_threshold} lan → SWITCH: {model_names[current_model]} → {model_names[next_model]}", "WARN")
+
+            self._current_model_index = next_model
+            if self.setup_image_settings(next_model):
+                self._consecutive_403 = 0
+                self.log(f"[{tag}] [403] Da chuyen sang {model_names[next_model]}", "SUCCESS")
+                return True
+            else:
+                self.log(f"[{tag}] [403] Khong switch duoc model, restart Chrome + fingerprint moi", "WARN")
+                self._kill_chrome()
+                self.close()
+                time.sleep(2)
+                self.activate_fingerprint_spoof()
+                saved_url = getattr(self, '_current_project_url', None)
+                return self.setup(project_url=saved_url, skip_403_reset=True)
+
+        elif not cleared_flag:
+            # Het 3 models (5+2+2=9 lan) → XOA DATA + reset ve model 0 + login lai (het luot 1)
+            self.log(f"[{tag}] [403] Het 3 models → RESET PROFILE + FINGERPRINT MOI + DANG NHAP LAI!", "WARN")
+            self.activate_fingerprint_spoof()
+            self.reset_chrome_profile()
+            time.sleep(1)
+            self._auto_login_google()
+            self._warmup_after_login()
+            saved_url = getattr(self, '_current_project_url', None)
+            if saved_url:
+                self.log(f"[{tag}] [403] Quay lai project URL...")
+                self.driver.get(saved_url)
+                time.sleep(3)
+            self._cleared_data_for_403 = True
+            self._consecutive_403 = 0
+            self._current_model_index = 0  # Reset ve model dau
+            if tracker:
+                tracker.mark_cleared_data(self.worker_id)
+            return True
+
+        else:
+            # Da clear data van 403 → DOI IPv6 + restart lai tu dau (luot 2)
+            self.log(f"[{tag}] [403] Da clear data van 403 → DOI IPv6!", "WARN")
+            self._rotate_ipv6(tag)
+            self._cleared_data_for_403 = False
+            self._consecutive_403 = 0
+            self._current_model_index = 0
+            if tracker:
+                tracker.reset_after_rotation()
+            self._kill_chrome()
+            self.close()
+            time.sleep(2)
+            self.activate_fingerprint_spoof()
+            saved_url = getattr(self, '_current_project_url', None)
+            return self.setup(project_url=saved_url, skip_403_reset=True)
 
     def reset_to_pro_model(self):
         """Reset về model pro (GEM_PIX_2) - gọi khi bắt đầu project mới."""
@@ -4992,143 +5196,15 @@ class DrissionFlowAPI:
                         return False, [], "POLICY_VIOLATION: Prompt bị cấm, skip"
 
                 # === 403 ERROR HANDLING ===
-                # v1.0.176: Logic SWITCH MODEL trước khi reset data
-                # Model 0 (Nano Banana Pro): 5 lần 403 → switch model 1
-                # Model 1 (Nano Banana 2): 2 lần 403 → switch model 2
-                # Model 2 (Imagen 4): 2 lần 403 → xóa data, reset về model 0
-                # Tổng: 5 + 2 + 2 = 9 lần 403 trước khi reset data
+                # v1.0.488: Tach thanh _handle_image_403() de de maintain
                 if "403" in error:
-                    self._consecutive_403 += 1
-                    current_model = getattr(self, '_current_model_index', 0)  # 0, 1, 2
-                    model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
-                    cleared_flag = getattr(self, '_cleared_data_for_403', False)
+                    self._handle_image_403("IMAGE")
 
-                    # Tính threshold cho model hiện tại
-                    model_threshold = 5 if current_model == 0 else 2
-
-                    # Get shared tracker
-                    try:
-                        from modules.shared_403_tracker import get_403_tracker
-                        tracker = get_403_tracker(total_workers=self._total_workers)
-                        tracker.mark_403(self.worker_id)
-                    except Exception as e:
-                        self.log(f"[403] Tracker error: {e}", "WARN")
-                        tracker = None
-
-                    self.log(f"[403] Model {model_names[current_model]}: {self._consecutive_403}/{model_threshold}", "WARN")
-
-                    # v1.0.197: Cleanup NGAY SAU 403 (trước khi restart)
-                    # Xóa localStorage/IndexedDB để lượt sau không bị flag
-                    self.cleanup_browser_data()
-
-                    if self._consecutive_403 < model_threshold:
-                        # Chưa đủ threshold → restart Chrome và setup lại
-                        self.log(f"[403] Restart Chrome + fingerprint mới...", "WARN")
-                        self._kill_chrome()
-                        self.close()
-                        time.sleep(2)
-                        # v1.0.486: Fingerprint spoof mỗi lần 403
-                        self.activate_fingerprint_spoof()
-                        # v1.0.183: Setup với project_url đã lưu (không làm warm up)
-                        # v1.0.195: skip_403_reset=True để giữ counter
-                        saved_url = getattr(self, '_current_project_url', None)
-                        self.setup(project_url=saved_url, skip_403_reset=True)
-
-                    elif current_model < 2:
-                        # Đủ threshold nhưng chưa hết model → SWITCH MODEL
-                        next_model = current_model + 1
-                        self.log(f"[403] Đủ {model_threshold} lần → SWITCH: {model_names[current_model]} → {model_names[next_model]}", "WARN")
-
-                        # Switch model trên UI
-                        # v1.0.388: Dùng setup_image_settings() thay select_model_by_index()
-                        self._current_model_index = next_model
-                        if self.setup_image_settings(next_model):
-                            self._consecutive_403 = 0  # Reset counter
-                            self.log(f"[403] Đã chuyển sang {model_names[next_model]}", "SUCCESS")
-                        else:
-                            self.log(f"[403] Không switch được model, restart Chrome + fingerprint mới", "WARN")
-                            self._kill_chrome()
-                            self.close()
-                            time.sleep(2)
-                            # v1.0.486: Fingerprint spoof
-                            self.activate_fingerprint_spoof()
-                            saved_url = getattr(self, '_current_project_url', None)
-                            self.setup(project_url=saved_url, skip_403_reset=True)
-
-                    elif not cleared_flag:
-                        # Hết 3 models (9 lần 403) → XÓA DATA + reset về model 0 + fingerprint mới
-                        self.log(f"[403] Hết 3 models → RESET PROFILE + FINGERPRINT MỚI + ĐĂNG NHẬP LẠI!", "WARN")
-                        self.activate_fingerprint_spoof()
-                        self.reset_chrome_profile()
-                        time.sleep(1)
-                        self._auto_login_google()
-                        self._warmup_after_login()
-                        # v1.0.201: Navigate về project URL sau warmup
-                        saved_url = getattr(self, '_current_project_url', None)
-                        if saved_url:
-                            self.log(f"[WARMUP] Quay lại project URL...")
-                            self.driver.get(saved_url)
-                            time.sleep(3)
-                        self._cleared_data_for_403 = True
-                        self._consecutive_403 = 0
-                        self._current_model_index = 0  # Reset về model đầu
-
-                        if tracker:
-                            tracker.mark_cleared_data(self.worker_id)
-
-                    else:
-                        # Bước 3: Đã clear data vẫn 403
-                        self.log(f"[WARN] 403 sau khi clear data (worker {self.worker_id})", "WARN")
-
-                        # Mark ready for rotation in shared tracker
-                        if tracker:
-                            tracker.mark_ready_for_rotation(self.worker_id)
-
-                            # CHỈ đổi IPv6 khi CẢ 2 workers đều ready
-                            if tracker.should_rotate_ipv6(self.worker_id):
-                                self.log(f"  → [NET] CẢ {self._total_workers} Chrome đều ready → ĐỔI IPv6!", "WARN")
-                                self._cleared_data_for_403 = False
-                                self._consecutive_403 = 0
-
-                                # CHỈ Chrome 1 (worker_id=0) rotate IPv6
-                                if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
-                                    new_ip = self._ipv6_rotator.rotate()
-                                    if new_ip:
-                                        self.log(f"  → [NET] IPv6 mới: {new_ip}")
-                                        if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
-                                            self._ipv6_proxy.set_ipv6(new_ip)
-                                    else:
-                                        self.log(f"  → [WARN] Không rotate được IPv6!", "WARN")
-
-                                # Reset all workers after rotation
-                                tracker.reset_after_rotation()
-                            else:
-                                # Chưa đủ workers ready → đợi và retry
-                                self.log(f"  → [WAIT] Đợi Chrome khác cũng ready... (tiếp tục retry)", "WARN")
-                                self._cleared_data_for_403 = False  # Reset để thử lại flow
-                                self._consecutive_403 = 0
-                        else:
-                            # No tracker → fallback to old behavior
-                            self.log(f"[WARN] 403 sau khi clear data → ĐỔI IPv6!", "WARN")
-                            self._cleared_data_for_403 = False
-                            self._consecutive_403 = 0
-
-                            # CHỈ Chrome 1 (worker_id=0) rotate IPv6
-                            if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
-                                new_ip = self._ipv6_rotator.rotate()
-                                if new_ip:
-                                    self.log(f"  → [NET] IPv6 mới: {new_ip}")
-                                    if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
-                                        self._ipv6_proxy.set_ipv6(new_ip)
-                                else:
-                                    self.log(f"  → [WARN] Không rotate được IPv6!", "WARN")
-
-                    # v1.0.193: Bỏ restart thừa - các block if/elif trên đã restart+setup rồi
-                    # Extend retries để đủ cho cả flow: reset x2 → clear data → IPv6 rotation
+                    # Extend retries de du cho ca flow: switch model → clear data → IPv6
                     if effective_max_retries < 6:
                         effective_max_retries = 6
 
-                    # Tiếp tục retry (đã restart trong các block if/elif)
+                    # Tiep tuc retry (da restart trong _handle_image_403)
                     attempt += 1
                     continue
 
@@ -6169,46 +6245,13 @@ class DrissionFlowAPI:
                                 continue
                         return False, None, f"Quota exceeded sau {max_retries} lần thử"
 
-                    # === 403 error - RESET CHROME NGAY ===
+                    # === 403 ERROR HANDLING ===
+                    # v1.0.488: Dung _handle_video_403() chung cho tat ca video 403
                     if "403" in error:
-                        # Tăng counter 403 liên tiếp
-                        self._consecutive_403 += 1
-                        self.log(f"[I2V] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
-
-                        # Kill Chrome
-                        self._kill_chrome()
-                        self.close()
-                        time.sleep(2)
-
-                        # Đổi proxy nếu có
-                        if self._use_webshare and self._webshare_proxy:
-                            success, msg = self._webshare_proxy.rotate_ip(self.worker_id, "I2V 403")
-                            self.log(f"[I2V] → Webshare rotate: {msg}", "WARN")
-
-                        # === IPv6: Sau N lần 403 liên tiếp, ACTIVATE hoặc ROTATE IPv6 ===
-                        # CHỈ Chrome 1 (worker_id=0) mới activate/rotate IPv6
-                        rotate_ipv6 = False
-                        if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
-                            self._consecutive_403 = 0  # Reset counter
-
-                            if not self._ipv6_activated:
-                                # Lần đầu: Activate IPv6
-                                self.log(f"[I2V] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
-                                self._activate_ipv6()
-                            else:
-                                # Đã activate: Rotate sang IP khác
-                                self.log(f"[I2V] → [SYNC] Rotate sang IPv6 khác...")
-                                rotate_ipv6 = True
-                        elif self._consecutive_403 >= self._max_403_before_ipv6:
-                            self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
-                            self._consecutive_403 = 0
-
-                        # Restart Chrome (có thể kèm IPv6 rotation)
-                        if self.restart_chrome(rotate_ipv6=rotate_ipv6):
-                            self.log("[I2V] → Chrome restarted, tiếp tục...")
-                            continue  # Thử lại 1 lần sau khi reset
+                        if self._handle_video_403("I2V"):
+                            continue
                         else:
-                            return False, None, "Không restart được Chrome sau 403"
+                            return False, None, "Restart failed sau 403"
 
                     # Other errors - simple retry
                     if attempt < max_retries - 1:
@@ -6358,42 +6401,12 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === 403 ERROR: RESET CHROME + IPv6 ===
+                # === 403 ERROR ===
                 if "403" in str(error):
-                    self._consecutive_403 += 1
-                    self.log(f"[I2V-Chrome] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
-
-                    # Kill Chrome
-                    self._kill_chrome()
-                    self.close()
-                    time.sleep(2)
-
-                    # Đổi proxy nếu có
-                    if self._use_webshare and self._webshare_proxy:
-                        success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "I2V-Chrome 403")
-                        self.log(f"[I2V-Chrome] → Webshare rotate: {msg}", "WARN")
-
-                    # === IPv6: CHỈ Chrome 1 (worker_id=0) mới activate/rotate ===
-                    rotate_ipv6 = False
-                    if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
-                        self._consecutive_403 = 0  # Reset counter
-
-                        if not self._ipv6_activated:
-                            self.log(f"[I2V-Chrome] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
-                            self._activate_ipv6()
-                        else:
-                            self.log(f"[I2V-Chrome] → [SYNC] Rotate sang IPv6 khác...")
-                            rotate_ipv6 = True
-                    elif self._consecutive_403 >= self._max_403_before_ipv6:
-                        self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
-                        self._consecutive_403 = 0
-
-                    # Restart Chrome
-                    if self.restart_chrome(rotate_ipv6=rotate_ipv6):
-                        self.log("[I2V-Chrome] → Chrome restarted, tiếp tục...")
+                    if self._handle_video_403("I2V-Chrome"):
                         continue
                     else:
-                        return False, None, "Không restart được Chrome sau 403"
+                        return False, None, "Restart failed sau 403"
 
                 # === TIMEOUT ERROR ===
                 if "timeout" in str(error).lower():
@@ -6845,44 +6858,12 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === 403 ERROR: RESET CHROME + IPv6 ===
+                # === 403 ERROR ===
                 if "403" in str(error):
-                    self._consecutive_403 += 1
-                    self.log(f"[I2V-FORCE] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
-
-                    # Kill Chrome
-                    self._kill_chrome()
-                    self.close()
-                    time.sleep(2)
-
-                    # Đổi proxy nếu có
-                    if self._use_webshare and self._webshare_proxy:
-                        success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "I2V-FORCE 403")
-                        self.log(f"[I2V-FORCE] → Webshare rotate: {msg}", "WARN")
-
-                    # === IPv6: CHỈ Chrome 1 (worker_id=0) mới activate/rotate ===
-                    rotate_ipv6 = False
-                    if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
-                        self._consecutive_403 = 0  # Reset counter
-
-                        if not self._ipv6_activated:
-                            # Lần đầu: Activate IPv6
-                            self.log(f"[I2V-FORCE] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
-                            self._activate_ipv6()
-                        else:
-                            # Đã activate: Rotate sang IP khác
-                            self.log(f"[I2V-FORCE] → [SYNC] Rotate sang IPv6 khác...")
-                            rotate_ipv6 = True
-                    elif self._consecutive_403 >= self._max_403_before_ipv6:
-                        self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
-                        self._consecutive_403 = 0
-
-                    # Restart Chrome (có thể kèm IPv6 rotation)
-                    if self.restart_chrome(rotate_ipv6=rotate_ipv6):
-                        self.log("[I2V-FORCE] → Chrome restarted, tiếp tục...")
-                        continue  # Thử lại sau khi reset
+                    if self._handle_video_403("I2V-FORCE"):
+                        continue
                     else:
-                        return False, None, "Không restart được Chrome sau 403"
+                        return False, None, "Restart failed sau 403"
 
                 # === TIMEOUT ERROR: Reset Chrome ===
                 if "timeout" in str(error).lower():
@@ -7254,60 +7235,12 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === 403 ERROR HANDLING ===
-                # Logic: 403 → Reset Chrome (3 lần) → Clear data + login lại → Đổi IPv6
+                # === 403 ERROR ===
                 if "403" in str(error):
-                    self._consecutive_403 += 1
-                    cleared_flag = getattr(self, '_cleared_data_for_403', False)
-
-                    if self._consecutive_403 <= 3 and not cleared_flag:
-                        # Bước 1: Reset Chrome (tối đa 3 lần)
-                        self.log(f"[T2V→I2V] [WARN] 403 error (lần {self._consecutive_403}/3) - RESET CHROME!", "WARN")
-                        self._kill_chrome()
-                        self.close()
-                        time.sleep(2)
-
-                    elif self._consecutive_403 == 4 or (self._consecutive_403 > 3 and not cleared_flag):
-                        # Bước 2: Sau 3 lần reset vẫn 403 → XÓA TRIỆT ĐỂ PROFILE + đăng nhập lại
-                        self.log(f"[T2V→I2V] [WARN] 403 sau 3 lần reset → RESET PROFILE + ĐĂNG NHẬP LẠI!", "WARN")
-                        # Dùng reset_chrome_profile() - xóa hoàn toàn thư mục profile
-                        self.reset_chrome_profile()
-                        time.sleep(1)
-                        # Login lại (sẽ tự khởi động Chrome mới)
-                        self._auto_login_google()
-                        # v1.0.150: Warm-up sau login - đảm bảo có thể tạo ảnh
-                        self._warmup_after_login()
-                        # v1.0.201: Navigate về project URL sau warmup
-                        saved_url = getattr(self, '_current_project_url', None)
-                        if saved_url:
-                            self.log(f"[WARMUP] Quay lại project URL...")
-                            self.driver.get(saved_url)
-                            time.sleep(3)
-                        self._cleared_data_for_403 = True
-                        self._consecutive_403 = 0
-
-                    else:
-                        # Bước 3: Đã clear data vẫn 403 → Đổi IPv6
-                        self.log(f"[T2V→I2V] [WARN] 403 sau khi clear data → ĐỔI IPv6!", "WARN")
-                        self._cleared_data_for_403 = False
-                        self._consecutive_403 = 0
-                        self._kill_chrome()
-                        self.close()
-                        time.sleep(2)
-
-                        # CHỈ Chrome 1 (worker_id=0) rotate IPv6
-                        if self.worker_id == 0 and self._ipv6_rotator and self._ipv6_activated:
-                            new_ip = self._ipv6_rotator.rotate()
-                            if new_ip:
-                                self.log(f"[T2V→I2V] → [NET] IPv6 mới: {new_ip}")
-                                if hasattr(self, '_ipv6_proxy') and self._ipv6_proxy:
-                                    self._ipv6_proxy.set_ipv6(new_ip)
-
-                    if self.restart_chrome(rotate_ipv6=False):
-                        self.log("[T2V→I2V] → Chrome restarted, tiếp tục...")
+                    if self._handle_video_403("T2V-I2V"):
                         continue
                     else:
-                        return False, None, "Không restart được Chrome sau 403"
+                        return False, None, "Restart failed sau 403"
 
                 # === TIMEOUT ERROR: Reset + retry 1 lần → skip ===
                 if "timeout" in str(error).lower():
@@ -7871,35 +7804,9 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === 403 ERROR: RESET CHROME + IPv6 ===
+                # === 403 ERROR ===
                 if "403" in str(error):
-                    self._consecutive_403 += 1
-                    self.log(f"[T2V-PURE] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
-
-                    self._kill_chrome()
-                    self.close()
-                    time.sleep(2)
-
-                    if self._use_webshare and self._webshare_proxy:
-                        success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "T2V-PURE 403")
-                        self.log(f"[T2V-PURE] → Webshare rotate: {msg}", "WARN")
-
-                    # CHỈ Chrome 1 (worker_id=0) mới activate/rotate IPv6
-                    rotate_ipv6 = False
-                    if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
-                        self._consecutive_403 = 0
-                        if not self._ipv6_activated:
-                            self.log(f"[T2V-PURE] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
-                            self._activate_ipv6()
-                        else:
-                            self.log(f"[T2V-PURE] → [SYNC] Rotate sang IPv6 khác...")
-                            rotate_ipv6 = True
-                    elif self._consecutive_403 >= self._max_403_before_ipv6:
-                        self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
-                        self._consecutive_403 = 0
-
-                    if self.restart_chrome(rotate_ipv6=rotate_ipv6):
-                        self.log("[T2V-PURE] → Chrome restarted, tiếp tục...")
+                    if self._handle_video_403("T2V-PURE"):
                         continue
                     else:
                         return False, None, "Không restart được Chrome sau 403"
@@ -8099,35 +8006,9 @@ class DrissionFlowAPI:
             if error:
                 last_error = error
 
-                # === 403 ERROR: RESET CHROME + IPv6 ===
+                # === 403 ERROR ===
                 if "403" in str(error):
-                    self._consecutive_403 += 1
-                    self.log(f"[I2V-MODIFY] [WARN] 403 error (lần {self._consecutive_403}/{self._max_403_before_ipv6}) - RESET CHROME!", "WARN")
-
-                    self._kill_chrome()
-                    self.close()
-                    time.sleep(2)
-
-                    if self._use_webshare and self._webshare_proxy:
-                        success_rotate, msg = self._webshare_proxy.rotate_ip(self.worker_id, "I2V-MODIFY 403")
-                        self.log(f"[I2V-MODIFY] → Webshare rotate: {msg}", "WARN")
-
-                    # CHỈ Chrome 1 (worker_id=0) mới activate/rotate IPv6
-                    rotate_ipv6 = False
-                    if self._consecutive_403 >= self._max_403_before_ipv6 and self.worker_id == 0:
-                        self._consecutive_403 = 0
-                        if not self._ipv6_activated:
-                            self.log(f"[I2V-MODIFY] → [NET] ACTIVATE IPv6 MODE (lần đầu)...")
-                            self._activate_ipv6()
-                        else:
-                            self.log(f"[I2V-MODIFY] → [SYNC] Rotate sang IPv6 khác...")
-                            rotate_ipv6 = True
-                    elif self._consecutive_403 >= self._max_403_before_ipv6:
-                        self.log(f"[Worker{self.worker_id}] Skip IPv6 (Chrome 1 quản lý)")
-                        self._consecutive_403 = 0
-
-                    if self.restart_chrome(rotate_ipv6=rotate_ipv6):
-                        self.log("[I2V-MODIFY] → Chrome restarted, tiếp tục...")
+                    if self._handle_video_403("I2V-MODIFY"):
                         continue
                     else:
                         return False, None, "Không restart được Chrome sau 403"

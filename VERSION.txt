@@ -1,3 +1,60 @@
+1.0.491
+2026-03-28 (VN)
+Change: SERVER IPv6 ROTATION tu sheet + GUI nhap bo sung
+
+Thay doi:
+- ChromePool luu TAT CA IPv6 tu sheet SERVER col C vao _ipv6_list
+- Them get_next_ipv6(current): lay IPv6 tiep theo tu list (quay vong, bo qua IP hien tai)
+- Khi 403 sau clear data → goi get_next_ipv6() → truyen cho session.rotate_ipv6(new_ip)
+- ChromeSession.rotate_ipv6(new_ip): nhan IPv6 truc tiep thay vi tu tim
+  + Restart SOCKS5 proxy voi IP moi
+  + Tao proxy moi ke ca khi truoc do chua co
+- GUI: Them o nhap "IPv6 bo sung" (Text box, moi dong 1 IP)
+  + IPv6 tu GUI duoc them vao _ipv6_list cung voi IPv6 tu sheet
+  + De trong neu chi dung IPv6 tu sheet
+
+Fix:
+- Them self._cleared_data_for_403 = False trong __init__ (tranh skip luot 1)
+- Them self._current_model_index = 0 trong __init__ (tranh dung model sai)
+
+---
+1.0.490
+2026-03-28 (VN)
+Change: FIX khoi tao bien 403 trong __init__ + 403 TACH RIENG + IPv6 ROTATION
+
+---
+1.0.489
+2026-03-28 (VN)
+Change: 403 HANDLING TACH RIENG + IPv6 ROTATION SAU MOI LUOT 403
+
+Thay doi:
+- Tach 403 thanh 3 methods rieng, de maintain:
+  + _handle_image_403(tag): ANH - co switch model
+  + _handle_video_403(tag): VIDEO - KHONG switch model
+  + _rotate_ipv6(tag): Helper doi IPv6
+
+- FLOW 403 CHO ANH (_handle_image_403):
+  LUOT 1: Model 0 (5x) → Model 1 (2x) → Model 2 (2x) → clear data + login lai
+  LUOT 2: Van 403 sau clear data → DOI IPv6 → restart lai tu model 0
+  Moi lan restart → fingerprint moi + cleanup browser data
+
+- FLOW 403 CHO VIDEO (_handle_video_403):
+  LUOT 1: 403 x1-4 restart + fingerprint → 403 x5 clear data + login lai
+  LUOT 2: Van 403 sau clear data → DOI IPv6 → restart lai tu dau
+  KHONG switch model
+
+- IPv6 ROTATION (_rotate_ipv6):
+  + Activate IPv6 neu chua bat (goi _activate_ipv6)
+  + Chi worker_id=0 (Chrome 1) rotate, worker khac dung IP hien tai
+  + Dung ipv6_rotator de doi sang IP moi tu config/ipv6_list.txt
+
+- SERVER MODE (chrome_pool.py + chrome_session.py):
+  + Them ChromeSession.rotate_ipv6(): doi IPv6 + restart SOCKS5 proxy
+  + chrome_pool.py: Khi da clear data van 403 → goi rotate_ipv6() truoc restart
+
+- AP DUNG CHO CA API MODE VA SERVER MODE
+
+---
 1.0.487
 2026-03-28 (VN)
 Change: SERVER 403 LOGIC GIONG API MODE - switch model + fingerprint

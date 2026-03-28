@@ -153,6 +153,8 @@ class ChromePool:
     def __init__(self, log_callback: Callable = None):
         self.workers: List[ChromeWorker] = []
         self._log_fn = log_callback or (lambda msg, level="INFO": print(f"[ChromePool] {msg}"))
+        self._ipv6_list: List[str] = []  # Tat ca IPv6 tu sheet SERVER col C
+        self._ipv6_rotate_index = 0  # Vi tri hien tai trong _ipv6_list
 
     def _log(self, msg: str, level: str = "INFO"):
         self._log_fn(msg, level)
@@ -182,6 +184,14 @@ class ChromePool:
         """
         server_configs = server_configs or []
 
+        # Thu thap TAT CA IPv6 tu sheet (col C) de dung khi rotate
+        self._ipv6_list = [
+            cfg['ipv6'] for cfg in server_configs
+            if cfg.get('ipv6', '').strip()
+        ]
+        if self._ipv6_list:
+            self._log(f"[IPv6] Thu thap {len(self._ipv6_list)} IPv6 tu sheet SERVER")
+
         chromes = self.discover_chromes()
         if not chromes:
             self._log("Khong tim thay Chrome Portable nao!", "ERROR")
@@ -209,6 +219,29 @@ class ChromePool:
             acc_str = account["id"] if account else "no-account"
             ipv6_str = ipv6[:30] if ipv6 else "no-ipv6"
             self._log(f"  Worker {i}: {chrome_info['folder']} | {acc_str} | {ipv6_str}")
+
+    def get_next_ipv6(self, current_ipv6: str = "") -> str:
+        """
+        Lay IPv6 tiep theo tu danh sach (sheet SERVER col C).
+        Bo qua IPv6 dang dung. Quay vong khi het list.
+
+        Args:
+            current_ipv6: IPv6 hien tai cua worker (de bo qua)
+
+        Returns: IPv6 moi, hoac "" neu khong co
+        """
+        if not self._ipv6_list:
+            return ""
+
+        # Tim IPv6 khac voi current, bat dau tu vi tri rotate hien tai
+        for _ in range(len(self._ipv6_list)):
+            self._ipv6_rotate_index = (self._ipv6_rotate_index + 1) % len(self._ipv6_list)
+            candidate = self._ipv6_list[self._ipv6_rotate_index]
+            if candidate != current_ipv6:
+                return candidate
+
+        # Tat ca deu giong current → tra ve cai dau tien
+        return self._ipv6_list[0]
 
     def setup_all(self) -> int:
         """
@@ -443,16 +476,26 @@ class ChromePool:
                                 except Exception as re:
                                     self._log(f"[{worker_name}] [403] Reset error: {re}", "ERROR")
                             else:
-                                # Da clear data roi ma van 403 → chi restart + fingerprint
-                                self._log(f"[{worker_name}] [403] Da clear data, restart + fingerprint moi...", "WARN")
+                                # Da clear data roi ma van 403 → DOI IPv6 + restart
+                                self._log(f"[{worker_name}] [403] Da clear data van 403 → DOI IPv6!", "WARN")
                                 worker.session._consecutive_403 = 0
                                 worker.session._cleared_data_for_403 = False
                                 worker.ready = False
                                 try:
+                                    # Lay IPv6 moi tu danh sach sheet SERVER
+                                    new_ip = self.get_next_ipv6(worker.ipv6)
+                                    if new_ip:
+                                        self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6[:20]}... → {new_ip[:20]}...", "WARN")
+                                        worker.session.rotate_ipv6(new_ip)
+                                        worker.ipv6 = new_ip  # Cap nhat worker.ipv6
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Khong co IPv6 khac, chi restart", "WARN")
                                     ok = worker.session.restart_with_new_fingerprint()
                                     worker.ready = ok
-                                except Exception:
-                                    pass
+                                    if ok:
+                                        self._log(f"[{worker_name}] [403] IPv6 rotated + restart OK", "OK")
+                                except Exception as re:
+                                    self._log(f"[{worker_name}] [403] IPv6 rotate error: {re}", "ERROR")
 
                         elif err_code != 403 and worker.session:
                             worker.session._consecutive_403 = 0

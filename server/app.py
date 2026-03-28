@@ -699,6 +699,7 @@ def _do_start_workers():
     with settings_lock:
         use_ipv6 = server_settings['use_ipv6']
         chrome_count = server_settings['chrome_count']
+        extra_ipv6 = server_settings.get('extra_ipv6', [])
 
     server_log("Doc cau hinh tu Google Sheet 'SERVER'...")
     server_configs = []
@@ -722,6 +723,11 @@ def _do_start_workers():
 
     chrome_pool = ChromePool(log_callback=pool_log)
     chrome_pool.init_workers(server_configs)
+
+    # Them IPv6 bo sung tu GUI (neu co)
+    if extra_ipv6 and use_ipv6:
+        chrome_pool._ipv6_list.extend(extra_ipv6)
+        server_log(f"[IPv6] Them {len(extra_ipv6)} IPv6 bo sung tu GUI (tong: {len(chrome_pool._ipv6_list)})")
 
     # Gioi han so Chrome neu user chon
     if chrome_count > 0 and len(chrome_pool.workers) > chrome_count:

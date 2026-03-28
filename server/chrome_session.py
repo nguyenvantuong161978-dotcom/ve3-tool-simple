@@ -488,6 +488,63 @@ class ChromeSession:
         except Exception as e:
             self.log(f"[SPOOF] Inject error: {e}", "WARN")
 
+    def rotate_ipv6(self, new_ip: str = "") -> bool:
+        """
+        Doi IPv6 address va restart SOCKS5 proxy.
+
+        Args:
+            new_ip: IPv6 moi (tu ChromePool). Neu rong → tu tim tu ipv6_rotator.
+
+        Returns: True neu doi thanh cong.
+        """
+        try:
+            if not new_ip:
+                # Fallback: tu tim tu ipv6_rotator
+                from modules.ipv6_rotator import get_ipv6_rotator
+                rotator = get_ipv6_rotator()
+                if not rotator or not rotator.enabled or not rotator.ipv6_list:
+                    self.log("[IPv6] Khong co IPv6 de rotate", "WARN")
+                    return False
+                new_ip = rotator.rotate()
+                if not new_ip:
+                    self.log("[IPv6] Rotate failed!", "WARN")
+                    return False
+
+            old_ip = self.ipv6
+            self.ipv6 = new_ip
+            self.log(f"[IPv6] Rotated: {old_ip[:20]}... → {new_ip[:20]}...", "OK")
+
+            # Restart SOCKS5 proxy voi IP moi
+            if self._proxy:
+                try:
+                    self._proxy.stop()
+                except Exception:
+                    pass
+
+            # Tao proxy moi (ke ca khi truoc do khong co proxy)
+            if not self._proxy_port:
+                self._proxy_port = self.port + 200
+            try:
+                from modules.ipv6_proxy import IPv6SocksProxy
+                self._proxy = IPv6SocksProxy(
+                    listen_port=self._proxy_port,
+                    ipv6_address=new_ip,
+                    log_func=lambda msg: self.log(f"[PROXY] {msg}"),
+                )
+                if self._proxy.start():
+                    self.log(f"[IPv6] SOCKS5 proxy restarted OK", "OK")
+                else:
+                    self.log(f"[IPv6] SOCKS5 proxy restart FAILED!", "ERROR")
+                    return False
+            except Exception as e:
+                self.log(f"[IPv6] Proxy restart error: {e}", "ERROR")
+                return False
+
+            return True
+        except Exception as e:
+            self.log(f"[IPv6] Rotate error: {e}", "WARN")
+            return False
+
     def restart_with_new_fingerprint(self) -> bool:
         """
         Restart Chrome voi fingerprint moi.
