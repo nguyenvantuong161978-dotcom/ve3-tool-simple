@@ -2080,14 +2080,15 @@ class BrowserFlowGenerator:
                 chrome_profile = str(cp_data_profile)
                 self._log(f"Got chrome_profile from ChromePortable: {chrome_profile}")
 
-        # 1. UU TIEN NHAT: chrome_profiles/ directory (GUI tao)
-        profiles_dir = root_dir / "chrome_profiles"
-        if profiles_dir.exists():
-            for profile_path in sorted(profiles_dir.iterdir()):
-                if profile_path.is_dir() and not profile_path.name.startswith('.'):
-                    chrome_profile = str(profile_path)
-                    self._log(f"Got chrome_profile from chrome_profiles/ dir: {chrome_profile}")
-                    break
+        # 1. chrome_profiles/ directory (GUI tao) - chi dung neu chua co ChromePortable profile
+        if not chrome_profile:
+            profiles_dir = root_dir / "chrome_profiles"
+            if profiles_dir.exists():
+                for profile_path in sorted(profiles_dir.iterdir()):
+                    if profile_path.is_dir() and not profile_path.name.startswith('.'):
+                        chrome_profile = str(profile_path)
+                        self._log(f"Got chrome_profile from chrome_profiles/ dir: {chrome_profile}")
+                        break
 
         # 2. Fallback: accounts.json
         if not chrome_profile:

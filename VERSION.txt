@@ -1,6 +1,6 @@
-1.0.459
+1.0.460
 2026-03-28 (VN)
-Change: FIX token extraction - dung ChromePortable thay vi system Chrome
+Change: FIX profile priority - ChromePortable Data/profile khong bi ghi de
 
 Thay doi:
 - v1.0.452: CRITICAL FIX - SRT TEXT + VISUAL MOMENT BI MAT TRONG DIRECTOR_PLAN
