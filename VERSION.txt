@@ -1,8 +1,14 @@
-1.0.474
+1.0.475
 2026-03-28 (VN)
-Change: Chrome xong setup → nhan request NGAY (khong doi worker khac)
+Change: Dashboard Settings - chon IPv6/Chrome count truoc khi start
 
 Thay doi:
+- v1.0.475: DASHBOARD SETTINGS
+  * Mo dashboard → thay panel cai dat truoc khi start
+  * Toggle IPv6 ON/OFF (default: ON)
+  * Chon so Chrome: 1/2/3/4/5/tat ca
+  * Bam START → setup Chrome theo cai dat
+  * CLI args: --no-ipv6, --chrome N, --auto (tu dong start)
 - v1.0.474: INSTANT WORKER START
   * Chrome nao setup xong → start worker loop NGAY
   * Khong doi tat ca worker setup xong moi bat dau

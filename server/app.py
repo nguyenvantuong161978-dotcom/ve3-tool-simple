@@ -165,9 +165,58 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: 
 .log-line.ERROR .msg { color: #ef4444; }
 
 .full-width { grid-column: 1 / -1; }
+
+/* Setup Panel */
+.setup-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.setup-panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; width: 420px; }
+.setup-panel h2 { color: #38bdf8; margin-bottom: 24px; font-size: 20px; text-align: center; }
+.setup-row { margin-bottom: 20px; }
+.setup-row label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 8px; }
+.setup-row select, .setup-row input { width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; font-size: 14px; }
+.setup-row .hint { font-size: 11px; color: #64748b; margin-top: 4px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; }
+.toggle { position: relative; width: 48px; height: 26px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #475569; border-radius: 13px; cursor: pointer; transition: 0.3s; }
+.toggle .slider:before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; bottom: 3px; background: #e2e8f0; border-radius: 50%; transition: 0.3s; }
+.toggle input:checked + .slider { background: #22c55e; }
+.toggle input:checked + .slider:before { transform: translateX(22px); }
+.btn-start { width: 100%; padding: 14px; background: #22c55e; color: #0f172a; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px; }
+.btn-start:hover { background: #16a34a; }
+.btn-start:disabled { background: #475569; cursor: not-allowed; color: #94a3b8; }
 </style>
 </head>
 <body>
+
+<!-- Setup Panel (hien khi chua start) -->
+<div class="setup-overlay" id="setup-overlay" style="display:none">
+    <div class="setup-panel">
+        <h2>Server Settings</h2>
+        <div class="setup-row">
+            <div class="toggle-row">
+                <label style="margin:0">IPv6 Proxy</label>
+                <label class="toggle">
+                    <input type="checkbox" id="cfg-ipv6" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="hint">BAT: Moi Chrome dung IPv6 rieng (chong 403). TAT: Dung IPv4 chung.</div>
+        </div>
+        <div class="setup-row">
+            <label>So luong Chrome</label>
+            <select id="cfg-chrome">
+                <option value="0">Tat ca (tu dong detect)</option>
+                <option value="1">1 Chrome</option>
+                <option value="2">2 Chrome</option>
+                <option value="3">3 Chrome</option>
+                <option value="4">4 Chrome</option>
+                <option value="5">5 Chrome</option>
+            </select>
+            <div class="hint">Chon so Chrome workers chay song song</div>
+        </div>
+        <button class="btn-start" id="btn-start" onclick="startServer()">START SERVER</button>
+    </div>
+</div>
 
 <div class="header">
     <h1>Chrome Server Dashboard</h1>
@@ -321,6 +370,41 @@ async function refresh() {
     }
 }
 
+// Setup panel logic
+async function checkSetup() {
+    try {
+        let s = await fetch('/api/settings').then(r=>r.json());
+        if (!s.started) {
+            document.getElementById('setup-overlay').style.display = 'flex';
+            document.getElementById('cfg-ipv6').checked = s.use_ipv6;
+            document.getElementById('cfg-chrome').value = s.chrome_count;
+        } else {
+            document.getElementById('setup-overlay').style.display = 'none';
+        }
+    } catch(e) {}
+}
+
+async function startServer() {
+    let btn = document.getElementById('btn-start');
+    btn.disabled = true;
+    btn.textContent = 'DANG KHOI DONG...';
+
+    let ipv6 = document.getElementById('cfg-ipv6').checked;
+    let chrome = parseInt(document.getElementById('cfg-chrome').value);
+
+    // Save settings
+    await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({use_ipv6: ipv6, chrome_count: chrome})
+    });
+
+    // Start
+    await fetch('/api/start', {method: 'POST'});
+    document.getElementById('setup-overlay').style.display = 'none';
+}
+
+checkSetup();
 refresh();
 setInterval(refresh, 2000);
 </script>
@@ -561,19 +645,58 @@ def cleanup_old_tasks():
 # Main
 # ============================================================
 
-if __name__ == '__main__':
-    print("=" * 60)
-    print("  CHROME SERVER v4.0 - Single Process + Web Dashboard")
-    print("=" * 60)
-    print()
+# ============================================================
+# Server Settings (co the thay doi tu dashboard)
+# ============================================================
+server_settings = {
+    'use_ipv6': True,       # Dung IPv6 cho Chrome (default: True)
+    'chrome_count': 0,      # 0 = tat ca Chrome tim thay, >0 = gioi han so luong
+    'started': False,       # Da bat dau setup chua
+}
+settings_lock = threading.Lock()
 
-    # Start cleanup thread
-    threading.Thread(target=cleanup_old_tasks, daemon=True).start()
 
-    # ============================================================
-    # Init Chrome Pool (setup SONG SONG bang threads)
-    # ============================================================
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    with settings_lock:
+        return jsonify(server_settings)
+
+
+@app.route('/api/settings', methods=['POST'])
+def update_settings():
+    data = request.get_json() or {}
+    with settings_lock:
+        if server_settings['started']:
+            return jsonify({"error": "Server da bat dau, khong the thay doi"}), 400
+        if 'use_ipv6' in data:
+            server_settings['use_ipv6'] = bool(data['use_ipv6'])
+        if 'chrome_count' in data:
+            server_settings['chrome_count'] = max(0, int(data['chrome_count']))
+    server_log(f"Settings updated: IPv6={server_settings['use_ipv6']}, Chrome={server_settings['chrome_count'] or 'ALL'}")
+    return jsonify(server_settings)
+
+
+@app.route('/api/start', methods=['POST'])
+def start_server_workers():
+    """Bat dau setup Chrome workers (goi tu dashboard)."""
+    with settings_lock:
+        if server_settings['started']:
+            return jsonify({"error": "Da bat dau roi"}), 400
+        server_settings['started'] = True
+
+    threading.Thread(target=_do_start_workers, daemon=True).start()
+    return jsonify({"status": "starting"})
+
+
+def _do_start_workers():
+    """Setup Chrome workers (chay trong background thread)."""
+    global chrome_pool
+
     from server.chrome_pool import ChromePool, get_server_config
+
+    with settings_lock:
+        use_ipv6 = server_settings['use_ipv6']
+        chrome_count = server_settings['chrome_count']
 
     server_log("Doc cau hinh tu Google Sheet 'SERVER'...")
     server_configs = []
@@ -586,17 +709,27 @@ if __name__ == '__main__':
     except Exception as e:
         server_log(f"Loi doc sheet: {e}", "ERROR")
 
-    # Callback de log vao dashboard
+    # Tat IPv6 neu user chon
+    if not use_ipv6:
+        server_log("IPv6: TAT - Chrome se dung IPv4", "WARN")
+        for cfg in server_configs:
+            cfg['ipv6'] = ""
+
     def pool_log(msg, level="INFO"):
         server_log(msg, level)
 
     chrome_pool = ChromePool(log_callback=pool_log)
     chrome_pool.init_workers(server_configs)
 
+    # Gioi han so Chrome neu user chon
+    if chrome_count > 0 and len(chrome_pool.workers) > chrome_count:
+        removed = len(chrome_pool.workers) - chrome_count
+        chrome_pool.workers = chrome_pool.workers[:chrome_count]
+        server_log(f"Gioi han: chi dung {chrome_count} Chrome (bo {removed})")
+
     if chrome_pool.workers:
         server_log(f"Setup {len(chrome_pool.workers)} Chrome workers SONG SONG...")
 
-        # Setup SONG SONG bang threads - moi worker xong setup → nhan request NGAY
         def setup_worker_thread(worker):
             """Setup 1 worker trong thread rieng. Xong → start worker loop ngay."""
             from server.chrome_session import ChromeSession
@@ -622,7 +755,6 @@ if __name__ == '__main__':
                     worker.ready = True
                     pool_log(f"[{worker_name}] READY! Project: {session.project_url}", "OK")
 
-                    # Start worker loop NGAY - khong doi worker khac
                     t = threading.Thread(
                         target=chrome_pool._worker_loop,
                         args=(worker, task_queue, queue_lock, tasks, task_lock, stats),
@@ -630,14 +762,13 @@ if __name__ == '__main__':
                         name=f"ChromeWorker-{worker.index}",
                     )
                     t.start()
-                    pool_log(f"[{worker_name}] Worker loop STARTED - san sang nhan request!", "OK")
+                    pool_log(f"[{worker_name}] Worker loop STARTED!", "OK")
                 else:
                     pool_log(f"[{worker_name}] Setup FAILED!", "ERROR")
             except Exception as e:
                 pool_log(f"[{worker_name}] Setup error: {e}", "ERROR")
                 traceback.print_exc()
 
-        # Khoi dong tat ca setup threads CUNG LUC
         for worker in chrome_pool.workers:
             t = threading.Thread(
                 target=setup_worker_thread,
@@ -646,14 +777,45 @@ if __name__ == '__main__':
                 name=f"Setup-Chrome-{worker.index}",
             )
             t.start()
-            time.sleep(1)  # Gian cach 1s de tranh conflict
+            time.sleep(1)
     else:
         server_log("Khong tim thay Chrome Portable nao!", "ERROR")
 
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Chrome Server v4.0")
+    parser.add_argument('--no-ipv6', action='store_true', help='Tat IPv6, dung IPv4')
+    parser.add_argument('--chrome', type=int, default=0, help='So Chrome (0=tat ca)')
+    parser.add_argument('--auto', action='store_true', help='Tu dong start (khong doi dashboard)')
+    args = parser.parse_args()
+
+    # Apply args to settings
+    server_settings['use_ipv6'] = not args.no_ipv6
+    server_settings['chrome_count'] = args.chrome
+
+    print("=" * 60)
+    print("  CHROME SERVER v4.0 - Single Process + Web Dashboard")
+    print("=" * 60)
+    print()
+    print(f"  IPv6:   {'BAT' if server_settings['use_ipv6'] else 'TAT'}")
+    print(f"  Chrome: {server_settings['chrome_count'] or 'TAT CA'}")
+    print()
+
+    # Start cleanup thread
+    threading.Thread(target=cleanup_old_tasks, daemon=True).start()
+
+    if args.auto:
+        # Auto-start: khong can bam nut tren dashboard
+        server_settings['started'] = True
+        threading.Thread(target=_do_start_workers, daemon=True).start()
+        print("  Auto-start: Chrome dang setup...")
+    else:
+        print("  Mo dashboard va bam START de bat dau!")
+
     print()
     print(f"  Dashboard: http://0.0.0.0:5000/")
-    print(f"  API:       http://0.0.0.0:5000/api/status")
-    print(f"  Chrome workers dang setup song song phia sau...")
     print()
     print("=" * 60)
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
