@@ -156,7 +156,7 @@ class ChromePool:
         self._ipv6_list: List[str] = []  # Tat ca IPv6 tu sheet SERVER col C
         self._ipv6_rotate_index = 0  # Vi tri hien tai trong _ipv6_list
         self._all_accounts: List[Dict] = []  # Tat ca tai khoan tu sheet SERVER
-        self._account_usage: Dict[str, int] = {}  # email -> so lan da dung
+        self._account_rotate_index = 0  # Vi tri hien tai (xoay vong)
 
     def _log(self, msg: str, level: str = "INFO"):
         self._log_fn(msg, level)
@@ -218,59 +218,25 @@ class ChromePool:
             ipv6_str = ipv6[:30] if ipv6 else "no-ipv6"
             self._log(f"  Worker {i}: {chrome_info['folder']} | {acc_str} | {ipv6_str}")
 
-        # Load tat ca tai khoan tu sheet de dung khi doi account (403 lan 5)
-        self.load_all_accounts()
-
-    def load_all_accounts(self):
-        """Load tat ca tai khoan tu sheet SERVER vao _all_accounts."""
-        try:
-            from server.chrome_session import get_server_accounts
-            accounts = get_server_accounts()
-            if accounts:
-                self._all_accounts = accounts
-                # Track usage: email dang duoc worker nao dung
-                for w in self.workers:
-                    if w.account:
-                        email = w.account['id']
-                        self._account_usage[email] = self._account_usage.get(email, 0) + 1
-                self._log(f"Loaded {len(accounts)} tai khoan tu sheet SERVER")
-            else:
-                self._log("Khong tim thay tai khoan nao tu sheet SERVER", "WARN")
-        except Exception as e:
-            self._log(f"Loi load tai khoan: {e}", "ERROR")
+        # _all_accounts se duoc set boi app.py sau init_workers()
 
     def get_next_account(self, current_email: str = "") -> Optional[Dict]:
         """
-        Lay tai khoan it dung nhat, khac voi current_email.
+        Lay tai khoan tiep theo (xoay vong), bo qua current_email.
         Returns: account dict hoac None.
         """
         if not self._all_accounts:
             return None
 
-        # Tim account it dung nhat, khac current
-        best = None
-        best_usage = float('inf')
-        for acc in self._all_accounts:
-            email = acc['id']
-            if email == current_email:
-                continue
-            # Khong dung account dang duoc worker khac dung
-            in_use = any(
-                w.account and w.account['id'] == email
-                for w in self.workers
-            )
-            usage = self._account_usage.get(email, 0)
-            # Uu tien: khong dang dung > it dung nhat
-            score = usage + (1000 if in_use else 0)
-            if score < best_usage:
-                best_usage = score
-                best = acc
+        # Xoay vong qua danh sach, bo qua account hien tai
+        for _ in range(len(self._all_accounts)):
+            self._account_rotate_index = (self._account_rotate_index + 1) % len(self._all_accounts)
+            candidate = self._all_accounts[self._account_rotate_index]
+            if candidate['id'] != current_email:
+                return candidate
 
-        if best:
-            self._account_usage[best['id']] = self._account_usage.get(best['id'], 0) + 1
-            self._log(f"Next account: {best['id']} (usage={best_usage})")
-
-        return best
+        # Tat ca deu giong current → tra ve cai dau tien
+        return self._all_accounts[0]
 
     def get_next_ipv6(self, current_ipv6: str = "") -> str:
         """

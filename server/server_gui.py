@@ -137,15 +137,45 @@ class ServerGUI(tk.Tk):
         self.chrome_combo.pack(side='right')
 
         tk.Label(card, text="Chon so Chrome workers chay song song.",
-                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w', pady=(0, 20))
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w', pady=(0, 10))
+
+        # Separator
+        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=5)
+
+        # Accounts input
+        tk.Label(card, text="Tai khoan Google", font=("Segoe UI", 13, "bold"),
+                 bg=BG2, fg=FG).pack(padx=20, anchor='w', pady=(10, 0))
+        tk.Label(card, text="Moi dong 1 tai khoan: email|password|2fa_secret",
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w', pady=(2, 4))
+
+        acc_text_frame = tk.Frame(card, bg=BG2)
+        acc_text_frame.pack(fill='x', padx=20, pady=(0, 20))
+
+        self.accounts_text = tk.Text(acc_text_frame, height=4, width=50,
+                                      font=("Consolas", 9), bg='#0f172a', fg=FG,
+                                      insertbackground=FG, relief='solid', bd=1,
+                                      highlightbackground=BORDER)
+        self.accounts_text.pack(fill='x')
+
+        # Buttons row: UPDATE + START
+        btn_row = tk.Frame(self.setup_frame, bg=BG)
+        btn_row.pack(fill='x', padx=80, pady=30)
+
+        # UPDATE button
+        self.update_btn = tk.Button(btn_row, text="UPDATE",
+                                     font=("Segoe UI", 12, "bold"),
+                                     bg='#0984e3', fg='white', activebackground='#0766b2',
+                                     relief='flat', cursor='hand2', width=10,
+                                     command=self._run_update)
+        self.update_btn.pack(side='left', padx=(0, 10), ipady=8)
 
         # START button
-        self.start_btn = tk.Button(self.setup_frame, text="START SERVER",
+        self.start_btn = tk.Button(btn_row, text="START SERVER",
                                    font=("Segoe UI", 16, "bold"),
                                    bg=GREEN, fg='#0f172a', activebackground='#16a34a',
                                    relief='flat', cursor='hand2', height=2,
                                    command=self._on_start)
-        self.start_btn.pack(fill='x', padx=80, pady=30)
+        self.start_btn.pack(side='left', fill='x', expand=True)
 
         # Version
         version = "?"
@@ -178,6 +208,10 @@ class ServerGUI(tk.Tk):
                 if 'chrome_count' in data:
                     val = data['chrome_count']
                     self.chrome_combo.set("Tat ca" if val == 0 else str(val))
+                # Accounts
+                if data.get('accounts_raw'):
+                    self.accounts_text.delete("1.0", "end")
+                    self.accounts_text.insert("1.0", "\n".join(data['accounts_raw']))
         except Exception:
             pass
 
@@ -189,6 +223,7 @@ class ServerGUI(tk.Tk):
                 'use_ipv6': self.ipv6_var.get(),
                 'ipv6_list': self._get_ipv6_list(),
                 'chrome_count': self._get_chrome_count(),
+                'accounts_raw': self._get_accounts_raw(),
             }
             self._settings_file.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False),
@@ -212,6 +247,28 @@ class ServerGUI(tk.Tk):
             line.strip() for line in text.split('\n')
             if line.strip() and ':' in line.strip()
         ]
+
+    def _get_accounts_raw(self):
+        """Lay danh sach dong tai khoan (chua parse)."""
+        text = self.accounts_text.get("1.0", "end").strip()
+        return [
+            line.strip() for line in text.split('\n')
+            if line.strip() and '|' in line.strip()
+        ]
+
+    def _get_accounts_parsed(self):
+        """Parse tai khoan tu text box thanh list dict."""
+        accounts = []
+        for line in self._get_accounts_raw():
+            parts = line.split('|')
+            if len(parts) >= 2:
+                acc = {
+                    'id': parts[0].strip(),
+                    'password': parts[1].strip(),
+                    'totp_secret': parts[2].strip() if len(parts) >= 3 else '',
+                }
+                accounts.append(acc)
+        return accounts
 
     def _add_ipv6_to_machine(self):
         """Them IPv6 vao network interface bang netsh."""
@@ -379,6 +436,134 @@ class ServerGUI(tk.Tk):
             return 0
 
     # ============================================================
+    # Update
+    # ============================================================
+    def _run_update(self):
+        """Cap nhat code tu GitHub - giong vm_manager_gui.py."""
+        import subprocess
+        import urllib.request
+        import zipfile
+        import shutil
+
+        GITHUB_ZIP_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple/archive/refs/heads/main.zip"
+        GITHUB_GIT_URL = "https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple.git"
+
+        def do_update():
+            self.update_btn.config(state="disabled", text="DANG CAP NHAT...", bg='#666')
+
+            try:
+                # Kiem tra git co san khong
+                git_available = False
+                try:
+                    result = subprocess.run(
+                        ["git", "--version"],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    git_available = (result.returncode == 0)
+                except:
+                    git_available = False
+
+                if git_available:
+                    # === DUNG GIT ===
+                    # Kiem tra remote origin
+                    result = subprocess.run(
+                        ["git", "remote", "get-url", "origin"],
+                        cwd=str(TOOL_DIR), capture_output=True, text=True, timeout=10
+                    )
+                    if result.returncode != 0:
+                        subprocess.run(
+                            ["git", "remote", "add", "origin", GITHUB_GIT_URL],
+                            cwd=str(TOOL_DIR), capture_output=True, timeout=10
+                        )
+                    elif GITHUB_GIT_URL not in result.stdout.strip():
+                        subprocess.run(
+                            ["git", "remote", "set-url", "origin", GITHUB_GIT_URL],
+                            cwd=str(TOOL_DIR), capture_output=True, timeout=10
+                        )
+
+                    # Fetch va reset
+                    for cmd in [
+                        ["git", "fetch", "origin", "main"],
+                        ["git", "checkout", "main"],
+                        ["git", "reset", "--hard", "origin/main"]
+                    ]:
+                        subprocess.run(cmd, cwd=str(TOOL_DIR), capture_output=True, text=True, timeout=120)
+
+                else:
+                    # === KHONG CO GIT - TAI ZIP ===
+                    import ssl
+                    ssl_context = ssl.create_default_context()
+                    ssl_context.check_hostname = False
+                    ssl_context.verify_mode = ssl.CERT_NONE
+
+                    zip_path = TOOL_DIR / "update_temp.zip"
+                    extract_dir = TOOL_DIR / "update_temp"
+
+                    cache_buster = f"?t={int(time.time())}"
+                    with urllib.request.urlopen(GITHUB_ZIP_URL + cache_buster, context=ssl_context) as response:
+                        with open(str(zip_path), 'wb') as out_file:
+                            out_file.write(response.read())
+
+                    with zipfile.ZipFile(str(zip_path), 'r') as zip_ref:
+                        zip_ref.extractall(str(extract_dir))
+
+                    extracted_folder = extract_dir / "ve3-tool-simple-main"
+
+                    # Copy files
+                    files_to_update = [
+                        "vm_manager.py", "vm_manager_gui.py", "run_excel_api.py",
+                        "run_worker.py", "START.py", "START.bat", "START_SERVER.bat",
+                        "requirements.txt", "_run_chrome1.py", "_run_chrome2.py",
+                        "google_login.py", "VERSION.txt",
+                    ]
+                    for f in files_to_update:
+                        src = extracted_folder / f
+                        dst = TOOL_DIR / f
+                        if src.exists():
+                            shutil.copy2(str(src), str(dst))
+
+                    # Copy modules/
+                    src_modules = extracted_folder / "modules"
+                    dst_modules = TOOL_DIR / "modules"
+                    if src_modules.exists():
+                        for py_file in src_modules.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_modules / py_file.name))
+                        for sub_dir in src_modules.iterdir():
+                            if sub_dir.is_dir():
+                                dst_sub = dst_modules / sub_dir.name
+                                if dst_sub.exists():
+                                    shutil.rmtree(str(dst_sub))
+                                shutil.copytree(str(sub_dir), str(dst_sub))
+
+                    # Copy server/
+                    src_server = extracted_folder / "server"
+                    dst_server = TOOL_DIR / "server"
+                    if src_server.exists():
+                        dst_server.mkdir(exist_ok=True)
+                        for py_file in src_server.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_server / py_file.name))
+
+                    # Cleanup
+                    if zip_path.exists():
+                        zip_path.unlink()
+                    if extract_dir.exists():
+                        shutil.rmtree(str(extract_dir))
+
+                # Restart
+                self.update_btn.config(text="XONG - KHOI DONG LAI...", bg='#00ff88')
+                self.after(1000, lambda: os.execv(sys.executable, [sys.executable] + sys.argv))
+
+            except Exception as e:
+                self.update_btn.config(text="LOI", bg=RED)
+                print(f"Update error: {e}")
+                from tkinter import messagebox
+                messagebox.showerror("Loi cap nhat", f"Loi: {e}\n\nThu tai thu cong:\n{GITHUB_ZIP_URL}")
+            finally:
+                self.after(3000, lambda: self.update_btn.config(state="normal", text="UPDATE", bg='#0984e3'))
+
+        threading.Thread(target=do_update, daemon=True).start()
+
+    # ============================================================
     # Start Server
     # ============================================================
     def _on_start(self):
@@ -393,27 +578,26 @@ class ServerGUI(tk.Tk):
         chrome_count = self._get_chrome_count()
 
         # Thu thap IPv6 bo sung tu text box
-        extra_ipv6_text = self.ipv6_text.get("1.0", "end").strip()
-        extra_ipv6 = [
-            line.strip() for line in extra_ipv6_text.split('\n')
-            if line.strip() and ':' in line.strip()  # IPv6 phai co dau ':'
-        ]
+        extra_ipv6 = self._get_ipv6_list()
+
+        # Parse accounts tu text box
+        gui_accounts = self._get_accounts_parsed()
 
         # Switch to monitor page
-        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6))
+        self.after(500, lambda: self._switch_to_monitor(use_ipv6, chrome_count, extra_ipv6, gui_accounts))
 
-    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None):
+    def _switch_to_monitor(self, use_ipv6, chrome_count, extra_ipv6=None, gui_accounts=None):
         self.setup_frame.destroy()
         self._build_monitor_page()
 
         # Start server in background
         threading.Thread(
             target=self._start_server,
-            args=(use_ipv6, chrome_count, extra_ipv6 or []),
+            args=(use_ipv6, chrome_count, extra_ipv6 or [], gui_accounts or []),
             daemon=True,
         ).start()
 
-    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None):
+    def _start_server(self, use_ipv6, chrome_count, extra_ipv6=None, gui_accounts=None):
         """Start Flask + Chrome workers in background."""
         self._add_log("Khoi dong server...", "INFO")
 
@@ -428,6 +612,7 @@ class ServerGUI(tk.Tk):
             server_settings['use_ipv6'] = use_ipv6
             server_settings['chrome_count'] = chrome_count
             server_settings['extra_ipv6'] = extra_ipv6 or []
+            server_settings['gui_accounts'] = gui_accounts or []
             server_settings['mode'] = 'gop'
             server_settings['started'] = True
 

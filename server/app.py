@@ -987,18 +987,25 @@ def _do_start_workers():
         use_ipv6 = server_settings['use_ipv6']
         chrome_count = server_settings['chrome_count']
         extra_ipv6 = server_settings.get('extra_ipv6', [])
+        gui_accounts = server_settings.get('gui_accounts', [])
         mode = server_settings.get('mode', 'gop')  # 'gop' or 'tach'
 
-    server_log("Doc cau hinh tu Google Sheet 'SERVER'...")
-    server_configs = []
-    try:
-        server_configs = get_server_config()
-        if server_configs:
-            server_log(f"Tim thay {len(server_configs)} accounts/IPv6")
-        else:
-            server_log("Khong tim thay config trong sheet 'SERVER'")
-    except Exception as e:
-        server_log(f"Loi doc sheet: {e}", "ERROR")
+    # Accounts: uu tien GUI, fallback sheet
+    if gui_accounts:
+        server_log(f"[ACCOUNTS] {len(gui_accounts)} tai khoan tu GUI")
+        # Tao server_configs tu GUI accounts (khong dung sheet)
+        server_configs = [{"account": acc, "ipv6": ""} for acc in gui_accounts]
+    else:
+        server_log("Doc cau hinh tu Google Sheet 'SERVER'...")
+        server_configs = []
+        try:
+            server_configs = get_server_config()
+            if server_configs:
+                server_log(f"Tim thay {len(server_configs)} accounts tu sheet")
+            else:
+                server_log("Khong tim thay config trong sheet 'SERVER'")
+        except Exception as e:
+            server_log(f"Loi doc sheet: {e}", "ERROR")
 
     # Store configs globally for /internal/worker-config
     _stored_server_configs = list(server_configs)
@@ -1019,16 +1026,21 @@ def _do_start_workers():
 
     chrome_pool.init_workers(server_configs)
 
+    # Truyen TAT CA accounts vao pool de xoay vong khi 403
+    all_accounts = [cfg['account'] for cfg in server_configs if cfg.get('account')]
+    if all_accounts:
+        chrome_pool._all_accounts = all_accounts
+        server_log(f"[ACCOUNTS] {len(all_accounts)} tai khoan san sang cho rotation")
+
     # IPv6 tu GUI (nguon duy nhat - khong lay tu sheet)
     if extra_ipv6 and use_ipv6:
         chrome_pool._ipv6_list = list(extra_ipv6)
         server_log(f"[IPv6] {len(extra_ipv6)} IPv6 tu GUI")
-        # Gan IPv6 tu GUI cho tung worker (thay vi tu sheet)
+        # Gan IPv6 tu GUI cho tung worker (xoay vong)
         for i, w in enumerate(chrome_pool.workers):
             if i < len(extra_ipv6):
                 w.ipv6 = extra_ipv6[i]
             else:
-                # Quay vong neu nhieu worker hon IPv6
                 w.ipv6 = extra_ipv6[i % len(extra_ipv6)]
 
     # Gioi han so Chrome neu user chon
