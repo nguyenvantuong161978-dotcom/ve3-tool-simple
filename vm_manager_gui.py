@@ -2948,11 +2948,12 @@ class SimpleGUI(tk.Tk):
                         "run_worker.py",
                         "START.py",
                         "START.bat",
+                        "START_SERVER.bat",
                         "requirements.txt",
                         "_run_chrome1.py",
                         "_run_chrome2.py",
                         "google_login.py",
-                        "VERSION.txt",  # Version info cho VMs khong co git
+                        "VERSION.txt",
                     ]
 
                     for f in files_to_update:
