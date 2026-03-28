@@ -1,3 +1,15 @@
+1.0.520
+2026-03-29 (VN)
+Change: Them nut "Server" vao Generation Mode - gui anh TRUC TIEP qua server
+
+- GUI: Them radio button "Server" cung cho voi API/Browser/Chrome UI/API+Server
+- browser_flow_generator.py: Them handler mode 'server' trong generate_from_prompts_auto()
+  * Force local_server_enabled=True, goi generate_from_prompts_api()
+  * Bao loi neu chua cau hinh Server URLs
+- smart_engine.py: Them 'server' vao tat ca mode checks (4 vi tri)
+  * Character generation, Scene generation, Step 5 images, proxy_token bypass
+- Server mode = chi dung server, KHONG chay Chrome local
+
 1.0.519
 2026-03-29 (VN)
 Change: FIX API+Server mode - Buoc 1 FORCE chay API (Chrome local) truoc

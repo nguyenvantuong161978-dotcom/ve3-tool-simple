@@ -1423,7 +1423,7 @@ class SmartEngine:
                     self.log(f"[PARALLEL] {'Lần đầu' if retry == 0 else f'Retry {retry}'}: Còn {len(char_prompts)} characters cần tạo...")
 
                     # Generate using correct mode
-                    if generation_mode in ('api', 'api+server'):
+                    if generation_mode in ('api', 'api+server', 'server'):
                         results = self.generate_images_api(char_prompts, proj_dir)
                     elif generation_mode == 'chrome':
                         results = self.generate_images_chrome(char_prompts, proj_dir)
@@ -1567,7 +1567,7 @@ class SmartEngine:
                     pass
 
                 # Generate using correct mode
-                if generation_mode in ('api', 'api+server'):
+                if generation_mode in ('api', 'api+server', 'server'):
                     self.log("[PARALLEL-SCENES] Dùng API MODE...")
                     results = self.generate_images_api(scene_prompts, proj_dir)
                 else:
@@ -1979,9 +1979,12 @@ class SmartEngine:
         if local_server_enabled and local_server_url:
             self.log(f"[LOCAL SERVER] Mode: {local_server_url}")
             self.log(f"[LOCAL SERVER] VM gui anh qua server, khong dung Chrome local")
-        elif generation_mode == 'api+server':
-            # v1.0.514: api+server khong can proxy_token (dung Chrome drission + fallback server)
-            self.log(f"[API+SERVER] Chay API truoc, server fallback: {cfg.get('local_server_url', 'N/A')}")
+        elif generation_mode in ('api+server', 'server'):
+            # v1.0.514: api+server/server khong can proxy_token
+            if generation_mode == 'server':
+                self.log(f"[SERVER] Gui anh qua server: {cfg.get('local_server_url', 'N/A')}")
+            else:
+                self.log(f"[API+SERVER] Chay API truoc, server fallback: {cfg.get('local_server_url', 'N/A')}")
         elif not proxy_token:
             self.log("THIEU proxy_api_token trong settings.yaml!", "ERROR")
             self.log("API mode can proxy token tu nanoai.pics", "ERROR")
@@ -3437,8 +3440,8 @@ class SmartEngine:
             scene_results = {"success": 0, "failed": 0}
 
             if image_prompts:
-                if generation_mode in ('api', 'api+server'):
-                    mode_label = "API + SERVER" if generation_mode == 'api+server' else "API"
+                if generation_mode in ('api', 'api+server', 'server'):
+                    mode_label = "SERVER" if generation_mode == 'server' else ("API + SERVER" if generation_mode == 'api+server' else "API")
                     self.log(f"[STEP 5] Tao images bang {mode_label} MODE...")
                     scene_results = self.generate_images_api(image_prompts, proj_dir)
                 elif generation_mode == 'chrome':

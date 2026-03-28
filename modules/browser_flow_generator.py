@@ -2519,6 +2519,26 @@ class BrowserFlowGenerator:
 
             return api_result
 
+        # v1.0.520: Server mode - gui thang qua server (khong dung Chrome local)
+        if mode == 'server':
+            if has_local_server:
+                self._log(f"[AUTO] SERVER mode: Gui anh qua server ({local_server_url})")
+                # Force local_server_enabled de dam bao gui qua server
+                old_se = self.config.get('local_server_enabled', False)
+                self.config['local_server_enabled'] = True
+                try:
+                    return self.generate_from_prompts_api(
+                        prompts=prompts,
+                        excel_path=excel_path,
+                        bearer_token=bearer_token
+                    )
+                finally:
+                    self.config['local_server_enabled'] = old_se
+            else:
+                self._log("[AUTO] SERVER mode nhung chua cau hinh Server URLs!", "WARN")
+                self._log("[AUTO] Hay nhap Server URLs trong Settings va bam Luu")
+                return {"success": False, "error": "Chua cau hinh Server URLs"}
+
         if mode == 'api':
             if has_local_server:
                 self._log(f"[AUTO] API mode voi LOCAL SERVER - gui anh qua {local_server_url}")
