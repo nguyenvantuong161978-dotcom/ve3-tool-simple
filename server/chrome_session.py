@@ -883,6 +883,13 @@ class ChromeSession:
             # 6. Chờ response (giống test step 7)
             result = self._wait_for_response(timeout=120)
 
+            # 7. Cleanup browser data sau mỗi request (tránh bị Google track/flag)
+            try:
+                self.page.run_js(JS_CLEANUP)
+                self.log("Cleanup browser data OK")
+            except Exception as ce:
+                self.log(f"Cleanup warning: {ce}", "WARN")
+
             return result
 
         except Exception as e:

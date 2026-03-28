@@ -1,8 +1,12 @@
-1.0.480
+1.0.481
 2026-03-28 (VN)
-Change: FIX VM Local Server - anh khong luu duoc
+Change: Server cleanup browser data sau moi request
 
 Thay doi:
+- v1.0.481: SERVER - Them lai JS_CLEANUP sau moi generate_image()
+  * Sau moi request (thanh cong/loi): xoa localStorage, sessionStorage, IndexedDB, cookies, cache, service workers
+  * Tranh Google track/flag browser qua stored data
+  * Giong flow v1.0.198 (da bo khi lam giong test file, nay them lai)
 - v1.0.480: FIX 3 BUGS TRONG _generate_via_local_server
   * BUG 1: Anh khong luu - images[0] la GeneratedImage object, KHONG phai bytes/str
     - Code cu: isinstance(img_data, bytes) → KHONG BAO GIO match → anh mat
