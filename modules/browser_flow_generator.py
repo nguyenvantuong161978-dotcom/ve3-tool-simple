@@ -2224,7 +2224,7 @@ class BrowserFlowGenerator:
                         _wb.set_config_value('flow_bearer_token', token)
                         if proj_id:
                             _wb.set_config_value('flow_project_id', proj_id)
-                        _wb.save()
+                        _wb.safe_save()
                         self._log("  -> Token da luu vao Excel config (cho server mode)")
                 except Exception as e:
                     self._log(f"  -> Luu token vao Excel fail: {e}", "warn")
@@ -2534,17 +2534,21 @@ class BrowserFlowGenerator:
 
             return api_result
 
-        # v1.0.521: Server mode - gui thang qua server (khong can local_server_enabled checkbox)
+        # v1.0.523: Server mode - gui thang qua server (khong can local_server_enabled checkbox)
         if mode == 'server':
             # Chi can co URL, khong can checkbox local_server_enabled
             if local_server_url or server_list:
                 self._log(f"[AUTO] SERVER mode: Gui anh qua server ({local_server_url})")
-                # Force local_server_enabled + dam bao co URL
+                # Save original config
                 old_se = self.config.get('local_server_enabled', False)
                 old_url = self.config.get('local_server_url', '')
+                old_list = self.config.get('local_server_list', [])
+                # Force server config
                 self.config['local_server_enabled'] = True
-                if not old_url and local_server_url:
+                if local_server_url:
                     self.config['local_server_url'] = local_server_url
+                if server_list:
+                    self.config['local_server_list'] = server_list
                 try:
                     return self.generate_from_prompts_api(
                         prompts=prompts,
@@ -2552,9 +2556,10 @@ class BrowserFlowGenerator:
                         bearer_token=bearer_token
                     )
                 finally:
+                    # Always restore original config
                     self.config['local_server_enabled'] = old_se
-                    if not old_url and local_server_url:
-                        self.config['local_server_url'] = old_url
+                    self.config['local_server_url'] = old_url
+                    self.config['local_server_list'] = old_list
             else:
                 self._log("[AUTO] SERVER mode nhung chua cau hinh Server URLs!", "WARN")
                 self._log("[AUTO] Hay nhap Server URLs trong Settings va bam Luu")
@@ -4456,6 +4461,7 @@ class BrowserFlowGenerator:
 
         # Reset stats
         self.stats = {"total": len(prompts), "success": 0, "failed": 0, "skipped": 0}
+        _token_saved_to_excel = False  # v1.0.523: Flag de chi save token 1 lan
 
         # Track failed prompts để retry sau
         failed_prompts = []  # List[Tuple[prompt_data, index, error]]
@@ -4738,15 +4744,15 @@ class BrowserFlowGenerator:
                     self.stats["success"] += 1
                     consecutive_403 = 0  # Reset counter on success
 
-                    # v1.0.522: Luu bearer token + project_id vao Excel sau anh DAU TIEN thanh cong
-                    # De server mode doc duoc token tu Excel (khong can mo Chrome lai)
-                    if self.stats["success"] == 1 and workbook and drission_api:
+                    # v1.0.523: Luu bearer token + project_id vao Excel sau anh DAU TIEN thanh cong
+                    # Dung flag _token_saved de chi save 1 lan (khong phu thuoc success count)
+                    if not _token_saved_to_excel and workbook and drission_api:
                         try:
-                            _cur_token = getattr(drission_api, 'bearer_token', '') or ''
-                            if _cur_token.startswith('Bearer '):
+                            _cur_token = getattr(drission_api, 'bearer_token', None) or ''
+                            if isinstance(_cur_token, str) and _cur_token.startswith('Bearer '):
                                 _cur_token = _cur_token[7:]
-                            _cur_pid = getattr(drission_api, 'project_id', '') or self.config.get('flow_project_id', '')
-                            _cur_url = getattr(drission_api, 'captured_url', '') or ''
+                            _cur_pid = getattr(drission_api, 'project_id', None) or self.config.get('flow_project_id', '')
+                            _cur_url = getattr(drission_api, 'captured_url', None) or ''
                             if _cur_token:
                                 workbook.set_config_value('flow_bearer_token', _cur_token)
                                 self._log(f"   [TOKEN] Luu bearer token vao Excel: {_cur_token[:20]}...")
@@ -4757,6 +4763,7 @@ class BrowserFlowGenerator:
                             if _cur_token or _cur_pid:
                                 workbook.safe_save()
                                 self._log(f"   [TOKEN] Token + project_id da luu vao Excel (server mode co the dung)")
+                            _token_saved_to_excel = True
                         except Exception as _te:
                             self._log(f"   [TOKEN] Luu token vao Excel fail: {_te}", "warn")
 

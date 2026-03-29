@@ -1,3 +1,17 @@
+1.0.523
+2026-03-29 (VN)
+Change: FIX 3 bugs trong server mode flow
+
+- BUG 1 (HIGH): Server mode config restore sai - local_server_url khong restore dung
+  * Truoc: Chi restore khi old_url rong (logic nguoc) + thieu restore local_server_list
+  * Sau: Luon restore tat ca 3 config values (enabled, url, list)
+- BUG 2 (LOW): _auto_extract_token() dung .save() thay vi .safe_save()
+  * .save() fail khi Excel bi lock → token mat
+  * Doi sang .safe_save() (retry khi lock)
+- BUG 3 (LOW): Token chi save khi success==1 (miss khi anh dau skip)
+  * Doi sang flag _token_saved_to_excel (save 1 lan duy nhat, bat ke thu tu)
+  * Them isinstance check cho bearer_token attribute
+
 1.0.522
 2026-03-29 (VN)
 Change: Luu bearer token vao Excel sau anh dau tien - server mode doc duoc
