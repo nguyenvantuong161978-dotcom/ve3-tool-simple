@@ -119,9 +119,14 @@ class ServerPool:
         return True
 
     def refresh_status(self, server: ServerInfo) -> bool:
-        """Check status 1 server. Return True neu OK."""
+        """
+        Check status 1 server. Return True neu OK.
+        v1.0.531: KHONG tang connect_fail_count khi refresh fail.
+        Refresh chi la kiem tra, khong phai submit that.
+        Chi mark_submit_failed() moi tang connect_fail_count.
+        """
         try:
-            resp = requests.get(f"{server.url}/api/status", timeout=5)
+            resp = requests.get(f"{server.url}/api/status", timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 with self._lock:
@@ -134,10 +139,8 @@ class ServerPool:
         except Exception:
             pass
 
-        # Khong ket noi duoc
-        with self._lock:
-            server.connect_fail_count += 1
-            server.last_connect_fail_time = time.time()
+        # Refresh fail - KHONG tang connect_fail (chi la status check)
+        # Chi mark_submit_failed() moi disable server
         return False
 
     def refresh_all(self):

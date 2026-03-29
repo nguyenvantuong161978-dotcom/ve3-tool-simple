@@ -1,3 +1,17 @@
+1.0.531
+2026-03-29 (VN)
+Change: FIX servers bi DOWN oan do refresh_status + tang refresh timeout
+
+- BUG: refresh_status() timeout → tang connect_fail_count → server bi DISABLED
+  * Server dang ban (7 VMs gui cung luc) → /api/status cham → refresh fail
+  * Moi refresh fail += 1 → 5 lan = server DOWN 60s
+  * Nhung server KHONG CHET - chi ban/cham thoi!
+- FIX: refresh_status() KHONG tang connect_fail_count
+  * Refresh chi la kiem tra, KHONG PHAI submit that
+  * Chi mark_submit_failed() (submit that bai) moi disable server
+  * Server ban → refresh fail → van available → VM gui duoc
+- Tang refresh timeout: 5s → 10s (server ban can nhieu thoi gian hon)
+
 1.0.530
 2026-03-29 (VN)
 Change: FIX duplicate images - submit timeout KHONG retry + tang timeout 60s
