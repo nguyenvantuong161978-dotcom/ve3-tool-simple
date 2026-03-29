@@ -2214,6 +2214,21 @@ class BrowserFlowGenerator:
                 except Exception as e:
                     self._log(f"  -> Luu cache that bai: {e}")
 
+                # v1.0.522: Luu token vao Excel de server mode doc duoc
+                try:
+                    excel_path = self._find_excel_file()
+                    if excel_path and excel_path.exists():
+                        from modules.excel_manager import PromptWorkbook
+                        _wb = PromptWorkbook(excel_path)
+                        _wb.load_or_create()
+                        _wb.set_config_value('flow_bearer_token', token)
+                        if proj_id:
+                            _wb.set_config_value('flow_project_id', proj_id)
+                        _wb.save()
+                        self._log("  -> Token da luu vao Excel config (cho server mode)")
+                except Exception as e:
+                    self._log(f"  -> Luu token vao Excel fail: {e}", "warn")
+
                 return token
             else:
                 self._log(f"FAIL - Khong lay duoc token: {error}", "error")
@@ -4722,6 +4737,28 @@ class BrowserFlowGenerator:
                     self._log(f"   [v] Thành công! Saved {len(images)} image(s)")
                     self.stats["success"] += 1
                     consecutive_403 = 0  # Reset counter on success
+
+                    # v1.0.522: Luu bearer token + project_id vao Excel sau anh DAU TIEN thanh cong
+                    # De server mode doc duoc token tu Excel (khong can mo Chrome lai)
+                    if self.stats["success"] == 1 and workbook and drission_api:
+                        try:
+                            _cur_token = getattr(drission_api, 'bearer_token', '') or ''
+                            if _cur_token.startswith('Bearer '):
+                                _cur_token = _cur_token[7:]
+                            _cur_pid = getattr(drission_api, 'project_id', '') or self.config.get('flow_project_id', '')
+                            _cur_url = getattr(drission_api, 'captured_url', '') or ''
+                            if _cur_token:
+                                workbook.set_config_value('flow_bearer_token', _cur_token)
+                                self._log(f"   [TOKEN] Luu bearer token vao Excel: {_cur_token[:20]}...")
+                            if _cur_pid:
+                                workbook.set_config_value('flow_project_id', _cur_pid)
+                            if _cur_url:
+                                workbook.set_config_value('flow_project_url', _cur_url)
+                            if _cur_token or _cur_pid:
+                                workbook.safe_save()
+                                self._log(f"   [TOKEN] Token + project_id da luu vao Excel (server mode co the dung)")
+                        except Exception as _te:
+                            self._log(f"   [TOKEN] Luu token vao Excel fail: {_te}", "warn")
 
                     # Đánh dấu thành công với ChromeManager
                     try:

@@ -1,3 +1,14 @@
+1.0.522
+2026-03-29 (VN)
+Change: Luu bearer token vao Excel sau anh dau tien - server mode doc duoc
+
+- API mode (DrissionPage): Sau anh dau tien thanh cong → luu token + project_id vao Excel
+  * _generate_images_drission_mode(): stats.success==1 → set_config_value('flow_bearer_token')
+  * _auto_extract_token(): Sau khi lay token → luu vao Excel config sheet
+- Truoc: Token chi luu trong memory/cache → server mode khong doc duoc
+- Sau: Token luu vao Excel → server mode doc tu Excel → khong can mo Chrome lai
+- Flow: API mode tao anh → luu token → chuyen Server mode → doc token tu Excel → chay luon
+
 1.0.521
 2026-03-29 (VN)
 Change: FIX Server mode - khong can checkbox local_server_enabled + skip Chrome login
