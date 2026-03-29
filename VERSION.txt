@@ -1,3 +1,15 @@
+1.0.533
+2026-03-29 (VN)
+Change: STOP scenes khi refs thieu media_id - doi cycle sau
+
+- Truoc: Refs fail (timeout/error) → warn roi chay scenes KHONG CO tham chieu
+  * Scenes tao ra KHONG co reference nhan vat/dia diem → chat luong kem
+  * Phai tao lai scenes sau khi co refs → lang phi thoi gian + quota
+- Sau: Refs chua du media_id → DUNG LAI, khong tao scenes
+  * Doi cycle tiep theo khi refs da co media_id
+  * Dam bao scenes LUON co day du tham chieu
+  * Log ro rang: "[STOP] X/Y refs THIEU media_id!"
+
 1.0.532
 2026-03-29 (VN)
 Change: Server REUSE project URL + FIX GoogleFlowAPI._log() crash
