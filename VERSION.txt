@@ -1,3 +1,32 @@
+1.0.545
+2026-03-29 (VN)
+Change: PROXY PROVIDER PLUGGABLE - He thong proxy module hoa (IPv6 / Webshare / None)
+
+- Tao modules/proxy_providers/ - he thong proxy module hoa:
+  * base_provider.py: Abstract interface (setup, rotate, get_chrome_arg, stop)
+  * ipv6_provider.py: Wrap IPv6 rotator + SOCKS5 proxy hien tai
+  * webshare_provider.py: Webshare.io Rotating Residential (doi IP bang session ID)
+  * __init__.py: Factory create_provider() + NoneProvider + backward compat
+- Config format (settings.yaml):
+  * proxy_provider.type: "none" | "ipv6" | "webshare"
+  * proxy_provider.webshare: {rotating_username, rotating_password, machine_id}
+  * Backward compat: ipv6_rotation.enabled van hoat dong
+- Tich hop Server mode:
+  * chrome_session.py: Dung ProxyProvider neu co, fallback IPv6 truc tiep
+  * chrome_pool.py: setup_proxy_providers() tao provider cho moi worker
+  * app.py: Doc proxy_config tu server_settings, truyen cho ChromePool
+- Tich hop VM mode:
+  * drission_flow_api.py: _proxy_provider uu tien hon IPv6 truc tiep
+  * _rotate_ipv6() dung ProxyProvider.rotate() neu co
+- GUI Settings:
+  * server_gui.py: Dropdown proxy type + Webshare fields + TEST button
+  * vm_manager_gui.py: Setup VM popup - Proxy type selector + Webshare/IPv6 fields
+  * Show/hide fields theo loai proxy, luu proxy_provider section vao settings.yaml
+- Webshare Rotating Residential:
+  * Local HTTP proxy bridge (WebshareProxyBridge) xu ly CONNECT tunnel + auth
+  * Doi IP bang tang session_id trong username (~1s, nhanh hon IPv6)
+  * Chrome → localhost:{port} → p.webshare.io:80 → Target
+
 1.0.544
 2026-03-29 (VN)
 Change: Server TIMEOUT RETRY - Flow bi do/load cham thi thu lai tai cho (khong tinh fail)

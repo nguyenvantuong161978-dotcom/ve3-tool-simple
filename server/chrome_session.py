@@ -378,13 +378,15 @@ def get_server_accounts() -> list:
 class ChromeSession:
     """Quản lý Chrome session cho proxy server."""
 
-    def __init__(self, chrome_portable_path: str = None, port: int = 19222, ipv6: str = ""):
+    def __init__(self, chrome_portable_path: str = None, port: int = 19222, ipv6: str = "",
+                 proxy_provider=None):
         """
         Args:
             chrome_portable_path: Đường dẫn tới ChromePortable.exe
                                   Mặc định: {tool_dir}/GoogleChromePortable/GoogleChromePortable.exe
             port: Debug port cho Chrome (mặc định 19222 - không trùng với workers 9222/9223)
             ipv6: IPv6 address - nếu có sẽ tạo SOCKS5 proxy để Chrome dùng IPv6
+            proxy_provider: ProxyProvider instance (v1.0.545) - neu co thi dung thay IPv6
         """
         if chrome_portable_path:
             self.chrome_path = Path(chrome_portable_path)
@@ -396,6 +398,8 @@ class ChromeSession:
         self.ipv6 = ipv6.strip() if ipv6 else ""
         self._proxy_port = 0  # SOCKS5 proxy port (set khi start proxy)
         self._proxy = None  # IPv6SocksProxy instance
+        # v1.0.545: ProxyProvider interface (thay the IPv6 truc tiep)
+        self._proxy_provider = proxy_provider
         self.page = None
         self.ready = False
         self.project_url = None
@@ -468,6 +472,23 @@ class ChromeSession:
                 pass
         except Exception as e:
             self.log(f"[SPOOF] Inject error: {e}", "WARN")
+
+    def rotate_proxy(self, reason: str = "403") -> bool:
+        """
+        v1.0.545: Doi IP qua ProxyProvider (IPv6/Webshare/...).
+        Goi method nay thay vi rotate_ipv6() khi dung ProxyProvider.
+
+        Returns: True neu doi thanh cong.
+        """
+        if self._proxy_provider:
+            ok = self._proxy_provider.rotate(reason)
+            if ok:
+                self.log(f"[PROXY] Rotated ({reason}): → {self._proxy_provider.get_current_ip()}", "OK")
+            else:
+                self.log(f"[PROXY] Rotate failed ({reason})", "WARN")
+            return ok
+        # Fallback: rotate_ipv6
+        return self.rotate_ipv6()
 
     def rotate_ipv6(self, new_ip: str = "") -> bool:
         """
@@ -680,8 +701,17 @@ class ChromeSession:
         co.set_argument('--no-first-run')
         co.set_argument('--no-default-browser-check')
 
-        # IPv6: Start SOCKS5 proxy và set Chrome dùng proxy
-        if self.ipv6:
+        # v1.0.545: ProxyProvider (uu tien) hoac IPv6 truc tiep (backward compat)
+        if self._proxy_provider and self._proxy_provider.is_ready():
+            # Dung ProxyProvider interface (IPv6/Webshare/...)
+            chrome_arg = self._proxy_provider.get_chrome_arg()
+            if chrome_arg:
+                self.log(f"Proxy ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
+                co.set_argument(f'--proxy-server={chrome_arg}')
+                co.set_argument('--proxy-bypass-list=<-loopback>')
+                self.log(f"Proxy READY → Chrome dung {self._proxy_provider.get_type()}", "OK")
+        elif self.ipv6:
+            # Backward compat: IPv6 truc tiep (logic cu)
             self._proxy_port = self.port + 200  # VD: port 19222 → proxy 19422
             self.log(f"IPv6: {self.ipv6}")
             self.log(f"Starting SOCKS5 proxy on 127.0.0.1:{self._proxy_port}...")
@@ -754,8 +784,13 @@ class ChromeSession:
             co2.set_address(f'127.0.0.1:{self.port}')
             co2.set_argument('--no-first-run')
             co2.set_argument('--no-default-browser-check')
-            # IPv6 proxy (neu da start o tren)
-            if self._proxy and self._proxy._running:
+            # v1.0.545: ProxyProvider hoac IPv6 proxy
+            if self._proxy_provider and self._proxy_provider.is_ready():
+                chrome_arg = self._proxy_provider.get_chrome_arg()
+                if chrome_arg:
+                    co2.set_argument(f'--proxy-server={chrome_arg}')
+                    co2.set_argument('--proxy-bypass-list=<-loopback>')
+            elif self._proxy and self._proxy._running:
                 co2.set_argument(f'--proxy-server=socks5://127.0.0.1:{self._proxy_port}')
                 co2.set_argument('--proxy-bypass-list=<-loopback>')
             try:

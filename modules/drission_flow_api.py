@@ -1348,6 +1348,8 @@ class DrissionFlowAPI:
         # IPv6 rotation: Đọc từ settings.yaml
         self._ipv6_activated = False  # True = đã bật IPv6 proxy
         self._ipv6_rotator = None  # IPv6Rotator instance
+        # v1.0.545: ProxyProvider interface (thay the IPv6 truc tiep neu co)
+        self._proxy_provider = None
 
         # Đọc max_403_before_rotate từ settings
         try:
@@ -1463,10 +1465,21 @@ class DrissionFlowAPI:
 
     def _rotate_ipv6(self, tag: str = "403") -> bool:
         """
-        Doi IPv6 de giam 403. Goi khi da het 1 luot 403 ma van bi.
-        Chi Chrome 1 (worker_id=0) moi rotate, Chrome 2+ dung IP do Chrome 1 set.
-        Returns: True neu rotate thanh cong hoac khong can rotate
+        Doi IP de giam 403. Goi khi da het 1 luot 403 ma van bi.
+
+        v1.0.545: Uu tien ProxyProvider (IPv6/Webshare/...) neu co.
+        Backward compat: Neu khong co ProxyProvider, dung IPv6 truc tiep.
         """
+        # v1.0.545: Dung ProxyProvider neu co
+        if self._proxy_provider:
+            ok = self._proxy_provider.rotate(tag)
+            if ok:
+                self.log(f"[{tag}] [PROXY] Rotated: → {self._proxy_provider.get_current_ip()}", "SUCCESS")
+            else:
+                self.log(f"[{tag}] [PROXY] Rotate failed!", "WARN")
+            return ok
+
+        # Backward compat: IPv6 truc tiep
         # Activate IPv6 neu chua bat
         if not self._ipv6_activated:
             self.log(f"[{tag}] [IPv6] Chua bat IPv6, dang activate...", "WARN")
@@ -2968,16 +2981,32 @@ class DrissionFlowAPI:
                 options.set_argument(f'--window-size={_chr_w},{_chr_h}')
                 self.log(f"[EYE] Headless mode: OFF | Window: {_chr_w}x{_chr_h} at ({_chr_x},{_chr_y})")
 
+            # === v1.0.545: PROXY PROVIDER (uu tien) ===
+            # Neu co ProxyProvider → dung no thay IPv6 truc tiep
+            _using_proxy_provider = False
+            if self._proxy_provider and self._proxy_provider.is_ready():
+                chrome_arg = self._proxy_provider.get_chrome_arg()
+                if chrome_arg:
+                    options.set_argument(f'--proxy-server={chrome_arg}')
+                    options.set_argument('--proxy-bypass-list=<-loopback>')
+                    self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
+                    self.log(f"[NET] Chrome → {chrome_arg}")
+                    _using_proxy_provider = True
+
             # === IPv6 MODE - BẬT NGAY KHI MỞ CHROME ===
             # Dùng IPv6 ngay từ đầu, nếu 403 thì đổi IPv6 khác
             # QUAN TRỌNG: Dùng local SOCKS5 proxy để ÉP Chrome chỉ dùng IPv6
             # CHỈ Chrome 1 (worker_id=0) mới activate/quản lý IPv6
             # Chrome 2+ chỉ dùng proxy đã có (Chrome 1 khởi động)
             _using_ipv6_proxy = False
+            if _using_proxy_provider:
+                # Skip IPv6 truc tiep - da dung ProxyProvider
+                _using_ipv6_proxy = True  # Flag de skip webshare cu phia duoi
+
             try:
                 from modules.ipv6_rotator import get_ipv6_rotator
                 rotator = get_ipv6_rotator()
-                if rotator and rotator.enabled and rotator.ipv6_list:
+                if not _using_proxy_provider and rotator and rotator.enabled and rotator.ipv6_list:
                     self.log(f"[NET] IPv6 MODE: Có {len(rotator.ipv6_list)} IPs")
 
                     # Chrome 2+: Chỉ dùng proxy, KHÔNG activate IPv6

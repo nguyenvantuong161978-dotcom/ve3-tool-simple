@@ -1062,6 +1062,12 @@ def _do_start_workers():
         # Don't start any Chrome threads - external workers will connect via internal APIs
         return
 
+    # v1.0.545: Setup Proxy Providers (Webshare/IPv6/none)
+    with settings_lock:
+        proxy_config = server_settings.get('proxy_config', {})
+    if proxy_config:
+        chrome_pool.setup_proxy_providers(proxy_config)
+
     # GOP mode (default): start Chrome worker threads in same process
     if chrome_pool.workers:
         server_log(f"Setup {len(chrome_pool.workers)} Chrome workers SONG SONG...")
@@ -1087,6 +1093,7 @@ def _do_start_workers():
                         chrome_portable_path=worker.chrome_path,
                         port=worker.port,
                         ipv6=worker.ipv6,
+                        proxy_provider=getattr(worker, 'proxy_provider', None),
                     )
                     if worker.account:
                         session._account = worker.account

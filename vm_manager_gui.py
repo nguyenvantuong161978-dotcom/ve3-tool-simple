@@ -3124,7 +3124,7 @@ class SimpleGUI(tk.Tk):
             self.after(3000, self._monitor_server)
 
     def _setup_vm(self):
-        """Setup SMB share + IPv6 cho may ao."""
+        """Setup SMB share + IPv6/Proxy cho may ao."""
         import tkinter.messagebox as msgbox
         import yaml
         import subprocess
@@ -3139,23 +3139,41 @@ class SimpleGUI(tk.Tk):
         # Tao popup
         popup = tk.Toplevel(self)
         popup.title("Setup VM")
-        popup.geometry("500x600")
+        popup.geometry("550x750")
         popup.configure(bg='#1a1a2e')
         popup.transient(self)
         popup.grab_set()
 
         # Center popup
         popup.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 500) // 2
-        y = self.winfo_y() + (self.winfo_height() - 600) // 2
+        x = self.winfo_x() + (self.winfo_width() - 550) // 2
+        y = self.winfo_y() + (self.winfo_height() - 750) // 2
         popup.geometry(f"+{x}+{y}")
 
+        # Scrollable content
+        canvas = tk.Canvas(popup, bg='#1a1a2e', highlightthickness=0)
+        scrollbar = tk.Scrollbar(popup, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg='#1a1a2e')
+
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw", width=530)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Mouse wheel scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        popup.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>") if e.widget == popup else None)
+
         # ============ SECTION 1: SMB SHARE ============
-        tk.Label(popup, text="1. KET NOI O MANG (SMB SHARE)",
+        tk.Label(scroll_frame, text="1. KET NOI O MANG (SMB SHARE)",
                 bg='#1a1a2e', fg='#00ff88', font=("Arial", 11, "bold")).pack(pady=(10, 5))
 
         # Form frame
-        form = tk.Frame(popup, bg='#1a1a2e')
+        form = tk.Frame(scroll_frame, bg='#1a1a2e')
         form.pack(pady=5, padx=20, fill="x")
 
         # IP
@@ -3180,7 +3198,7 @@ class SimpleGUI(tk.Tk):
 
         # SMB Status
         smb_status_var = tk.StringVar(value="")
-        smb_status_lbl = tk.Label(popup, textvariable=smb_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
+        smb_status_lbl = tk.Label(scroll_frame, textvariable=smb_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
         smb_status_lbl.pack(pady=3)
 
         def do_smb_setup():
@@ -3225,26 +3243,153 @@ class SimpleGUI(tk.Tk):
                 smb_status_var.set(f"LOI: {str(e)[:40]}")
                 smb_status_lbl.config(fg='#e94560')
 
-        tk.Button(popup, text="KET NOI SMB", command=do_smb_setup,
+        tk.Button(scroll_frame, text="KET NOI SMB", command=do_smb_setup,
                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
                  relief="flat", padx=15, pady=3).pack(pady=5)
 
         # ============ SEPARATOR ============
-        tk.Frame(popup, bg='#444', height=2).pack(fill="x", padx=20, pady=10)
+        tk.Frame(scroll_frame, bg='#444', height=2).pack(fill="x", padx=20, pady=10)
 
-        # ============ SECTION 2: IPv6 ROTATION ============
-        tk.Label(popup, text="2. IPv6 ROTATION (Bypass Rate Limit)",
+        # ============ SECTION 2: PROXY PROVIDER ============
+        tk.Label(scroll_frame, text="2. PROXY / IP ROTATION",
                 bg='#1a1a2e', fg='#00ff88', font=("Arial", 11, "bold")).pack(pady=(5, 5))
 
-        # Read current IPv6 setting
+        # --- Proxy Type Selector ---
+        proxy_type_frame = tk.Frame(scroll_frame, bg='#1a1a2e')
+        proxy_type_frame.pack(pady=5, padx=20, fill="x")
+
+        tk.Label(proxy_type_frame, text="Loai Proxy:", bg='#1a1a2e', fg='white',
+                 font=("Arial", 10)).pack(side="left", padx=(0, 10))
+
+        # Read current proxy_provider config
         config_path = TOOL_DIR / "config" / "settings.yaml"
+        current_proxy_type = "ipv6"  # default
+        current_ws_username = ""
+        current_ws_password = ""
+        current_ws_machine_id = "1"
+        try:
+            if config_path.exists():
+                with open(config_path, "r", encoding="utf-8") as f:
+                    _cfg = yaml.safe_load(f) or {}
+                pp_cfg = _cfg.get('proxy_provider', {})
+                if pp_cfg:
+                    current_proxy_type = pp_cfg.get('type', 'ipv6')
+                    ws_cfg = pp_cfg.get('webshare', {})
+                    current_ws_username = ws_cfg.get('rotating_username', '')
+                    current_ws_password = ws_cfg.get('rotating_password', '')
+                    current_ws_machine_id = str(ws_cfg.get('machine_id', 1))
+                else:
+                    # Backward compat
+                    ipv6_cfg = _cfg.get('ipv6_rotation', {})
+                    current_proxy_type = "ipv6" if ipv6_cfg.get('enabled', False) else "none"
+        except:
+            pass
+
+        proxy_type_var = tk.StringVar(value=current_proxy_type)
+        proxy_types = [("Khong dung", "none"), ("IPv6 Rotation", "ipv6"), ("Webshare Rotating", "webshare")]
+
+        for text, val in proxy_types:
+            tk.Radiobutton(proxy_type_frame, text=text, variable=proxy_type_var, value=val,
+                          bg='#1a1a2e', fg='white', selectcolor='#1a1a2e', font=("Arial", 9),
+                          activebackground='#1a1a2e', activeforeground='white',
+                          command=lambda: _on_proxy_type_changed()
+                          ).pack(side="left", padx=8)
+
+        # --- Webshare Settings Frame ---
+        ws_frame = tk.LabelFrame(scroll_frame, text=" Webshare.io Settings ", bg='#16213e', fg='#ffd93d',
+                                  font=("Arial", 9, "bold"), padx=10, pady=8)
+
+        ws_form = tk.Frame(ws_frame, bg='#16213e')
+        ws_form.pack(fill="x", pady=5)
+
+        tk.Label(ws_form, text="Username:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        ws_username_var = tk.StringVar(value=current_ws_username)
+        tk.Entry(ws_form, textvariable=ws_username_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
+
+        tk.Label(ws_form, text="Password:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=1, column=0, sticky="e", pady=3)
+        ws_password_var = tk.StringVar(value=current_ws_password)
+        tk.Entry(ws_form, textvariable=ws_password_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=1, column=1, pady=3, padx=5)
+
+        tk.Label(ws_form, text="Machine ID:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=2, column=0, sticky="e", pady=3)
+        ws_machine_var = tk.StringVar(value=current_ws_machine_id)
+        tk.Entry(ws_form, textvariable=ws_machine_var, width=5, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=2, column=1, pady=3, padx=5, sticky="w")
+
+        tk.Label(ws_frame, text="Webshare.io Rotating Residential - Doi IP bang session ID",
+                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
+
+        # Webshare test status
+        ws_status_var = tk.StringVar(value="")
+        ws_status_lbl = tk.Label(ws_frame, textvariable=ws_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        ws_status_lbl.pack(anchor="w", pady=3)
+
+        def _test_webshare():
+            """Test Webshare proxy connectivity."""
+            username = ws_username_var.get().strip()
+            password = ws_password_var.get().strip()
+            if not username or not password:
+                ws_status_var.set("Nhap username va password!")
+                ws_status_lbl.config(fg='#e94560')
+                return
+            ws_status_var.set("Dang test...")
+            ws_status_lbl.config(fg='#ffd93d')
+
+            def _do_test():
+                try:
+                    from modules.proxy_providers.webshare_provider import WebshareProvider
+                    provider = WebshareProvider(config={'webshare': {
+                        'rotating_username': username,
+                        'rotating_password': password,
+                        'machine_id': int(ws_machine_var.get() or 1),
+                    }})
+                    ok = provider.test_connectivity()
+                    def _show():
+                        if ok:
+                            ws_status_var.set("OK! Ket noi thanh cong")
+                            ws_status_lbl.config(fg='#00ff88')
+                        else:
+                            ws_status_var.set("THAT BAI! Kiem tra lai thong tin")
+                            ws_status_lbl.config(fg='#e94560')
+                    popup.after(0, _show)
+                except Exception as e:
+                    popup.after(0, lambda: (ws_status_var.set(f"LOI: {str(e)[:40]}"), ws_status_lbl.config(fg='#e94560')))
+
+            threading.Thread(target=_do_test, daemon=True).start()
+
+        tk.Button(ws_frame, text="TEST KET NOI", command=_test_webshare,
+                 bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
+                 relief="flat", padx=10, pady=2).pack(anchor="w", pady=3)
+
+        # --- IPv6 section (existing) ---
+        ipv6_section_frame = tk.Frame(scroll_frame, bg='#1a1a2e')
+
+        # Show/hide based on proxy type
+        def _on_proxy_type_changed():
+            ptype = proxy_type_var.get()
+            if ptype == "webshare":
+                ws_frame.pack(fill="x", padx=20, pady=5, after=proxy_type_frame)
+                ipv6_section_frame.pack_forget()
+            elif ptype == "ipv6":
+                ws_frame.pack_forget()
+                ipv6_section_frame.pack(fill="x", padx=0, pady=5, after=proxy_type_frame)
+            else:
+                ws_frame.pack_forget()
+                ipv6_section_frame.pack_forget()
+
+        # IPv6 content inside ipv6_section_frame
+        tk.Label(ipv6_section_frame, text="IPv6 ROTATION",
+                bg='#1a1a2e', fg='#00ff88', font=("Arial", 10, "bold")).pack(pady=(5, 5))
+
+        # Read current IPv6 setting
         ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
         current_ipv6_enabled = self._get_ipv6_setting()
 
         # Radio buttons for IPv6 mode
         ipv6_mode_var = tk.IntVar(value=1 if current_ipv6_enabled else 0)
 
-        mode_frame = tk.Frame(popup, bg='#1a1a2e')
+        mode_frame = tk.Frame(ipv6_section_frame, bg='#1a1a2e')
         mode_frame.pack(pady=5)
 
         tk.Radiobutton(mode_frame, text="Khong dung IPv6 (Direct)", variable=ipv6_mode_var, value=0,
@@ -3255,8 +3400,8 @@ class SimpleGUI(tk.Tk):
                       activebackground='#1a1a2e', activeforeground='#00ff88').pack(side="left", padx=10)
 
         # IPv6 list frame
-        ipv6_frame = tk.Frame(popup, bg='#1a1a2e')
-        ipv6_frame.pack(pady=5, padx=20, fill="both", expand=True)
+        ipv6_frame = tk.Frame(ipv6_section_frame, bg='#1a1a2e')
+        ipv6_frame.pack(pady=5, padx=20, fill="x")
 
         tk.Label(ipv6_frame, text="Danh sach IPv6 (config/ipv6.txt):",
                 bg='#1a1a2e', fg='#aaa', font=("Arial", 9)).pack(anchor="w")
@@ -3264,7 +3409,7 @@ class SimpleGUI(tk.Tk):
         # Text widget for IPv6 list
         ipv6_text = tk.Text(ipv6_frame, height=8, width=50, bg='#2a2a4e', fg='white',
                            font=("Consolas", 9), insertbackground='white')
-        ipv6_text.pack(fill="both", expand=True, pady=5)
+        ipv6_text.pack(fill="x", pady=5)
 
         # Load IPv6 list from file
         if ipv6_file.exists():
@@ -3273,12 +3418,12 @@ class SimpleGUI(tk.Tk):
 
         # IPv6 test status
         ipv6_status_var = tk.StringVar(value="")
-        ipv6_status_lbl = tk.Label(popup, textvariable=ipv6_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
+        ipv6_status_lbl = tk.Label(ipv6_section_frame, textvariable=ipv6_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
         ipv6_status_lbl.pack(pady=3)
 
         # Test results frame
         test_results_var = tk.StringVar(value="")
-        test_results_lbl = tk.Label(popup, textvariable=test_results_var, bg='#1a1a2e', fg='#888', font=("Consolas", 8))
+        test_results_lbl = tk.Label(ipv6_section_frame, textvariable=test_results_var, bg='#1a1a2e', fg='#888', font=("Consolas", 8))
         test_results_lbl.pack(pady=2)
 
         def test_ipv6():
@@ -3328,36 +3473,52 @@ class SimpleGUI(tk.Tk):
 
             threading.Thread(target=run_test, daemon=True).start()
 
-        def save_ipv6_config():
-            """Save IPv6 settings to config."""
+        def save_proxy_config():
+            """Save proxy provider + IPv6 settings to config."""
             try:
                 # Save IPv6 list to file
                 ipv6_content = ipv6_text.get("1.0", "end").strip()
                 with open(ipv6_file, "w", encoding="utf-8") as f:
                     f.write(ipv6_content)
 
-                # Save enabled setting to settings.yaml
+                # Read existing config
                 config = {}
                 if config_path.exists():
                     with open(config_path, "r", encoding="utf-8") as f:
                         config = yaml.safe_load(f) or {}
 
+                # Save proxy_provider section
+                ptype = proxy_type_var.get()
+                if 'proxy_provider' not in config:
+                    config['proxy_provider'] = {}
+                config['proxy_provider']['type'] = ptype
+
+                # Webshare settings
+                config['proxy_provider']['webshare'] = {
+                    'rotating_host': 'p.webshare.io',
+                    'rotating_port': 80,
+                    'rotating_username': ws_username_var.get().strip(),
+                    'rotating_password': ws_password_var.get().strip(),
+                    'machine_id': int(ws_machine_var.get() or 1),
+                }
+
+                # IPv6 backward compat
                 if 'ipv6_rotation' not in config:
                     config['ipv6_rotation'] = {}
-                config['ipv6_rotation']['enabled'] = (ipv6_mode_var.get() == 1)
+                config['ipv6_rotation']['enabled'] = (ptype == 'ipv6' and ipv6_mode_var.get() == 1)
 
                 with open(config_path, "w", encoding="utf-8") as f:
                     yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
 
                 # Update manager settings
                 if hasattr(self, 'manager') and self.manager:
-                    if hasattr(self.manager, 'settings') and hasattr(self.manager.settings, 'ipv6_rotation'):
-                        self.manager.settings.ipv6_rotation['enabled'] = (ipv6_mode_var.get() == 1)
+                    if hasattr(self.manager, 'settings'):
+                        if hasattr(self.manager.settings, 'config'):
+                            self.manager.settings.config = config.copy()
 
-                status = "BAT" if ipv6_mode_var.get() == 1 else "TAT"
-                ipv6_status_var.set(f"Da luu! IPv6: {status}")
+                ipv6_status_var.set(f"Da luu! Proxy: {ptype.upper()}")
                 ipv6_status_lbl.config(fg='#00ff88')
-                print(f"[GUI] IPv6 saved: {status}")
+                print(f"[GUI] Proxy config saved: type={ptype}")
 
             except Exception as e:
                 ipv6_status_var.set(f"LOI: {str(e)[:40]}")
@@ -3396,8 +3557,8 @@ class SimpleGUI(tk.Tk):
                 ipv6_status_lbl.config(fg='#e94560')
 
         # Buttons for IPv6
-        ipv6_btn_frame = tk.Frame(popup, bg='#1a1a2e')
-        ipv6_btn_frame.pack(pady=10)
+        ipv6_btn_frame = tk.Frame(ipv6_section_frame, bg='#1a1a2e')
+        ipv6_btn_frame.pack(pady=5)
 
         tk.Button(ipv6_btn_frame, text="LAY TU TRANG TINH", command=fetch_ipv6_from_sheet,
                  bg='#e17055', fg='white', font=("Arial", 9, "bold"),
@@ -3407,13 +3568,22 @@ class SimpleGUI(tk.Tk):
                  bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"),
                  relief="flat", padx=15, pady=3).pack(side="left", padx=5)
 
-        tk.Button(ipv6_btn_frame, text="LUU CAU HINH", command=save_ipv6_config,
-                 bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
-                 relief="flat", padx=15, pady=3).pack(side="left", padx=5)
+        # --- Trigger initial show/hide ---
+        _on_proxy_type_changed()
 
-        tk.Button(ipv6_btn_frame, text="DONG", command=popup.destroy,
-                 bg='#e94560', fg='white', font=("Arial", 9, "bold"),
-                 relief="flat", padx=15, pady=3).pack(side="left", padx=5)
+        # --- Bottom buttons (LUU + DONG) - outside proxy sections ---
+        tk.Frame(scroll_frame, bg='#444', height=2).pack(fill="x", padx=20, pady=10)
+
+        bottom_btn_frame = tk.Frame(scroll_frame, bg='#1a1a2e')
+        bottom_btn_frame.pack(pady=10)
+
+        tk.Button(bottom_btn_frame, text="LUU CAU HINH", command=save_proxy_config,
+                 bg='#00ff88', fg='#1a1a2e', font=("Arial", 10, "bold"),
+                 relief="flat", padx=20, pady=5).pack(side="left", padx=10)
+
+        tk.Button(bottom_btn_frame, text="DONG", command=popup.destroy,
+                 bg='#e94560', fg='white', font=("Arial", 10, "bold"),
+                 relief="flat", padx=20, pady=5).pack(side="left", padx=10)
 
     def _position_tool_window(self):
         """Dat cua so VE3 tool vao goc trai tren man hinh."""

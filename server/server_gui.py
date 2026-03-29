@@ -122,6 +122,60 @@ class ServerGUI(tk.Tk):
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=8)
 
+        # === v1.0.545: Proxy Provider (Webshare Rotating Residential) ===
+        row_proxy = tk.Frame(card, bg=BG2)
+        row_proxy.pack(fill='x', padx=20, pady=(0, 5))
+
+        tk.Label(row_proxy, text="Proxy Provider", font=("Segoe UI", 13, "bold"),
+                 bg=BG2, fg=FG).pack(side='left')
+
+        self.proxy_type_var = tk.StringVar(value="none")
+        proxy_options = ["none", "ipv6", "webshare"]
+        self.proxy_combo = ttk.Combobox(row_proxy, textvariable=self.proxy_type_var,
+                                         values=proxy_options, state='readonly', width=12)
+        self.proxy_combo.set("none")
+        self.proxy_combo.pack(side='right')
+        self.proxy_combo.bind("<<ComboboxSelected>>", self._on_proxy_type_changed)
+
+        tk.Label(card, text="none: Khong proxy | ipv6: IPv6 rotation | webshare: Webshare.io Rotating",
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
+
+        # Webshare settings frame (an/hien theo proxy_type)
+        self.ws_frame = tk.Frame(card, bg=BG2)
+        self.ws_frame.pack(fill='x', padx=20, pady=(5, 5))
+
+        ws_row1 = tk.Frame(self.ws_frame, bg=BG2)
+        ws_row1.pack(fill='x', pady=2)
+        tk.Label(ws_row1, text="Username:", font=("Segoe UI", 9), bg=BG2, fg=FG2, width=10, anchor='w').pack(side='left')
+        self.ws_username_var = tk.StringVar(value="")
+        tk.Entry(ws_row1, textvariable=self.ws_username_var, font=("Consolas", 9),
+                 bg='#0f172a', fg=FG, insertbackground=FG, relief='solid', bd=1).pack(side='left', fill='x', expand=True)
+
+        ws_row2 = tk.Frame(self.ws_frame, bg=BG2)
+        ws_row2.pack(fill='x', pady=2)
+        tk.Label(ws_row2, text="Password:", font=("Segoe UI", 9), bg=BG2, fg=FG2, width=10, anchor='w').pack(side='left')
+        self.ws_password_var = tk.StringVar(value="")
+        tk.Entry(ws_row2, textvariable=self.ws_password_var, font=("Consolas", 9),
+                 bg='#0f172a', fg=FG, insertbackground=FG, relief='solid', bd=1).pack(side='left', fill='x', expand=True)
+
+        ws_row3 = tk.Frame(self.ws_frame, bg=BG2)
+        ws_row3.pack(fill='x', pady=2)
+        tk.Label(ws_row3, text="Machine ID:", font=("Segoe UI", 9), bg=BG2, fg=FG2, width=10, anchor='w').pack(side='left')
+        self.ws_machine_var = tk.StringVar(value="1")
+        tk.Entry(ws_row3, textvariable=self.ws_machine_var, font=("Consolas", 9),
+                 bg='#0f172a', fg=FG, insertbackground=FG, relief='solid', bd=1, width=5).pack(side='left')
+
+        self.ws_test_btn = tk.Button(ws_row3, text="TEST", font=("Segoe UI", 9, "bold"),
+                                      bg=ORANGE, fg='#0f172a', relief='flat', cursor='hand2',
+                                      command=self._test_webshare)
+        self.ws_test_btn.pack(side='right')
+
+        # Mac dinh an webshare settings
+        self.ws_frame.pack_forget()
+
+        # Separator
+        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=8)
+
         # Chrome count
         row2 = tk.Frame(card, bg=BG2)
         row2.pack(fill='x', padx=20, pady=(0, 10))
@@ -212,6 +266,16 @@ class ServerGUI(tk.Tk):
                 if data.get('accounts_raw'):
                     self.accounts_text.delete("1.0", "end")
                     self.accounts_text.insert("1.0", "\n".join(data['accounts_raw']))
+                # v1.0.545: Proxy Provider
+                if data.get('proxy_type'):
+                    self.proxy_type_var.set(data['proxy_type'])
+                    self._on_proxy_type_changed()
+                if data.get('ws_username'):
+                    self.ws_username_var.set(data['ws_username'])
+                if data.get('ws_password'):
+                    self.ws_password_var.set(data['ws_password'])
+                if data.get('ws_machine_id'):
+                    self.ws_machine_var.set(str(data['ws_machine_id']))
         except Exception:
             pass
 
@@ -224,6 +288,11 @@ class ServerGUI(tk.Tk):
                 'ipv6_list': self._get_ipv6_list(),
                 'chrome_count': self._get_chrome_count(),
                 'accounts_raw': self._get_accounts_raw(),
+                # v1.0.545: Proxy Provider
+                'proxy_type': self.proxy_type_var.get(),
+                'ws_username': self.ws_username_var.get().strip(),
+                'ws_password': self.ws_password_var.get().strip(),
+                'ws_machine_id': int(self.ws_machine_var.get().strip() or '1'),
             }
             self._settings_file.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False),
@@ -231,6 +300,60 @@ class ServerGUI(tk.Tk):
             )
         except Exception:
             pass
+
+    def _on_proxy_type_changed(self, event=None):
+        """v1.0.545: Hien/an webshare settings khi doi proxy type."""
+        ptype = self.proxy_type_var.get()
+        if ptype == "webshare":
+            self.ws_frame.pack(fill='x', padx=20, pady=(5, 5))
+        else:
+            self.ws_frame.pack_forget()
+
+    def _test_webshare(self):
+        """v1.0.545: Test ket noi Webshare proxy."""
+        import threading
+        def _do_test():
+            self.ws_test_btn.config(state='disabled', text="Testing...")
+            try:
+                from modules.proxy_providers.webshare_provider import WebshareProvider
+                provider = WebshareProvider(
+                    config={'webshare': {
+                        'rotating_host': 'p.webshare.io',
+                        'rotating_port': 80,
+                        'rotating_username': self.ws_username_var.get().strip(),
+                        'rotating_password': self.ws_password_var.get().strip(),
+                        'machine_id': int(self.ws_machine_var.get().strip() or '1'),
+                    }},
+                    log_func=lambda msg, lvl="INFO": print(msg),
+                )
+                ok = provider.test_connectivity()
+                if ok:
+                    self.ws_test_btn.config(text="OK!", bg=GREEN)
+                else:
+                    self.ws_test_btn.config(text="FAIL!", bg=RED)
+            except Exception as e:
+                self.ws_test_btn.config(text=f"ERR", bg=RED)
+                print(f"Webshare test error: {e}")
+            finally:
+                self.ws_test_btn.config(state='normal')
+                self.root.after(3000, lambda: self.ws_test_btn.config(text="TEST", bg=ORANGE))
+        threading.Thread(target=_do_test, daemon=True).start()
+
+    def _get_proxy_config(self) -> dict:
+        """v1.0.545: Lay proxy provider config tu GUI."""
+        ptype = self.proxy_type_var.get()
+        return {
+            'proxy_provider': {
+                'type': ptype,
+                'webshare': {
+                    'rotating_host': 'p.webshare.io',
+                    'rotating_port': 80,
+                    'rotating_username': self.ws_username_var.get().strip(),
+                    'rotating_password': self.ws_password_var.get().strip(),
+                    'machine_id': int(self.ws_machine_var.get().strip() or '1'),
+                },
+            }
+        }
 
     def _toggle_ipv6(self):
         current = self.ipv6_var.get()
@@ -615,6 +738,8 @@ class ServerGUI(tk.Tk):
             server_settings['gui_accounts'] = gui_accounts or []
             server_settings['mode'] = 'gop'
             server_settings['started'] = True
+            # v1.0.545: Proxy Provider config
+            server_settings['proxy_config'] = self._get_proxy_config()
 
         # Redirect server_log to our GUI
         self._server_logs_ref = server_logs

@@ -132,6 +132,7 @@ class ChromeWorker:
         self.total_completed = 0
         self.total_failed = 0
         self.last_error = ""
+        self.proxy_provider = None  # v1.0.545: ProxyProvider instance
 
     def __repr__(self):
         status = "READY" if self.ready and not self.busy else ("BUSY" if self.busy else "DOWN")
@@ -220,6 +221,59 @@ class ChromePool:
 
         # _all_accounts se duoc set boi app.py sau init_workers()
 
+    def setup_proxy_providers(self, proxy_config: dict = None):
+        """
+        v1.0.545: Setup ProxyProvider cho tat ca workers.
+
+        Args:
+            proxy_config: Config tu settings.yaml hoac GUI
+                { "proxy_provider": { "type": "webshare", "webshare": {...} } }
+        """
+        if not proxy_config:
+            return
+
+        try:
+            from modules.proxy_providers import create_provider
+
+            pp_type = proxy_config.get('proxy_provider', {}).get('type', 'none')
+            if pp_type == 'none':
+                self._log(f"[PROXY] Provider type = none, skip")
+                return
+
+            for worker in self.workers:
+                # Moi worker co provider rieng (port rieng)
+                proxy_port = worker.port + 200  # 19222 → 19422, 19223 → 19423
+                provider = create_provider(
+                    config=proxy_config,
+                    log_func=lambda msg, lvl="INFO", wn=f"Chrome-{worker.index}": self._log(f"[{wn}] {msg}", lvl),
+                )
+
+                if pp_type == 'webshare':
+                    # Webshare: setup bridge tren proxy_port
+                    if provider.setup(worker_id=worker.index, port=proxy_port):
+                        worker.proxy_provider = provider
+                        self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): OK on port {proxy_port}")
+                    else:
+                        self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): FAILED", "ERROR")
+
+                elif pp_type == 'ipv6':
+                    # IPv6: setup dedicated voi IPv6 cua worker
+                    if worker.ipv6:
+                        provider.setup_dedicated(
+                            worker_id=worker.index,
+                            port=proxy_port,
+                            ipv6_address=worker.ipv6,
+                        )
+                        worker.proxy_provider = provider
+                        self._log(f"[Chrome-{worker.index}] Proxy (ipv6): {worker.ipv6} on port {proxy_port}")
+                    else:
+                        self._log(f"[Chrome-{worker.index}] Proxy (ipv6): skip (no IPv6 assigned)")
+
+        except ImportError as e:
+            self._log(f"[PROXY] Import error: {e}", "ERROR")
+        except Exception as e:
+            self._log(f"[PROXY] Setup error: {e}", "ERROR")
+
     def get_next_account(self, current_email: str = "") -> Optional[Dict]:
         """
         Lay tai khoan IT DUNG NHAT, khac voi current_email.
@@ -303,6 +357,7 @@ class ChromePool:
                     chrome_portable_path=worker.chrome_path,
                     port=worker.port,
                     ipv6=worker.ipv6,
+                    proxy_provider=getattr(worker, 'proxy_provider', None),
                 )
                 if worker.account:
                     session._account = worker.account
@@ -554,14 +609,22 @@ class ChromePool:
 
                             worker.ready = False
                             try:
-                                # Doi IPv6
-                                new_ip = self.get_next_ipv6(worker.ipv6)
-                                if new_ip and new_ip != worker.ipv6:
-                                    self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6} → {new_ip}", "WARN")
-                                    worker.session.rotate_ipv6(new_ip)
-                                    worker.ipv6 = new_ip
+                                # v1.0.545: Dung ProxyProvider neu co, nguoc lai dung IPv6 truc tiep
+                                if worker.session._proxy_provider:
+                                    ok_rotate = worker.session.rotate_proxy("403")
+                                    if ok_rotate:
+                                        self._log(f"[{worker_name}] [403] Proxy rotated: → {worker.session._proxy_provider.get_current_ip()}", "WARN")
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Proxy rotate failed", "WARN")
                                 else:
-                                    self._log(f"[{worker_name}] [403] Khong co IPv6 khac", "WARN")
+                                    # Backward compat: IPv6 truc tiep
+                                    new_ip = self.get_next_ipv6(worker.ipv6)
+                                    if new_ip and new_ip != worker.ipv6:
+                                        self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6} → {new_ip}", "WARN")
+                                        worker.session.rotate_ipv6(new_ip)
+                                        worker.ipv6 = new_ip
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Khong co IPv6 khac", "WARN")
 
                                 if c403 <= 3:
                                     # Lan 1-3: Restart + fingerprint moi (giu data)
