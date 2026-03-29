@@ -1,3 +1,17 @@
+1.0.521
+2026-03-29 (VN)
+Change: FIX Server mode - khong can checkbox local_server_enabled + skip Chrome login
+
+- BUG: Mode "Server" bao "chua cau hinh Server URLs" du da nhap URLs
+  * has_local_server yeu cau local_server_enabled=True (checkbox cu)
+  * Chon radio "Server" nhung checkbox tat → has_local_server=False → fail
+- FIX: Mode "server" chi can co URL, khong can checkbox
+  * Check (local_server_url or server_list) thay vi has_local_server
+  * Force local_server_enabled=True + local_server_url trong config
+- FIX: Skip Chrome login khi mode=server (khong can Chrome local)
+  * Truoc: Login 2 Chrome + warm-up ~6 phut MOI CYCLE (vo ich)
+  * Sau: Skip luon, tiet kiem thoi gian
+
 1.0.520
 2026-03-29 (VN)
 Change: Them nut "Server" vao Generation Mode - gui anh TRUC TIEP qua server

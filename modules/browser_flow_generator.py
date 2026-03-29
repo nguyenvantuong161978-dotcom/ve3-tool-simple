@@ -2519,13 +2519,17 @@ class BrowserFlowGenerator:
 
             return api_result
 
-        # v1.0.520: Server mode - gui thang qua server (khong dung Chrome local)
+        # v1.0.521: Server mode - gui thang qua server (khong can local_server_enabled checkbox)
         if mode == 'server':
-            if has_local_server:
+            # Chi can co URL, khong can checkbox local_server_enabled
+            if local_server_url or server_list:
                 self._log(f"[AUTO] SERVER mode: Gui anh qua server ({local_server_url})")
-                # Force local_server_enabled de dam bao gui qua server
+                # Force local_server_enabled + dam bao co URL
                 old_se = self.config.get('local_server_enabled', False)
+                old_url = self.config.get('local_server_url', '')
                 self.config['local_server_enabled'] = True
+                if not old_url and local_server_url:
+                    self.config['local_server_url'] = local_server_url
                 try:
                     return self.generate_from_prompts_api(
                         prompts=prompts,
@@ -2534,6 +2538,8 @@ class BrowserFlowGenerator:
                     )
                 finally:
                     self.config['local_server_enabled'] = old_se
+                    if not old_url and local_server_url:
+                        self.config['local_server_url'] = old_url
             else:
                 self._log("[AUTO] SERVER mode nhung chua cau hinh Server URLs!", "WARN")
                 self._log("[AUTO] Hay nhap Server URLs trong Settings va bam Luu")

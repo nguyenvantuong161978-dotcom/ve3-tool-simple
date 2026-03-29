@@ -991,6 +991,19 @@ def _do_pre_login_if_needed(project_code: str = None):
     """
     print("\n[PRE-LOGIN] Checking if login needed...")
 
+    # v1.0.521: Skip login khi mode "server" (khong can Chrome local)
+    try:
+        import yaml
+        _settings_path = TOOL_DIR / "config" / "settings.yaml"
+        if _settings_path.exists():
+            with open(_settings_path, 'r', encoding='utf-8') as f:
+                _gen_mode = (yaml.safe_load(f) or {}).get('generation_mode', 'api')
+            if _gen_mode == 'server':
+                print("[PRE-LOGIN] Mode=SERVER - skip Chrome login (dung server, khong can Chrome local)")
+                return
+    except:
+        pass
+
     if project_code:
         code = project_code
     else:
