@@ -658,6 +658,15 @@ class GoogleFlowAPI:
                     self._log(f"Poll {poll_count}: {pos_info} ({int(elapsed)}s)")
 
                 if not result.get("success"):
+                    # v1.0.550: Check if task FAILED on server (has error message)
+                    # Server returns {"success": false, "error": "..."} when task failed
+                    # vs queued/processing returns {"success": true, "status": "queued"}
+                    error_msg = result.get("error", "")
+                    if error_msg:
+                        # Task da that bai tren server - KHONG can poll tiep!
+                        self._log(f"Task {task_id[:8]} FAILED on server: {error_msg[:200]}")
+                        return False, [], f"Server task failed: {error_msg[:200]}"
+                    # Khong co error = intermediate state, tiep tuc poll
                     time.sleep(poll_interval)
                     continue
 
@@ -1643,6 +1652,14 @@ class GoogleFlowAPI:
                             status="failed", prompt=prompt, seed=seed,
                             scene_id=scene_id, error=error_msg
                         ), error_msg
+                    # v1.0.550: Check error from server (task failed)
+                    error_msg = result.get("error", "")
+                    if error_msg:
+                        self._log(f"Video task {task_id[:8]} FAILED: {error_msg[:200]}")
+                        return False, VideoGenerationResult(
+                            status="failed", prompt=prompt, seed=seed,
+                            scene_id=scene_id, error=f"Server: {error_msg[:200]}"
+                        ), f"Server task failed: {error_msg[:200]}"
                     time.sleep(3)
                     continue
 

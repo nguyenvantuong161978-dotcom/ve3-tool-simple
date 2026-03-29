@@ -4031,8 +4031,10 @@ class BrowserFlowGenerator:
                         pool.mark_task_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [TASK FAIL] {server.name}: {error}")
 
-                    # v1.0.548: Server mode retry nhieu hon
+                    # v1.0.550: Server mode retry nhieu hon + cho phep retry cung server
                     _tried_urls = {server.url}  # Da thu server nay roi
+                    # v1.0.550: Task failed (khong phai timeout) → cho retry cung server (sau delay)
+                    _is_task_failed = not _is_timeout  # ContextLostError, 403, etc
                     if _is_ref_prompt:
                         _max_retries = len(pool.servers)  # Refs thu tat ca servers
                     elif _is_server_mode:
@@ -4046,8 +4048,10 @@ class BrowserFlowGenerator:
                         if not server2:
                             _wait_max = 300 if _is_server_mode else 120  # v1.0.548
                             server2 = pool.wait_for_server(max_wait=_wait_max)
-                        # Refs cho phep retry cung server (sau delay)
-                        _allow_same = _is_ref_prompt and _retry_i == _max_retries - 1  # Lan cuoi moi retry cung server
+                        # v1.0.550: Cho phep retry cung server khi:
+                        # - Refs (idempotent) ở lần cuối
+                        # - Server mode + task failed (khong phai timeout) ở lần cuối
+                        _allow_same = (_is_ref_prompt or (_is_server_mode and _is_task_failed)) and _retry_i == _max_retries - 1
                         if not server2:
                             break
                         if server2.url in _tried_urls and not _allow_same:

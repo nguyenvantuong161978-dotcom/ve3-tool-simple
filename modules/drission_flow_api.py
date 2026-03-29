@@ -166,7 +166,7 @@ window._modifyConfig=null;  // Chỉ dùng cho imageInputs (references)
 window._videoResponse=null;window._videoError=null;window._videoPending=false;
 window._t2vToI2vConfig=null; // Config để convert T2V request thành I2V
 
-(function(){
+return (function(){
     if(window.__interceptReady) return 'ALREADY_READY';
     window.__interceptReady = true;
 
