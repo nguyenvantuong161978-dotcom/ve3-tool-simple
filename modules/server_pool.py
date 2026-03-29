@@ -5,6 +5,12 @@ VM co nhieu prompts can tao anh → phan bo qua nhieu server dong thoi.
 Moi server co 1 Chrome = 1 anh/lan → N server = N anh song song.
 
 Strategy: Least-queue (chon server it viec nhat)
+
+v1.0.528: Queue-based redesign
+- Task da submit vao server = CHAC CHAN se duoc lam (server co queue)
+- VM chi can cho den luot, KHONG disable server khi task fail
+- Chi disable khi KHONG KET NOI DUOC (server chet/unreachable)
+- Tach: connect_fail (server chet) vs task_fail (Google loi - server van OK)
 """
 import time
 import threading
@@ -20,19 +26,30 @@ class ServerInfo:
         self.enabled = enabled
         self.queue_size = 0
         self.chrome_ready = False
-        self.fail_count = 0
+        # Connection failures (server unreachable) - CO THE disable
+        self.connect_fail_count = 0
+        self.last_connect_fail_time = 0.0
+        # Task failures (Google API error) - KHONG disable server
+        self.task_fail_count = 0
         self.last_check = 0.0
-        self.last_fail_time = 0.0
         self.total_completed = 0
         self.total_failed = 0
 
+    @property
+    def fail_count(self):
+        """Backward compat - tra ve connect_fail_count."""
+        return self.connect_fail_count
+
     def __repr__(self):
-        return f"Server({self.name}, q={self.queue_size}, fail={self.fail_count})"
+        return f"Server({self.name}, q={self.queue_size}, conn_fail={self.connect_fail_count})"
 
 
 class ServerPool:
     """
     Quan ly pool cac server, load balancing least-queue.
+
+    v1.0.528: Queue-based - task da submit = se duoc lam.
+    Chi disable server khi KHONG KET NOI DUOC.
 
     Usage:
         pool = ServerPool(config)
@@ -43,9 +60,10 @@ class ServerPool:
         pool.mark_success(server)
     """
 
-    REFRESH_INTERVAL = 5  # seconds - check server status moi 5s
-    FAIL_COOLDOWN = 300   # seconds - server fail bi disable 5 phut
-    MAX_FAIL_COUNT = 3    # Sau 3 lan fail lien tiep → disable
+    REFRESH_INTERVAL = 5     # seconds - check server status moi 5s
+    CONNECT_COOLDOWN = 60    # seconds - server unreachable → cho 60s roi thu lai
+    MAX_CONNECT_FAIL = 5     # Sau 5 lan khong ket noi → disable tam
+    WAIT_FOR_SERVER = 30     # seconds - cho khi khong co server nao
 
     def __init__(self, config: Dict, log_callback: Callable = None):
         self._lock = threading.Lock()
@@ -82,7 +100,7 @@ class ServerPool:
         self._log(f"Loaded {len(self.servers)} servers: {[s.name for s in self.servers]}")
 
     def available_count(self) -> int:
-        """So server kha dung (enabled + khong bi fail qua nhieu)."""
+        """So server kha dung (enabled + ket noi duoc)."""
         with self._lock:
             return sum(1 for s in self.servers if self._is_available(s))
 
@@ -90,31 +108,34 @@ class ServerPool:
         """Check server co kha dung khong (goi trong lock)."""
         if not server.enabled:
             return False
-        if server.fail_count >= self.MAX_FAIL_COUNT:
-            # Check cooldown
-            if time.time() - server.last_fail_time < self.FAIL_COOLDOWN:
+        if server.connect_fail_count >= self.MAX_CONNECT_FAIL:
+            # Check cooldown - chi 60s thay vi 300s
+            if time.time() - server.last_connect_fail_time < self.CONNECT_COOLDOWN:
                 return False
-            # Het cooldown → reset fail count, cho thu lai
-            server.fail_count = 0
+            # Het cooldown → reset, cho thu lai
+            server.connect_fail_count = 0
         return True
 
     def refresh_status(self, server: ServerInfo) -> bool:
         """Check status 1 server. Return True neu OK."""
         try:
-            resp = requests.get(f"{server.url}/api/status", timeout=3)
+            resp = requests.get(f"{server.url}/api/status", timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 with self._lock:
                     server.queue_size = data.get('queue_size', 0)
                     server.chrome_ready = data.get('chrome_ready', False)
                     server.last_check = time.time()
+                    # Server phan hoi OK → reset connection failures
+                    server.connect_fail_count = 0
                 return True
         except Exception:
             pass
 
+        # Khong ket noi duoc
         with self._lock:
-            server.fail_count += 1
-            server.last_fail_time = time.time()
+            server.connect_fail_count += 1
+            server.last_connect_fail_time = time.time()
         return False
 
     def refresh_all(self):
@@ -150,7 +171,6 @@ class ServerPool:
             candidates = [s for s in self.servers if self._is_available(s)]
 
         if not candidates:
-            self._log("Khong co server kha dung!", "error")
             return None
 
         # Refresh neu data cu
@@ -163,26 +183,106 @@ class ServerPool:
             candidates = [s for s in self.servers if self._is_available(s)]
             if not candidates:
                 return None
-            # Sort: queue_size ASC, fail_count ASC
-            candidates.sort(key=lambda s: (s.queue_size, s.fail_count))
+            # Sort: queue_size ASC, task_fail_count ASC
+            candidates.sort(key=lambda s: (s.queue_size, s.task_fail_count))
             best = candidates[0]
 
         return best
 
-    def mark_success(self, server: ServerInfo):
-        """Danh dau server thanh cong."""
+    def wait_for_server(self, max_wait: int = 300, log_interval: int = 30) -> Optional[ServerInfo]:
+        """
+        Cho den khi co server kha dung. Queue-based: server se san sang sau cooldown.
+
+        Args:
+            max_wait: Thoi gian cho toi da (seconds). Default 300s = 5 phut.
+            log_interval: Log moi X giay.
+
+        Returns:
+            ServerInfo neu tim thay, None neu het thoi gian.
+        """
+        start = time.time()
+        last_log = 0
+        attempt = 0
+
+        while time.time() - start < max_wait:
+            # Thu pick server
+            server = self.pick_best_server()
+            if server:
+                if attempt > 0:
+                    elapsed = int(time.time() - start)
+                    self._log(f"Server available sau {elapsed}s cho: {server.name} (q={server.queue_size})")
+                return server
+
+            # Chua co → cho va thu lai
+            attempt += 1
+            elapsed = int(time.time() - start)
+
+            # Log dinh ky
+            if elapsed - last_log >= log_interval:
+                remaining = max_wait - elapsed
+                # Tinh thoi gian cooldown con lai cua server gan nhat
+                nearest_cooldown = self._nearest_cooldown()
+                if nearest_cooldown > 0:
+                    self._log(f"Cho server... ({elapsed}s/{max_wait}s, server gan nhat san sang trong ~{nearest_cooldown}s)")
+                else:
+                    self._log(f"Cho server... ({elapsed}s/{max_wait}s)")
+                last_log = elapsed
+
+            # Refresh de check lai
+            self.refresh_all()
+
+            # Cho 10s roi thu lai
+            time.sleep(min(10, max_wait - (time.time() - start)))
+
+        self._log(f"Het thoi gian cho server ({max_wait}s)", "warn")
+        return None
+
+    def _nearest_cooldown(self) -> int:
+        """Tra ve so giay con lai cua server co cooldown gan het nhat."""
+        now = time.time()
+        nearest = float('inf')
         with self._lock:
-            server.fail_count = 0
+            for s in self.servers:
+                if s.enabled and s.connect_fail_count >= self.MAX_CONNECT_FAIL:
+                    remaining = self.CONNECT_COOLDOWN - (now - s.last_connect_fail_time)
+                    if 0 < remaining < nearest:
+                        nearest = remaining
+        return int(nearest) if nearest < float('inf') else 0
+
+    def mark_success(self, server: ServerInfo):
+        """Danh dau server thanh cong - reset tat ca failures."""
+        with self._lock:
+            server.connect_fail_count = 0
+            server.task_fail_count = 0
             server.total_completed += 1
 
-    def mark_failed(self, server: ServerInfo, error: str = ""):
-        """Danh dau server that bai."""
+    def mark_submit_failed(self, server: ServerInfo, error: str = ""):
+        """
+        Khong submit duoc (connection error) → CO THE disable server.
+        Day la loi NGHIEM TRONG - server co the da chet.
+        """
         with self._lock:
-            server.fail_count += 1
-            server.last_fail_time = time.time()
+            server.connect_fail_count += 1
+            server.last_connect_fail_time = time.time()
             server.total_failed += 1
-        if server.fail_count >= self.MAX_FAIL_COUNT:
-            self._log(f"Server {server.name} disabled ({self.MAX_FAIL_COUNT} fails). Cooldown {self.FAIL_COOLDOWN}s", "warn")
+        if server.connect_fail_count >= self.MAX_CONNECT_FAIL:
+            self._log(f"Server {server.name} unreachable ({self.MAX_CONNECT_FAIL} connect fails). "
+                       f"Cooldown {self.CONNECT_COOLDOWN}s", "warn")
+
+    def mark_task_failed(self, server: ServerInfo, error: str = ""):
+        """
+        Task fail (Google API error, timeout, policy) → KHONG disable server.
+        Server van hoat dong tot, chi la Google tra loi loi.
+        """
+        with self._lock:
+            server.task_fail_count += 1
+            server.total_failed += 1
+        # KHONG disable - server van OK, chi Google loi thoi
+
+    # Backward compat
+    def mark_failed(self, server: ServerInfo, error: str = ""):
+        """Backward compat - mac dinh la task_failed (khong disable)."""
+        self.mark_task_failed(server, error)
 
     def get_stats(self) -> Dict[str, Any]:
         """Thong ke tat ca servers."""
@@ -195,7 +295,9 @@ class ServerPool:
                         "queue_size": s.queue_size,
                         "chrome_ready": s.chrome_ready,
                         "available": self._is_available(s),
-                        "fail_count": s.fail_count,
+                        "connect_fails": s.connect_fail_count,
+                        "task_fails": s.task_fail_count,
+                        "fail_count": s.connect_fail_count,  # backward compat
                         "completed": s.total_completed,
                         "failed": s.total_failed,
                     }

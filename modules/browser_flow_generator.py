@@ -3766,13 +3766,16 @@ class BrowserFlowGenerator:
                 except Exception:
                     pass
 
-            # Chon server tot nhat
+            # v1.0.528: Queue-based - cho server thay vi give up
             server = pool.pick_best_server()
             if not server:
-                self._log(f"  [{idx+1}] {pid}: Khong co server!", "error")
-                with count_lock:
-                    failed_count += 1
-                return False
+                self._log(f"  [{idx+1}] {pid}: Cho server san sang...")
+                server = pool.wait_for_server(max_wait=300)  # cho toi da 5 phut
+                if not server:
+                    self._log(f"  [{idx+1}] {pid}: Het thoi gian cho server!", "error")
+                    with count_lock:
+                        failed_count += 1
+                    return False
 
             # Tao API client cho server nay
             api = GoogleFlowAPI(
@@ -3884,11 +3887,23 @@ class BrowserFlowGenerator:
                         success_count += 1
                     return True
                 else:
-                    pool.mark_failed(server, str(error))
-                    self._log(f"  [{idx+1}] {pid} [FAIL] {server.name}: {error}")
+                    # v1.0.528: Phan loai loi
+                    _err_str = str(error).lower()
+                    _is_connect_err = any(k in _err_str for k in [
+                        'proxy network error', 'proxy request timeout',
+                        'connection refused', 'connection error', 'no taskid',
+                    ])
+                    if _is_connect_err:
+                        pool.mark_submit_failed(server, str(error))
+                        self._log(f"  [{idx+1}] {pid} [CONNECT FAIL] {server.name}: {error}")
+                    else:
+                        pool.mark_task_failed(server, str(error))
+                        self._log(f"  [{idx+1}] {pid} [TASK FAIL] {server.name}: {error}")
 
                     # Retry tren server khac
                     server2 = pool.pick_best_server()
+                    if not server2:
+                        server2 = pool.wait_for_server(max_wait=120)
                     if server2 and server2.url != server.url:
                         self._log(f"  [{idx+1}] {pid} [RETRY] → {server2.name}")
                         api2 = GoogleFlowAPI(
@@ -3982,7 +3997,8 @@ class BrowserFlowGenerator:
                     return False
 
             except Exception as e:
-                pool.mark_failed(server, str(e))
+                # v1.0.528: Exception = thuong la connection error
+                pool.mark_submit_failed(server, str(e))
                 self._log(f"  [{idx+1}] {pid} [ERROR] {server.name}: {e}", "error")
                 with count_lock:
                     failed_count += 1

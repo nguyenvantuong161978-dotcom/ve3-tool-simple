@@ -1,3 +1,27 @@
+1.0.528
+2026-03-29 (VN)
+Change: QUEUE-BASED ServerPool - xep hang cho thay vi disable server
+
+- ServerPool redesign: Task da submit vao server = CHAC CHAN se duoc lam
+  * Tach connect_fail (server chet) vs task_fail (Google loi)
+  * Chi disable server khi KHONG KET NOI DUOC (5 connect fails)
+  * Task fail (Google API error) → KHONG disable server (server van OK)
+  * Cooldown giam 300s → 60s (server thuong phuc hoi nhanh)
+- Smart polling theo queue_position:
+  * Truoc: Fixed 90 polls x 2s = 180s timeout → bo cuoc
+  * Sau: Dynamic timeout = 180s + position x 90s (cho theo vi tri)
+  * Track position changes: "pos 5 → 3 → 1 → processing → done"
+  * Stuck detection: position khong giam 180s → canh bao, 360s → timeout
+  * Toi thieu 10 phut cho moi task (du cho queue dai)
+- Wait-for-server thay vi give up:
+  * Truoc: pick_best_server() = None → failed ngay
+  * Sau: wait_for_server(300s) → cho + retry moi 10s → tim server
+  * Log: "Cho server... (30s/300s, server gan nhat san sang trong ~45s)"
+- Phan loai loi chinh xac:
+  * Connection error (timeout, refused) → mark_submit_failed → co the disable
+  * Task error (Google API, policy) → mark_task_failed → KHONG disable
+  * Backward compat: mark_failed() = mark_task_failed()
+
 1.0.527
 2026-03-29 (VN)
 Change: FIX CRITICAL - Media_id bi mat do Excel ghi de + ref skip + false warning

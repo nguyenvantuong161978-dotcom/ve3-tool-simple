@@ -574,10 +574,49 @@ class GoogleFlowAPI:
         max_attempts: int = 90,
         poll_interval: float = 2.0
     ) -> Tuple[bool, List[GeneratedImage], str]:
-        """Poll proxy task status until complete."""
+        """
+        Poll proxy task status until complete.
+
+        v1.0.528: Queue-aware polling - cho theo vi tri trong hang doi.
+        - Moi vi tri ~90s (1 anh)
+        - Timeout = base 180s + position × 90s
+        - Chi timeout neu stuck (position khong giam)
+        """
         self._log(f"Polling task {task_id}...")
 
-        for attempt in range(max_attempts):
+        TIME_PER_POSITION = 90   # seconds - uoc tinh thoi gian cho moi vi tri
+        BASE_TIMEOUT = 180       # seconds - timeout co ban (processing + network)
+        STUCK_THRESHOLD = 180    # seconds - neu position khong giam trong 180s → stuck
+
+        start_time = time.time()
+        last_position = None
+        last_position_change = time.time()
+        current_status = "queued"
+        poll_count = 0
+
+        while True:
+            elapsed = time.time() - start_time
+            poll_count += 1
+
+            # Tinh dynamic timeout dua tren queue position
+            if last_position is not None and last_position > 0:
+                dynamic_timeout = BASE_TIMEOUT + (last_position * TIME_PER_POSITION)
+            else:
+                dynamic_timeout = BASE_TIMEOUT
+
+            # Check stuck: position khong giam trong STUCK_THRESHOLD
+            time_since_change = time.time() - last_position_change
+            if last_position is not None and time_since_change > STUCK_THRESHOLD and current_status == "queued":
+                self._log(f"Task stuck tai position {last_position} ({int(time_since_change)}s khong giam)", "warn")
+                # Van cho them 1 vong nua truoc khi bo cuoc
+                if time_since_change > STUCK_THRESHOLD * 2:
+                    return False, [], f"Task stuck at position {last_position} for {int(time_since_change)}s"
+
+            # Check tong timeout (an toan - tranh cho vo han)
+            max_total = max(dynamic_timeout, 600)  # it nhat 10 phut
+            if elapsed > max_total:
+                return False, [], f"Polling timeout after {int(elapsed)}s (max {int(max_total)}s, pos={last_position})"
+
             try:
                 response = requests.get(
                     f"{self.PROXY_TASK_STATUS_URL}?taskId={task_id}",
@@ -586,12 +625,37 @@ class GoogleFlowAPI:
                 )
 
                 if response.status_code != 200:
-                    self._log(f"Poll attempt {attempt+1}: status {response.status_code}")
+                    if poll_count % 10 == 0:
+                        self._log(f"Poll {poll_count}: status {response.status_code}")
                     time.sleep(poll_interval)
                     continue
 
                 result = response.json()
-                self._log(f"Poll {attempt+1}: {json.dumps(result)[:300]}")
+
+                # Parse queue_position va status tu response
+                queue_position = result.get("queue_position")
+                task_status = result.get("status", "")
+
+                # Track position changes
+                if queue_position is not None:
+                    if last_position is None or queue_position != last_position:
+                        if last_position is not None and queue_position < last_position:
+                            self._log(f"Queue: pos {last_position} → {queue_position} ({int(elapsed)}s)")
+                        elif last_position is None:
+                            self._log(f"Queue: position {queue_position} ({int(elapsed)}s)")
+                        last_position = queue_position
+                        last_position_change = time.time()
+
+                # Track status changes
+                if task_status and task_status != current_status:
+                    self._log(f"Task {task_id[:8]}: {current_status} → {task_status} ({int(elapsed)}s)")
+                    current_status = task_status
+                    last_position_change = time.time()  # Status change = progress
+
+                # Log dinh ky (moi 30s thay vi moi 2s)
+                if poll_count % 15 == 0:
+                    pos_info = f"pos={queue_position}" if queue_position is not None else f"status={task_status}"
+                    self._log(f"Poll {poll_count}: {pos_info} ({int(elapsed)}s)")
 
                 if not result.get("success"):
                     time.sleep(poll_interval)
@@ -613,7 +677,7 @@ class GoogleFlowAPI:
 
                 if task_result.get("success") == True:
                     # Task completed successfully - extract images
-                    self._log(f"Task completed! Extracting images...")
+                    self._log(f"Task completed! ({int(elapsed)}s) Extracting images...")
                     images = self._parse_image_response(task_result, prompt, aspect_ratio)
                     if images:
                         return True, images, ""
@@ -624,13 +688,13 @@ class GoogleFlowAPI:
 
                 elif task_result.get("success") == False:
                     error = task_result.get("error", "Unknown error")
-                    self._log(f"=== TASK FAILED ===")
+                    self._log(f"=== TASK FAILED ({int(elapsed)}s) ===")
                     self._log(f"Full result: {json.dumps(result)}")
                     return False, [], f"Task failed: {error}"
 
                 # Check if we have media/images in result (success without explicit flag)
                 if "media" in task_result or "images" in task_result:
-                    self._log(f"Task completed (implicit)! Extracting images...")
+                    self._log(f"Task completed (implicit, {int(elapsed)}s)! Extracting images...")
                     # Debug: log first media item structure
                     if "media" in task_result and task_result["media"]:
                         first_media = task_result["media"][0]
@@ -651,10 +715,9 @@ class GoogleFlowAPI:
                 time.sleep(poll_interval)
 
             except Exception as e:
-                self._log(f"Poll error: {e}")
+                if poll_count % 10 == 0:
+                    self._log(f"Poll error: {e}")
                 time.sleep(poll_interval)
-
-        return False, [], f"Polling timeout after {max_attempts} attempts"
 
     def _parse_image_response(
         self,
