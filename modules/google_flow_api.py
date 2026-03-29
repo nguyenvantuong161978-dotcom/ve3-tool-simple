@@ -526,12 +526,12 @@ class GoogleFlowAPI:
                     "Content-Type": "application/json"
                 }
 
-            # Step 1: Create task
+            # Step 1: Create task (v1.0.530: tang timeout 30→60s tranh timeout khi server ban)
             response = requests.post(
                 self.PROXY_IMAGE_API_URL,
                 headers=proxy_headers,
                 json=proxy_payload,
-                timeout=30
+                timeout=60
             )
 
             self._log(f"Proxy response status: {response.status_code}")

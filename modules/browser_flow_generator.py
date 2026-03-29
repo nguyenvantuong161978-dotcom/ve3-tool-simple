@@ -3887,20 +3887,30 @@ class BrowserFlowGenerator:
                         success_count += 1
                     return True
                 else:
-                    # v1.0.528: Phan loai loi
+                    # v1.0.530: Phan loai loi chinh xac hon
                     _err_str = str(error).lower()
+                    # Connection error = CHAC CHAN khong gui duoc (server chet)
                     _is_connect_err = any(k in _err_str for k in [
-                        'proxy network error', 'proxy request timeout',
-                        'connection refused', 'connection error', 'no taskid',
+                        'proxy network error', 'connection refused', 'connection error',
                     ])
-                    if _is_connect_err:
+                    # Submit timeout = KHONG BIET da gui duoc chua → KHONG retry (tranh duplicate)
+                    _is_timeout = 'proxy request timeout' in _err_str
+
+                    if _is_timeout:
+                        pool.mark_task_failed(server, str(error))
+                        self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Submit timeout - KHONG retry (tranh duplicate)")
+                        # KHONG retry - task co the da nam trong queue server
+                        with count_lock:
+                            failed_count += 1
+                        return False
+                    elif _is_connect_err:
                         pool.mark_submit_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [CONNECT FAIL] {server.name}: {error}")
                     else:
                         pool.mark_task_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [TASK FAIL] {server.name}: {error}")
 
-                    # Retry tren server khac
+                    # Retry tren server khac (chi khi CONNECT error hoac TASK error, KHONG retry timeout)
                     server2 = pool.pick_best_server()
                     if not server2:
                         server2 = pool.wait_for_server(max_wait=120)

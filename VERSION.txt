@@ -1,3 +1,19 @@
+1.0.530
+2026-03-29 (VN)
+Change: FIX duplicate images - submit timeout KHONG retry + tang timeout 60s
+
+- BUG: Submit timeout bi phan loai sai thanh CONNECT error → retry tren server khac
+  * Server co the DA NHAN task (chi response cham) → retry tao DUPLICATE
+  * Server lam 2 anh cho 1 prompt, VM chi nhan 1 → LECH so luong
+- FIX: Submit timeout = KHONG retry (task co the da nam trong queue)
+  * "Proxy request timeout" → mark_task_failed → return False (khong retry)
+  * Prompt se duoc retry o vong scan tiep theo (khong mat)
+- Tang submit timeout: 30s → 60s (giam chance timeout khi server ban)
+- Phan loai loi 3 loai:
+  * TIMEOUT: submit cham → KHONG retry (tranh duplicate)
+  * CONNECT: server chet → retry server khac (ok vi task chua tao)
+  * TASK: Google API loi → retry server khac
+
 1.0.529
 2026-03-29 (VN)
 Change: Server slot reservation - moi server chi nhan 1 prompt/lan tu VM
