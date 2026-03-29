@@ -1,3 +1,16 @@
+1.0.538
+2026-03-29 (VN)
+Change: FIX Chrome 2 doi media_id cho child NV mai khong co
+
+- BUG: Chrome 2 dem TAT CA nv_chars (ke ca is_child=True) → doi media_id
+  * Chrome 1 skip is_child=True (khong tao anh cho tre con) → SE KHONG BAO GIO co media_id
+  * Chrome 2 doi 30 phut (max_wait_nv=1800s) roi moi timeout → lang phi thoi gian
+  * Log: "NV media_id: 7/9" nhung Chrome 1 chi tao 8/9 (1 la child)
+- FIX: Chrome 2 filter is_child khi dem nv_chars
+  * Truoc: nv_chars = [c if startswith('nv') and not skip]
+  * Sau: nv_chars = [c if startswith('nv') and not skip and not is_child]
+  * Dem dung so NV can media_id → khong doi thua
+
 1.0.537
 2026-03-29 (VN)
 Change: FIX ref TIMEOUT infinite loop - refs retry tren server khac khi timeout

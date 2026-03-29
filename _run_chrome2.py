@@ -735,7 +735,8 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                     wb_nv = PromptWorkbook(str(excel_path))
                     wb_nv.load_or_create()
                     chars = wb_nv.get_characters()
-                    nv_chars = [c for c in chars if c.id.lower().startswith('nv') and not getattr(c, 'skip', False)]
+                    # v1.0.538: Filter ca is_child - Chrome 1 khong tao anh cho tre con
+                    nv_chars = [c for c in chars if c.id.lower().startswith('nv') and not getattr(c, 'skip', False) and not getattr(c, 'is_child', False)]
 
                     # v1.0.322: Nếu chars rỗng → Excel chưa sẵn sàng → đợi tiếp
                     if not chars:
