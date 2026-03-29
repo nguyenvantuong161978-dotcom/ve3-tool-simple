@@ -517,7 +517,9 @@ class ChromePool:
                             err_str = f"Error {err_code}: {err_msg.get('message', str(err_msg))}"
                         else:
                             err_str = str(err_msg)
-                            if '403' in err_str:
+                            if '401' in err_str or 'authentication' in err_str.lower():
+                                err_code = 401
+                            elif '403' in err_str:
                                 err_code = 403
                             elif '429' in err_str or '253' in err_str or 'quota' in err_str.lower():
                                 err_code = 429
@@ -569,6 +571,14 @@ class ChromePool:
                                 stats['total_failed'] += 1
                                 worker.total_failed += 1
                                 self._log(f"[{worker_name}] FAIL (interceptor): {task_id[:8]}...", "ERROR")
+
+                        # === 401: Token expired - KHONG retry, VM can refresh token ===
+                        elif err_code == 401 or '401' in err_str or 'authentication' in err_str.lower():
+                            tasks[task_id]['status'] = 'failed'
+                            tasks[task_id]['error'] = err_str
+                            stats['total_failed'] += 1
+                            worker.total_failed += 1
+                            self._log(f"[{worker_name}] FAIL (401): {task_id[:8]}... | TOKEN HET HAN - VM can refresh", "ERROR")
 
                         # === 400: Bo qua luon, khong retry ===
                         elif err_code == 400:

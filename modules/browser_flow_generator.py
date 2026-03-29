@@ -3764,7 +3764,7 @@ class BrowserFlowGenerator:
 
         # Ham xu ly 1 prompt tren 1 server
         def _process_one(prompt_info):
-            nonlocal success_count, failed_count
+            nonlocal success_count, failed_count, bearer_token
             pid = prompt_info['id']
             ptxt = prompt_info['prompt']
             opath = prompt_info['output_path']
@@ -3932,8 +3932,81 @@ class BrowserFlowGenerator:
                     ])
                     # Submit timeout = KHONG BIET da gui duoc chua → KHONG retry (tranh duplicate)
                     _is_timeout = 'proxy request timeout' in _err_str
+                    # v1.0.549: Token expired (401) → refresh token roi retry
+                    _is_401 = '401' in _err_str or 'authentication' in _err_str or 'unauthenticated' in _err_str
 
-                    if _is_timeout:
+                    if _is_401:
+                        # v1.0.549: Token het han → refresh token tu Chrome/Excel
+                        pool.mark_task_failed(server, str(error))
+                        self._log(f"  [{idx+1}] {pid} [401] Token het han! Dang refresh...", "warn")
+                        try:
+                            new_token = self._auto_extract_token(force_refresh=True)
+                            if new_token:
+                                nonlocal bearer_token
+                                bearer_token = new_token
+                                self._log(f"  [{idx+1}] {pid} [401] Token moi OK - retry...")
+                                # Retry voi token moi tren server khac
+                                server3 = pool.pick_best_server()
+                                if not server3:
+                                    server3 = pool.wait_for_server(max_wait=120)
+                                if server3:
+                                    api3 = GoogleFlowAPI(
+                                        bearer_token=new_token, project_id=flow_project_id,
+                                        timeout=flow_timeout, verbose=False,
+                                        proxy_api_token='', use_proxy=True,
+                                        local_server_url=server3.url,
+                                    )
+                                    ok3, images3, err3 = api3.generate_images(
+                                        prompt=ptxt, count=1, aspect_ratio=aspect_ratio,
+                                        image_inputs=image_inputs if image_inputs else None
+                                    )
+                                    if ok3 and images3:
+                                        gen_img3 = images3[0]
+                                        saved3 = False
+                                        if hasattr(gen_img3, 'base64_data') and gen_img3.base64_data:
+                                            import base64
+                                            with open(opath, 'wb') as f:
+                                                f.write(base64.b64decode(gen_img3.base64_data))
+                                            saved3 = True
+                                        elif hasattr(gen_img3, 'url') and gen_img3.url:
+                                            import requests as req
+                                            try:
+                                                r = req.get(gen_img3.url, timeout=30)
+                                                if r.status_code == 200:
+                                                    with open(opath, 'wb') as f:
+                                                        f.write(r.content)
+                                                    saved3 = True
+                                            except:
+                                                pass
+                                        if saved3:
+                                            pool.mark_success(server3)
+                                            _media_name3 = getattr(gen_img3, 'media_name', None)
+                                            self._log(f"  [{idx+1}] {pid} [OK] 401→refresh→retry OK → {opath.name}")
+                                            with excel_lock:
+                                                try:
+                                                    _wb3 = PromptWorkbook(excel_path)
+                                                    _wb3.load_or_create()
+                                                    if pid.startswith('nv') or pid.startswith('loc'):
+                                                        _wb3.update_character(pid, status="done", image_file=str(opath),
+                                                                              media_id=_media_name3)
+                                                    elif not pid.startswith('thumb'):
+                                                        _wb3.update_scene(int(pid), status_img="done", img_path=str(opath),
+                                                                          media_id=_media_name3)
+                                                    _wb3.safe_save() or _wb3.save()
+                                                except:
+                                                    pass
+                                            with count_lock:
+                                                success_count += 1
+                                            return True
+                                    else:
+                                        pool.mark_task_failed(server3, str(err3))
+                                        self._log(f"  [{idx+1}] {pid} [401 RETRY FAIL] {err3}")
+                            else:
+                                self._log(f"  [{idx+1}] {pid} [401] Khong refresh duoc token!", "error")
+                        except Exception as e401:
+                            self._log(f"  [{idx+1}] {pid} [401] Refresh error: {e401}", "error")
+                        # Fall through - de retry logic ben duoi xu ly tiep
+                    elif _is_timeout:
                         pool.mark_task_failed(server, str(error))
                         # v1.0.541: Track timeout de deprioritize server cham
                         server.recent_timeout_count = getattr(server, 'recent_timeout_count', 0) + 1

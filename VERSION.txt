@@ -1,3 +1,23 @@
+1.0.549
+2026-03-30 (VN)
+Change: FIX 401 Token Expired - VM tu dong refresh token khi server tra 401
+
+- VAN DE: VM gui token cu (het han sau 1h) → server dung dung token do → Google tra 401
+  * Server mode khong co logic refresh token (chi API mode co)
+  * Server khong phan biet 401 vs loi khac → retry cung token cu → 401 vo han
+- FIX VM (_generate_via_local_server):
+  * Detect 401 tu error message ("401", "authentication", "unauthenticated")
+  * Goi _auto_extract_token(force_refresh=True) → mo Chrome lay token moi
+  * Retry voi token moi tren server khac
+  * Cap nhat bearer_token (nonlocal) de cac prompt sau dung token moi
+- FIX SERVER (chrome_pool.py):
+  * Phan biet 401 rieng (truoc 403/400/429)
+  * 401 → mark failed NGAY, KHONG retry (retry vo ich vi token cu)
+  * Log ro: "TOKEN HET HAN - VM can refresh"
+- Flow moi khi 401:
+  Server tra 401 → VM detect → mo Chrome lay token moi → retry voi token moi → OK
+- Files: modules/browser_flow_generator.py, server/chrome_pool.py
+
 1.0.548
 2026-03-30 (VN)
 Change: VM PERSISTENT POLLING - Server mode KHONG BAO GIO bo cuoc
