@@ -1,3 +1,15 @@
+1.0.535
+2026-03-29 (VN)
+Change: Mode API = LUON dung Chrome local, KHONG gui qua server
+
+- Truoc: Chon mode API nhung co Server URLs → tu dong gui qua server (SAI!)
+  * User chon API la muon dung Chrome local (DrissionPage)
+  * Nhung code thay local_server_enabled=True → gui server thay Chrome
+- Sau: Mode API = luon dung Chrome local
+  * Tam tat local_server_enabled khi chay API mode
+  * Server URLs chi dung cho mode 'server' va 'api+server'
+  * User chon gi duoc nay: API=Chrome, Server=Server, API+Server=ca hai
+
 1.0.534
 2026-03-29 (VN)
 Change: FIX REUSE project fallback - tao project moi khi textarea khong xuat hien

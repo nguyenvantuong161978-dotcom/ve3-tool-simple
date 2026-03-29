@@ -2566,23 +2566,28 @@ class BrowserFlowGenerator:
                 return {"success": False, "error": "Chua cau hinh Server URLs"}
 
         if mode == 'api':
-            if has_local_server:
-                self._log(f"[AUTO] API mode voi LOCAL SERVER - gui anh qua {local_server_url}")
-                return self.generate_from_prompts_api(
-                    prompts=prompts,
-                    excel_path=excel_path,
-                    bearer_token=bearer_token
-                )
-            elif proxy_api_token:
-                self._log("[AUTO] API mode voi proxy support - su dung proxy de bypass captcha")
-                # Use API mode with proxy for prompts
-                return self.generate_from_prompts_api(
-                    prompts=prompts,
-                    excel_path=excel_path,
-                    bearer_token=bearer_token
-                )
-            else:
-                self._log("[AUTO] API mode khong co proxy token, chuyen sang Chrome mode...")
+            # v1.0.535: Mode API = LUON dung Chrome local (DrissionPage)
+            # Server URLs chi dung cho mode 'server' va 'api+server'
+            # Tam tat local_server de KHONG gui qua server
+            old_ls_enabled = self.config.get('local_server_enabled', False)
+            self.config['local_server_enabled'] = False
+            try:
+                if proxy_api_token:
+                    self._log("[AUTO] API mode voi proxy support - su dung proxy de bypass captcha")
+                    return self.generate_from_prompts_api(
+                        prompts=prompts,
+                        excel_path=excel_path,
+                        bearer_token=bearer_token
+                    )
+                else:
+                    self._log("[AUTO] API mode - dung Chrome local (DrissionPage)")
+                    return self.generate_from_prompts_api(
+                        prompts=prompts,
+                        excel_path=excel_path,
+                        bearer_token=bearer_token
+                    )
+            finally:
+                self.config['local_server_enabled'] = old_ls_enabled
 
         # Fall back to Chrome mode
         return self.generate_from_prompts(
