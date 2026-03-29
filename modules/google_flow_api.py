@@ -283,11 +283,11 @@ class GoogleFlowAPI:
         session.headers.update(headers)
         return session
     
-    def _log(self, message: str) -> None:
+    def _log(self, message: str, level: str = "INFO") -> None:
         """Print log message if verbose."""
         if self.verbose:
             timestamp = datetime.now().strftime("%H:%M:%S")
-            print(f"[{timestamp}] {message}")
+            print(f"[{timestamp}] [{level.upper()}] {message}")
     
     def _generate_seed(self) -> int:
         """Tạo random seed cho image generation."""

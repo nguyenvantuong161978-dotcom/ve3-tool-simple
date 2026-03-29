@@ -1,3 +1,18 @@
+1.0.532
+2026-03-29 (VN)
+Change: Server REUSE project URL + FIX GoogleFlowAPI._log() crash
+
+- SERVER REUSE PROJECT URL (tiet kiem thoi gian):
+  * Truoc: MOI LAN restart Chrome (403 → fingerprint moi) → tao project moi (~30-60s)
+  * Sau: Restart giu data → navigate thang vao project URL cu (3-5s)
+  * Chi tao project moi khi: (1) lan dau setup, (2) sau clear data + login lai
+  * Neu project cu khong con (URL loi/het han) → tu dong tao project moi
+  * clear_data=True → reset project_url (can tao moi sau login)
+- FIX: GoogleFlowAPI._log() crash - them level parameter
+  * _log() chi nhan 1 arg nhung co cho goi voi 2 args (message, level)
+  * Server 145 tra ve loi: "takes 2 positional arguments but 3 were given"
+  * Them level parameter: _log(self, message, level="INFO")
+
 1.0.531
 2026-03-29 (VN)
 Change: FIX servers bi DOWN oan do refresh_status + tang refresh timeout

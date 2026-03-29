@@ -553,6 +553,8 @@ class ChromeSession:
         # 2. Clear Chrome data CHI KHI duoc yeu cau
         if clear_data:
             self._clear_chrome_data()
+            # v1.0.532: Reset project_url khi clear data (can tao project moi sau login)
+            self.project_url = None
 
         # 3. Setup lai (setup() se goi inject_fingerprint_spoof)
         ok = self.setup(skip_403_reset=True)
@@ -768,8 +770,17 @@ class ChromeSession:
                 self.inject_fingerprint_spoof()
 
         # 5. Vào Flow page
-        self.log(f"Vao Flow: {FLOW_URL}")
-        self.page.get(FLOW_URL)
+        # v1.0.532: Reuse project URL cu neu co (khong tao project moi thua)
+        # Chi tao project moi khi: (1) lan dau setup, (2) sau clear data + login lai
+        reuse_url = None
+        if self.project_url and not need_login:
+            reuse_url = self.project_url
+            self.log(f"[REUSE] Co project URL cu: {reuse_url}")
+            self.log(f"[REUSE] Navigate thang vao project cu (khong tao moi)")
+
+        target_url = reuse_url or FLOW_URL
+        self.log(f"Vao: {target_url}")
+        self.page.get(target_url)
         time.sleep(5)
         self.inject_fingerprint_spoof()
 
@@ -779,6 +790,9 @@ class ChromeSession:
         # Check login fallback (cho truong hop khong co _account)
         if 'accounts.google.com' in current_url:
             self.log("Chua dang nhap! Tu dong dang nhap...", "WARN")
+            # Login bi mat → project URL cu cung khong dung duoc nua
+            reuse_url = None
+            self.project_url = None
             login_ok = self._auto_login()
             if not login_ok:
                 self.log("Dang nhap that bai!", "ERROR")
@@ -789,8 +803,16 @@ class ChromeSession:
             self.inject_fingerprint_spoof()
             current_url = self.page.url or ''
 
-        # 6. Tạo project mới
-        if '/project/' not in current_url:
+        # 6. Reuse project cu hoac tao project moi
+        if '/project/' in current_url:
+            # Da vao project (reuse thanh cong hoac redirect tu dong)
+            if reuse_url:
+                self.log(f"[REUSE] Vao lai project cu thanh cong!", "OK")
+        else:
+            # Chua co project → tao moi
+            if reuse_url:
+                self.log(f"[REUSE] Project cu khong con → tao project moi", "WARN")
+                self.project_url = None
             success = self._create_new_project()
             if not success:
                 self.log("Không tạo được project mới!", "ERROR")
@@ -800,7 +822,10 @@ class ChromeSession:
         if self._wait_for_textarea():
             self.ready = True
             self.project_url = self.page.url
-            self.log(f"READY! Project: {self.project_url}", "OK")
+            if reuse_url:
+                self.log(f"READY! Reused project: {self.project_url}", "OK")
+            else:
+                self.log(f"READY! New project: {self.project_url}", "OK")
             return True
 
         # v1.0.509: Textarea không xuất hiện → thử click "Create with Flow" + tạo project lại
