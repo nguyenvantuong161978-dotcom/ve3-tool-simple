@@ -1,15 +1,16 @@
-1.0.538
+1.0.539
 2026-03-29 (VN)
-Change: FIX Chrome 2 doi media_id cho child NV mai khong co
+Change: FIX Chrome 2 doi media_id - deduplicate theo unique ID
 
-- BUG: Chrome 2 dem TAT CA nv_chars (ke ca is_child=True) → doi media_id
-  * Chrome 1 skip is_child=True (khong tao anh cho tre con) → SE KHONG BAO GIO co media_id
-  * Chrome 2 doi 30 phut (max_wait_nv=1800s) roi moi timeout → lang phi thoi gian
-  * Log: "NV media_id: 7/9" nhung Chrome 1 chi tao 8/9 (1 la child)
-- FIX: Chrome 2 filter is_child khi dem nv_chars
-  * Truoc: nv_chars = [c if startswith('nv') and not skip]
-  * Sau: nv_chars = [c if startswith('nv') and not skip and not is_child]
-  * Dem dung so NV can media_id → khong doi thua
+- BUG: Excel co 2 dong cung ID "nvc" (nvc 35 tuoi + nvc 23 tuoi)
+  * Dong 1 (nvc 35): co media_id ✓
+  * Dong 2 (nvc 23): KHONG co media_id ✗
+  * Chrome 2 dem 9 NV rows, 7 co media_id → doi 2 NV (nv6 + nvc dong 2)
+  * Nhung Chrome 1 chi tao nv6 (nvc da co media_id qua dong 1) → Chrome 2 doi mai
+- FIX: Dem theo UNIQUE ID thay vi dem tung dong
+  * Gom theo ID: nvc co media_id (dong 1) → OK, nv6 chua → doi
+  * 8 unique IDs, 7 co media_id → chi doi nv6
+  * Bonus: Filter is_child cho truong hop co tre con
 
 1.0.537
 2026-03-29 (VN)

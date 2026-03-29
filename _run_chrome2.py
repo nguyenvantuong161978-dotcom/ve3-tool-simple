@@ -735,8 +735,10 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                     wb_nv = PromptWorkbook(str(excel_path))
                     wb_nv.load_or_create()
                     chars = wb_nv.get_characters()
-                    # v1.0.538: Filter ca is_child - Chrome 1 khong tao anh cho tre con
-                    nv_chars = [c for c in chars if c.id.lower().startswith('nv') and not getattr(c, 'skip', False) and not getattr(c, 'is_child', False)]
+                    # v1.0.539: Deduplicate theo ID + filter is_child
+                    # Excel co the co 2 dong cung ID (vd: nvc tre va nvc gia)
+                    # Chi can 1 dong co media_id la du cho ID do
+                    nv_all = [c for c in chars if c.id.lower().startswith('nv') and not getattr(c, 'skip', False) and not getattr(c, 'is_child', False)]
 
                     # v1.0.322: Nếu chars rỗng → Excel chưa sẵn sàng → đợi tiếp
                     if not chars:
@@ -745,24 +747,34 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                         waited_nv += wait_interval_nv
                         continue
 
+                    # Deduplicate: gom theo ID, chi can 1 co media_id la OK
+                    nv_ids = {}  # id -> has_media_id
+                    for c in nv_all:
+                        cid = c.id.lower()
+                        has_mid = bool(getattr(c, 'media_id', None))
+                        # Neu da co True roi thi giu True
+                        nv_ids[cid] = nv_ids.get(cid, False) or has_mid
+
+                    unique_nv_count = len(nv_ids)
+                    nv_with_media_count = sum(1 for v in nv_ids.values() if v)
+
                     # Không có NV characters (chỉ có locations) → không cần đợi
-                    if not nv_chars:
+                    if unique_nv_count == 0:
                         log(f"  [v] Không có NV characters ({len(chars)} chars total) - không cần đợi media_id")
                         nv_ready = True
                         break
 
-                    nv_with_media = [c for c in nv_chars if getattr(c, 'media_id', None)]
-                    if len(nv_with_media) >= len(nv_chars):
-                        log(f"  [v] NV references ready ({len(nv_with_media)}/{len(nv_chars)} có media_id)")
+                    if nv_with_media_count >= unique_nv_count:
+                        log(f"  [v] NV references ready ({nv_with_media_count}/{unique_nv_count} unique IDs có media_id)")
                         nv_ready = True
                         break
 
                     if waited_nv == 0:
                         nv_dir = local_dir / "nv"
                         nv_pngs = list(nv_dir.glob("nv*.png")) if nv_dir.exists() else []
-                        log(f"  [INFO] NV chars: {len(nv_chars)}, NV media_id: {len(nv_with_media)}, NV pngs: {len(nv_pngs)}")
+                        log(f"  [INFO] NV unique IDs: {unique_nv_count}, media_id: {nv_with_media_count}, pngs: {len(nv_pngs)}")
 
-                    log(f"  [WAIT] NV media_id: {len(nv_with_media)}/{len(nv_chars)} - đợi Chrome 1... ({waited_nv}s)")
+                    log(f"  [WAIT] NV media_id: {nv_with_media_count}/{unique_nv_count} unique IDs - đợi Chrome 1... ({waited_nv}s)")
                 except Exception as e:
                     log(f"  [WAIT] Đọc Excel lỗi: {e} - đợi... ({waited_nv}s)")
                 time.sleep(wait_interval_nv)
