@@ -3913,7 +3913,9 @@ class BrowserFlowGenerator:
                             local_server_url=server2.url,
                         )
                         ok2, images2, err2 = api2.generate_images(prompt=ptxt, count=1, aspect_ratio=aspect_ratio, image_inputs=image_inputs if image_inputs else None)
-                        if ok2 and images2:
+                        if not ok2 or not images2:
+                            pool.mark_task_failed(server2, str(err2))  # release + track
+                        elif ok2 and images2:
                             gen_img2 = images2[0]
                             saved2 = False
                             if hasattr(gen_img2, 'base64_data') and gen_img2.base64_data:
@@ -3941,6 +3943,7 @@ class BrowserFlowGenerator:
                                     f.write(base64.b64decode(gen_img2))
                                 saved2 = True
                             if not saved2:
+                                pool.release_server(server2)
                                 with count_lock:
                                     failed_count += 1
                                 return False

@@ -26,6 +26,8 @@ class ServerInfo:
         self.enabled = enabled
         self.queue_size = 0
         self.chrome_ready = False
+        # Local pending: so prompt VM nay dang gui cho server (chua xong)
+        self.local_pending = 0
         # Connection failures (server unreachable) - CO THE disable
         self.connect_fail_count = 0
         self.last_connect_fail_time = 0.0
@@ -41,7 +43,7 @@ class ServerInfo:
         return self.connect_fail_count
 
     def __repr__(self):
-        return f"Server({self.name}, q={self.queue_size}, conn_fail={self.connect_fail_count})"
+        return f"Server({self.name}, q={self.queue_size}, pending={self.local_pending}, conn_fail={self.connect_fail_count})"
 
 
 class ServerPool:
@@ -159,11 +161,14 @@ class ServerPool:
         if unavailable:
             self._log(f"Servers DOWN: {unavailable}", "warn")
 
-    def pick_best_server(self) -> Optional[ServerInfo]:
+    def pick_best_server(self, auto_reserve: bool = True) -> Optional[ServerInfo]:
         """
-        Chon server tot nhat (queue nho nhat).
+        Chon server tot nhat (queue + local_pending nho nhat).
         Auto refresh neu data cu (> REFRESH_INTERVAL).
         Return None neu khong co server kha dung.
+
+        auto_reserve: Tu dong tang local_pending (+1) de thread khac chon server khac.
+        Sau khi xong phai goi release_server() de giam lai.
         """
         now = time.time()
 
@@ -178,16 +183,23 @@ class ServerPool:
             if now - s.last_check > self.REFRESH_INTERVAL:
                 self.refresh_status(s)
 
-        # Chon server co queue nho nhat
+        # Chon server co tong queue nho nhat (server queue + local pending)
         with self._lock:
             candidates = [s for s in self.servers if self._is_available(s)]
             if not candidates:
                 return None
-            # Sort: queue_size ASC, task_fail_count ASC
-            candidates.sort(key=lambda s: (s.queue_size, s.task_fail_count))
+            # Sort: (queue_size + local_pending) ASC → server it viec nhat
+            candidates.sort(key=lambda s: (s.queue_size + s.local_pending, s.task_fail_count))
             best = candidates[0]
+            if auto_reserve:
+                best.local_pending += 1
 
         return best
+
+    def release_server(self, server: ServerInfo):
+        """Giam local_pending sau khi task xong (success hoac fail)."""
+        with self._lock:
+            server.local_pending = max(0, server.local_pending - 1)
 
     def wait_for_server(self, max_wait: int = 300, log_interval: int = 30) -> Optional[ServerInfo]:
         """
@@ -250,11 +262,12 @@ class ServerPool:
         return int(nearest) if nearest < float('inf') else 0
 
     def mark_success(self, server: ServerInfo):
-        """Danh dau server thanh cong - reset tat ca failures."""
+        """Danh dau server thanh cong - reset failures + release slot."""
         with self._lock:
             server.connect_fail_count = 0
             server.task_fail_count = 0
             server.total_completed += 1
+            server.local_pending = max(0, server.local_pending - 1)
 
     def mark_submit_failed(self, server: ServerInfo, error: str = ""):
         """
@@ -265,6 +278,7 @@ class ServerPool:
             server.connect_fail_count += 1
             server.last_connect_fail_time = time.time()
             server.total_failed += 1
+            server.local_pending = max(0, server.local_pending - 1)
         if server.connect_fail_count >= self.MAX_CONNECT_FAIL:
             self._log(f"Server {server.name} unreachable ({self.MAX_CONNECT_FAIL} connect fails). "
                        f"Cooldown {self.CONNECT_COOLDOWN}s", "warn")
@@ -277,6 +291,7 @@ class ServerPool:
         with self._lock:
             server.task_fail_count += 1
             server.total_failed += 1
+            server.local_pending = max(0, server.local_pending - 1)
         # KHONG disable - server van OK, chi Google loi thoi
 
     # Backward compat
@@ -293,6 +308,7 @@ class ServerPool:
                         "name": s.name,
                         "url": s.url,
                         "queue_size": s.queue_size,
+                        "local_pending": s.local_pending,
                         "chrome_ready": s.chrome_ready,
                         "available": self._is_available(s),
                         "connect_fails": s.connect_fail_count,

@@ -1,3 +1,17 @@
+1.0.529
+2026-03-29 (VN)
+Change: Server slot reservation - moi server chi nhan 1 prompt/lan tu VM
+
+- local_pending: Track so prompt VM dang gui cho moi server
+  * pick_best_server() tu dong reserve (+1 pending)
+  * mark_success/mark_task_failed/mark_submit_failed tu dong release (-1 pending)
+  * Sort theo (queue_size + local_pending) → server it viec nhat
+- Tranh qua tai: 3 server → 3 thread → moi thread 1 server rieng
+  * Thread 1 pick server A (+1) → Thread 2 thay A.pending=1, chon B
+  * Xong prompt → release → thread khac co the chon lai
+- release_server(): Giam pending khi task xong ma khong can mark success/fail
+- Fix: Retry path release server2 dung khi fail
+
 1.0.528
 2026-03-29 (VN)
 Change: QUEUE-BASED ServerPool - xep hang cho thay vi disable server
