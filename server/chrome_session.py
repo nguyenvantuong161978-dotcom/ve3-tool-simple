@@ -201,6 +201,7 @@ def build_interceptor_js(client_bearer_token: str, client_project_id: str,
     else:
         image_inputs_json = "null"
 
+    # v1.0.548: Dung return NGAY DAU de DrissionPage bat duoc gia tri tra ve
     return """
 window._response = null;
 window._responseError = null;
@@ -209,7 +210,7 @@ window._clientBearerToken = '""" + safe_token + """';
 window._clientProjectId = '""" + safe_project + """';
 window._imageInputs = """ + image_inputs_json + """;
 
-(function() {
+return (function() {
     if (window.__proxyInterceptReady) return 'ALREADY';
     window.__proxyInterceptReady = true;
 

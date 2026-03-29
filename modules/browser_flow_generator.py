@@ -3664,8 +3664,22 @@ class BrowserFlowGenerator:
         num_servers = pool.available_count()
 
         if num_servers == 0:
-            return {"success": False, "error": "Khong co server nao kha dung!",
-                    "stats": {"success": 0, "failed": 0, "skipped": 0}}
+            # v1.0.548: Server mode - cho den khi co server
+            _gen_mode = self.config.get('generation_mode', '')
+            if _gen_mode in ('server', 'api+server'):
+                self._log("[POOL] Chua co server nao san sang - CHO (server mode)...")
+                _wait_count = 0
+                while num_servers == 0:
+                    _wait_count += 1
+                    time.sleep(30)
+                    pool.refresh_all()
+                    num_servers = pool.available_count()
+                    if _wait_count % 10 == 0:
+                        self._log(f"[POOL] Van cho server... ({_wait_count * 30}s)")
+                self._log(f"[POOL] Da co {num_servers} server san sang!")
+            else:
+                return {"success": False, "error": "Khong co server nao kha dung!",
+                        "stats": {"success": 0, "failed": 0, "skipped": 0}}
 
         # Project ID va config chung
         flow_project_id = self.config.get('flow_project_id', self.project_code)
@@ -3745,6 +3759,9 @@ class BrowserFlowGenerator:
             return {"success": True, "total": len(prompts), "generated": 0, "failed": 0,
                     "stats": {"success": 0, "failed": 0, "skipped": skipped_count}}
 
+        # v1.0.548: Server mode = KHONG BAO GIO bo cuoc
+        _is_server_mode = self.config.get('generation_mode', '') in ('server', 'api+server')
+
         # Ham xu ly 1 prompt tren 1 server
         def _process_one(prompt_info):
             nonlocal success_count, failed_count
@@ -3771,16 +3788,29 @@ class BrowserFlowGenerator:
                 except Exception:
                     pass
 
-            # v1.0.528: Queue-based - cho server thay vi give up
+            # v1.0.548: Server mode = cho VO HAN, khong bao gio bo cuoc
             server = pool.pick_best_server()
             if not server:
-                self._log(f"  [{idx+1}] {pid}: Cho server san sang...")
-                server = pool.wait_for_server(max_wait=300)  # cho toi da 5 phut
-                if not server:
-                    self._log(f"  [{idx+1}] {pid}: Het thoi gian cho server!", "error")
-                    with count_lock:
-                        failed_count += 1
-                    return False
+                if _is_server_mode:
+                    # Server mode: cho den khi co server (retry moi 30s)
+                    self._log(f"  [{idx+1}] {pid}: Cho server san sang (server mode - cho vo han)...")
+                    _wait_round = 0
+                    while not server:
+                        _wait_round += 1
+                        server = pool.wait_for_server(max_wait=60)
+                        if not server:
+                            if _wait_round % 5 == 0:
+                                pool.refresh_all()  # Refresh lai trang thai servers
+                                self._log(f"  [{idx+1}] {pid}: Van cho server... ({_wait_round * 60}s)")
+                            time.sleep(5)
+                else:
+                    self._log(f"  [{idx+1}] {pid}: Cho server san sang...")
+                    server = pool.wait_for_server(max_wait=300)
+                    if not server:
+                        self._log(f"  [{idx+1}] {pid}: Het thoi gian cho server!", "error")
+                        with count_lock:
+                            failed_count += 1
+                        return False
 
             # Tao API client cho server nay
             api = GoogleFlowAPI(
@@ -3911,6 +3941,11 @@ class BrowserFlowGenerator:
                         if _is_ref_prompt:
                             self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Ref timeout → retry server khac (ref idempotent)")
                             # Fall through to retry logic below (same as CONNECT/TASK error)
+                        elif _is_server_mode:
+                            # v1.0.548: Server mode - KHONG bo cuoc, de cycle sau retry
+                            self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Submit timeout - DOI CYCLE SAU retry (server mode)")
+                            # Khong tang failed_count - prompt se duoc retry o vong scan tiep theo
+                            return False
                         else:
                             self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Submit timeout - KHONG retry (tranh duplicate)")
                             # KHONG retry - task co the da nam trong queue server
@@ -3924,15 +3959,21 @@ class BrowserFlowGenerator:
                         pool.mark_task_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [TASK FAIL] {server.name}: {error}")
 
-                    # v1.0.542: Retry tren NHIEU server (refs thu tat ca, scenes thu 1)
+                    # v1.0.548: Server mode retry nhieu hon
                     _tried_urls = {server.url}  # Da thu server nay roi
-                    _max_retries = len(pool.servers) if _is_ref_prompt else 1  # Refs thu tat ca servers
+                    if _is_ref_prompt:
+                        _max_retries = len(pool.servers)  # Refs thu tat ca servers
+                    elif _is_server_mode:
+                        _max_retries = max(len(pool.servers), 3)  # v1.0.548: Server mode retry nhieu hon
+                    else:
+                        _max_retries = 1
                     _retry_success = False
 
                     for _retry_i in range(_max_retries):
                         server2 = pool.pick_best_server()
                         if not server2:
-                            server2 = pool.wait_for_server(max_wait=120)
+                            _wait_max = 300 if _is_server_mode else 120  # v1.0.548
+                            server2 = pool.wait_for_server(max_wait=_wait_max)
                         # Refs cho phep retry cung server (sau delay)
                         _allow_same = _is_ref_prompt and _retry_i == _max_retries - 1  # Lan cuoi moi retry cung server
                         if not server2:
@@ -4037,16 +4078,23 @@ class BrowserFlowGenerator:
                                 success_count += 1
                             return True
 
-                    with count_lock:
-                        failed_count += 1
+                    if not _is_server_mode:
+                        with count_lock:
+                            failed_count += 1
+                    else:
+                        # v1.0.548: Server mode - khong tang failed, de cycle sau retry
+                        self._log(f"  [{idx+1}] {pid} [RETRY EXHAUSTED] Server mode - prompt se duoc retry cycle sau")
                     return False
 
             except Exception as e:
                 # v1.0.528: Exception = thuong la connection error
                 pool.mark_submit_failed(server, str(e))
                 self._log(f"  [{idx+1}] {pid} [ERROR] {server.name}: {e}", "error")
-                with count_lock:
-                    failed_count += 1
+                if not _is_server_mode:
+                    with count_lock:
+                        failed_count += 1
+                else:
+                    self._log(f"  [{idx+1}] {pid} [ERROR] Server mode - prompt se duoc retry cycle sau")
                 return False
 
         # Chay song song - so worker = so server kha dung

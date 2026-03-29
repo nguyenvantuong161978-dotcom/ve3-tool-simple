@@ -1,3 +1,27 @@
+1.0.548
+2026-03-30 (VN)
+Change: VM PERSISTENT POLLING - Server mode KHONG BAO GIO bo cuoc
+
+- VAN DE: VM hay bo cuoc khi mode=server:
+  * _poll_proxy_task: Hard timeout 600s → task dang lam tren server cung bi cancel
+  * wait_for_server(300): Chi cho 5 phut → khong co server = FAIL ngay
+  * Submit timeout → danh dau failed ngay (trong khi server co the dang lam)
+  * num_servers=0 → return FAIL (khong cho server khoi dong)
+- FIX: Khi generation_mode='server' hoac 'api+server':
+  * _poll_proxy_task: BO hard timeout 600s → chi timeout khi STUCK (10 phut khong thay doi)
+  * Task 404 (server restart) → return de retry (khong loop vo han)
+  * Track consecutive errors → 30 loi lien tiep moi bo cuoc
+  * wait_for_server: CHO VO HAN thay vi 5 phut (retry moi 60s + refresh servers)
+  * Submit timeout: KHONG tang failed_count → prompt retry o cycle sau
+  * Retry: Tang len max(len(servers), 3) thay vi 1
+  * num_servers=0: CHO den khi co server (retry moi 30s)
+- KET QUA:
+  * Server mode: VM gui task → cho server lam xong → KHONG BAO GIO bo cuoc
+  * Task con tren server → cho vo han
+  * Server chet → retry server khac / cho server phuc hoi
+  * Khong co server → cho den khi co
+- Files: modules/google_flow_api.py, modules/browser_flow_generator.py
+
 1.0.547
 2026-03-30 (VN)
 Change: FIX Server 403 loop + sleep negative bug

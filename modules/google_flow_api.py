@@ -577,45 +577,38 @@ class GoogleFlowAPI:
         """
         Poll proxy task status until complete.
 
-        v1.0.528: Queue-aware polling - cho theo vi tri trong hang doi.
-        - Moi vi tri ~90s (1 anh)
-        - Timeout = base 180s + position × 90s
-        - Chi timeout neu stuck (position khong giam)
+        v1.0.548: PERSISTENT polling - task da gui server thi CHO DEN KHI XONG.
+        - Task con tren server (queued/processing) → cho vo han
+        - Chi timeout khi task STUCK (position khong giam 10 phut)
+        - Task not found (server restart) → return de retry
         """
         self._log(f"Polling task {task_id}...")
 
         TIME_PER_POSITION = 90   # seconds - uoc tinh thoi gian cho moi vi tri
-        BASE_TIMEOUT = 180       # seconds - timeout co ban (processing + network)
-        STUCK_THRESHOLD = 180    # seconds - neu position khong giam trong 180s → stuck
+        STUCK_THRESHOLD = 300    # v1.0.548: Tang 180→300s (5 phut) - cho server xu ly
+        STUCK_GIVEUP = 600       # v1.0.548: 10 phut stuck moi bo cuoc
 
         start_time = time.time()
         last_position = None
         last_position_change = time.time()
         current_status = "queued"
         poll_count = 0
+        consecutive_errors = 0    # v1.0.548: Track loi lien tiep
 
         while True:
             elapsed = time.time() - start_time
             poll_count += 1
 
-            # Tinh dynamic timeout dua tren queue position
-            if last_position is not None and last_position > 0:
-                dynamic_timeout = BASE_TIMEOUT + (last_position * TIME_PER_POSITION)
-            else:
-                dynamic_timeout = BASE_TIMEOUT
-
-            # Check stuck: position khong giam trong STUCK_THRESHOLD
+            # v1.0.548: Check stuck - position/status khong thay doi qua lau
             time_since_change = time.time() - last_position_change
-            if last_position is not None and time_since_change > STUCK_THRESHOLD and current_status == "queued":
-                self._log(f"Task stuck tai position {last_position} ({int(time_since_change)}s khong giam)", "warn")
-                # Van cho them 1 vong nua truoc khi bo cuoc
-                if time_since_change > STUCK_THRESHOLD * 2:
-                    return False, [], f"Task stuck at position {last_position} for {int(time_since_change)}s"
+            if time_since_change > STUCK_THRESHOLD and current_status in ("queued", "processing"):
+                self._log(f"Task {task_id[:8]} co the stuck ({int(time_since_change)}s khong thay doi, status={current_status})", "warn")
+                if time_since_change > STUCK_GIVEUP:
+                    return False, [], f"Task stuck ({current_status}) for {int(time_since_change)}s - server co the bi treo"
 
-            # Check tong timeout (an toan - tranh cho vo han)
-            max_total = max(dynamic_timeout, 600)  # it nhat 10 phut
-            if elapsed > max_total:
-                return False, [], f"Polling timeout after {int(elapsed)}s (max {int(max_total)}s, pos={last_position})"
+            # v1.0.548: Qua nhieu loi lien tiep (server co the chet)
+            if consecutive_errors > 30:
+                return False, [], f"Server khong phan hoi sau {consecutive_errors} lan poll lien tiep"
 
             try:
                 response = requests.get(
@@ -624,12 +617,19 @@ class GoogleFlowAPI:
                     timeout=30
                 )
 
+                if response.status_code == 404:
+                    # v1.0.548: Task not found - server co the da restart
+                    self._log(f"Task {task_id[:8]} not found on server (404) - co the server restart")
+                    return False, [], f"Task not found on server (404) - server may have restarted"
+
                 if response.status_code != 200:
+                    consecutive_errors += 1
                     if poll_count % 10 == 0:
                         self._log(f"Poll {poll_count}: status {response.status_code}")
                     time.sleep(poll_interval)
                     continue
 
+                consecutive_errors = 0  # Reset khi thanh cong
                 result = response.json()
 
                 # Parse queue_position va status tu response
@@ -715,6 +715,7 @@ class GoogleFlowAPI:
                 time.sleep(poll_interval)
 
             except Exception as e:
+                consecutive_errors += 1
                 if poll_count % 10 == 0:
                     self._log(f"Poll error: {e}")
                 time.sleep(poll_interval)
