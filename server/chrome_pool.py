@@ -547,6 +547,29 @@ class ChromePool:
                                 worker.total_failed += 1
                                 self._log(f"[{worker_name}] FAIL (QUOTA): {task_id[:8]}... | Het model!", "ERROR")
 
+                        # === INTERCEPTOR FAIL: Re-queue (khong doi IPv6) ===
+                        elif 'interceptor' in err_str.lower():
+                            retry_count = tasks[task_id].get('_inject_retries', 0)
+                            if retry_count < 3:
+                                tasks[task_id]['_inject_retries'] = retry_count + 1
+                                tasks[task_id]['status'] = 'queued'
+                                tasks[task_id]['error'] = ''
+                                self._log(f"[{worker_name}] RE-QUEUE (interceptor): {task_id[:8]}... | retry {retry_count + 1}/3", "WARN")
+                                with queue_lock:
+                                    task_queue.append(task_id)
+                                # Restart Chrome (co the page bi loi)
+                                if worker.session:
+                                    try:
+                                        worker.session.restart_with_new_fingerprint(clear_data=False)
+                                    except:
+                                        pass
+                            else:
+                                tasks[task_id]['status'] = 'failed'
+                                tasks[task_id]['error'] = 'Interceptor injection failed 3x'
+                                stats['total_failed'] += 1
+                                worker.total_failed += 1
+                                self._log(f"[{worker_name}] FAIL (interceptor): {task_id[:8]}...", "ERROR")
+
                         # === 400: Bo qua luon, khong retry ===
                         elif err_code == 400:
                             tasks[task_id]['status'] = 'failed'

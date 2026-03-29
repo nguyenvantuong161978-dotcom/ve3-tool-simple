@@ -270,8 +270,11 @@ class ServerPool:
             # Refresh de check lai
             self.refresh_all()
 
-            # Cho 10s roi thu lai
-            time.sleep(min(10, max_wait - (time.time() - start)))
+            # Cho 10s roi thu lai (dam bao khong am)
+            remaining = max_wait - (time.time() - start)
+            if remaining <= 0:
+                break
+            time.sleep(min(10, remaining))
 
         self._log(f"Het thoi gian cho server ({max_wait}s)", "warn")
         return None

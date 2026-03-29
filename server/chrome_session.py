@@ -1182,16 +1182,46 @@ class ChromeSession:
                         return {"error": "Textarea not found after project creation"}
                     self.project_url = self.page.url
 
-                # 2. Inject interceptor (giống test file - reset trước khi inject)
+                # 2. Inject interceptor (reset trước khi inject + retry nếu fail)
                 self.log("Inject interceptor...")
                 if image_inputs:
                     self.log(f"Reference images: {len(image_inputs)} media ID(s)")
-                # Reset state trước (giống test file)
+                # Reset state trước
                 self.page.run_js("window.__proxyInterceptReady = false; window._response = null; window._responseError = null; window._requestPending = false;")
-                time.sleep(0.5)
+                time.sleep(1)  # v1.0.547: Tang 0.5→1s cho page xu ly
+
                 js = build_interceptor_js(client_bearer_token, client_project_id, image_inputs)
-                r = self.page.run_js(js)
-                self.log(f"Interceptor: {r}")
+
+                # v1.0.547: Retry interceptor injection toi da 3 lan
+                interceptor_ok = False
+                for inject_attempt in range(3):
+                    try:
+                        r = self.page.run_js(js)
+                        self.log(f"Interceptor: {r}")
+                        if r and r in ('PROXY_INTERCEPTOR_READY', 'ALREADY'):
+                            interceptor_ok = True
+                            break
+                        # r is None hoac unexpected → retry
+                        self.log(f"[WARN] Interceptor inject returned: {r}, retry {inject_attempt+1}/3")
+                        time.sleep(1)
+                    except Exception as ie:
+                        self.log(f"[WARN] Interceptor inject error: {ie}, retry {inject_attempt+1}/3")
+                        time.sleep(1)
+
+                # Verify interceptor da inject thanh cong
+                if not interceptor_ok:
+                    # Thu verify bang check window variable
+                    try:
+                        check = self.page.run_js("return window.__proxyInterceptReady === true ? 'OK' : 'FAIL';")
+                        if check == 'OK':
+                            self.log("[OK] Interceptor verified via window check")
+                            interceptor_ok = True
+                        else:
+                            self.log("[ERROR] Interceptor KHONG inject duoc! Request se dung token SAI → 403")
+                            return {"error": "Interceptor injection failed - cannot proceed"}
+                    except:
+                        self.log("[ERROR] Interceptor verification failed!")
+                        return {"error": "Interceptor injection failed - cannot proceed"}
 
                 # 3. Setup Image mode + model (giống test step 4)
                 # v1.0.487: Dung _current_model_index khi da switch model do 403

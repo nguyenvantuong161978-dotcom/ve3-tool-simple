@@ -1,3 +1,22 @@
+1.0.547
+2026-03-30 (VN)
+Change: FIX Server 403 loop + sleep negative bug
+
+- BUG 1 (CRITICAL): Server 403 loop vo han - Interceptor JS KHONG inject duoc
+  * Log: "Interceptor: None" = JS injection that bai
+  * Server Chrome dung TOKEN CUA CHINH NO thay vi token tu VM
+  * Token khong match projectId → 403 MOI LAN
+  * Doi IPv6 + fingerprint + account VO ICH vi van de la token SAI
+  * Lang phi IPv6 addresses (moi retry dot 1 IP)
+  * FIX: Retry interceptor injection 3 lan + verify window.__proxyInterceptReady
+  * FIX: Neu interceptor fail → return error NGAY (khong gui request voi token sai)
+  * FIX: Tang sleep 0.5→1s cho page xu ly
+  * FIX: chrome_pool.py: Interceptor fail → re-queue task + restart Chrome (KHONG doi IPv6)
+- BUG 2: "sleep length must be non-negative" crash
+  * server_pool.py: wait_for_server() tinh sleep time bi am khi vuot max_wait
+  * FIX: Check remaining <= 0 → break ngay
+- Files: server/chrome_session.py, server/chrome_pool.py, modules/server_pool.py
+
 1.0.545
 2026-03-29 (VN)
 Change: PROXY PROVIDER PLUGGABLE - He thong proxy module hoa (IPv6 / Webshare / None)
