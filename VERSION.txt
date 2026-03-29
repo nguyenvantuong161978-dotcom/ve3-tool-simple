@@ -1,3 +1,13 @@
+1.0.524
+2026-03-29 (VN)
+Change: FIX UnboundLocalError workbook trong _generate_via_local_server
+
+- BUG: "cannot access local variable 'workbook'" khi save Excel trong thread
+  * Python closure: workbook reassign o line 3856 → Python coi la local trong _process_one()
+  * Line 3838 truy cap truoc khi assign → UnboundLocalError
+- FIX: Them "nonlocal workbook" trong _process_one() (cung voi success_count, failed_count)
+- Retry 10 lan da handle duoc (save thanh cong o lan 2) nhung fix de tranh warning
+
 1.0.523
 2026-03-29 (VN)
 Change: FIX 3 bugs trong server mode flow

@@ -3735,7 +3735,7 @@ class BrowserFlowGenerator:
 
         # Ham xu ly 1 prompt tren 1 server
         def _process_one(prompt_info):
-            nonlocal success_count, failed_count
+            nonlocal success_count, failed_count, workbook
             pid = prompt_info['id']
             ptxt = prompt_info['prompt']
             opath = prompt_info['output_path']
