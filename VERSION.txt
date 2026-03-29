@@ -1,3 +1,20 @@
+1.0.527
+2026-03-29 (VN)
+Change: FIX CRITICAL - Media_id bi mat do Excel ghi de + ref skip + false warning
+
+- BUG 1 (CRITICAL): Media_ids bi MAT giua cac lan chay (10 → 5 media_ids)
+  * ROOT CAUSE: _generate_via_local_server() load workbook 1 lan vao memory (line 3679)
+    Nhieu threads share CUNG workbook object qua nonlocal
+    Moi thread save → ghi TOAN BO in-memory data ra disk → ghi de thay doi cua Chrome 2
+  * FIX: Moi lan save → RELOAD Excel tu disk → update 1 field → save lai
+    Dung local _wb = PromptWorkbook() thay vi shared workbook
+    Bo nonlocal workbook (khong can share nua)
+    Dam bao Chrome 1 va Chrome 2 khong ghi de nhau
+- BUG 2: Warning "Khong co reference nao tao thanh cong" khi ref da co file
+  * Fix: Phan biet 3 TH: (1) co file+media_id, (2) co file ko media_id, (3) ko file
+- BUG 3: _generate_via_local_server() skip ref co file nhung KHONG co media_id
+  * Fix: Ref (nv/loc) co file nhung khong media_id → van tao lai qua server
+
 1.0.525
 2026-03-29 (VN)
 Change: Bo checkbox "BAT Local Server Mode" - chi can nhap URL la du

@@ -2160,13 +2160,32 @@ class SmartEngine:
 
             # === BƯỚC 2: TẠO SCENES SAU KHI REFERENCES XONG ===
             if scene_prompts:
-                # Kiểm tra: nếu có references nhưng KHÔNG có media_id nào → cảnh báo mạnh
+                # Kiểm tra: nếu có references nhưng KHÔNG có media_id nào → cảnh báo
+                # v1.0.526: Cũng check file exist - nếu ảnh đã có thì chỉ warn nhẹ về media_id
                 if ref_prompts and ref_media_ids_created == 0 and ref_success == 0:
-                    self.log("=" * 60, "WARN")
-                    self.log("[WARN] CẢNH BÁO: Không có reference nào được tạo thành công!", "WARN")
-                    self.log("[WARN] Scenes sẽ được tạo KHÔNG CÓ tham chiếu nhân vật/địa điểm!", "WARN")
-                    self.log("[WARN] Khuyến nghị: Tạo lại references trước khi tạo scenes", "WARN")
-                    self.log("=" * 60, "WARN")
+                    # Check xem refs đã có file ảnh chưa
+                    _ref_files_exist = 0
+                    try:
+                        _nv_dir = Path(excel_files[0]).parent / "nv"
+                        for _rp in ref_prompts:
+                            if (_nv_dir / f"{_rp.get('id', '')}.png").exists():
+                                _ref_files_exist += 1
+                    except Exception:
+                        pass
+
+                    if _ref_files_exist == len(ref_prompts):
+                        # Tất cả refs đã có file - chỉ thiếu media_id
+                        self.log(f"[WARN] Tất cả {len(ref_prompts)} refs đã có ảnh nhưng THIẾU media_id trong Excel", "WARN")
+                        self.log("[WARN] Scenes sẽ tạo KHÔNG CÓ tham chiếu (cần validate để lấy media_id)", "WARN")
+                    elif _ref_files_exist > 0:
+                        self.log(f"[WARN] {_ref_files_exist}/{len(ref_prompts)} refs có ảnh, nhưng thiếu media_id", "WARN")
+                        self.log("[WARN] Scenes sẽ tạo KHÔNG CÓ tham chiếu đầy đủ", "WARN")
+                    else:
+                        self.log("=" * 60, "WARN")
+                        self.log("[WARN] CẢNH BÁO: Không có reference nào được tạo thành công!", "WARN")
+                        self.log("[WARN] Scenes sẽ được tạo KHÔNG CÓ tham chiếu nhân vật/địa điểm!", "WARN")
+                        self.log("[WARN] Khuyến nghị: Tạo lại references trước khi tạo scenes", "WARN")
+                        self.log("=" * 60, "WARN")
 
                 self.log(f"[STEP 2/2] Tạo {len(scene_prompts)} scene images...")
                 scene_result = generator.generate_from_prompts_auto(

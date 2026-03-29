@@ -3715,9 +3715,16 @@ class BrowserFlowGenerator:
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             if output_path.exists():
-                with count_lock:
-                    skipped_count += 1
-                continue
+                # v1.0.526: Nếu là ref (nv/loc) có file nhưng KHÔNG có media_id → vẫn tạo lại để lấy media_id
+                is_ref = prompt_id.startswith('nv') or prompt_id.startswith('loc')
+                has_media_id = prompt_id.lower() in media_ids_lower
+                if is_ref and not has_media_id:
+                    self._log(f"[REF] {prompt_id}: Có ảnh nhưng KHÔNG có media_id → tạo lại qua server")
+                    # Không skip - thêm vào pending để lấy media_id
+                else:
+                    with count_lock:
+                        skipped_count += 1
+                    continue
 
             pending_prompts.append({
                 'id': prompt_id,
@@ -3735,7 +3742,7 @@ class BrowserFlowGenerator:
 
         # Ham xu ly 1 prompt tren 1 server
         def _process_one(prompt_info):
-            nonlocal success_count, failed_count, workbook
+            nonlocal success_count, failed_count
             pid = prompt_info['id']
             ptxt = prompt_info['prompt']
             opath = prompt_info['output_path']
@@ -3830,45 +3837,42 @@ class BrowserFlowGenerator:
                     self._log(f"  [{idx+1}] {pid} [OK] → {opath.name} ({server.name})" +
                               (f" media_id={_media_name[:40]}..." if _media_name else ""))
 
-                    # v1.0.511: Cap nhat Excel - retry 10 lan + media_id + pending write
+                    # v1.0.527: RELOAD Excel moi lan save - tranh ghi de data tu Chrome 2
                     with excel_lock:
                         _saved_ok = False
                         for _sa in range(10):
                             try:
+                                _wb = PromptWorkbook(excel_path)
+                                _wb.load_or_create()
                                 if pid.startswith('nv') or pid.startswith('loc'):
-                                    workbook.update_character(pid, status="done", image_file=str(opath),
-                                                              media_id=_media_name)
+                                    _wb.update_character(pid, status="done", image_file=str(opath),
+                                                         media_id=_media_name)
                                 elif not pid.startswith('thumb'):
-                                    workbook.update_scene(int(pid), status_img="done", img_path=str(opath),
-                                                          media_id=_media_name)
-                                if workbook.safe_save():
+                                    _wb.update_scene(int(pid), status_img="done", img_path=str(opath),
+                                                     media_id=_media_name)
+                                if _wb.safe_save():
                                     _saved_ok = True
                                     break
                                 else:
-                                    workbook.save()
+                                    _wb.save()
                                     _saved_ok = True
                                     break
                             except Exception as e:
                                 if _sa < 9:
                                     self._log(f"  [{idx+1}] Excel save retry {_sa+1}/10: {e}", "warn")
                                     time.sleep(3)
-                                    try:
-                                        workbook = PromptWorkbook(excel_path)
-                                        workbook.load_or_create()
-                                    except:
-                                        pass
                                 else:
                                     self._log(f"  [{idx+1}] Excel save FAILED after 10 attempts: {e}", "warn")
                         # Pending write fallback
                         if not _saved_ok:
                             try:
                                 if pid.startswith('nv') or pid.startswith('loc'):
-                                    workbook._save_pending_write('character', char_id=pid,
-                                                                  media_id=_media_name, status="done")
+                                    _wb._save_pending_write('character', char_id=pid,
+                                                            media_id=_media_name, status="done")
                                 elif not pid.startswith('thumb'):
-                                    workbook._save_pending_write('scene', scene_id=pid,
-                                                                  img_path=str(opath), status_img="done",
-                                                                  media_id=_media_name)
+                                    _wb._save_pending_write('scene', scene_id=pid,
+                                                            img_path=str(opath), status_img="done",
+                                                            media_id=_media_name)
                                 self._log(f"  [{idx+1}] [PENDING] Saved pending write for {pid}")
                             except:
                                 pass
@@ -3929,44 +3933,43 @@ class BrowserFlowGenerator:
                             _media_name2 = getattr(gen_img2, 'media_name', None) if gen_img2 else None
                             self._log(f"  [{idx+1}] {pid} [OK] retry → {opath.name} ({server2.name})" +
                                       (f" media_id={_media_name2[:40]}..." if _media_name2 else ""))
-                            # v1.0.510: Retry save giong API mode
+                            # v1.0.527: RELOAD Excel moi lan save - tranh ghi de
                             with excel_lock:
                                 _saved_ok2 = False
                                 for _sa2 in range(10):
                                     try:
+                                        _wb2 = PromptWorkbook(excel_path)
+                                        _wb2.load_or_create()
                                         if pid.startswith('nv') or pid.startswith('loc'):
-                                            workbook.update_character(pid, status="done", image_file=str(opath),
-                                                                      media_id=_media_name2)
-                                        elif not pid.startswith('thumb'):
-                                            workbook.update_scene(int(pid), status_img="done", img_path=str(opath),
+                                            _wb2.update_character(pid, status="done", image_file=str(opath),
                                                                   media_id=_media_name2)
-                                        if workbook.safe_save():
+                                        elif not pid.startswith('thumb'):
+                                            _wb2.update_scene(int(pid), status_img="done", img_path=str(opath),
+                                                              media_id=_media_name2)
+                                        if _wb2.safe_save():
                                             _saved_ok2 = True
                                             break
                                         else:
-                                            workbook.save()
+                                            _wb2.save()
                                             _saved_ok2 = True
                                             break
                                     except Exception as e:
                                         if _sa2 < 9:
                                             self._log(f"  [{idx+1}] Excel retry save {_sa2+1}/10: {e}", "warn")
                                             time.sleep(3)
-                                            try:
-                                                workbook = PromptWorkbook(excel_path)
-                                                workbook.load_or_create()
-                                            except:
-                                                pass
                                         else:
                                             self._log(f"  [{idx+1}] Excel retry FAILED: {e}", "warn")
                                 if not _saved_ok2:
                                     try:
+                                        _wb2 = PromptWorkbook(excel_path)
+                                        _wb2.load_or_create()
                                         if pid.startswith('nv') or pid.startswith('loc'):
-                                            workbook._save_pending_write('character', char_id=pid,
-                                                                          media_id=_media_name2, status="done")
+                                            _wb2._save_pending_write('character', char_id=pid,
+                                                                     media_id=_media_name2, status="done")
                                         elif not pid.startswith('thumb'):
-                                            workbook._save_pending_write('scene', scene_id=pid,
-                                                                          img_path=str(opath), status_img="done",
-                                                                          media_id=_media_name2)
+                                            _wb2._save_pending_write('scene', scene_id=pid,
+                                                                     img_path=str(opath), status_img="done",
+                                                                     media_id=_media_name2)
                                         self._log(f"  [{idx+1}] [PENDING] Saved pending write for {pid}")
                                     except:
                                         pass
