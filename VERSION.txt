@@ -1,3 +1,13 @@
+1.0.536
+2026-03-29 (VN)
+Change: REUSE project - retry reload 3 lan truoc khi tao moi
+
+- Truoc: Reuse fail (textarea khong co) → tao project moi ngay (mat 30-60s)
+- Sau: Thu reload project cu 3 lan truoc:
+  * Reload URL + dismiss popup + doi textarea (15s moi lan)
+  * Neu 3 lan van fail → moi tao project moi
+  * Tiet kiem thoi gian khi project cu chi can F5
+
 1.0.535
 2026-03-29 (VN)
 Change: Mode API = LUON dung Chrome local, KHONG gui qua server

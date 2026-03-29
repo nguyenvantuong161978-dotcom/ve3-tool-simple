@@ -828,12 +828,36 @@ class ChromeSession:
                 self.log(f"READY! New project: {self.project_url}", "OK")
             return True
 
-        # v1.0.534: Textarea khong xuat hien → bo project cu, tao project MOI
-        # Bug cu: reuse URL co '/project/' → fallback skip tao moi → fail
-        self.log("Textarea khong xuat hien - tao project MOI thay the...", "WARN")
-        self.project_url = None  # Bo project cu (khong dung duoc)
+        # v1.0.536: Textarea khong xuat hien → retry reload project cu truoc khi tao moi
+        self.log("Textarea khong xuat hien - thu reload project cu...", "WARN")
 
-        # Navigate ve Flow home → tao project moi
+        # Retry 1: Reload project URL cu (F5) - 3 lan
+        current_project = self.page.url or ''
+        if '/project/' in current_project:
+            for retry in range(3):
+                self.log(f"[RETRY {retry+1}/3] Reload project cu...")
+                try:
+                    self.page.get(current_project)
+                    time.sleep(3)
+                    self.inject_fingerprint_spoof()
+
+                    # Dismiss popup neu co
+                    self._dismiss_popups()
+                    time.sleep(1)
+
+                    if self._wait_for_textarea(timeout=15):
+                        self.ready = True
+                        self.project_url = self.page.url
+                        self.log(f"READY! Reused project (retry {retry+1}): {self.project_url}", "OK")
+                        return True
+                except Exception as e:
+                    self.log(f"[RETRY {retry+1}/3] Error: {e}", "WARN")
+
+            self.log("Project cu khong phuc hoi sau 3 lan retry → tao project moi", "WARN")
+
+        # Retry 2: Bo project cu, tao project MOI
+        self.project_url = None
+
         try:
             self.page.get(FLOW_URL)
             time.sleep(3)
@@ -841,12 +865,10 @@ class ChromeSession:
         except Exception:
             pass
 
-        # Click "Create with Flow" neu co
         if self._click_create_with_flow():
             self.log("Clicked 'Create with Flow'", "OK")
             time.sleep(2)
 
-        # Tao project moi
         try:
             current_url = self.page.url or ''
             if '/project/' not in current_url:
@@ -857,7 +879,6 @@ class ChromeSession:
         except:
             pass
 
-        # Đợi textarea lần nữa
         if self._wait_for_textarea():
             self.ready = True
             self.project_url = self.page.url
