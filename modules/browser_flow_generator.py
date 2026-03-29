@@ -3942,7 +3942,6 @@ class BrowserFlowGenerator:
                         try:
                             new_token = self._auto_extract_token(force_refresh=True)
                             if new_token:
-                                nonlocal bearer_token
                                 bearer_token = new_token
                                 self._log(f"  [{idx+1}] {pid} [401] Token moi OK - retry...")
                                 # Retry voi token moi tren server khac
