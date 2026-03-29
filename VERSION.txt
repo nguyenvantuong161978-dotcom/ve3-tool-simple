@@ -1,3 +1,12 @@
+1.0.525
+2026-03-29 (VN)
+Change: Bo checkbox "BAT Local Server Mode" - chi can nhap URL la du
+
+- Bo checkbox thua: Mode Server/API+Server tu force local_server_enabled
+- local_server_enabled tu bat khi co URL, tu tat khi xoa URL
+- Text box Server URLs luon enabled (khong can bat checkbox moi nhap duoc)
+- GUI gon hon, bot 1 buoc thao tac
+
 1.0.524
 2026-03-29 (VN)
 Change: FIX UnboundLocalError workbook trong _generate_via_local_server

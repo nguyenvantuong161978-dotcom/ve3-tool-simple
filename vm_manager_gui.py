@@ -209,14 +209,8 @@ class SettingsWindow(tk.Toplevel):
         tk.Label(server_frame, text="Gui anh qua server thay vi dung Chrome local. Nhieu VM cung nhap chung → tu dong chia tai.",
                  bg='#16213e', fg='#888', font=("Arial", 8), justify="left").pack(anchor="w")
 
-        # Checkbox bat/tat
-        self.local_server_enabled_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(server_frame, text="BAT Local Server Mode",
-                       variable=self.local_server_enabled_var,
-                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460',
-                       activebackground='#16213e', activeforeground='#00ff88',
-                       font=("Arial", 10, "bold"),
-                       command=self._toggle_server_fields).pack(anchor="w", pady=(8, 0))
+        # v1.0.525: Bo checkbox - chi can nhap URL, mode Server/API+Server tu xu ly
+        self.local_server_enabled_var = tk.BooleanVar(value=False)  # Giu var de backward compat
 
         # Server URLs (multi-line: moi dong 1 server)
         tk.Label(server_frame, text="Server URLs (moi dong 1 server):", bg='#16213e', fg='white',
@@ -403,7 +397,6 @@ class SettingsWindow(tk.Toplevel):
                 self.proxy_token_var.set(config.get('proxy_api_token', ''))
                 self.chrome1_var.set(config.get('chrome_portable', ''))
                 self.chrome2_var.set(config.get('chrome_portable_2', ''))
-                self.local_server_enabled_var.set(config.get('local_server_enabled', False))
                 # Load server URLs: uu tien list, fallback single URL
                 server_list = config.get('local_server_list', [])
                 if server_list:
@@ -415,7 +408,6 @@ class SettingsWindow(tk.Toplevel):
                     urls_text = config.get('local_server_url', '')
                 self.server_urls_text.delete('1.0', 'end')
                 self.server_urls_text.insert('1.0', urls_text)
-                self._toggle_server_fields()
         except Exception as e:
             print(f"Error loading settings: {e}")
 
@@ -443,8 +435,7 @@ class SettingsWindow(tk.Toplevel):
             config['proxy_api_token'] = self.proxy_token_var.get().strip()
             config['chrome_portable'] = self.chrome1_var.get().strip()
             config['chrome_portable_2'] = self.chrome2_var.get().strip()
-            config['local_server_enabled'] = self.local_server_enabled_var.get()
-            # Parse server URLs tu text box → list
+            # v1.0.525: Parse server URLs - local_server_enabled tu bat khi co URL
             raw_urls = self.server_urls_text.get('1.0', 'end').strip()
             server_list = []
             first_url = ''
@@ -456,6 +447,7 @@ class SettingsWindow(tk.Toplevel):
                         first_url = url
             config['local_server_list'] = server_list
             config['local_server_url'] = first_url  # backward compat
+            config['local_server_enabled'] = bool(first_url)  # Tu bat khi co URL
 
             # Luu
             with open(settings_path, "w", encoding="utf-8") as f:
@@ -482,14 +474,8 @@ class SettingsWindow(tk.Toplevel):
             messagebox.showerror("Loi", f"Khong the luu: {e}")
 
     def _toggle_server_fields(self):
-        """Bat/tat truong URL khi checkbox thay doi."""
-        enabled = self.local_server_enabled_var.get()
-        state = "normal" if enabled else "disabled"
-        self.server_urls_text.config(state=state)
-        if enabled:
-            self.server_status_lbl.config(text="Da bat - VM se gui anh qua server", fg='#00ff88')
-        else:
-            self.server_status_lbl.config(text="Da tat - VM dung Chrome local", fg='#888')
+        """v1.0.525: Khong can toggle - text box luon enabled."""
+        pass
 
     def _get_server_urls(self) -> list:
         """Lay danh sach server URLs tu text box."""
