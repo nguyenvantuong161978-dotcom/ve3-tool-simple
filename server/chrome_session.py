@@ -828,12 +828,25 @@ class ChromeSession:
                 self.log(f"READY! New project: {self.project_url}", "OK")
             return True
 
-        # v1.0.509: Textarea không xuất hiện → thử click "Create with Flow" + tạo project lại
-        self.log("Textarea khong xuat hien - check Create with Flow...", "WARN")
+        # v1.0.534: Textarea khong xuat hien → bo project cu, tao project MOI
+        # Bug cu: reuse URL co '/project/' → fallback skip tao moi → fail
+        self.log("Textarea khong xuat hien - tao project MOI thay the...", "WARN")
+        self.project_url = None  # Bo project cu (khong dung duoc)
+
+        # Navigate ve Flow home → tao project moi
+        try:
+            self.page.get(FLOW_URL)
+            time.sleep(3)
+            self.inject_fingerprint_spoof()
+        except Exception:
+            pass
+
+        # Click "Create with Flow" neu co
         if self._click_create_with_flow():
-            self.log("Clicked 'Create with Flow' - thu tao project lai...", "OK")
+            self.log("Clicked 'Create with Flow'", "OK")
             time.sleep(2)
-        # Thử tạo project mới
+
+        # Tao project moi
         try:
             current_url = self.page.url or ''
             if '/project/' not in current_url:
@@ -843,11 +856,12 @@ class ChromeSession:
                     return False
         except:
             pass
+
         # Đợi textarea lần nữa
         if self._wait_for_textarea():
             self.ready = True
             self.project_url = self.page.url
-            self.log(f"READY! Project: {self.project_url}", "OK")
+            self.log(f"READY! New project (fallback): {self.project_url}", "OK")
             return True
 
         self.log("Textarea không xuất hiện!", "ERROR")

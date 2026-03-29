@@ -1,3 +1,16 @@
+1.0.534
+2026-03-29 (VN)
+Change: FIX REUSE project fallback - tao project moi khi textarea khong xuat hien
+
+- BUG: Reuse project URL cu → textarea khong xuat hien → FAIL!
+  * Fallback check '/project/' not in URL → URL da co '/project/' → skip tao moi
+  * Ket qua: worker CHET, khong phuc hoi duoc
+- FIX: Khi reuse fail (textarea khong co):
+  * Bo project_url cu (khong dung duoc)
+  * Navigate ve Flow home (FLOW_URL)
+  * Tao project MOI tu dau
+  * Worker phuc hoi binh thuong
+
 1.0.533
 2026-03-29 (VN)
 Change: STOP scenes khi refs thieu media_id - doi cycle sau
