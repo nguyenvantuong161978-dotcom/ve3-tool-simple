@@ -36,6 +36,9 @@ class ServerInfo:
         self.last_check = 0.0
         self.total_completed = 0
         self.total_failed = 0
+        # v1.0.541: Response time tracking - server nhanh hon duoc uu tien
+        self.last_response_time = 0.0  # seconds - thoi gian phan hoi /api/status
+        self.recent_timeout_count = 0  # so lan timeout gan day (reset khi success)
 
     @property
     def fail_count(self):
@@ -116,23 +119,29 @@ class ServerPool:
                 return False
             # Het cooldown → reset, cho thu lai
             server.connect_fail_count = 0
+        # v1.0.541: Server phai co Chrome ready moi nhan task
+        # Neu chua refresh (last_check=0) → coi nhu available (chua biet)
+        if server.last_check > 0 and not server.chrome_ready:
+            return False
         return True
 
     def refresh_status(self, server: ServerInfo) -> bool:
         """
         Check status 1 server. Return True neu OK.
         v1.0.531: KHONG tang connect_fail_count khi refresh fail.
-        Refresh chi la kiem tra, khong phai submit that.
-        Chi mark_submit_failed() moi tang connect_fail_count.
+        v1.0.541: Track response time de uu tien server nhanh.
         """
         try:
+            t0 = time.time()
             resp = requests.get(f"{server.url}/api/status", timeout=10)
+            response_time = time.time() - t0
             if resp.status_code == 200:
                 data = resp.json()
                 with self._lock:
                     server.queue_size = data.get('queue_size', 0)
                     server.chrome_ready = data.get('chrome_ready', False)
                     server.last_check = time.time()
+                    server.last_response_time = response_time
                     # Server phan hoi OK → reset connection failures
                     server.connect_fail_count = 0
                 return True
@@ -140,7 +149,8 @@ class ServerPool:
             pass
 
         # Refresh fail - KHONG tang connect_fail (chi la status check)
-        # Chi mark_submit_failed() moi disable server
+        with self._lock:
+            server.chrome_ready = False  # v1.0.541: Khong ket noi duoc → khong ready
         return False
 
     def refresh_all(self):
@@ -155,14 +165,21 @@ class ServerPool:
         for t in threads:
             t.join(timeout=5)
 
-        # Log
+        # Log v1.0.541: Hien thi chi tiet hon (chrome_ready, response_time)
         with self._lock:
-            available = [f"{s.name}(q={s.queue_size})" for s in self.servers if self._is_available(s)]
-            unavailable = [s.name for s in self.servers if not self._is_available(s)]
+            available = []
+            unavailable = []
+            for s in self.servers:
+                if self._is_available(s):
+                    rt = f"{s.last_response_time:.1f}s" if s.last_response_time > 0 else "?"
+                    available.append(f"{s.name}(q={s.queue_size},rt={rt})")
+                else:
+                    reason = "disabled" if not s.enabled else ("chrome_not_ready" if not s.chrome_ready else "connect_fail")
+                    unavailable.append(f"{s.name}({reason})")
 
         self._log(f"Servers OK: {available}")
         if unavailable:
-            self._log(f"Servers DOWN: {unavailable}", "warn")
+            self._log(f"Servers NOT READY: {unavailable}", "warn")
 
     def pick_best_server(self, auto_reserve: bool = True) -> Optional[ServerInfo]:
         """
@@ -191,8 +208,13 @@ class ServerPool:
             candidates = [s for s in self.servers if self._is_available(s)]
             if not candidates:
                 return None
-            # Sort: (queue_size + local_pending) ASC → server it viec nhat
-            candidates.sort(key=lambda s: (s.queue_size + s.local_pending, s.task_fail_count))
+            # v1.0.541: Sort uu tien: (1) queue nho, (2) it timeout, (3) phan hoi nhanh
+            candidates.sort(key=lambda s: (
+                s.queue_size + s.local_pending,       # Uu tien queue nho
+                s.recent_timeout_count,               # Uu tien server it timeout
+                s.task_fail_count,                     # Uu tien server it fail
+                s.last_response_time,                  # Uu tien server phan hoi nhanh
+            ))
             best = candidates[0]
             if auto_reserve:
                 best.local_pending += 1
@@ -269,6 +291,7 @@ class ServerPool:
         with self._lock:
             server.connect_fail_count = 0
             server.task_fail_count = 0
+            server.recent_timeout_count = 0  # v1.0.541: Reset timeout khi success
             server.total_completed += 1
             server.local_pending = max(0, server.local_pending - 1)
 

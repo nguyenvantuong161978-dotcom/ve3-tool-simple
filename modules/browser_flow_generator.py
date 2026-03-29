@@ -3905,6 +3905,8 @@ class BrowserFlowGenerator:
 
                     if _is_timeout:
                         pool.mark_task_failed(server, str(error))
+                        # v1.0.541: Track timeout de deprioritize server cham
+                        server.recent_timeout_count = getattr(server, 'recent_timeout_count', 0) + 1
                         # v1.0.537: Refs idempotent → retry, Scenes → KHONG retry (tranh duplicate)
                         if _is_ref_prompt:
                             self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Ref timeout → retry server khac (ref idempotent)")

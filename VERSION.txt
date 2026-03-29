@@ -1,3 +1,22 @@
+1.0.541
+2026-03-29 (VN)
+Change: SMART SERVER SELECTION - check chrome_ready + response time + timeout tracking
+
+- BUG: Server chua bat Chrome (chrome_ready=False) van nhan task → TIMEOUT
+  * /api/status tra ve OK nhung Chrome ben trong chua san sang
+  * VM gui task → server khong xu ly duoc → timeout 21s → lang phi
+- FIX 1: Check chrome_ready trong _is_available()
+  * Server phai co Chrome ready moi duoc chon
+  * Refresh fail → chrome_ready=False → khong nhan task
+  * Log: "Servers NOT READY: [server(chrome_not_ready)]"
+- FIX 2: Response time tracking
+  * Do thoi gian phan hoi /api/status khi refresh
+  * Server nhanh hon duoc uu tien (sort theo response_time)
+- FIX 3: Timeout count tracking
+  * Server bi timeout nhieu → deprioritize (recent_timeout_count)
+  * Reset khi server thanh cong (mark_success)
+  * Sort: queue → timeout_count → task_fail → response_time
+
 1.0.540
 2026-03-29 (VN)
 Change: FIX trung ID nvc trong Excel + Chrome 2 chap nhan 80% media_id
