@@ -1,3 +1,19 @@
+1.0.544
+2026-03-29 (VN)
+Change: Server TIMEOUT RETRY - Flow bi do/load cham thi thu lai tai cho (khong tinh fail)
+
+- VAN DE: Flow tao anh 99% xong nhung bi do/load cham → timeout 120s → tinh fail
+  * Khong phai 403, khong phai loi that - chi la Flow bi do
+  * VM nhan "Timeout 120s" → coi nhu fail → retry tren server khac (lang phi)
+  * Anh gan xong bi bo, phai tao lai tu dau
+- FIX: Server tu retry TAI CHO khi timeout (toi da 3 lan)
+  * Timeout → doi 3s → reload page → gui lai prompt → doi response
+  * Chi retry khi TIMEOUT (khong retry 403/400/loi khac)
+  * Lan 1: timeout → retry | Lan 2: timeout → retry | Lan 3: timeout → fail
+  * Log: "[TIMEOUT RETRY] Flow bi do → thu lai lan 2/3..."
+  * Thanh cong: "[TIMEOUT RETRY] OK sau 2 lan!"
+- File: server/chrome_session.py - generate_image()
+
 1.0.543
 2026-03-29 (VN)
 Change: FIX thumbnail dung ServerPool - smart server selection + retry tat ca servers

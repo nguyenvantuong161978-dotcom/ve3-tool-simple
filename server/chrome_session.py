@@ -1109,88 +1109,125 @@ class ChromeSession:
         4. Paste prompt → đợi 4s recaptcha → Enter
         5. Chờ response → trả base64
 
+        v1.0.543: Timeout = Flow bị đơ/load chậm → retry tại chỗ (không phải 403).
+        Retry tối đa 2 lần nữa (tổng 3 lần) trước khi trả fail.
+
         Returns: { media: [...] } hoặc { error: "..." }
         """
         if not self.page:
             return {"error": "Chrome not initialized"}
 
-        self.log(f"=== Generate Image ===")
-        self.log(f"Token: {client_bearer_token[:20]}...{client_bearer_token[-10:]}")
-        self.log(f"ProjectId: {client_project_id}")
-        self.log(f"Prompt: {client_prompt[:60]}...")
+        max_timeout_retries = 3  # v1.0.543: Retry 3 lan khi timeout (Flow bi do)
+        last_result = None
 
-        try:
-            # 1. Vào project (giống test step 2)
-            if self.project_url:
-                self.page.get(self.project_url)
+        for attempt in range(max_timeout_retries):
+            if attempt > 0:
+                self.log(f"=== Generate Image [RETRY {attempt}/{max_timeout_retries-1}] ===")
             else:
-                self.page.get(FLOW_URL)
-            time.sleep(5)
-            self.inject_fingerprint_spoof()
+                self.log(f"=== Generate Image ===")
+            self.log(f"Token: {client_bearer_token[:20]}...{client_bearer_token[-10:]}")
+            self.log(f"ProjectId: {client_project_id}")
+            self.log(f"Prompt: {client_prompt[:60]}...")
 
-            # Đợi textarea
-            if not self._wait_for_textarea(timeout=20):
-                self.log("Textarea not found, tao project moi...", "WARN")
-                if not self._create_new_project():
-                    return {"error": "Cannot create project"}
-                if not self._wait_for_textarea(timeout=20):
-                    return {"error": "Textarea not found after project creation"}
-                self.project_url = self.page.url
-
-            # 2. Inject interceptor (giống test file - reset trước khi inject)
-            self.log("Inject interceptor...")
-            if image_inputs:
-                self.log(f"Reference images: {len(image_inputs)} media ID(s)")
-            # Reset state trước (giống test file)
-            self.page.run_js("window.__proxyInterceptReady = false; window._response = null; window._responseError = null; window._requestPending = false;")
-            time.sleep(0.5)
-            js = build_interceptor_js(client_bearer_token, client_project_id, image_inputs)
-            r = self.page.run_js(js)
-            self.log(f"Interceptor: {r}")
-
-            # 3. Setup Image mode + model (giống test step 4)
-            # v1.0.487: Dung _current_model_index khi da switch model do 403
-            model_index = self._current_model_index if self._current_model_index > 0 else MODEL_INDEX_MAP.get(model_name, 0)
-            self.log(f"Setup Image mode (model index: {model_index})...")
-            js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
-            self.page.run_js("window._modelSelectResult = 'PENDING';")
-            self.page.run_js(js_model)
-            time.sleep(7)
-
-            model_result = self.page.run_js("return window._modelSelectResult;")
-            self.log(f"Model result: {model_result}")
-
-            # 4. Paste prompt (giống test step 5)
-            self.log(f"Paste prompt...")
-            ok = self._paste_prompt(client_prompt)
-            if not ok:
-                return {"error": "Cannot paste prompt"}
-
-            # 5. Đợi recaptcha 4s → Enter (giống test step 6)
-            self.log("Doi recaptcha (4s)...")
-            time.sleep(4)
-
-            from DrissionPage.common import Keys
-            self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
-            self.log("Enter sent!")
-
-            # 6. Chờ response (giống test step 7)
-            result = self._wait_for_response(timeout=120)
-
-            # 7. Cleanup browser data sau mỗi request (tránh bị Google track/flag)
             try:
-                self.page.run_js(JS_CLEANUP)
-                self.log("Cleanup browser data OK")
-            except Exception as ce:
-                self.log(f"Cleanup warning: {ce}", "WARN")
+                # 1. Vào project (giống test step 2)
+                if self.project_url:
+                    self.page.get(self.project_url)
+                else:
+                    self.page.get(FLOW_URL)
+                time.sleep(5)
+                self.inject_fingerprint_spoof()
 
-            return result
+                # Đợi textarea
+                if not self._wait_for_textarea(timeout=20):
+                    self.log("Textarea not found, tao project moi...", "WARN")
+                    if not self._create_new_project():
+                        return {"error": "Cannot create project"}
+                    if not self._wait_for_textarea(timeout=20):
+                        return {"error": "Textarea not found after project creation"}
+                    self.project_url = self.page.url
 
-        except Exception as e:
-            self.log(f"Error: {e}", "ERROR")
-            import traceback
-            traceback.print_exc()
-            return {"error": str(e)}
+                # 2. Inject interceptor (giống test file - reset trước khi inject)
+                self.log("Inject interceptor...")
+                if image_inputs:
+                    self.log(f"Reference images: {len(image_inputs)} media ID(s)")
+                # Reset state trước (giống test file)
+                self.page.run_js("window.__proxyInterceptReady = false; window._response = null; window._responseError = null; window._requestPending = false;")
+                time.sleep(0.5)
+                js = build_interceptor_js(client_bearer_token, client_project_id, image_inputs)
+                r = self.page.run_js(js)
+                self.log(f"Interceptor: {r}")
+
+                # 3. Setup Image mode + model (giống test step 4)
+                # v1.0.487: Dung _current_model_index khi da switch model do 403
+                model_index = self._current_model_index if self._current_model_index > 0 else MODEL_INDEX_MAP.get(model_name, 0)
+                self.log(f"Setup Image mode (model index: {model_index})...")
+                js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
+                self.page.run_js("window._modelSelectResult = 'PENDING';")
+                self.page.run_js(js_model)
+                time.sleep(7)
+
+                model_result = self.page.run_js("return window._modelSelectResult;")
+                self.log(f"Model result: {model_result}")
+
+                # 4. Paste prompt (giống test step 5)
+                self.log(f"Paste prompt...")
+                ok = self._paste_prompt(client_prompt)
+                if not ok:
+                    return {"error": "Cannot paste prompt"}
+
+                # 5. Đợi recaptcha 4s → Enter (giống test step 6)
+                self.log("Doi recaptcha (4s)...")
+                time.sleep(4)
+
+                from DrissionPage.common import Keys
+                self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+                self.log("Enter sent!")
+
+                # 6. Chờ response (giống test step 7)
+                result = self._wait_for_response(timeout=120)
+
+                # 7. Cleanup browser data sau mỗi request (tránh bị Google track/flag)
+                try:
+                    self.page.run_js(JS_CLEANUP)
+                    self.log("Cleanup browser data OK")
+                except Exception as ce:
+                    self.log(f"Cleanup warning: {ce}", "WARN")
+
+                # v1.0.543: Check timeout → retry tai cho (Flow bi do, khong phai 403)
+                if 'error' in result:
+                    err_str = str(result['error']).lower()
+                    is_timeout = 'timeout' in err_str
+                    is_403 = '403' in err_str
+                    is_400 = '400' in err_str
+
+                    if is_timeout and not is_403 and not is_400:
+                        # Timeout = Flow bi do/load cham → retry
+                        last_result = result
+                        if attempt < max_timeout_retries - 1:
+                            self.log(f"[TIMEOUT RETRY] Flow bi do → thu lai lan {attempt + 2}/{max_timeout_retries}...", "WARN")
+                            time.sleep(3)  # Doi 3s truoc khi retry
+                            continue
+                        else:
+                            self.log(f"[TIMEOUT RETRY] Het {max_timeout_retries} lan retry, tra fail", "WARN")
+                            return result
+                    else:
+                        # 403/400/loi khac → tra ve ngay, khong retry
+                        return result
+                else:
+                    # Thanh cong!
+                    if attempt > 0:
+                        self.log(f"[TIMEOUT RETRY] OK sau {attempt + 1} lan!", "OK")
+                    return result
+
+            except Exception as e:
+                self.log(f"Error: {e}", "ERROR")
+                import traceback
+                traceback.print_exc()
+                return {"error": str(e)}
+
+        # Fallback (khong nen den day)
+        return last_result or {"error": "Max retries exceeded"}
 
     def _paste_prompt(self, prompt: str) -> bool:
         """Paste prompt bằng Ctrl+V (giống tool)."""
