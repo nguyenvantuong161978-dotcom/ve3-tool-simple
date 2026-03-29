@@ -3924,17 +3924,28 @@ class BrowserFlowGenerator:
                         pool.mark_task_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [TASK FAIL] {server.name}: {error}")
 
-                    # Retry tren server khac (CONNECT error, TASK error, hoac ref TIMEOUT)
-                    server2 = pool.pick_best_server()
-                    if not server2:
-                        server2 = pool.wait_for_server(max_wait=120)
-                    # v1.0.537: Refs cho phep retry tren CUNG server (sau delay) vi idempotent
-                    _allow_same_server = _is_ref_prompt
-                    if server2 and (server2.url != server.url or _allow_same_server):
-                        if server2.url == server.url:
-                            self._log(f"  [{idx+1}] {pid} [RETRY] Doi 10s truoc khi retry cung server...")
+                    # v1.0.542: Retry tren NHIEU server (refs thu tat ca, scenes thu 1)
+                    _tried_urls = {server.url}  # Da thu server nay roi
+                    _max_retries = len(pool.servers) if _is_ref_prompt else 1  # Refs thu tat ca servers
+                    _retry_success = False
+
+                    for _retry_i in range(_max_retries):
+                        server2 = pool.pick_best_server()
+                        if not server2:
+                            server2 = pool.wait_for_server(max_wait=120)
+                        # Refs cho phep retry cung server (sau delay)
+                        _allow_same = _is_ref_prompt and _retry_i == _max_retries - 1  # Lan cuoi moi retry cung server
+                        if not server2:
+                            break
+                        if server2.url in _tried_urls and not _allow_same:
+                            # Da thu server nay roi, tim server khac
+                            pool.release_server(server2)
+                            continue
+                        if server2.url in _tried_urls:
+                            self._log(f"  [{idx+1}] {pid} [RETRY {_retry_i+1}] Doi 10s truoc khi retry cung server...")
                             time.sleep(10)
-                        self._log(f"  [{idx+1}] {pid} [RETRY] → {server2.name}")
+                        self._log(f"  [{idx+1}] {pid} [RETRY {_retry_i+1}/{_max_retries}] → {server2.name}")
+                        _tried_urls.add(server2.url)
                         api2 = GoogleFlowAPI(
                             bearer_token=bearer_token, project_id=flow_project_id,
                             timeout=flow_timeout, verbose=False,
@@ -3944,7 +3955,9 @@ class BrowserFlowGenerator:
                         ok2, images2, err2 = api2.generate_images(prompt=ptxt, count=1, aspect_ratio=aspect_ratio, image_inputs=image_inputs if image_inputs else None)
                         if not ok2 or not images2:
                             pool.mark_task_failed(server2, str(err2))  # release + track
-                        elif ok2 and images2:
+                            self._log(f"  [{idx+1}] {pid} [RETRY FAIL] {server2.name}: {err2}")
+                            continue  # v1.0.542: Thu server tiep theo trong loop
+                        if ok2 and images2:
                             gen_img2 = images2[0]
                             saved2 = False
                             if hasattr(gen_img2, 'base64_data') and gen_img2.base64_data:

@@ -119,9 +119,11 @@ class ServerPool:
                 return False
             # Het cooldown → reset, cho thu lai
             server.connect_fail_count = 0
-        # v1.0.541: Server phai co Chrome ready moi nhan task
-        # Neu chua refresh (last_check=0) → coi nhu available (chua biet)
-        if server.last_check > 0 and not server.chrome_ready:
+        # v1.0.542: Server PHAI refresh thanh cong + Chrome ready moi nhan task
+        # Chua refresh (last_check=0) = KHONG available (khong biet server co chay khong)
+        if server.last_check == 0:
+            return False
+        if not server.chrome_ready:
             return False
         return True
 
@@ -163,7 +165,7 @@ class ServerPool:
                 t.start()
 
         for t in threads:
-            t.join(timeout=5)
+            t.join(timeout=10)  # v1.0.542: Tang tu 5s len 10s cho server cham
 
         # Log v1.0.541: Hien thi chi tiet hon (chrome_ready, response_time)
         with self._lock:

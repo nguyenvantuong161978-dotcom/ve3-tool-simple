@@ -1,21 +1,19 @@
-1.0.541
+1.0.542
 2026-03-29 (VN)
-Change: SMART SERVER SELECTION - check chrome_ready + response time + timeout tracking
+Change: FIX server selection - PHAI refresh OK + retry TAT CA servers
 
-- BUG: Server chua bat Chrome (chrome_ready=False) van nhan task → TIMEOUT
-  * /api/status tra ve OK nhung Chrome ben trong chua san sang
-  * VM gui task → server khong xu ly duoc → timeout 21s → lang phi
-- FIX 1: Check chrome_ready trong _is_available()
-  * Server phai co Chrome ready moi duoc chon
+- BUG 1: Server chua bat nhung van hien "OK" → gui task → TIMEOUT
+  * Truoc: Chua refresh (last_check=0) → coi nhu available (chua biet)
+  * Sau: PHAI refresh thanh cong moi available
   * Refresh fail → chrome_ready=False → khong nhan task
-  * Log: "Servers NOT READY: [server(chrome_not_ready)]"
-- FIX 2: Response time tracking
-  * Do thoi gian phan hoi /api/status khi refresh
-  * Server nhanh hon duoc uu tien (sort theo response_time)
-- FIX 3: Timeout count tracking
-  * Server bi timeout nhieu → deprioritize (recent_timeout_count)
-  * Reset khi server thanh cong (mark_success)
-  * Sort: queue → timeout_count → task_fail → response_time
+- BUG 2: Retry chi thu 1 server khac → 2/3 server hong = fail
+  * VD: nv6 → 146 TIMEOUT → retry 165 TIMEOUT → FAIL (khong thu 145!)
+  * Sau: Refs retry TAT CA servers (loop qua tung server)
+  * Scenes van retry 1 lan (tranh duplicate)
+  * Log: "[RETRY 1/3] → server2", "[RETRY FAIL] server2", "[RETRY 2/3] → server3"
+- FIX 3: Refresh fail → mark chrome_ready=False (khong de mac dinh)
+- FIX 4: Tang join timeout 5s → 10s (cho server cham)
+- v1.0.541: Response time + timeout tracking (van giu)
 
 1.0.540
 2026-03-29 (VN)
