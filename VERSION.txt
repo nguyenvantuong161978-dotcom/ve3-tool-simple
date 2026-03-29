@@ -1,3 +1,17 @@
+1.0.537
+2026-03-29 (VN)
+Change: FIX ref TIMEOUT infinite loop - refs retry tren server khac khi timeout
+
+- BUG: Ref (nv/loc) chi co 1 prompt → gui server → TIMEOUT → STOP (thieu media_id)
+  * FULL RESTART → gui LAI cung server → TIMEOUT → STOP → loop vo han
+  * VM mac ket, khong tien trien duoc
+  * Root cause: TIMEOUT = KHONG retry (tranh duplicate) → dung cho scenes, SAI cho refs
+- FIX: Refs (nv/loc) la idempotent → AN TOAN retry khi TIMEOUT
+  * Scene TIMEOUT: Van KHONG retry (tranh duplicate trong queue) - giu nguyen
+  * Ref TIMEOUT: Fall through vao retry logic, thu server khac
+  * Neu chi co 1 server: Cho phep retry CUNG server (doi 10s truoc khi retry)
+  * Refs tao lai khong sao (cung prompt → cung ket qua, va duplicate ref khong anh huong)
+
 1.0.536
 2026-03-29 (VN)
 Change: REUSE project - retry reload 3 lan truoc khi tao moi

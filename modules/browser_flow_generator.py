@@ -3894,6 +3894,8 @@ class BrowserFlowGenerator:
                 else:
                     # v1.0.530: Phan loai loi chinh xac hon
                     _err_str = str(error).lower()
+                    # v1.0.537: Refs (nv/loc) la idempotent → AN TOAN retry khi TIMEOUT
+                    _is_ref_prompt = pid.startswith('nv') or pid.startswith('loc')
                     # Connection error = CHAC CHAN khong gui duoc (server chet)
                     _is_connect_err = any(k in _err_str for k in [
                         'proxy network error', 'connection refused', 'connection error',
@@ -3903,11 +3905,16 @@ class BrowserFlowGenerator:
 
                     if _is_timeout:
                         pool.mark_task_failed(server, str(error))
-                        self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Submit timeout - KHONG retry (tranh duplicate)")
-                        # KHONG retry - task co the da nam trong queue server
-                        with count_lock:
-                            failed_count += 1
-                        return False
+                        # v1.0.537: Refs idempotent → retry, Scenes → KHONG retry (tranh duplicate)
+                        if _is_ref_prompt:
+                            self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Ref timeout → retry server khac (ref idempotent)")
+                            # Fall through to retry logic below (same as CONNECT/TASK error)
+                        else:
+                            self._log(f"  [{idx+1}] {pid} [TIMEOUT] {server.name}: Submit timeout - KHONG retry (tranh duplicate)")
+                            # KHONG retry - task co the da nam trong queue server
+                            with count_lock:
+                                failed_count += 1
+                            return False
                     elif _is_connect_err:
                         pool.mark_submit_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [CONNECT FAIL] {server.name}: {error}")
@@ -3915,11 +3922,16 @@ class BrowserFlowGenerator:
                         pool.mark_task_failed(server, str(error))
                         self._log(f"  [{idx+1}] {pid} [TASK FAIL] {server.name}: {error}")
 
-                    # Retry tren server khac (chi khi CONNECT error hoac TASK error, KHONG retry timeout)
+                    # Retry tren server khac (CONNECT error, TASK error, hoac ref TIMEOUT)
                     server2 = pool.pick_best_server()
                     if not server2:
                         server2 = pool.wait_for_server(max_wait=120)
-                    if server2 and server2.url != server.url:
+                    # v1.0.537: Refs cho phep retry tren CUNG server (sau delay) vi idempotent
+                    _allow_same_server = _is_ref_prompt
+                    if server2 and (server2.url != server.url or _allow_same_server):
+                        if server2.url == server.url:
+                            self._log(f"  [{idx+1}] {pid} [RETRY] Doi 10s truoc khi retry cung server...")
+                            time.sleep(10)
                         self._log(f"  [{idx+1}] {pid} [RETRY] → {server2.name}")
                         api2 = GoogleFlowAPI(
                             bearer_token=bearer_token, project_id=flow_project_id,
