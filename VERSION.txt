@@ -1,16 +1,19 @@
-1.0.539
+1.0.540
 2026-03-29 (VN)
-Change: FIX Chrome 2 doi media_id - deduplicate theo unique ID
+Change: FIX trung ID nvc trong Excel + Chrome 2 chap nhan 80% media_id
 
-- BUG: Excel co 2 dong cung ID "nvc" (nvc 35 tuoi + nvc 23 tuoi)
-  * Dong 1 (nvc 35): co media_id ✓
-  * Dong 2 (nvc 23): KHONG co media_id ✗
-  * Chrome 2 dem 9 NV rows, 7 co media_id → doi 2 NV (nv6 + nvc dong 2)
-  * Nhung Chrome 1 chi tao nv6 (nvc da co media_id qua dong 1) → Chrome 2 doi mai
-- FIX: Dem theo UNIQUE ID thay vi dem tung dong
-  * Gom theo ID: nvc co media_id (dong 1) → OK, nv6 chua → doi
-  * 8 unique IDs, 7 co media_id → chi doi nv6
-  * Bonus: Filter is_child cho truong hop co tre con
+- BUG 1: API tra ve 2 narrator (35 tuoi + 23 tuoi) → ca 2 duoc gan ID "nvc"
+  * Chrome 1 chi tao 1 anh nvc.png → dong 2 khong co media_id
+  * Chrome 2 doi media_id cho dong 2 → doi mai
+  * FIX: Chi narrator DAU TIEN la "nvc", cac narrator sau dung nv{counter}
+  * File: modules/progressive_prompts.py - them nvc_used flag
+
+- BUG 2 (v1.0.539): Chrome 2 doi 100% media_id → 1 ref fail = block tat ca
+  * FIX: Chap nhan 80% media_id (vd: 8/10 ref co media_id → OK, chay luon)
+  * Neu 1-2 ref bi fail/timeout, Chrome 2 van tao scenes duoc
+  * File: _run_chrome2.py - media_ratio >= 0.8
+
+- v1.0.539: Deduplicate NV theo unique ID (van giu)
 
 1.0.537
 2026-03-29 (VN)

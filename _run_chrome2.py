@@ -764,8 +764,11 @@ def process_project_pic_basic_chrome2(code: str, callback=None) -> bool:
                         nv_ready = True
                         break
 
-                    if nv_with_media_count >= unique_nv_count:
-                        log(f"  [v] NV references ready ({nv_with_media_count}/{unique_nv_count} unique IDs có media_id)")
+                    # v1.0.540: Chap nhan 80% media_id (khong doi 100%)
+                    # Neu 1-2 ref bi fail/timeout, Chrome 2 van chay duoc voi ref da co
+                    media_ratio = nv_with_media_count / unique_nv_count if unique_nv_count > 0 else 1.0
+                    if media_ratio >= 0.8 or nv_with_media_count >= unique_nv_count:
+                        log(f"  [v] NV references ready ({nv_with_media_count}/{unique_nv_count} unique IDs = {media_ratio:.0%} media_id)")
                         nv_ready = True
                         break
 

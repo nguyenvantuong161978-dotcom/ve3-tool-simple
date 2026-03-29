@@ -1567,14 +1567,17 @@ SEGMENT "{seg_name}":
         try:
             minor_count = 0
             char_counter = 0  # Đếm để tạo ID đơn giản: nv1, nv2, nv3...
+            nvc_used = False  # v1.0.540: Chi 1 narrator duoc gan ID "nvc"
 
             for char_data in data["characters"]:
                 role = char_data.get("role", "supporting").lower()
 
                 # Tạo ID đơn giản và nhất quán
                 # v1.0.433: narrator detection chi ap dung cho story topic
-                if self.topic_prompts.has_narrator_role() and (role == "narrator" or "narrator" in char_data.get("name", "").lower()):
-                    char_id = "nvc"  # Narrator luôn là nvc (chi story)
+                # v1.0.540: Chi narrator DAU TIEN la nvc, cac narrator sau dung nv{counter}
+                if not nvc_used and self.topic_prompts.has_narrator_role() and (role == "narrator" or "narrator" in char_data.get("name", "").lower()):
+                    char_id = "nvc"  # Narrator DAU TIEN la nvc
+                    nvc_used = True
                 else:
                     char_counter += 1
                     char_id = f"nv{char_counter}"  # nv1, nv2, nv3...
