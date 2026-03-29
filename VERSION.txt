@@ -1,3 +1,18 @@
+1.0.543
+2026-03-29 (VN)
+Change: FIX thumbnail dung ServerPool - smart server selection + retry tat ca servers
+
+- BUG: Thumbnail dung SINGLE server URL (cfg.local_server_url) truc tiep
+  * Server 146 timeout → tat ca 3 portrait thumbnails FAIL
+  * Khong co retry, khong co smart selection, khong check chrome_ready
+  * Log: "[THUMB] LOCAL SERVER MODE: http://192.168.88.146:5000" → timeout x3
+- FIX: Dung ServerPool giong nhu image generation chinh
+  * pick_best_server(): Chon server nhanh nhat, it queue nhat
+  * Retry tat ca servers khi fail (thumbnail idempotent nhu refs)
+  * Track timeout count de deprioritize server cham
+  * Requires chrome_ready + successful refresh (v1.0.542 logic)
+- File: modules/smart_engine.py - _generate_thumbnails_via_server()
+
 1.0.542
 2026-03-29 (VN)
 Change: FIX server selection - PHAI refresh OK + retry TAT CA servers

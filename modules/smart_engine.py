@@ -6343,12 +6343,13 @@ class SmartEngine:
         return success_count > 0
 
     def _generate_thumbnails_via_server(self, thumbnails, wb, proj_dir, thumb_dir, excel_media_ids, cfg):
-        """Tao thumbnails qua local server (khong dung Chrome local)."""
+        """Tao thumbnails qua local server - dung ServerPool de chon server tot nhat + retry."""
         import json
         import base64
+        import time
         from modules.google_flow_api import GoogleFlowAPI, AspectRatio
+        from modules.server_pool import ServerPool
 
-        local_server_url = cfg.get('local_server_url', '')
         bearer_token = cfg.get('flow_bearer_token', '')
         if not bearer_token:
             bearer_token = wb.get_config_value('flow_bearer_token') or ''
@@ -6358,6 +6359,17 @@ class SmartEngine:
         if not bearer_token:
             self.log("[THUMB] Khong co bearer_token!", "ERROR")
             return False
+
+        # v1.0.543: Dung ServerPool thay vi single server URL
+        pool = ServerPool(cfg, log_callback=lambda msg, lvl="info": self.log(f"[THUMB][POOL] {msg}", lvl))
+        pool.refresh_all()
+        num_servers = pool.available_count()
+
+        if num_servers == 0:
+            self.log("[THUMB] Khong co server nao kha dung!", "ERROR")
+            return False
+
+        self.log(f"[THUMB] ServerPool: {num_servers} server kha dung")
 
         excel_media_ids_lower = {k.lower(): v for k, v in excel_media_ids.items()}
 
@@ -6378,6 +6390,108 @@ class SmartEngine:
                     self.log(f"[THUMB] Ref OK: {ref_id} -> {excel_media_ids_lower[ref_id][:30]}...")
             return image_inputs
 
+        def _generate_single_thumb(thumb, fname, save_path, aspect_ratio, is_portrait=False):
+            """Tao 1 thumbnail voi ServerPool smart selection + retry tat ca servers."""
+            image_inputs = _build_refs(thumb)
+            self.log(f"[THUMB] Tao {fname}{' (portrait)' if is_portrait else ''}: {thumb.img_prompt[:60]}...")
+
+            # Pick best server
+            server = pool.pick_best_server()
+            if not server:
+                server = pool.wait_for_server(max_wait=60)
+            if not server:
+                self.log(f"[THUMB] [x] {fname} FAIL: khong co server kha dung", "WARN")
+                return False
+
+            self.log(f"[THUMB] {fname} → {server.name}")
+            api = GoogleFlowAPI(
+                bearer_token=bearer_token, project_id=flow_project_id,
+                timeout=flow_timeout, verbose=False,
+                proxy_api_token='', use_proxy=True, local_server_url=server.url,
+            )
+            ok, images, err = api.generate_images(
+                prompt=thumb.img_prompt, count=1,
+                aspect_ratio=aspect_ratio,
+                image_inputs=image_inputs if image_inputs else None,
+            )
+
+            if ok and images:
+                pool.mark_success(server)
+                return _save_thumb_image(images[0], save_path, fname)
+
+            # FAIL → retry tren tat ca servers (thumbnail idempotent nhu refs)
+            _err_str = str(err).lower()
+            _is_timeout = 'proxy request timeout' in _err_str
+            if _is_timeout:
+                pool.mark_task_failed(server, str(err))
+                server.recent_timeout_count = getattr(server, 'recent_timeout_count', 0) + 1
+            else:
+                pool.mark_task_failed(server, str(err))
+
+            self.log(f"[THUMB] {fname} FAIL on {server.name}: {err} → retry servers khac")
+
+            _tried_urls = {server.url}
+            _max_retries = len(pool.servers)  # Thu tat ca servers
+
+            for _retry_i in range(_max_retries):
+                server2 = pool.pick_best_server()
+                if not server2:
+                    server2 = pool.wait_for_server(max_wait=60)
+                _allow_same = _retry_i == _max_retries - 1  # Lan cuoi cho retry cung server
+                if not server2:
+                    break
+                if server2.url in _tried_urls and not _allow_same:
+                    pool.release_server(server2)
+                    continue
+                if server2.url in _tried_urls:
+                    self.log(f"[THUMB] {fname} [RETRY {_retry_i+1}] Doi 10s truoc khi retry cung server...")
+                    time.sleep(10)
+
+                self.log(f"[THUMB] {fname} [RETRY {_retry_i+1}/{_max_retries}] → {server2.name}")
+                _tried_urls.add(server2.url)
+
+                api2 = GoogleFlowAPI(
+                    bearer_token=bearer_token, project_id=flow_project_id,
+                    timeout=flow_timeout, verbose=False,
+                    proxy_api_token='', use_proxy=True, local_server_url=server2.url,
+                )
+                ok2, images2, err2 = api2.generate_images(
+                    prompt=thumb.img_prompt, count=1,
+                    aspect_ratio=aspect_ratio,
+                    image_inputs=image_inputs if image_inputs else None,
+                )
+                if ok2 and images2:
+                    pool.mark_success(server2)
+                    return _save_thumb_image(images2[0], save_path, fname)
+                else:
+                    pool.mark_task_failed(server2, str(err2))
+                    self.log(f"[THUMB] {fname} [RETRY FAIL] {server2.name}: {err2}")
+                    continue
+
+            self.log(f"[THUMB] [x] {fname} FAIL: het server de retry", "WARN")
+            return False
+
+        def _save_thumb_image(gen_img, save_path, fname):
+            """Luu anh thumbnail tu response."""
+            saved = False
+            if hasattr(gen_img, 'base64_data') and gen_img.base64_data:
+                with open(save_path, 'wb') as f:
+                    f.write(base64.b64decode(gen_img.base64_data))
+                saved = True
+            elif hasattr(gen_img, 'url') and gen_img.url:
+                import requests as req
+                try:
+                    r = req.get(gen_img.url, timeout=30)
+                    if r.status_code == 200:
+                        with open(save_path, 'wb') as f:
+                            f.write(r.content)
+                        saved = True
+                except Exception:
+                    pass
+            if not saved:
+                self.log(f"[THUMB] [x] {fname} FAIL: khong luu duoc", "WARN")
+            return saved
+
         success_count = 0
 
         # Batch A: Landscape
@@ -6390,47 +6504,14 @@ class SmartEngine:
                 success_count += 1
                 continue
 
-            image_inputs = _build_refs(thumb)
-            self.log(f"[THUMB] Tao {fname}: {thumb.img_prompt[:60]}...")
-
-            api = GoogleFlowAPI(
-                bearer_token=bearer_token, project_id=flow_project_id,
-                timeout=flow_timeout, verbose=False,
-                proxy_api_token='', use_proxy=True, local_server_url=local_server_url,
-            )
-            ok, images, err = api.generate_images(
-                prompt=thumb.img_prompt, count=1,
-                aspect_ratio=AspectRatio.LANDSCAPE,
-                image_inputs=image_inputs if image_inputs else None,
-            )
-            if ok and images:
-                gen_img = images[0]
-                saved = False
-                if hasattr(gen_img, 'base64_data') and gen_img.base64_data:
-                    with open(save_path, 'wb') as f:
-                        f.write(base64.b64decode(gen_img.base64_data))
-                    saved = True
-                elif hasattr(gen_img, 'url') and gen_img.url:
-                    import requests as req
-                    try:
-                        r = req.get(gen_img.url, timeout=30)
-                        if r.status_code == 200:
-                            with open(save_path, 'wb') as f:
-                                f.write(r.content)
-                            saved = True
-                    except Exception:
-                        pass
-                if saved:
-                    wb.update_thumbnail(thumb.thumb_id, status_img="done", img_path=f"thumbnail/{fname}")
-                    wb.safe_save()
-                    success_count += 1
-                    self.log(f"[THUMB] [v] {fname} OK (server)")
-                else:
-                    self.log(f"[THUMB] [x] {fname} FAIL: khong luu duoc", "WARN")
+            if _generate_single_thumb(thumb, fname, save_path, AspectRatio.LANDSCAPE):
+                wb.update_thumbnail(thumb.thumb_id, status_img="done", img_path=f"thumbnail/{fname}")
+                wb.safe_save()
+                success_count += 1
+                self.log(f"[THUMB] [v] {fname} OK (server)")
             else:
                 wb.update_thumbnail(thumb.thumb_id, status_img="error")
                 wb.safe_save()
-                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
 
         # Batch B: Portrait
         self.log("[THUMB] Batch B: Portrait (3 anh) qua server...")
@@ -6442,47 +6523,14 @@ class SmartEngine:
                 success_count += 1
                 continue
 
-            image_inputs = _build_refs(thumb)
-            self.log(f"[THUMB] Tao {fname} (portrait): {thumb.img_prompt[:60]}...")
-
-            api = GoogleFlowAPI(
-                bearer_token=bearer_token, project_id=flow_project_id,
-                timeout=flow_timeout, verbose=False,
-                proxy_api_token='', use_proxy=True, local_server_url=local_server_url,
-            )
-            ok, images, err = api.generate_images(
-                prompt=thumb.img_prompt, count=1,
-                aspect_ratio=AspectRatio.PORTRAIT,
-                image_inputs=image_inputs if image_inputs else None,
-            )
-            if ok and images:
-                gen_img = images[0]
-                saved = False
-                if hasattr(gen_img, 'base64_data') and gen_img.base64_data:
-                    with open(save_path, 'wb') as f:
-                        f.write(base64.b64decode(gen_img.base64_data))
-                    saved = True
-                elif hasattr(gen_img, 'url') and gen_img.url:
-                    import requests as req
-                    try:
-                        r = req.get(gen_img.url, timeout=30)
-                        if r.status_code == 200:
-                            with open(save_path, 'wb') as f:
-                                f.write(r.content)
-                            saved = True
-                    except Exception:
-                        pass
-                if saved:
-                    wb.update_thumbnail(thumb.thumb_id, status_portrait="done", img_path_portrait=f"thumbnail/{fname}")
-                    wb.safe_save()
-                    success_count += 1
-                    self.log(f"[THUMB] [v] {fname} OK (portrait, server)")
-                else:
-                    self.log(f"[THUMB] [x] {fname} FAIL: khong luu duoc", "WARN")
+            if _generate_single_thumb(thumb, fname, save_path, AspectRatio.PORTRAIT, is_portrait=True):
+                wb.update_thumbnail(thumb.thumb_id, status_portrait="done", img_path_portrait=f"thumbnail/{fname}")
+                wb.safe_save()
+                success_count += 1
+                self.log(f"[THUMB] [v] {fname} OK (portrait, server)")
             else:
                 wb.update_thumbnail(thumb.thumb_id, status_portrait="error")
                 wb.safe_save()
-                self.log(f"[THUMB] [x] {fname} FAIL: {err}", "WARN")
 
         self.log(f"[THUMB] === XONG (SERVER): {success_count}/6 thumbnails ===")
         return success_count > 0
