@@ -925,6 +925,18 @@ class VMManager:
         self._watchdog_thread = None
         self._vm_id = TOOL_DIR.parent.name  # e.g., "AR8-T1"
 
+        # v1.0.592: Settings sync tu master
+        self._settings_sync = None
+        try:
+            from modules.settings_sync import SettingsSync
+            self._settings_sync = SettingsSync(
+                vm_id=self._vm_id,
+                local_config_path=CONFIG_FILE,
+                log_func=lambda msg: self.log(msg, "SYSTEM", "INFO"),
+            )
+        except Exception:
+            pass
+
         # v1.0.346: GUI callbacks - master commands gọi thẳng GUI buttons
         self._gui_start_callback = None  # Callback = ấn BẮT ĐẦU trên GUI
         self._gui_stop_callback = None   # Callback = ấn DỪNG trên GUI
@@ -3363,6 +3375,7 @@ class VMManager:
             try:
                 self._report_status_to_master()
                 self._check_master_commands()
+                self._sync_master_settings()
             except Exception as e:
                 self.log(f"Watchdog error: {e}", "MANAGER", "ERROR")
             time.sleep(10)
@@ -3482,6 +3495,22 @@ class VMManager:
             status_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
         except Exception:
             pass  # Silent fail - network có thể mất tạm thời
+
+    def _sync_master_settings(self):
+        """v1.0.592: Sync settings tu master (control/settings/) vao local."""
+        if not self._settings_sync or not self.auto_path:
+            return
+        try:
+            changes = self._settings_sync.check_and_sync(
+                auto_path=self.auto_path,
+                min_interval=60,  # Check moi 60s
+            )
+            if changes:
+                # Reload local settings vao memory
+                self.settings.config = self.settings._load_config()
+                self.log(f"[SYNC] Da cap nhat {len(changes)} settings tu master", "SYSTEM", "SUCCESS")
+        except Exception as e:
+            pass  # Silent fail
 
     def _check_master_commands(self):
         """Đọc commands từ AUTO/commands/{VM_ID}.* và thực thi."""

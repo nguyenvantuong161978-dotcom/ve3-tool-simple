@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
 from datetime import datetime, date
+import yaml
 
 
 # ============================================================================
@@ -45,10 +46,11 @@ VE3_DIR = AUTO_PATH / "ve3-tool-simple"
 CONTROL_DIR = VE3_DIR / "control"
 COMMANDS_DIR = CONTROL_DIR / "commands"
 STATUS_DIR = CONTROL_DIR / "status"
+SETTINGS_DIR = CONTROL_DIR / "settings"  # v1.0.592: Master settings cho VM
 MASTER_PROJECTS = VE3_DIR / "PROJECTS"
 VISUAL_DIR = AUTO_PATH / "visual"
 
-for d in [CONTROL_DIR, COMMANDS_DIR, STATUS_DIR, MASTER_PROJECTS, VISUAL_DIR]:
+for d in [CONTROL_DIR, COMMANDS_DIR, STATUS_DIR, SETTINGS_DIR, MASTER_PROJECTS, VISUAL_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 REFRESH_MS = 8000
@@ -210,6 +212,12 @@ class MasterControlGUI:
             tk.Button(bf, text=txt, bg=clr, fg=BG, font=("Segoe UI", 9, "bold"),
                       activebackground=clr, relief=tk.FLAT, padx=10, pady=2,
                       command=lambda c=cmd: self._cmd_all(c)).pack(side=tk.LEFT, padx=2)
+
+        # SETTINGS button
+        tk.Button(bf, text="SETTINGS", bg=PURPLE, fg="white",
+                  font=("Segoe UI", 9, "bold"), activebackground=PURPLE,
+                  relief=tk.FLAT, padx=10, pady=2,
+                  command=self._open_settings).pack(side=tk.LEFT, padx=2)
 
         # === QUEUE BAR ===
         self.queue_lbl = tk.Label(self.root, text="", font=("Consolas", 9),
@@ -499,9 +507,255 @@ class MasterControlGUI:
         for vm_id in list(self.vm_widgets.keys()):
             self._cmd(vm_id, cmd)
 
+    def _open_settings(self):
+        """Mo Settings Dialog."""
+        vm_list = sorted(self.vm_widgets.keys())
+        SettingsDialog(self.root, AUTO_PATH, vm_list)
+
     def on_close(self):
         self._stop.set()
         self.root.destroy()
+
+
+# ============================================================================
+# SETTINGS DIALOG
+# ============================================================================
+
+# Settings co the sync tu master → VM
+SETTINGS_DEFS = [
+    # (key, label, type, options/default)
+    ("generation_mode", "Generation Mode", "combo", ["api", "browser", "chrome", "server", "api+server"]),
+    ("chrome_model_index", "Chrome Model", "combo", ["0 - Nano Banana Pro", "1 - Nano Banana 2", "2 - Imagen 4"]),
+    ("topic", "Topic", "combo", ["story", "psychology", "finance_history"]),
+    ("excel_mode", "Excel Mode", "combo", ["full", "basic"]),
+    ("video_mode", "Video Mode", "combo", ["full", "basic"]),
+    ("browser_headless", "Headless", "combo", ["false", "true"]),
+    ("distributed_mode", "Distributed Mode", "combo", ["false", "true"]),
+    ("local_server_enabled", "Local Server", "combo", ["false", "true"]),
+    ("local_server_url", "Server URL", "entry", ""),
+    ("flow_aspect_ratio", "Aspect Ratio", "combo", ["landscape", "portrait", "square"]),
+    ("retry_count", "Retry Count", "entry", "3"),
+    ("browser_generate_timeout", "Generate Timeout (s)", "entry", "120"),
+    ("max_scenes_per_account", "Max Scenes/Account", "entry", "50"),
+    ("parallel_chrome", "Parallel Chrome", "entry", "1/2"),
+    ("use_proxy", "Use Proxy", "combo", ["true", "false"]),
+]
+
+class SettingsDialog:
+    """Dialog de master set settings cho VM."""
+
+    def __init__(self, parent, auto_path: Path, vm_list: list):
+        self.win = tk.Toplevel(parent)
+        self.win.title("VM Settings Control")
+        self.win.configure(bg=BG)
+        self.win.geometry("700x650")
+        self.win.transient(parent)
+
+        self.auto_path = auto_path
+        self.vm_list = vm_list
+        self.settings_dir = SETTINGS_DIR  # control/settings/
+        self.settings_dir.mkdir(parents=True, exist_ok=True)
+
+        self.vars = {}  # key → StringVar
+        self.checks = {}  # key → BooleanVar (enable checkbox)
+
+        self._build()
+        self._load_current()
+
+    def _build(self):
+        # === TARGET SELECTOR ===
+        top = tk.Frame(self.win, bg=BG2, pady=6)
+        top.pack(fill=tk.X)
+
+        tk.Label(top, text="Ap dung cho:", font=("Segoe UI", 10, "bold"),
+                 bg=BG2, fg=FG).pack(side=tk.LEFT, padx=10)
+
+        self.target_var = tk.StringVar(value="_global")
+        targets = ["_global (TAT CA VM)"] + self.vm_list
+        self.target_combo = ttk.Combobox(top, textvariable=self.target_var,
+                                          values=targets, width=25, state="readonly")
+        self.target_combo.pack(side=tk.LEFT, padx=4)
+        self.target_combo.bind("<<ComboboxSelected>>", lambda e: self._load_current())
+
+        # Buttons
+        tk.Button(top, text="LUU & AP DUNG", bg=GREEN, fg=BG,
+                  font=("Segoe UI", 10, "bold"), relief=tk.FLAT, padx=15,
+                  command=self._save).pack(side=tk.RIGHT, padx=10)
+
+        tk.Button(top, text="XOA", bg=RED, fg="white",
+                  font=("Segoe UI", 9, "bold"), relief=tk.FLAT, padx=10,
+                  command=self._delete).pack(side=tk.RIGHT, padx=2)
+
+        # === INFO ===
+        info = tk.Label(self.win,
+                        text="Tick checkbox = master kiem soat key do. Bo tick = VM giu nguyen local.",
+                        font=("Consolas", 8), bg=BG, fg=FG_DIM, anchor=tk.W)
+        info.pack(fill=tk.X, padx=12, pady=2)
+
+        # === SETTINGS LIST (scrollable) ===
+        canvas = tk.Canvas(self.win, bg=BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.win, orient=tk.VERTICAL, command=canvas.yview)
+        self.settings_frame = tk.Frame(canvas, bg=BG)
+
+        self.settings_frame.bind("<Configure>",
+                                  lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=self.settings_frame, anchor=tk.NW)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=8)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Mouse wheel scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # Build setting rows
+        for i, (key, label, stype, options) in enumerate(SETTINGS_DEFS):
+            row = tk.Frame(self.settings_frame, bg=BG_CARD if i % 2 == 0 else BG)
+            row.pack(fill=tk.X, pady=1)
+
+            # Checkbox (enable/disable)
+            chk_var = tk.BooleanVar(value=False)
+            chk = tk.Checkbutton(row, variable=chk_var, bg=row.cget("bg"),
+                                  activebackground=row.cget("bg"), selectcolor=BG)
+            chk.pack(side=tk.LEFT, padx=(8, 2))
+            self.checks[key] = chk_var
+
+            # Label
+            tk.Label(row, text=label, font=("Consolas", 9), width=22, anchor=tk.W,
+                     bg=row.cget("bg"), fg=FG).pack(side=tk.LEFT)
+
+            # Input
+            var = tk.StringVar()
+            if stype == "combo":
+                combo = ttk.Combobox(row, textvariable=var, values=options,
+                                      width=30, state="readonly")
+                combo.pack(side=tk.LEFT, padx=4)
+            else:  # entry
+                entry = tk.Entry(row, textvariable=var, width=32,
+                                 bg=BG2, fg=FG, insertbackground=FG,
+                                 font=("Consolas", 9))
+                entry.pack(side=tk.LEFT, padx=4)
+
+            self.vars[key] = var
+
+        # === STATUS BAR ===
+        self.status_lbl = tk.Label(self.win, text="", font=("Consolas", 9),
+                                    bg=BG, fg=GREEN, anchor=tk.W)
+        self.status_lbl.pack(fill=tk.X, padx=12, pady=4)
+
+    def _get_target_id(self) -> str:
+        """Lay target VM ID tu combobox."""
+        val = self.target_var.get()
+        if val.startswith("_global"):
+            return "_global"
+        return val
+
+    def _load_current(self):
+        """Load settings hien tai tu file master."""
+        target = self._get_target_id()
+        if target == "_global":
+            fpath = self.settings_dir / "_global.yaml"
+        else:
+            fpath = self.settings_dir / f"{target}.yaml"
+
+        # Reset all
+        for key in self.vars:
+            self.vars[key].set("")
+            self.checks[key].set(False)
+
+        if fpath.exists():
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    cfg = yaml.safe_load(f) or {}
+
+                for key, var in self.vars.items():
+                    if key in cfg:
+                        val = cfg[key]
+                        # chrome_model_index: hien thi dang "0 - Nano..."
+                        if key == "chrome_model_index":
+                            for opt in SETTINGS_DEFS:
+                                if opt[0] == key:
+                                    for o in opt[3]:
+                                        if o.startswith(str(val)):
+                                            val = o
+                                            break
+                        # bool → string
+                        if isinstance(val, bool):
+                            val = "true" if val else "false"
+                        var.set(str(val))
+                        self.checks[key].set(True)
+
+                self.status_lbl.config(
+                    text=f"Da load {len(cfg)} settings tu {fpath.name}", fg=BLUE)
+            except Exception as e:
+                self.status_lbl.config(text=f"Loi load: {e}", fg=RED)
+        else:
+            self.status_lbl.config(text=f"Chua co file {fpath.name} - tao moi", fg=FG_DIM)
+
+    def _save(self):
+        """Luu settings ra file master."""
+        target = self._get_target_id()
+        if target == "_global":
+            fpath = self.settings_dir / "_global.yaml"
+            label = "GLOBAL (tat ca VM)"
+        else:
+            fpath = self.settings_dir / f"{target}.yaml"
+            label = f"VM {target}"
+
+        # Thu thap cac key da tick
+        settings = {}
+        for key, chk_var in self.checks.items():
+            if chk_var.get():
+                val = self.vars[key].get()
+                if not val:
+                    continue
+
+                # Parse types
+                if key == "chrome_model_index":
+                    # "0 - Nano Banana Pro" → 0
+                    try:
+                        val = int(val.split(" ")[0])
+                    except Exception:
+                        val = 0
+                elif val == "true":
+                    val = True
+                elif val == "false":
+                    val = False
+                elif val.isdigit():
+                    val = int(val)
+
+                settings[key] = val
+
+        if not settings:
+            self.status_lbl.config(text="Khong co setting nao duoc tick!", fg=RED)
+            return
+
+        try:
+            with open(fpath, 'w', encoding='utf-8') as f:
+                yaml.dump(settings, f, default_flow_style=False, allow_unicode=True)
+
+            self.status_lbl.config(
+                text=f"Da luu {len(settings)} settings cho {label}. VM se tu dong cap nhat.",
+                fg=GREEN)
+        except Exception as e:
+            self.status_lbl.config(text=f"Loi luu: {e}", fg=RED)
+
+    def _delete(self):
+        """Xoa file settings."""
+        target = self._get_target_id()
+        if target == "_global":
+            fpath = self.settings_dir / "_global.yaml"
+        else:
+            fpath = self.settings_dir / f"{target}.yaml"
+
+        if fpath.exists():
+            fpath.unlink()
+            self._load_current()
+            self.status_lbl.config(text=f"Da xoa {fpath.name}", fg=ORANGE)
+        else:
+            self.status_lbl.config(text=f"File {fpath.name} khong ton tai", fg=FG_DIM)
 
 
 def main():
