@@ -194,7 +194,7 @@ class MikroTikAPI:
         # Prefix da chua phan dau (vd: "2001:ee0:4f89:30")
         # Them subnet hex vao cuoi
         full_prefix = f"{self.prefix}{subnet_str}"
-        return f"{full_prefix}::{host_id}/128"
+        return f"{full_prefix}::{host_id:x}/128"
 
     def get_available_subnets(self) -> List[int]:
         """

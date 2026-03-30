@@ -1,6 +1,6 @@
-1.0.564
+1.0.565
 2026-03-30 (VN)
-Change: FIX "Doi tat ca IP" - xoa IP cu tren router, tao IP moi voi host ID random
+Change: FIX host_id decimal trong IPv6 address - phai format hex
 
 - BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
   * _refill_if_needed() chi them khi available < min_pool_size (3)
