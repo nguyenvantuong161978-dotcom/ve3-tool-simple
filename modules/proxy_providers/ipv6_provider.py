@@ -156,6 +156,51 @@ class IPv6Provider(ProxyProvider):
             self.log(f"[PROXY-IPv6] [WARN] Error: {e}")
             return False
 
+    def cleanup_old_addresses(self, keep_ips: list = None):
+        """
+        v1.0.611: Xoa TAT CA IPv6 addresses cu tren interface (tru keep_ips).
+        Goi TRUOC khi add Pool IPs de tranh routing conflict tu 41+ static IPs.
+        """
+        keep_ips = [ip.lower() for ip in (keep_ips or [])]
+        iface = self._get_interface_name()
+        try:
+            addr_check = subprocess.run(
+                f'netsh interface ipv6 show address "{iface}"',
+                shell=True, capture_output=True, text=True, timeout=15
+            )
+            if addr_check.returncode != 0:
+                return
+
+            # Tim prefix chung cua pool IPs (vd "2001:ee0:b004:")
+            pool_prefix = ""
+            if keep_ips:
+                parts = keep_ips[0].split(":")
+                if len(parts) >= 3:
+                    pool_prefix = ":".join(parts[:3]) + ":"
+
+            if not pool_prefix:
+                return
+
+            removed = 0
+            for line in (addr_check.stdout or "").split('\n'):
+                line_stripped = line.strip()
+                if pool_prefix in line_stripped.lower() and 'Address' in line:
+                    parts = line_stripped.split()
+                    for p in parts:
+                        if pool_prefix in p.lower() and p.lower() not in keep_ips:
+                            try:
+                                subprocess.run(
+                                    f'netsh interface ipv6 delete address "{iface}" {p}',
+                                    shell=True, capture_output=True, text=True, timeout=15
+                                )
+                                removed += 1
+                            except Exception:
+                                pass
+            if removed:
+                self.log(f"[PROXY-IPv6] [CLEANUP] Xoa {removed} IPv6 cu tren interface")
+        except Exception:
+            pass
+
     def _cleanup_old_routes(self, iface: str, keep_gateway: str = ""):
         """
         v1.0.610: Xoa TAT CA default routes ::/0 cu de tranh routing conflict.
@@ -215,10 +260,12 @@ class IPv6Provider(ProxyProvider):
         # Step 1: Cleanup old default routes (v1.0.610)
         self._cleanup_old_routes(iface, keep_gateway=gateway)
 
-        # Step 2: Firewall ICMPv6 NDP (TRUOC khi add address)
-        # Neu khong co → MikroTik khong tim duoc server → gateway UNREACHABLE
+        # Step 2: Firewall - mo IPv6 (ICMPv6 NDP + TCP/UDP outbound)
+        # v1.0.611: Mo ca TCP/UDP outbound cho IPv6, khong chi ICMPv6
         self._run_cmd('netsh advfirewall firewall add rule name="ICMPv6-NDP-In" dir=in action=allow protocol=icmpv6')
         self._run_cmd('netsh advfirewall firewall add rule name="ICMPv6-NDP-Out" dir=out action=allow protocol=icmpv6')
+        self._run_cmd('netsh advfirewall firewall add rule name="IPv6-TCP-Out" dir=out action=allow protocol=tcp remoteip=any localip=any')
+        self._run_cmd('netsh advfirewall firewall add rule name="IPv6-UDP-Out" dir=out action=allow protocol=udp remoteip=any localip=any')
 
         # Step 3: Add IPv6 address
         ok_addr = self._run_cmd(f'netsh interface ipv6 add address "{iface}" {ipv6_address}')

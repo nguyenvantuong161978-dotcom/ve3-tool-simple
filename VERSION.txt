@@ -1,3 +1,15 @@
+1.0.611
+2026-03-30 (VN)
+Fix: Server IPv6 Pool - firewall TCP/UDP + cleanup static IPs
+
+- Firewall: Mo TCP/UDP outbound cho IPv6 (truoc chi mo ICMPv6 NDP)
+  * Ping gateway OK nhung TCP connect fail → thieu outbound TCP rule
+- Cleanup static IPs: Xoa 41+ IPv6 static (tu GUI list) TRUOC khi add Pool IPs
+  * Nhieu IP tren interface → nhieu route conflict → OS chon sai route
+  * Chi giu Pool IPs (keep_ips), xoa tat ca IP khac co cung prefix
+- Log target host:port khi connect fail (3 lan dau) de debug
+- File: modules/proxy_providers/ipv6_provider.py, modules/ipv6_proxy.py, server/chrome_pool.py
+
 1.0.610
 2026-03-30 (VN)
 Fix: Server IPv6 Pool - interface setup giong ipv6_rotator

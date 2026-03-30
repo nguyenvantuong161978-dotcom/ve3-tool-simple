@@ -256,7 +256,12 @@ class IPv6SocksProxy:
             return sock
 
         except Exception as e:
-            self.log(f"[IPv6-Proxy] IPv6 connect failed: {e}")
+            # v1.0.611: Log target de debug connectivity
+            if not getattr(self, '_connect_fail_logged', 0) or getattr(self, '_connect_fail_logged', 0) < 3:
+                self.log(f"[IPv6-Proxy] IPv6 connect failed to {host}:{port}: {e}")
+                self._connect_fail_logged = getattr(self, '_connect_fail_logged', 0) + 1
+            else:
+                self.log(f"[IPv6-Proxy] IPv6 connect failed: {e}")
             return None
 
     def _relay(self, client: socket.socket, remote: socket.socket):

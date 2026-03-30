@@ -323,6 +323,14 @@ class ChromePool:
                 self._log(f"[PROXY] Provider type = none, skip")
                 return
 
+            # v1.0.611: Pool mode + IPv6 → cleanup old static IPs truoc
+            if pp_type == 'ipv6' and self._pool_mode:
+                pool_ips = [w.ipv6 for w in self.workers if w.ipv6]
+                if pool_ips:
+                    from modules.proxy_providers.ipv6_provider import IPv6Provider
+                    _cleaner = IPv6Provider(log_func=lambda msg, lvl="INFO": self._log(msg, lvl))
+                    _cleaner.cleanup_old_addresses(keep_ips=pool_ips)
+
             for worker in self.workers:
                 # Moi worker co provider rieng (port rieng)
                 proxy_port = worker.port + 200  # 19222 → 19422, 19223 → 19423
