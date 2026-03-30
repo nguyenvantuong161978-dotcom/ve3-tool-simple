@@ -2746,7 +2746,8 @@ class SimpleGUI(tk.Tk):
     def _auto_detect_ipv6(self) -> bool:
         """
         Auto-detect IPv6 connectivity.
-        Test ping to Google DNS IPv6 for each IP in config/ipv6.txt.
+        v1.0.562: Pool mode → test Pool API connection first.
+        File mode → Test ping to Google DNS IPv6 for each IP in config/ipv6.txt.
         Returns True if at least one IPv6 works, False if none work.
         Also updates settings.yaml automatically.
         """
@@ -2754,6 +2755,32 @@ class SimpleGUI(tk.Tk):
         import yaml
 
         config_path = TOOL_DIR / "config" / "settings.yaml"
+
+        # v1.0.562: Check Pool mode first
+        try:
+            if config_path.exists():
+                with open(config_path, "r", encoding="utf-8") as f:
+                    _cfg = yaml.safe_load(f) or {}
+                pool_api_url = _cfg.get('mikrotik', {}).get('pool_api_url', '')
+                if pool_api_url:
+                    print(f"[IPv6] Pool mode: testing {pool_api_url}...")
+                    self.status_var.set("Dang kiem tra IPv6 Pool...")
+                    self.update()
+                    try:
+                        from modules.ipv6_pool_client import IPv6PoolClient
+                        client = IPv6PoolClient(api_url=pool_api_url, timeout=5)
+                        if client.ping():
+                            status = client.get_status()
+                            avail = status.get('available', 0) if status else 0
+                            print(f"[IPv6] Pool API OK! {avail} IPs available")
+                            self._set_ipv6_enabled(True)
+                            return True
+                        else:
+                            print(f"[IPv6] Pool API not available, fallback to file")
+                    except Exception as e:
+                        print(f"[IPv6] Pool API error: {e}, fallback to file")
+        except:
+            pass
 
         # Find IPv6 file (ipv6.txt or ipv6_list.txt)
         ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
@@ -3275,6 +3302,7 @@ class SimpleGUI(tk.Tk):
         current_ws_username = ""
         current_ws_password = ""
         current_ws_machine_id = "1"
+        current_pool_api_url = ""
         try:
             if config_path.exists():
                 with open(config_path, "r", encoding="utf-8") as f:
@@ -3290,11 +3318,16 @@ class SimpleGUI(tk.Tk):
                     # Backward compat
                     ipv6_cfg = _cfg.get('ipv6_rotation', {})
                     current_proxy_type = "ipv6" if ipv6_cfg.get('enabled', False) else "none"
+                # v1.0.562: Pool API URL
+                mikrotik_cfg = _cfg.get('mikrotik', {})
+                current_pool_api_url = mikrotik_cfg.get('pool_api_url', '')
+                if current_pool_api_url and current_proxy_type == 'ipv6':
+                    current_proxy_type = 'ipv6_pool'
         except:
             pass
 
         proxy_type_var = tk.StringVar(value=current_proxy_type)
-        proxy_types = [("Khong dung", "none"), ("IPv6 Rotation", "ipv6"), ("Webshare Rotating", "webshare")]
+        proxy_types = [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare")]
 
         for text, val in proxy_types:
             tk.Radiobutton(proxy_type_frame, text=text, variable=proxy_type_var, value=val,
@@ -3370,7 +3403,153 @@ class SimpleGUI(tk.Tk):
                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
                  relief="flat", padx=10, pady=2).pack(anchor="w", pady=3)
 
-        # --- IPv6 section (existing) ---
+        # --- v1.0.562: IPv6 Pool section ---
+        pool_frame = tk.LabelFrame(scroll_frame, text=" IPv6 Pool (MikroTik) ", bg='#16213e', fg='#ffd93d',
+                                    font=("Arial", 9, "bold"), padx=10, pady=8)
+
+        pool_form = tk.Frame(pool_frame, bg='#16213e')
+        pool_form.pack(fill="x", pady=5)
+
+        tk.Label(pool_form, text="Pool API URL:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        pool_api_var = tk.StringVar(value=current_pool_api_url)
+        tk.Entry(pool_form, textvariable=pool_api_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
+
+        tk.Label(pool_frame, text="VD: http://192.168.88.1:8765 - Lay IPv6 tu MikroTik Pool API",
+                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
+
+        # Pool status + stats
+        pool_status_var = tk.StringVar(value="")
+        pool_status_lbl = tk.Label(pool_frame, textvariable=pool_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        pool_status_lbl.pack(anchor="w", pady=3)
+
+        pool_stats_var = tk.StringVar(value="")
+        pool_stats_lbl = tk.Label(pool_frame, textvariable=pool_stats_var, bg='#16213e', fg='#888', font=("Consolas", 8),
+                                   justify="left")
+        pool_stats_lbl.pack(anchor="w", pady=2)
+
+        def _test_pool():
+            """Test ket noi Pool API va hien thi thong ke."""
+            url = pool_api_var.get().strip()
+            if not url:
+                pool_status_var.set("Nhap Pool API URL!")
+                pool_status_lbl.config(fg='#e94560')
+                return
+            pool_status_var.set("Dang ket noi...")
+            pool_status_lbl.config(fg='#ffd93d')
+            popup.update()
+
+            def _do_test():
+                try:
+                    from modules.ipv6_pool_client import IPv6PoolClient
+                    client = IPv6PoolClient(api_url=url, timeout=5)
+                    if client.ping():
+                        status = client.get_status()
+                        def _show():
+                            pool_status_var.set("OK! Ket noi Pool thanh cong")
+                            pool_status_lbl.config(fg='#00ff88')
+                            if status:
+                                avail = status.get('available', 0)
+                                in_use = status.get('in_use', 0)
+                                burned = status.get('burned', 0)
+                                total = avail + in_use + burned
+                                stats_text = (
+                                    f"Tong: {total} IP | San sang: {avail} | "
+                                    f"Dang dung: {in_use} | Da burn: {burned}"
+                                )
+                                pool_stats_var.set(stats_text)
+                        popup.after(0, _show)
+                    else:
+                        popup.after(0, lambda: (
+                            pool_status_var.set("THAT BAI! Khong ket noi duoc"),
+                            pool_status_lbl.config(fg='#e94560'),
+                            pool_stats_var.set("")
+                        ))
+                except Exception as e:
+                    popup.after(0, lambda: (
+                        pool_status_var.set(f"LOI: {str(e)[:50]}"),
+                        pool_status_lbl.config(fg='#e94560'),
+                        pool_stats_var.set("")
+                    ))
+
+            threading.Thread(target=_do_test, daemon=True).start()
+
+        def _rotate_pool_manual():
+            """Doi IPv6 thu cong qua Pool API."""
+            url = pool_api_var.get().strip()
+            if not url:
+                pool_status_var.set("Nhap Pool API URL!")
+                pool_status_lbl.config(fg='#e94560')
+                return
+            pool_status_var.set("Dang doi IPv6...")
+            pool_status_lbl.config(fg='#ffd93d')
+            popup.update()
+
+            def _do_rotate():
+                try:
+                    from modules.ipv6_pool_client import IPv6PoolClient
+                    client = IPv6PoolClient(api_url=url, timeout=5)
+
+                    # Lay IP hien tai tu rotator (neu co)
+                    current_ip = None
+                    try:
+                        from modules.ipv6_rotator import get_ipv6_rotator
+                        rotator = get_ipv6_rotator()
+                        if rotator:
+                            current_ip = rotator.get_current_ipv6()
+                    except:
+                        pass
+
+                    if current_ip:
+                        new_ip = client.rotate_ip(current_ip, reason="manual", worker="vm_gui")
+                    else:
+                        new_ip = client.get_ip(worker="vm_gui")
+
+                    if new_ip:
+                        # Thu set IPv6 len may
+                        try:
+                            from modules.ipv6_rotator import get_ipv6_rotator
+                            rotator = get_ipv6_rotator()
+                            if rotator:
+                                ok = rotator.set_ipv6(new_ip)
+                                if ok:
+                                    rotator.current_ipv6 = new_ip
+                                    popup.after(0, lambda: (
+                                        pool_status_var.set(f"DA DOI: {new_ip}"),
+                                        pool_status_lbl.config(fg='#00ff88')
+                                    ))
+                                    return
+                        except:
+                            pass
+                        popup.after(0, lambda: (
+                            pool_status_var.set(f"LAY DUOC: {new_ip} (chua set len may)"),
+                            pool_status_lbl.config(fg='#ffd93d')
+                        ))
+                    else:
+                        popup.after(0, lambda: (
+                            pool_status_var.set("THAT BAI! Pool het IP hoac loi"),
+                            pool_status_lbl.config(fg='#e94560')
+                        ))
+                except Exception as e:
+                    popup.after(0, lambda: (
+                        pool_status_var.set(f"LOI: {str(e)[:50]}"),
+                        pool_status_lbl.config(fg='#e94560')
+                    ))
+
+            threading.Thread(target=_do_rotate, daemon=True).start()
+
+        pool_btn_frame = tk.Frame(pool_frame, bg='#16213e')
+        pool_btn_frame.pack(anchor="w", pady=5)
+
+        tk.Button(pool_btn_frame, text="TEST KET NOI", command=_test_pool,
+                 bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
+                 relief="flat", padx=10, pady=2).pack(side="left", padx=(0, 8))
+
+        tk.Button(pool_btn_frame, text="DOI IPv6 THU CONG", command=_rotate_pool_manual,
+                 bg='#e17055', fg='white', font=("Arial", 8, "bold"),
+                 relief="flat", padx=10, pady=2).pack(side="left", padx=(0, 8))
+
+        # --- IPv6 section (existing - file based) ---
         ipv6_section_frame = tk.Frame(scroll_frame, bg='#1a1a2e')
 
         # Show/hide based on proxy type
@@ -3378,12 +3557,19 @@ class SimpleGUI(tk.Tk):
             ptype = proxy_type_var.get()
             if ptype == "webshare":
                 ws_frame.pack(fill="x", padx=20, pady=5, after=proxy_type_frame)
+                pool_frame.pack_forget()
+                ipv6_section_frame.pack_forget()
+            elif ptype == "ipv6_pool":
+                ws_frame.pack_forget()
+                pool_frame.pack(fill="x", padx=20, pady=5, after=proxy_type_frame)
                 ipv6_section_frame.pack_forget()
             elif ptype == "ipv6":
                 ws_frame.pack_forget()
+                pool_frame.pack_forget()
                 ipv6_section_frame.pack(fill="x", padx=0, pady=5, after=proxy_type_frame)
             else:
                 ws_frame.pack_forget()
+                pool_frame.pack_forget()
                 ipv6_section_frame.pack_forget()
 
         # IPv6 content inside ipv6_section_frame
@@ -3481,6 +3667,10 @@ class SimpleGUI(tk.Tk):
 
             threading.Thread(target=run_test, daemon=True).start()
 
+        # Save status label (dung chung cho ca save)
+        save_status_var = tk.StringVar(value="")
+        save_status_lbl = tk.Label(scroll_frame, textvariable=save_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
+
         def save_proxy_config():
             """Save proxy provider + IPv6 settings to config."""
             try:
@@ -3497,9 +3687,11 @@ class SimpleGUI(tk.Tk):
 
                 # Save proxy_provider section
                 ptype = proxy_type_var.get()
+                # Map ipv6_pool back to ipv6 for proxy_provider (pool is IPv6 source, not provider type)
+                pp_type = 'ipv6' if ptype == 'ipv6_pool' else ptype
                 if 'proxy_provider' not in config:
                     config['proxy_provider'] = {}
-                config['proxy_provider']['type'] = ptype
+                config['proxy_provider']['type'] = pp_type
 
                 # Webshare settings
                 config['proxy_provider']['webshare'] = {
@@ -3510,10 +3702,19 @@ class SimpleGUI(tk.Tk):
                     'machine_id': int(ws_machine_var.get() or 1),
                 }
 
+                # v1.0.562: Pool API URL → mikrotik section
+                if 'mikrotik' not in config:
+                    config['mikrotik'] = {}
+                if ptype == 'ipv6_pool':
+                    config['mikrotik']['pool_api_url'] = pool_api_var.get().strip()
+                else:
+                    config['mikrotik']['pool_api_url'] = ''
+
                 # IPv6 backward compat
                 if 'ipv6_rotation' not in config:
                     config['ipv6_rotation'] = {}
-                config['ipv6_rotation']['enabled'] = (ptype == 'ipv6' and ipv6_mode_var.get() == 1)
+                config['ipv6_rotation']['enabled'] = (ptype in ('ipv6', 'ipv6_pool') and
+                                                       (ptype == 'ipv6_pool' or ipv6_mode_var.get() == 1))
 
                 with open(config_path, "w", encoding="utf-8") as f:
                     yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
@@ -3524,13 +3725,14 @@ class SimpleGUI(tk.Tk):
                         if hasattr(self.manager.settings, 'config'):
                             self.manager.settings.config = config.copy()
 
-                ipv6_status_var.set(f"Da luu! Proxy: {ptype.upper()}")
-                ipv6_status_lbl.config(fg='#00ff88')
+                type_labels = {'none': 'KHONG DUNG', 'ipv6': 'IPv6 FILE', 'ipv6_pool': 'IPv6 POOL', 'webshare': 'WEBSHARE'}
+                save_status_var.set(f"DA LUU! Proxy: {type_labels.get(ptype, ptype)}")
+                save_status_lbl.config(fg='#00ff88')
                 print(f"[GUI] Proxy config saved: type={ptype}")
 
             except Exception as e:
-                ipv6_status_var.set(f"LOI: {str(e)[:40]}")
-                ipv6_status_lbl.config(fg='#e94560')
+                save_status_var.set(f"LOI: {str(e)[:40]}")
+                save_status_lbl.config(fg='#e94560')
 
         def fetch_ipv6_from_sheet():
             """Lay IPv6 tu trang tinh THONG TIN."""
@@ -3581,6 +3783,8 @@ class SimpleGUI(tk.Tk):
 
         # --- Bottom buttons (LUU + DONG) - outside proxy sections ---
         tk.Frame(scroll_frame, bg='#444', height=2).pack(fill="x", padx=20, pady=10)
+
+        save_status_lbl.pack(pady=3)
 
         bottom_btn_frame = tk.Frame(scroll_frame, bg='#1a1a2e')
         bottom_btn_frame.pack(pady=10)

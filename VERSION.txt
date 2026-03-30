@@ -1,3 +1,22 @@
+1.0.562
+2026-03-30 (VN)
+Change: VM GUI IPv6 Pool + Thong ke API + Doi IPv6 thu cong
+
+- VM Setup popup: Them loai proxy "IPv6 Pool" (MikroTik Pool API)
+  * Nhap Pool API URL + TEST KET NOI (hien thi so IP san sang/dang dung/burned)
+  * DOI IPv6 THU CONG: Lay IP tu pool va set len may (test nhanh)
+  * LUU CAU HINH: Luu pool_api_url vao mikrotik section trong settings.yaml
+  * Auto-detect: Kiem tra Pool API truoc, fallback sang file ipv6.txt
+- IPv6 GUI: Them section "Thong ke API"
+  * Hien thi: Lay IP / Doi IP / Burn / Tra lai (dem so lan)
+  * Worker tracking: Worker nao dang dung IP nao, bao nhieu lan get/rotate/burn
+  * Auto-refresh stats moi 10 giay khi API dang chay
+- API Server: Them /api/stats endpoint + tracking tat ca actions
+  * _track_stat(): Dem get/rotate/burn/release theo tong va theo worker
+  * get_api_stats(): Thread-safe access thong ke
+  * /api/status: Bao gom api_stats trong response
+- Files: vm_manager_gui.py, ipv6/ipv6_server.py, ipv6/ipv6_gui.py
+
 1.0.561
 2026-03-30 (VN)
 Change: Server IPv6 Pool - Server tu dong lay/doi IPv6 qua Pool API cho moi Chrome worker

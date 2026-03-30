@@ -29,6 +29,34 @@ from typing import Optional
 _pool = None
 _log_func = print
 
+# v1.0.562: Statistics tracking
+_stats = {
+    "total_get": 0,       # So lan get_ip
+    "total_rotate": 0,    # So lan rotate_ip
+    "total_burn": 0,      # So lan burn_ip
+    "total_release": 0,   # So lan release_ip
+    "workers": {},         # {worker_name: {"get": N, "rotate": N, "burn": N, "current_ip": "..."}}
+    "started_at": None,    # Thoi gian bat dau
+}
+_stats_lock = threading.Lock()
+
+
+def _track_stat(action: str, worker: str = "unknown", ip: str = ""):
+    """Track 1 action cho thong ke."""
+    with _stats_lock:
+        _stats[f"total_{action}"] = _stats.get(f"total_{action}", 0) + 1
+        if worker not in _stats["workers"]:
+            _stats["workers"][worker] = {"get": 0, "rotate": 0, "burn": 0, "release": 0, "current_ip": ""}
+        _stats["workers"][worker][action] = _stats["workers"][worker].get(action, 0) + 1
+        if action in ("get", "rotate") and ip:
+            _stats["workers"][worker]["current_ip"] = ip
+
+
+def get_api_stats() -> dict:
+    """Lay thong ke API (thread-safe)."""
+    with _stats_lock:
+        return dict(_stats)
+
 
 def set_pool(pool, log_func=print):
     """Set pool instance cho API server."""
@@ -76,6 +104,8 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
             self._handle_get_ip(params)
         elif path == "/api/status":
             self._handle_status()
+        elif path == "/api/stats":
+            self._handle_stats()
         elif path == "/api/ping":
             self._send_json({"ok": True, "time": time.strftime("%H:%M:%S")})
         else:
@@ -99,6 +129,7 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
                     break
 
             _log_func(f"[API] GET_IP: {ip} → {worker}")
+            _track_stat("get", worker, ip)
             self._send_json({
                 "success": True,
                 "ip": ip,
@@ -110,7 +141,7 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
             self._send_json({"success": False, "error": "No available IPs"}, 200)
 
     def _handle_status(self):
-        """GET /api/status → Trang thai pool."""
+        """GET /api/status → Trang thai pool + stats."""
         if not _pool:
             self._send_json({"error": "Pool not initialized"}, 503)
             return
@@ -125,10 +156,38 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
                 "use_count": e.get("use_count", 0),
             })
 
+        # v1.0.562: Include API stats
+        api_stats = get_api_stats()
+
         self._send_json({
             "success": True,
             **status,
             "entries": entries,
+            "api_stats": {
+                "total_get": api_stats.get("total_get", 0),
+                "total_rotate": api_stats.get("total_rotate", 0),
+                "total_burn": api_stats.get("total_burn", 0),
+                "total_release": api_stats.get("total_release", 0),
+                "workers": api_stats.get("workers", {}),
+            },
+        })
+
+    def _handle_stats(self):
+        """GET /api/stats → Thong ke API chi tiet."""
+        api_stats = get_api_stats()
+        pool_status = _pool.get_status() if _pool else {}
+
+        self._send_json({
+            "success": True,
+            "pool": pool_status,
+            "api": {
+                "total_get": api_stats.get("total_get", 0),
+                "total_rotate": api_stats.get("total_rotate", 0),
+                "total_burn": api_stats.get("total_burn", 0),
+                "total_release": api_stats.get("total_release", 0),
+                "started_at": api_stats.get("started_at"),
+            },
+            "workers": api_stats.get("workers", {}),
         })
 
     # =====================================================================
@@ -166,6 +225,7 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
         new_ip = _pool.rotate_ip(ip, reason=reason)
         if new_ip:
             _log_func(f"[API] ROTATE: {ip} → {new_ip} ({worker}, {reason})")
+            _track_stat("rotate", worker, new_ip)
             self._send_json({
                 "success": True,
                 "old_ip": ip,
@@ -191,6 +251,7 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
 
         _pool.release_ip(ip)
         _log_func(f"[API] RELEASE: {ip} ({worker})")
+        _track_stat("release", worker)
         self._send_json({"success": True, "ip": ip})
 
     def _handle_burn(self, body: dict):
@@ -209,6 +270,7 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
 
         _pool.burn_ip(ip, reason=reason)
         _log_func(f"[API] BURN: {ip} ({worker}, {reason})")
+        _track_stat("burn", worker)
         self._send_json({"success": True, "ip": ip})
 
 
@@ -240,6 +302,8 @@ def start_api_server(pool, host: str = "0.0.0.0", port: int = 8765, log_func=pri
         return True
 
     set_pool(pool, log_func)
+    with _stats_lock:
+        _stats["started_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
     try:
         _server = HTTPServer((host, port), IPv6APIHandler)

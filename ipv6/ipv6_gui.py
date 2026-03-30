@@ -130,6 +130,36 @@ class IPv6PoolGUI:
         self.lbl_api_url = ttk.Label(api_row, text="", foreground="gray")
         self.lbl_api_url.pack(side="left", padx=4)
 
+        # ---- API STATS (v1.0.562) ----
+        api_stats_frame = ttk.LabelFrame(self.root, text="Thong ke API", padding=8)
+        api_stats_frame.pack(fill="x", padx=8, pady=4)
+
+        self.var_stat_get = tk.StringVar(value="0")
+        self.var_stat_rotate = tk.StringVar(value="0")
+        self.var_stat_burn = tk.StringVar(value="0")
+        self.var_stat_release = tk.StringVar(value="0")
+
+        stats2_row = ttk.Frame(api_stats_frame)
+        stats2_row.pack(fill="x")
+
+        for label, var, color in [
+            ("Lay IP:", self.var_stat_get, "green"),
+            ("Doi IP:", self.var_stat_rotate, "#cc6600"),
+            ("Burn:", self.var_stat_burn, "red"),
+            ("Tra lai:", self.var_stat_release, "blue"),
+        ]:
+            f = ttk.Frame(stats2_row)
+            f.pack(side="left", padx=12)
+            ttk.Label(f, text=label).pack(side="left")
+            l = ttk.Label(f, textvariable=var, font=("Segoe UI", 11, "bold"))
+            l.pack(side="left", padx=4)
+            l.configure(foreground=color)
+
+        # Worker details
+        self.var_workers_text = tk.StringVar(value="Chua co du lieu")
+        ttk.Label(api_stats_frame, textvariable=self.var_workers_text,
+                  foreground="gray", font=("Consolas", 8)).pack(anchor="w", pady=(4, 0))
+
         # ---- IP LIST ----
         list_frame = ttk.LabelFrame(self.root, text="Danh sach IP trong Pool", padding=4)
         list_frame.pack(fill="both", expand=True, padx=8, pady=4)
@@ -315,8 +345,21 @@ class IPv6PoolGUI:
                 self.lbl_api_status.configure(text="API: Dang chay", style="Green.TLabel")
                 self.lbl_api_url.configure(text=f"http://{local_ip}:{port}")
                 self._log(f"API Server: http://{local_ip}:{port}")
+                # v1.0.562: Start auto-refresh stats
+                self._start_auto_refresh()
             else:
                 self._log("API Server start that bai!")
+
+    def _start_auto_refresh(self):
+        """v1.0.562: Tu dong cap nhat stats moi 10 giay."""
+        def _tick():
+            if api_is_running() and self.pool:
+                try:
+                    self._refresh_ui()
+                except Exception:
+                    pass
+                self.root.after(10000, _tick)  # 10s
+        self.root.after(10000, _tick)
 
     # =========================================================================
     # ACTIONS
@@ -517,6 +560,29 @@ class IPv6PoolGUI:
         remaining = status.get("range_remaining", 0)
         total = status.get("range_total", 0)
         self.var_remaining.set(f"{remaining}/{total}")
+
+        # v1.0.562: API Stats
+        try:
+            from ipv6.ipv6_server import get_api_stats
+            api_stats = get_api_stats()
+            self.var_stat_get.set(str(api_stats.get("total_get", 0)))
+            self.var_stat_rotate.set(str(api_stats.get("total_rotate", 0)))
+            self.var_stat_burn.set(str(api_stats.get("total_burn", 0)))
+            self.var_stat_release.set(str(api_stats.get("total_release", 0)))
+
+            # Worker details
+            workers = api_stats.get("workers", {})
+            if workers:
+                parts = []
+                for wname, wdata in workers.items():
+                    ip = wdata.get("current_ip", "")
+                    ip_short = ip[-15:] if len(ip) > 15 else ip
+                    parts.append(f"{wname}: IP={ip_short} get={wdata.get('get',0)} rot={wdata.get('rotate',0)} burn={wdata.get('burn',0)}")
+                self.var_workers_text.set(" | ".join(parts))
+            else:
+                self.var_workers_text.set("Chua co worker nao ket noi")
+        except Exception:
+            pass
 
         # Tree
         self.tree.delete(*self.tree.get_children())
