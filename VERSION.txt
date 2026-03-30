@@ -1,3 +1,22 @@
+1.0.603
+2026-03-30 (VN)
+Change: Them register_ip - VM dang ky IPv6 dang dung voi pool
+
+- VAN DE: Pool chay SAU VM hoac RESET → khong biet VM nao dung IP nao
+  * Pool cho IP da co VM dung → xung dot
+  * VM dung IP cu ma pool danh dau "available" → 2 VM cung subnet
+- GIAI PHAP: Them /api/register_ip
+  * VM khoi dong → check interface co IPv6 cu khong
+  * Neu co → goi register_ip (match theo subnet) → pool danh dau in_use
+  * Neu khong co hoac register fail → goi get_ip binh thuong
+- FLOW MOI:
+  * VM start → _get_existing_ipv6() doc IPv6 tu netsh
+  * → POST /api/register_ip {ip, worker}
+  * → Pool match subnet → danh dau in_use → tra IP + gateway
+  * → VM dung IP tu pool (co the khac worker IP cu nhung cung subnet)
+- Files: ipv6/ipv6_pool.py, ipv6/ipv6_server.py,
+         modules/ipv6_pool_client.py, modules/proxy_providers/ipv6_pool_provider.py
+
 1.0.602
 2026-03-30 (VN)
 Change: FIX refill tao gateway moi + auto-adjust max_pool_size

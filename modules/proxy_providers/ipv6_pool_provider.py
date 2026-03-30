@@ -65,8 +65,22 @@ class IPv6PoolProvider(ProxyProvider):
                 return False
 
             if worker_id == 0:
-                # Chrome 1: Lay IP tu pool + start SOCKS5 proxy
-                result = self._client.get_ip(worker=self._worker_name)
+                # v1.0.603: Thu register IP cu truoc (neu VM da co tu lan truoc)
+                existing_ip = self._get_existing_ipv6()
+                result = None
+
+                if existing_ip:
+                    self.log(f"[PROXY-Pool] Tim thay IPv6 cu: {existing_ip}, dang ky voi pool...")
+                    result = self._client.register_ip(existing_ip, worker=self._worker_name)
+                    if result:
+                        self.log(f"[PROXY-Pool] REGISTER OK: {result['ip']}")
+                    else:
+                        self.log(f"[PROXY-Pool] REGISTER failed, se lay IP moi")
+
+                # Neu khong register duoc → lay IP moi
+                if not result:
+                    result = self._client.get_ip(worker=self._worker_name)
+
                 if not result:
                     self.log("[PROXY-Pool] Khong lay duoc IP tu pool!")
                     return False
@@ -168,6 +182,40 @@ class IPv6PoolProvider(ProxyProvider):
 
     def get_type(self) -> str:
         return "ipv6_pool"
+
+    def _get_existing_ipv6(self) -> str:
+        """
+        v1.0.603: Kiem tra VM co IPv6 tu lan chay truoc khong.
+        Doc tu Windows interface (netsh).
+        """
+        import subprocess
+        try:
+            mikrotik_cfg = self.config.get('mikrotik', {})
+            prefix = mikrotik_cfg.get('prefix', '')
+            if not prefix:
+                return ""
+
+            # Lay danh sach IPv6 tren may
+            result = subprocess.run(
+                'netsh interface ipv6 show address',
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode != 0:
+                return ""
+
+            # Tim IPv6 co prefix cua pool (vd: 2001:ee0:b004:30)
+            prefix_check = prefix.rstrip(":")
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if prefix_check in line and "::" not in line.split()[-1] if line.split() else False:
+                    # Tim address dang: "2001:ee0:b004:30xx:xxxx:xxxx:xxxx:xxxx"
+                    parts = line.split()
+                    for part in parts:
+                        if prefix_check in part and "::" not in part:
+                            return part
+            return ""
+        except Exception:
+            return ""
 
     def test_connectivity(self) -> bool:
         """Test ket noi toi Pool API."""

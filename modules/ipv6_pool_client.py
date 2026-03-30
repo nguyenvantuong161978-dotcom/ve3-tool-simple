@@ -69,6 +69,33 @@ class IPv6PoolClient:
             self.log(f"[IPv6Client] GET failed: {resp.get('error', 'unknown')}")
         return None
 
+    def register_ip(self, ip: str, worker: str = "unknown") -> Optional[Dict]:
+        """
+        v1.0.603: Dang ky IP dang dung voi pool.
+
+        VM goi khi khoi dong va da co IPv6 tu lan truoc.
+        Pool match theo subnet, danh dau in_use.
+
+        Args:
+            ip: IPv6 address VM dang dung
+            worker: Ten worker
+
+        Returns:
+            Dict {"ip": "...", "gateway": "..."} hoac None
+        """
+        resp = self._post("/api/register_ip", {
+            "ip": ip,
+            "worker": worker,
+        })
+        if resp and resp.get("success"):
+            pool_ip = resp["ip"]
+            gateway = resp.get("gateway", "")
+            self.log(f"[IPv6Client] REGISTER: {ip} → {pool_ip} gw={gateway} (worker={worker})")
+            return {"ip": pool_ip, "gateway": gateway}
+        elif resp:
+            self.log(f"[IPv6Client] REGISTER failed: {resp.get('error', 'unknown')}")
+        return None
+
     def rotate_ip(self, ip: str, reason: str = "403", worker: str = "unknown") -> Optional[Dict]:
         """
         Burn IP cu, lay IP moi + gateway.

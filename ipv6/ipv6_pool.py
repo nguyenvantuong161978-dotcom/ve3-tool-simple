@@ -190,6 +190,66 @@ class IPv6Pool:
             self.log("[POOL] [!] POOL EMPTY - No more IPs!")
             return None
 
+    def register_ip(self, address: str, worker: str = "unknown") -> Optional[Tuple[str, str]]:
+        """
+        v1.0.603: VM dang ky IP dang dung voi pool.
+
+        Khi VM khoi dong va da co IPv6 tu lan truoc, goi register de:
+        - Pool biet IP nay dang duoc dung (tranh cap cho VM khac)
+        - Match theo SUBNET (vi worker IP co the khac sau reset)
+
+        Flow:
+            1. Tim entry trong pool co cung subnet
+            2. Neu tim thay → danh dau in_use, tra ve IP + gateway
+            3. Neu khong tim thay → tra None (VM nen goi get_ip)
+
+        Args:
+            address: IPv6 address VM dang dung
+            worker: Ten worker (vd: "KA4-T3_chrome0")
+
+        Returns:
+            Tuple (pool_ip, gateway) hoac None
+        """
+        import ipaddress
+        with self._lock:
+            # Extract subnet tu address VM dang dung
+            try:
+                addr = ipaddress.IPv6Address(address)
+                # Lay 4 octets cua /64 prefix → subnet la octet thu 4
+                parts = addr.exploded.split(":")
+                subnet_hex = parts[3]  # vd: "3065" → lay "65"
+                # Subnet hex trong pool la 2 ky tu cuoi (vd: "65", "af")
+                if subnet_hex.startswith(self.api.prefix.split(":")[-2][:2] if ":" in self.api.prefix else "30"):
+                    subnet_hex_short = subnet_hex[2:]  # "3065" → "65"
+                else:
+                    subnet_hex_short = subnet_hex
+            except Exception:
+                self.log(f"[POOL] REGISTER: Invalid address: {address}")
+                return None
+
+            # Tim entry co cung subnet
+            for entry in self.pool:
+                if entry.get("subnet_hex") == subnet_hex_short and entry["status"] == "available":
+                    entry["status"] = "in_use"
+                    entry["used_at"] = time.time()
+                    entry["use_count"] = entry.get("use_count", 0) + 1
+                    self._save_pool()
+                    ip = entry["address"]
+                    gateway = self._get_gateway_for_ip(ip)
+                    self.log(f"[POOL] REGISTER: {worker} → subnet {subnet_hex_short} → {ip} (da danh dau in_use)")
+                    return ip, gateway
+
+            # Subnet da in_use (VM khac hoac chinh VM nay truoc do)
+            for entry in self.pool:
+                if entry.get("subnet_hex") == subnet_hex_short and entry["status"] == "in_use":
+                    ip = entry["address"]
+                    gateway = self._get_gateway_for_ip(ip)
+                    self.log(f"[POOL] REGISTER: {worker} → subnet {subnet_hex_short} da in_use, tra ve {ip}")
+                    return ip, gateway
+
+            self.log(f"[POOL] REGISTER: subnet {subnet_hex_short} khong tim thay trong pool")
+            return None
+
     def release_ip(self, address: str):
         """
         Tra IP lai pool (van dung duoc, khong bi 403).

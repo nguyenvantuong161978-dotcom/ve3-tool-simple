@@ -7,6 +7,7 @@ API server cho VM/Server lay va doi IPv6 tu dong.
 
 Endpoints:
     GET  /api/get_ip?worker=vm1_chrome1   → Lay 1 IP
+    POST /api/register_ip                  → VM dang ky IP dang dung
     POST /api/rotate_ip                    → Burn IP cu, lay IP moi
     POST /api/release_ip                   → Tra IP ve pool
     POST /api/burn_ip                      → Danh dau burned
@@ -201,7 +202,9 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
         path = parsed.path
         body = self._read_body()
 
-        if path == "/api/rotate_ip":
+        if path == "/api/register_ip":
+            self._handle_register(body)
+        elif path == "/api/rotate_ip":
             self._handle_rotate(body)
         elif path == "/api/release_ip":
             self._handle_release(body)
@@ -209,6 +212,35 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
             self._handle_burn(body)
         else:
             self._send_json({"error": "Not found"}, 404)
+
+    def _handle_register(self, body: dict):
+        """POST /api/register_ip {ip, worker} → VM dang ky IP dang dung."""
+        if not _pool:
+            self._send_json({"error": "Pool not initialized"}, 503)
+            return
+
+        ip = body.get("ip", "")
+        worker = body.get("worker", "unknown")
+
+        if not ip:
+            self._send_json({"error": "Missing 'ip' field"}, 400)
+            return
+
+        result = _pool.register_ip(ip, worker=worker)
+        if result:
+            pool_ip, gateway = result
+            _log_func(f"[API] REGISTER: {worker} → {pool_ip} gw={gateway}")
+            _track_stat("get", worker, pool_ip)
+            self._send_json({
+                "success": True,
+                "ip": pool_ip,
+                "gateway": gateway,
+                "worker": worker,
+                "registered": True,
+            })
+        else:
+            _log_func(f"[API] REGISTER: {worker} → {ip} not found, use get_ip")
+            self._send_json({"success": False, "error": "IP not in pool, use get_ip"}, 200)
 
     def _handle_rotate(self, body: dict):
         """POST /api/rotate_ip {ip, reason, worker} → Burn cu, tra IP moi."""
