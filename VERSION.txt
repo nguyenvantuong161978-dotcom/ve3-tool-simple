@@ -1,28 +1,25 @@
+1.0.610
+2026-03-30 (VN)
+Fix: Server IPv6 Pool - interface setup giong ipv6_rotator
+
+- _add_to_interface() viet lai giong logic ipv6_rotator.set_ipv6():
+  * CLEANUP old ::/0 routes truoc (nhieu default routes → routing loan)
+  * Firewall ICMPv6 NDP TRUOC khi add address
+  * IPv6 prefix policy (prefer IPv6 over IPv4)
+  * Wait 8s cho NDP (truoc chi 3s)
+  * DNS chay rieng (non-fatal)
+  * VERIFY IP tren interface sau setup
+  * Log chi tiet tung command, ping gateway check Reply
+- File: modules/proxy_providers/ipv6_provider.py
+
 1.0.609
 2026-03-30 (VN)
 Fix: Server Chrome workers khong co mang khi dung IPv6 Pool
 
-BUG 1: Pool IP bi ghi de boi GUI IPv6 list
-- TRUOC: init_workers() gan Pool IP dung → app.py ghi de bang extra_ipv6[i] (static GUI list)
-  * Worker nhan IP `3065::100` (static) thay vi `3071:3c9a:...` (pool)
-- SAU: app.py KHONG ghi de worker.ipv6 khi pool mode active
-- File: server/app.py line 1058-1069
-
-BUG 2: setup_dedicated() khong add IPv6 to Windows interface
-- TRUOC: Chi tao SOCKS5 proxy binding den IPv6 → IP khong tren interface → WinError 10060
-- SAU: Add IPv6 to Windows interface via netsh TRUOC khi tao SOCKS5 proxy
-  * netsh interface ipv6 add address, add route /64 (on-link), add route ::/0 (default)
-  * ICMPv6 NDP firewall, DNS IPv6, ping gateway (NDP trigger)
-
-BUG 3: netsh command timeout kills entire sequence
-- TRUOC: 1 command timeout 10s → Exception → abort tat ca → proxy khong duoc tao
-- SAU: Moi command co try/except rieng, timeout tang 30s, tiep tuc du 1 command fail
-
-BUG 4: 403 rotation voi Pool mode + ProxyProvider
-- TRUOC: rotate_proxy() → provider.rotate() → can _rotator (khong co) → FAIL
-- SAU: Pool mode → rotate_to(new_ip, gateway) thay vi rotate()
-
-- ChromeWorker them field gateway tu Pool API dict
+- BUG 1: Pool IP bi ghi de boi GUI IPv6 list → Fix: skip khi pool mode
+- BUG 2: setup_dedicated() khong add IPv6 to interface → Fix: netsh add
+- BUG 3: netsh timeout kills sequence → Fix: try/except rieng
+- BUG 4: 403 rotation Pool+ProxyProvider → Fix: rotate_to()
 - File: modules/proxy_providers/ipv6_provider.py, server/chrome_pool.py, server/app.py
 
 1.0.608

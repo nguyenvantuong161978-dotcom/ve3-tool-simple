@@ -133,18 +133,75 @@ class IPv6Provider(ProxyProvider):
         except Exception:
             return ""
 
+    def _run_cmd(self, cmd: str, timeout: int = 20) -> bool:
+        """Run netsh command, log failure. Return True if OK."""
+        try:
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+            if r.returncode != 0:
+                stderr = (r.stderr or "").strip()
+                # "already exists" / "not found" khi delete → OK
+                if 'already' in stderr.lower() or 'object already exists' in stderr.lower():
+                    return True
+                if 'delete' in cmd and ('not found' in stderr.lower() or 'object' in stderr.lower()):
+                    return True
+                self.log(f"[PROXY-IPv6] [WARN] FAIL: {cmd[:80]}")
+                if stderr:
+                    self.log(f"[PROXY-IPv6] [WARN] stderr: {stderr[:150]}")
+                return False
+            return True
+        except subprocess.TimeoutExpired:
+            self.log(f"[PROXY-IPv6] [WARN] Timeout ({timeout}s): {cmd[:60]}...")
+            return False
+        except Exception as e:
+            self.log(f"[PROXY-IPv6] [WARN] Error: {e}")
+            return False
+
+    def _cleanup_old_routes(self, iface: str, keep_gateway: str = ""):
+        """
+        v1.0.610: Xoa TAT CA default routes ::/0 cu de tranh routing conflict.
+        Giong ipv6_rotator v1.0.598.
+        """
+        try:
+            route_check = subprocess.run(
+                'netsh interface ipv6 show route',
+                shell=True, capture_output=True, text=True, timeout=15
+            )
+            if route_check.returncode != 0:
+                return
+
+            for line in (route_check.stdout or "").split('\n'):
+                if '::/0' in line and iface.lower() in line.lower():
+                    parts = line.strip().split()
+                    for p in parts:
+                        if ':' in p and '::' in p and p != '::/0':
+                            if keep_gateway and p == keep_gateway:
+                                continue
+                            del_cmd = f'netsh interface ipv6 delete route ::/0 "{iface}" {p}'
+                            try:
+                                subprocess.run(del_cmd, shell=True, capture_output=True, text=True, timeout=15)
+                                self.log(f"[PROXY-IPv6] [CLEANUP] Xoa route cu: ::/0 via {p}")
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
     def _add_to_interface(self, ipv6_address: str, gateway: str = "") -> bool:
         """
-        v1.0.609: Add IPv6 address to Windows interface via netsh.
-        Server mode can: Pool IP phai duoc add vao interface truoc khi SOCKS5 proxy co the dung.
+        v1.0.609/610: Add IPv6 address to Windows interface via netsh.
+        Giong logic cua ipv6_rotator.set_ipv6() nhung cho server mode (nhieu worker).
 
-        Args:
-            ipv6_address: IPv6 address can add
-            gateway: Gateway address. Neu rong → auto-compute tu IPv6.
+        Steps:
+        1. Cleanup old default routes (tranh routing conflict)
+        2. Add IPv6 to interface
+        3. Firewall ICMPv6 NDP
+        4. On-link route + default route
+        5. IPv6 prefix policy (prefer IPv6)
+        6. Wait 8s NDP + ping gateway
+        7. DNS (non-fatal, chay rieng)
+        8. Verify
         """
         iface = self._get_interface_name()
 
-        # Auto-compute gateway neu khong co
         if not gateway:
             gateway = self._get_gateway_for_ipv6(ipv6_address)
         if not gateway:
@@ -153,59 +210,75 @@ class IPv6Provider(ProxyProvider):
 
         onlink_prefix = self._get_onlink_prefix(gateway)
 
-        commands = []
-
-        # 1. Add IPv6 address to interface
-        commands.append(f'netsh interface ipv6 add address "{iface}" {ipv6_address}')
-
-        # 2. Firewall: Allow ICMPv6 NDP (idempotent - add lai khong sao)
-        commands.append(f'netsh advfirewall firewall add rule name="ICMPv6-NDP-In" dir=in action=allow protocol=icmpv6')
-        commands.append(f'netsh advfirewall firewall add rule name="ICMPv6-NDP-Out" dir=out action=allow protocol=icmpv6')
-
-        # 3. On-link route (gateway phai reachable)
-        if onlink_prefix:
-            commands.append(f'netsh interface ipv6 add route {onlink_prefix} "{iface}"')
-
-        # 4. Default route qua gateway
-        commands.append(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
-
-        # 5. DNS IPv6
-        commands.append(f'netsh interface ipv6 set dnsservers "{iface}" static 2001:4860:4860::8888 primary')
-        commands.append(f'netsh interface ipv6 add dnsservers "{iface}" 2001:4860:4860::8844 index=2')
-
         self.log(f"[PROXY-IPv6] Adding {ipv6_address} to interface '{iface}' (gw: {gateway})")
 
-        errors = 0
-        for cmd in commands:
-            try:
-                result = subprocess.run(
-                    cmd, shell=True, capture_output=True, text=True, timeout=30
-                )
-                # Ignore "already exists" errors
-                if result.returncode != 0:
-                    stderr = result.stderr.lower()
-                    if 'already' not in stderr and 'object already exists' not in stderr:
-                        errors += 1
-            except subprocess.TimeoutExpired:
-                self.log(f"[PROXY-IPv6] Timeout: {cmd[:60]}...")
-            except Exception:
-                errors += 1
+        # Step 1: Cleanup old default routes (v1.0.610)
+        self._cleanup_old_routes(iface, keep_gateway=gateway)
 
-        # Wait for NDP neighbor discovery
-        time.sleep(3)
+        # Step 2: Firewall ICMPv6 NDP (TRUOC khi add address)
+        # Neu khong co → MikroTik khong tim duoc server → gateway UNREACHABLE
+        self._run_cmd('netsh advfirewall firewall add rule name="ICMPv6-NDP-In" dir=in action=allow protocol=icmpv6')
+        self._run_cmd('netsh advfirewall firewall add rule name="ICMPv6-NDP-Out" dir=out action=allow protocol=icmpv6')
 
-        # Ping gateway to trigger NDP
+        # Step 3: Add IPv6 address
+        ok_addr = self._run_cmd(f'netsh interface ipv6 add address "{iface}" {ipv6_address}')
+        if not ok_addr:
+            self.log(f"[PROXY-IPv6] [!] Add address failed - may already exist, continuing...")
+
+        # Step 4: On-link route + default route
+        if onlink_prefix:
+            self._run_cmd(f'netsh interface ipv6 add route {onlink_prefix} "{iface}"')
+        self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+
+        # Step 5: IPv6 prefix policy - uu tien IPv6 (giong ipv6_rotator)
+        self._run_cmd('netsh interface ipv6 set prefixpolicy ::1/128 50 0')
+        self._run_cmd('netsh interface ipv6 set prefixpolicy ::/0 40 1')
+        self._run_cmd('netsh interface ipv6 set prefixpolicy 2002::/16 30 2')
+        self._run_cmd('netsh interface ipv6 set prefixpolicy ::ffff:0:0/96 10 4')
+
+        # Step 6: Wait for NDP neighbor discovery (8s giong rotator)
+        self.log(f"[PROXY-IPv6] Doi NDP discovery (8s)...")
+        time.sleep(8)
+
+        # Ping gateway to trigger NDP + verify reachable
         try:
-            subprocess.run(
-                f'ping -6 -n 2 -w 2000 {gateway}',
-                shell=True, capture_output=True, timeout=15
+            ping_result = subprocess.run(
+                f'ping -6 -n 2 -w 3000 {gateway}',
+                shell=True, capture_output=True, text=True, timeout=15
             )
+            if ping_result.returncode == 0 and 'Reply from' in (ping_result.stdout or ''):
+                self.log(f"[PROXY-IPv6] [v] Gateway {gateway} reachable!")
+            else:
+                self.log(f"[PROXY-IPv6] [!] Gateway {gateway} KHONG reply (NDP chua xong?)")
+        except Exception:
+            self.log(f"[PROXY-IPv6] [!] Gateway ping timeout")
+
+        # Step 7: DNS (non-fatal - chay rieng, timeout rieng)
+        for dns_cmd in [
+            f'netsh interface ipv6 set dnsservers "{iface}" static 2001:4860:4860::8888 primary',
+            f'netsh interface ipv6 add dnsservers "{iface}" 2001:4860:4860::8844 index=2',
+        ]:
+            try:
+                subprocess.run(dns_cmd, shell=True, capture_output=True, timeout=15)
+            except Exception:
+                self.log(f"[PROXY-IPv6] [WARN] DNS command timeout (non-fatal)")
+
+        # Step 8: Verify IP on interface
+        try:
+            verify = subprocess.run(
+                f'netsh interface ipv6 show address "{iface}"',
+                shell=True, capture_output=True, text=True, timeout=10
+            )
+            if ipv6_address in (verify.stdout or ''):
+                self.log(f"[PROXY-IPv6] [v] VERIFIED: {ipv6_address} co tren interface")
+            else:
+                self.log(f"[PROXY-IPv6] [!] WARN: {ipv6_address} KHONG thay tren interface!")
         except Exception:
             pass
 
         self._current_ipv6 = ipv6_address
         self._current_gateway = gateway
-        self.log(f"[PROXY-IPv6] [v] IPv6 {ipv6_address} added to interface OK (errors: {errors})")
+        self.log(f"[PROXY-IPv6] [v] Setup complete for {ipv6_address}")
         return True
 
     def _remove_from_interface(self, ipv6_address: str):
