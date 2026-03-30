@@ -84,6 +84,10 @@ class IPv6Pool:
         # Pool la KHO IPv6 → can thay het tat ca IP de quan ly
         self._load_all_from_router()
 
+        # v1.0.602: Auto-adjust max_pool_size theo so IP thuc te tren router
+        if len(self.pool) > self.max_pool_size:
+            self.max_pool_size = len(self.pool) + 10  # +10 du phong
+
         available = [p for p in self.pool if p["status"] == "available"]
         in_use = [p for p in self.pool if p["status"] == "in_use"]
         burned = len(self._burned_addresses)
