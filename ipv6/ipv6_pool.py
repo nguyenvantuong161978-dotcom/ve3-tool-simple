@@ -126,8 +126,8 @@ class IPv6Pool:
 
     def _get_gateway_for_ip(self, ip: str) -> str:
         """
-        v1.0.578: Tinh gateway ::1 cho 1 IPv6 address.
-        Gateway = /64 prefix cua IP + ::1
+        v1.0.580: Tinh gateway ::1 cho 1 IPv6 address.
+        Gateway = /64 network address + 1, dung compressed format (khong co leading zeros).
 
         Args:
             ip: IPv6 address (khong co /prefix)
@@ -138,10 +138,10 @@ class IPv6Pool:
         import ipaddress
         try:
             addr = ipaddress.IPv6Address(ip)
-            full = addr.exploded  # "2001:0ee0:b004:3065:8f2e:41bc:d7a0:3e15"
-            groups = full.split(':')
-            prefix = ':'.join(groups[:4])  # /64 prefix
-            return f"{prefix}::1"
+            # Lay /64 network, +1 = gateway
+            network = ipaddress.IPv6Network(f"{addr}/64", strict=False)
+            gateway = network.network_address + 1
+            return str(gateway)  # compressed format: "2001:ee0:b004:3098::1"
         except Exception:
             return ""
 

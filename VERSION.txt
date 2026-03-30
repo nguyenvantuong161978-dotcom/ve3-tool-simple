@@ -1,3 +1,15 @@
+1.0.580
+2026-03-30 (VN)
+Change: FIX gateway format - dung compressed IPv6 (khong co leading zeros)
+
+- BUG: _get_gateway_for_ip() dung ipaddress.IPv6Address.exploded → tra ve "2001:0ee0:b004:3098::1"
+  * Leading zeros (0ee0 thay vi ee0) co the khong tuong thich voi Windows netsh
+  * VM nhan gateway sai format → khong add route duoc → no connectivity
+- FIX: Dung ipaddress.IPv6Network + str() cho compressed format
+  * str(gateway) tra ve "2001:ee0:b004:3098::1" (khong co leading zeros)
+  * Tuong thich 100% voi Windows netsh va moi OS
+- File: ipv6/ipv6_pool.py - _get_gateway_for_ip()
+
 1.0.579
 2026-03-30 (VN)
 Change: FIX gateway phai la /64 (khong phai /128) de router route duoc subnet
