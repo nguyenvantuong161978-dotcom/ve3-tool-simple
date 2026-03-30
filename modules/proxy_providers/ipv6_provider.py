@@ -38,8 +38,14 @@ class IPv6Provider(ProxyProvider):
             from modules.ipv6_rotator import get_ipv6_rotator
             self._rotator = get_ipv6_rotator()
 
-            if not self._rotator or not self._rotator.enabled or not self._rotator.ipv6_list:
-                self.log(f"[PROXY-IPv6] IPv6 khong kha dung (enabled={getattr(self._rotator, 'enabled', False)}, list={len(getattr(self._rotator, 'ipv6_list', []))})")
+            if not self._rotator or not self._rotator.enabled:
+                self.log(f"[PROXY-IPv6] IPv6 khong kha dung (enabled={getattr(self._rotator, 'enabled', False)})")
+                return False
+
+            # v1.0.574: Pool mode khong can ipv6_list (lay tu API)
+            _is_pool = getattr(self._rotator, '_pool_mode', False)
+            if not _is_pool and not self._rotator.ipv6_list:
+                self.log(f"[PROXY-IPv6] Khong co IPv6 list va khong co pool!")
                 return False
 
             self._rotator.set_logger(self.log)

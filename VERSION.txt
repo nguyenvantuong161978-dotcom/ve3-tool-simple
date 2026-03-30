@@ -1,6 +1,6 @@
-1.0.573
+1.0.574
 2026-03-30 (VN)
-Change: SOCKS5 proxy fallback IPv4 khi domain khong co IPv6 (fix login mat mang)
+Change: Fix Pool API - add IPv6 vao VM interface (netsh) truoc khi bind SOCKS5
 
 - BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
   * _refill_if_needed() chi them khi available < min_pool_size (3)

@@ -113,53 +113,39 @@ def _is_port_open(port: int) -> bool:
 
 def _ensure_socks5_proxy(cfg: dict, pp_type: str, port: int) -> bool:
     """
-    Start SOCKS5 proxy neu chua chay.
-    Lay IPv6 tu pool API hoac rotator.
+    v1.0.574: Start SOCKS5 proxy neu chua chay.
+    Dung ipv6_rotator de:
+    1. Lay IPv6 tu pool API hoac file
+    2. Add IPv6 vao VM interface (netsh)
+    3. Start SOCKS5 proxy bind vao IPv6 do
 
     Returns:
         True neu proxy san sang.
     """
     try:
-        ipv6_address = None
+        from modules.ipv6_rotator import get_ipv6_rotator
+        rotator = get_ipv6_rotator()
 
-        if pp_type == 'ipv6_pool':
-            # Lay IP tu Pool API
-            mikrotik_cfg = cfg.get('mikrotik', {})
-            api_url = mikrotik_cfg.get('pool_api_url', '')
-            timeout = mikrotik_cfg.get('pool_api_timeout', 5)
-            worker_name = mikrotik_cfg.get('worker_name', 'vm1')
-
-            if not api_url:
-                return False
-
-            from modules.ipv6_pool_client import IPv6PoolClient
-            client = IPv6PoolClient(api_url=api_url, timeout=timeout, log_func=log)
-            ipv6_address = client.get_ip(worker=f"{worker_name}_login")
-            if not ipv6_address:
-                log("[PROXY] Pool API: khong lay duoc IP", "WARN")
-                return False
-            log(f"[PROXY] Pool API: got {ipv6_address}", "INFO")
-
-        elif pp_type == 'ipv6':
-            # Lay IP tu rotator (ipv6.txt)
-            try:
-                from modules.ipv6_rotator import get_ipv6_rotator
-                rotator = get_ipv6_rotator()
-                if rotator and rotator.enabled and rotator.ipv6_list:
-                    ipv6_address = rotator.current_ipv6 or rotator.ipv6_list[0]
-                else:
-                    return False
-            except Exception:
-                return False
-
-        if not ipv6_address:
+        if not rotator or not rotator.enabled:
+            log("[PROXY] IPv6 rotator not enabled", "WARN")
             return False
 
-        # Start SOCKS5 proxy
+        rotator.set_logger(log)
+
+        # init_with_working_ipv6() tu dong:
+        # - Pool mode: lay IP tu API → set_ipv6 (netsh add) → test
+        # - File mode: doc ipv6.txt → set_ipv6 (netsh add) → test
+        working_ipv6 = rotator.init_with_working_ipv6()
+        if not working_ipv6:
+            log("[PROXY] Khong tim duoc IPv6 hoat dong", "WARN")
+            return False
+
+        log(f"[PROXY] IPv6 active: {working_ipv6}", "INFO")
+
+        # Start SOCKS5 proxy bind vao IPv6 da add vao interface
         from modules.ipv6_proxy import start_ipv6_proxy
-        proxy = start_ipv6_proxy(ipv6_address=ipv6_address, port=port, log_func=log)
+        proxy = start_ipv6_proxy(ipv6_address=working_ipv6, port=port, log_func=log)
         if proxy:
-            # Doi 1 giay de proxy san sang
             import time as _time
             _time.sleep(1)
             return _is_port_open(port)

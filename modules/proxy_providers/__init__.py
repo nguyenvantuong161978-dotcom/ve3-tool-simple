@@ -97,21 +97,15 @@ def create_provider(config: dict = None, log_func: Callable = print) -> ProxyPro
         if ipv6_cfg.get('enabled', False):
             provider_type = 'ipv6'
 
-    # v1.0.570: ipv6_pool = IPv6 Pool API (MikroTik)
-    # Check pool_api_url trong mikrotik section
+    # v1.0.574: ipv6_pool cung dung IPv6Provider (ipv6_rotator da co pool mode)
+    # ipv6_rotator tu dong detect pool_api_url va dung Pool API
     if not pp_config or provider_type == 'ipv6':
         mikrotik_cfg = config.get('mikrotik', {})
         pool_url = mikrotik_cfg.get('pool_api_url', '')
         if pool_url:
-            provider_type = 'ipv6_pool'
+            provider_type = 'ipv6'  # Dung IPv6Provider, rotator se detect pool mode
 
-    if provider_type == 'ipv6_pool':
-        from modules.proxy_providers.ipv6_pool_provider import IPv6PoolProvider
-        provider = IPv6PoolProvider(config=config, log_func=log_func)
-        log_func(f"[PROXY] Provider: IPv6 Pool API")
-        return provider
-
-    elif provider_type == 'ipv6':
+    if provider_type in ('ipv6_pool', 'ipv6'):
         from modules.proxy_providers.ipv6_provider import IPv6Provider
         provider = IPv6Provider(config=config, log_func=log_func)
         log_func(f"[PROXY] Provider: IPv6")
