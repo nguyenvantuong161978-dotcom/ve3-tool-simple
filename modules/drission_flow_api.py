@@ -1351,7 +1351,7 @@ class DrissionFlowAPI:
         # v1.0.545: ProxyProvider interface (thay the IPv6 truc tiep neu co)
         self._proxy_provider = None
 
-        # Đọc max_403_before_rotate từ settings
+        # Đọc settings.yaml va khoi tao ProxyProvider
         try:
             import yaml
             settings_path = Path(__file__).parent.parent / "config" / "settings.yaml"
@@ -1360,6 +1360,21 @@ class DrissionFlowAPI:
                     cfg = yaml.safe_load(f) or {}
                 ipv6_cfg = cfg.get('ipv6_rotation', {})
                 self._max_403_before_ipv6 = ipv6_cfg.get('max_403_before_rotate', 3)
+
+                # v1.0.570: Khoi tao ProxyProvider tu settings
+                try:
+                    from modules.proxy_providers import create_provider
+                    provider = create_provider(config=cfg, log_func=self.log if hasattr(self, 'log') else print)
+                    if provider.get_type() != 'none':
+                        # Setup provider (worker_id, port)
+                        proxy_port = ipv6_cfg.get('local_proxy_port', 1088)
+                        if provider.setup(worker_id=self.worker_id, port=proxy_port):
+                            self._proxy_provider = provider
+                            self.log(f"[PROXY] {provider.get_type()} provider READY: {provider.get_current_ip()}")
+                        else:
+                            self.log(f"[PROXY] {provider.get_type()} provider setup FAILED", "WARN")
+                except Exception as prov_err:
+                    self.log(f"[PROXY] Provider init error: {prov_err}", "WARN")
             else:
                 self._max_403_before_ipv6 = 3
         except:

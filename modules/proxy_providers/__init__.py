@@ -97,7 +97,21 @@ def create_provider(config: dict = None, log_func: Callable = print) -> ProxyPro
         if ipv6_cfg.get('enabled', False):
             provider_type = 'ipv6'
 
-    if provider_type == 'ipv6':
+    # v1.0.570: ipv6_pool = IPv6 Pool API (MikroTik)
+    # Check pool_api_url trong mikrotik section
+    if not pp_config or provider_type == 'ipv6':
+        mikrotik_cfg = config.get('mikrotik', {})
+        pool_url = mikrotik_cfg.get('pool_api_url', '')
+        if pool_url:
+            provider_type = 'ipv6_pool'
+
+    if provider_type == 'ipv6_pool':
+        from modules.proxy_providers.ipv6_pool_provider import IPv6PoolProvider
+        provider = IPv6PoolProvider(config=config, log_func=log_func)
+        log_func(f"[PROXY] Provider: IPv6 Pool API")
+        return provider
+
+    elif provider_type == 'ipv6':
         from modules.proxy_providers.ipv6_provider import IPv6Provider
         provider = IPv6Provider(config=config, log_func=log_func)
         log_func(f"[PROXY] Provider: IPv6")
@@ -123,5 +137,6 @@ def get_provider_types() -> list:
     return [
         {"value": "none", "label": "Khong dung proxy"},
         {"value": "ipv6", "label": "IPv6 Rotation"},
+        {"value": "ipv6_pool", "label": "IPv6 Pool API"},
         {"value": "webshare", "label": "Webshare Rotating Residential"},
     ]
