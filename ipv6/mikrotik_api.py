@@ -60,11 +60,27 @@ class MikroTikAPI:
         self.subnet_end = subnet_end
         self.log = log_func
 
-        self.base_url = f"https://{host}/rest"
         self.session = requests.Session()
         self.session.auth = (username, password)
         self.session.verify = False  # MikroTik self-signed cert
         self.session.headers.update({"Content-Type": "application/json"})
+
+        # v1.0.554: Auto-detect HTTPS vs HTTP
+        self.base_url = self._detect_base_url()
+
+    def _detect_base_url(self) -> str:
+        """Thu HTTPS truoc, neu fail thu HTTP."""
+        for scheme in ["https", "http"]:
+            try:
+                url = f"{scheme}://{self.host}/rest/system/identity"
+                resp = self.session.get(url, timeout=5)
+                if resp.status_code in (200, 401):
+                    self.log(f"[MikroTik] Using {scheme.upper()}://{self.host}")
+                    return f"{scheme}://{self.host}/rest"
+            except Exception:
+                pass
+        # Fallback HTTPS
+        return f"https://{self.host}/rest"
 
     # =========================================================================
     # CORE API METHODS

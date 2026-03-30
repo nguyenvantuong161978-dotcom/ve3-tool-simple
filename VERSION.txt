@@ -1,3 +1,13 @@
+1.0.554
+2026-03-30 (VN)
+Change: IPv6 tool ho tro HTTP - thu HTTPS roi fallback HTTP khi ket noi MikroTik
+
+- MikroTik www-ssl can certificate → nhieu router chua cau hinh
+- FIX: Thu HTTPS truoc, neu fail tu dong thu HTTP
+- Ap dung cho: test_pool.py (--detect) va mikrotik_api.py (tat ca API calls)
+- Huong dan bat www: /ip/service/set www disabled=no
+- Files: ipv6/test_pool.py, ipv6/mikrotik_api.py
+
 1.0.553
 2026-03-30 (VN)
 Change: IPv6 AUTO DETECT - tu dong lay interface/prefix/subnet tu MikroTik router

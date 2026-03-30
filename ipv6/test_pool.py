@@ -261,7 +261,7 @@ def auto_detect(config: dict):
 
     print(f"\nKet noi toi {host} (user: {username})...")
 
-    # Test connection truoc
+    # Test connection truoc - thu HTTPS roi HTTP
     import requests
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -270,34 +270,46 @@ def auto_detect(config: dict):
     session.auth = (username, password)
     session.verify = False
 
-    try:
-        resp = session.get(f"https://{host}/rest/system/identity", timeout=5)
-        if resp.status_code == 401:
-            print("[x] SAI MAT KHAU! Kiem tra lai username/password")
-            return
-        elif resp.status_code != 200:
-            print(f"[x] Loi HTTP {resp.status_code}")
-            print(f"    MikroTik can bat REST API (RouterOS 7+)")
-            print(f"    Vao router chay: /ip/service/set www-ssl disabled=no")
-            return
-        identity = resp.json().get("name", "unknown")
-        print(f"[v] Ket noi OK! Router: {identity}")
-    except requests.exceptions.ConnectionError:
-        print(f"[x] Khong ket noi duoc toi {host}")
+    # Thu HTTPS truoc, neu fail thu HTTP
+    base_url = None
+    for scheme in ["https", "http"]:
+        try:
+            test_url = f"{scheme}://{host}/rest/system/identity"
+            print(f"  Thu {scheme.upper()}...", end=" ")
+            resp = session.get(test_url, timeout=5)
+            if resp.status_code == 200:
+                base_url = f"{scheme}://{host}/rest"
+                identity = resp.json().get("name", "unknown")
+                print(f"OK! Router: {identity}")
+                break
+            elif resp.status_code == 401:
+                print(f"SAI MAT KHAU!")
+                print("[x] Kiem tra lai username/password")
+                return
+            else:
+                print(f"HTTP {resp.status_code}")
+        except requests.exceptions.ConnectionError:
+            print(f"khong ket noi duoc")
+        except Exception as e:
+            print(f"loi: {e}")
+
+    if not base_url:
+        print(f"\n[x] Khong ket noi duoc toi {host} (ca HTTPS va HTTP)")
         print(f"    Kiem tra:")
         print(f"    1. Router co bat khong?")
-        print(f"    2. IP {host} co dung khong?")
+        print(f"    2. IP {host} co dung khong? (thu ping {host})")
         print(f"    3. REST API da bat chua? (RouterOS 7+)")
-        print(f"       Vao router chay: /ip/service/set www-ssl disabled=no")
+        print(f"       Vao router chay:")
+        print(f"       /ip/service/set www disabled=no")
+        print(f"       /ip/service/set www-ssl certificate=local-cert disabled=no")
         return
-    except Exception as e:
-        print(f"[x] Loi: {e}")
-        return
+
+    print(f"[v] Ket noi OK qua {base_url}")
 
     # Lay tat ca IPv6 addresses
     print("\nDang lay danh sach IPv6...")
     try:
-        resp = session.get(f"https://{host}/rest/ipv6/address", timeout=10)
+        resp = session.get(f"{base_url}/ipv6/address", timeout=10)
         addrs = resp.json() if resp.status_code == 200 else []
     except Exception as e:
         print(f"[x] Loi lay IPv6: {e}")
