@@ -175,37 +175,38 @@ class IPv6Provider(ProxyProvider):
 
         self.log(f"[PROXY-IPv6] Adding {ipv6_address} to interface '{iface}' (gw: {gateway})")
 
-        try:
-            for cmd in commands:
-                result = subprocess.run(
-                    cmd, shell=True, capture_output=True, text=True, timeout=10
-                )
-                # Ignore errors (address/route may already exist)
-                if result.returncode != 0 and 'already' not in result.stderr.lower() and 'object already exists' not in result.stderr.lower():
-                    # Log but don't fail - some commands may fail if already set
-                    pass
-
-            # Wait for NDP neighbor discovery
-            import time
-            time.sleep(3)
-
-            # Ping gateway to trigger NDP
+        errors = 0
+        for cmd in commands:
             try:
-                subprocess.run(
-                    f'ping -6 -n 2 -w 2000 {gateway}',
-                    shell=True, capture_output=True, timeout=10
+                result = subprocess.run(
+                    cmd, shell=True, capture_output=True, text=True, timeout=30
                 )
+                # Ignore "already exists" errors
+                if result.returncode != 0:
+                    stderr = result.stderr.lower()
+                    if 'already' not in stderr and 'object already exists' not in stderr:
+                        errors += 1
+            except subprocess.TimeoutExpired:
+                self.log(f"[PROXY-IPv6] Timeout: {cmd[:60]}...")
             except Exception:
-                pass
+                errors += 1
 
-            self._current_ipv6 = ipv6_address
-            self._current_gateway = gateway
-            self.log(f"[PROXY-IPv6] [v] IPv6 {ipv6_address} added to interface OK")
-            return True
+        # Wait for NDP neighbor discovery
+        time.sleep(3)
 
-        except Exception as e:
-            self.log(f"[PROXY-IPv6] [x] Add to interface failed: {e}")
-            return False
+        # Ping gateway to trigger NDP
+        try:
+            subprocess.run(
+                f'ping -6 -n 2 -w 2000 {gateway}',
+                shell=True, capture_output=True, timeout=15
+            )
+        except Exception:
+            pass
+
+        self._current_ipv6 = ipv6_address
+        self._current_gateway = gateway
+        self.log(f"[PROXY-IPv6] [v] IPv6 {ipv6_address} added to interface OK (errors: {errors})")
+        return True
 
     def _remove_from_interface(self, ipv6_address: str):
         """v1.0.609: Remove IPv6 address tu Windows interface."""

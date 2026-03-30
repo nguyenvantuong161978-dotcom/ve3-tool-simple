@@ -1058,12 +1058,16 @@ def _do_start_workers():
     if extra_ipv6 and use_ipv6:
         chrome_pool._ipv6_list = list(extra_ipv6)
         server_log(f"[IPv6] {len(extra_ipv6)} IPv6 tu GUI")
-        # Gan IPv6 tu GUI cho tung worker (xoay vong)
-        for i, w in enumerate(chrome_pool.workers):
-            if i < len(extra_ipv6):
-                w.ipv6 = extra_ipv6[i]
-            else:
-                w.ipv6 = extra_ipv6[i % len(extra_ipv6)]
+        # v1.0.609: Pool mode da gan IPv6 trong init_workers() → KHONG ghi de
+        if not chrome_pool._pool_mode:
+            # Gan IPv6 tu GUI cho tung worker (xoay vong) - chi khi KHONG co pool
+            for i, w in enumerate(chrome_pool.workers):
+                if i < len(extra_ipv6):
+                    w.ipv6 = extra_ipv6[i]
+                else:
+                    w.ipv6 = extra_ipv6[i % len(extra_ipv6)]
+        else:
+            server_log(f"[IPv6] Pool mode: giu Pool IP cho workers (khong dung GUI list)")
 
     # Gioi han so Chrome neu user chon
     if chrome_count > 0 and len(chrome_pool.workers) > chrome_count:
