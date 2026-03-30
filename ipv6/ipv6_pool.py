@@ -205,28 +205,109 @@ class IPv6Pool:
 
     def burn_ip(self, address: str, reason: str = "403"):
         """
-        Danh dau IP la burned (bi 403).
-        KHONG xoa khoi router - chi danh dau trong pool.
+        v1.0.599: Burn IP = xoa gateway cu tren router + tao gateway moi voi subnet random.
+        Giong rotate_all nhung chi cho 1 IP.
+
+        Flow:
+            1. Tim subnet cua IP bi burn
+            2. Xoa gateway cu (::1/64) tren router
+            3. Chon subnet MOI (random, chua dung)
+            4. Tao gateway moi tren router
+            5. Them IP moi vao pool (available)
+            6. Xoa IP cu khoi pool
 
         Args:
             address: IPv6 address
             reason: Ly do burn (vd: "403", "blocked")
         """
         with self._lock:
-            for entry in self.pool:
+            burned_entry = None
+            burned_idx = None
+            for i, entry in enumerate(self.pool):
                 if entry["address"] == address:
-                    entry["status"] = "burned"
-                    entry["burned_at"] = time.time()
-                    entry["burn_reason"] = reason
-                    self._burned_addresses.add(address)
-                    self._save_pool()
-                    self.log(f"[POOL] BURN: {address} ({reason}) → marked burned (kept on router)")
+                    burned_entry = entry
+                    burned_idx = i
+                    break
 
-                    # Refill neu can
-                    self._refill_if_needed()
-                    return
+            if not burned_entry:
+                self.log(f"[POOL] Burn: {address} not found")
+                return
 
-            self.log(f"[POOL] Burn: {address} not found")
+            old_subnet = burned_entry.get("subnet")
+            old_subnet_hex = burned_entry.get("subnet_hex", "")
+
+            # 1. Xoa gateway cu tren router
+            if old_subnet is not None:
+                router_addrs = self.api.list_ipv6_addresses()
+                for rentry in router_addrs:
+                    addr_full = rentry.get("address", "")
+                    addr_clean = addr_full.split("/")[0]
+                    interface = rentry.get("interface", "")
+                    addr_id = rentry.get(".id", "")
+
+                    if interface != self.api.interface:
+                        continue
+
+                    r_subnet = self.api._extract_subnet(addr_full)
+                    if r_subnet == old_subnet and (addr_clean.endswith("::1") or addr_clean.endswith(":0001")):
+                        if self.api.remove_ipv6_address(addr_id):
+                            self.log(f"[POOL] BURN: Xoa gateway subnet {old_subnet_hex} tren router")
+                        else:
+                            self.log(f"[POOL] BURN: [!] Khong xoa duoc gateway subnet {old_subnet_hex}")
+                        break
+
+            # 2. Xoa IP cu khoi pool
+            self.pool.pop(burned_idx)
+            self._burned_addresses.add(address)
+
+            # 3. Chon subnet MOI (random, chua co trong pool va chua burned)
+            pool_subnets = {e.get("subnet") for e in self.pool if e.get("subnet") is not None}
+            # Them subnet cu vao danh sach tranh
+            pool_subnets.add(old_subnet)
+
+            full_range = list(range(self.api.subnet_start, self.api.subnet_end + 1))
+            random.shuffle(full_range)
+
+            new_subnet = None
+            for s in full_range:
+                if s not in pool_subnets:
+                    new_subnet = s
+                    break
+
+            if new_subnet is None:
+                self.log(f"[POOL] BURN: {address} ({reason}) → het subnet moi!")
+                self._save_pool()
+                return
+
+            # 4. Tao gateway moi tren router
+            new_subnet_hex = f"{new_subnet:02x}"
+            gw_addr = f"{self.api.prefix}{new_subnet_hex}::1/64"
+            gw_ok = self.api.add_ipv6_address(gw_addr)
+
+            if not gw_ok:
+                self.log(f"[POOL] BURN: [!] Khong tao duoc gateway cho subnet {new_subnet_hex}")
+                self._save_pool()
+                return
+
+            # 5. Generate random worker IP + them vao pool
+            worker_ip_full = self.api.build_ipv6_address(new_subnet, full_random=True)
+            worker_ip = worker_ip_full.split("/")[0]
+            gateway = self._get_gateway_for_ip(worker_ip)
+
+            new_entry = {
+                "address": worker_ip,
+                "full_address": worker_ip_full,
+                "subnet": new_subnet,
+                "subnet_hex": new_subnet_hex,
+                "gateway": gateway,
+                "status": "available",
+                "added_at": time.time(),
+            }
+            self.pool.append(new_entry)
+            self._save_pool()
+
+            self.log(f"[POOL] BURN: {address} ({reason}) → xoa subnet {old_subnet_hex}, "
+                     f"tao moi subnet {new_subnet_hex} ({worker_ip})")
 
     def rotate_ip(self, current_address: str, reason: str = "403") -> Optional[Tuple[str, str]]:
         """

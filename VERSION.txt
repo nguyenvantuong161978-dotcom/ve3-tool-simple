@@ -1,3 +1,16 @@
+1.0.599
+2026-03-30 (VN)
+Change: Burn IP 403 = xoa gateway cu + tao gateway moi (giong rotate_all cho 1 IP)
+
+- TRUOC: Burn chi danh dau "burned" trong tracking, gateway van con tren router
+  * IP bi 403 van chiem slot tren router → lang phi subnet
+  * Phai RESET thu cong khi het IP
+- SAU: Burn = xoa gateway cu tren router + tao gateway moi voi subnet RANDOM
+  * Flow: burn → xoa ::1/64 cu → chon subnet moi → tao ::1/64 moi → IP moi available
+  * Tu dong thay the, khong can RESET
+  * Pool luon co du IP available
+- File: ipv6/ipv6_pool.py - burn_ip()
+
 1.0.598
 2026-03-30 (VN)
 Change: FIX 2 van de: netsh timeout/routes tich tu + Chrome mode sai
