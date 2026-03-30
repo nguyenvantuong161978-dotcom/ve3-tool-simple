@@ -1,6 +1,6 @@
-1.0.557
+1.0.558
 2026-03-30 (VN)
-Change: Fix IPv6 test - dung MikroTik REST API ping thay vi local ping
+Change: Fix Doi TAT CA - burn tat ca truoc roi refill 1 lan (tranh IP bi nhan doi)
 
 - MikroTik www-ssl can certificate → nhieu router chua cau hinh
 - FIX: Thu HTTPS truoc, neu fail tu dong thu HTTP
