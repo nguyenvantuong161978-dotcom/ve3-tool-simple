@@ -3320,7 +3320,8 @@ class DrissionFlowAPI:
             return False
 
         # 3. Vào Google Flow (hoặc project cố định nếu có) - VỚI RETRY
-        max_nav_retries = 3
+        # v1.0.589: Tang 3 → 5 retries + F5 refresh 3 lan de moi page load
+        max_nav_retries = 5
         nav_success = False
 
         for nav_attempt in range(max_nav_retries):
@@ -3332,6 +3333,17 @@ class DrissionFlowAPI:
                     self.driver.run_js(f"window.location.href = '{project_url}';", timeout=2)
                     wait_time = 6 if getattr(self, '_ipv6_activated', False) else 3
                     time.sleep(wait_time)
+
+                    # v1.0.589: F5 refresh 3 lan (moi lan cach 1s) de moi page load day du
+                    # Khi mang cham, page load 1 nua roi dung → F5 giup load tiep
+                    for f5_i in range(3):
+                        try:
+                            self.driver.run_js("location.reload();", timeout=2)
+                        except Exception:
+                            pass
+                        time.sleep(1)
+                    # Doi them sau lan F5 cuoi de page on dinh
+                    time.sleep(2)
 
                     # Check có textarea không (đợi 5s)
                     textarea_found = False

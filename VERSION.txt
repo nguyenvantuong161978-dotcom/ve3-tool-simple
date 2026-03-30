@@ -1,3 +1,15 @@
+1.0.590
+2026-03-30 (VN)
+Change: Tang retry vao project 3→5 + F5 refresh 3 lan moi page load
+
+- Khi mang cham, page load 1 nua roi dung → Chrome khong thay textarea
+- FIX 1: Tang max_nav_retries tu 3 len 5 (nhieu co hoi hon)
+- FIX 2: Sau khi navigate, F5 refresh 3 lan (moi lan cach 1s)
+  * F5 giup page load tiep phan con thieu
+  * Doi 2s sau F5 cuoi de page on dinh
+  * Roi moi bat dau dem thoi gian cho textarea
+- File: modules/drission_flow_api.py
+
 1.0.589
 2026-03-30 (VN)
 Change: FIX Thumbnail chay sai mode - ton trong generation_mode setting
