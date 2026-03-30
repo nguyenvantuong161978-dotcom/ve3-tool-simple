@@ -3018,9 +3018,9 @@ class DrissionFlowAPI:
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
                     self.log(f"[NET] Chrome → {chrome_arg} (WebRTC blocked)")
                 else:
-                    # v1.0.612: VM mode DIRECT - IPv6 da tren interface, Chrome dung truc tiep
+                    # v1.0.613: VM mode DIRECT - IPv6 tren interface + firewall block IPv4
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
-                    self.log(f"[NET] Chrome → IPv6 DIRECT (khong proxy, nhanh hon)")
+                    self.log(f"[NET] Chrome → IPv6 DIRECT (firewall block IPv4, khong proxy)")
                 _using_proxy_provider = True
 
             # === IPv6 MODE - BẬT NGAY KHI MỞ CHROME ===

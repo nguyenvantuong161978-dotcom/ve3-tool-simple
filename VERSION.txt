@@ -1,14 +1,14 @@
-1.0.612
+1.0.613
 2026-03-30 (VN)
-Perf: VM mode IPv6 DIRECT - bo SOCKS5 proxy, Chrome dung IPv6 truc tiep
+Perf: VM IPv6 DIRECT + Firewall block IPv4 cho Chrome
 
-- VM mode (API): Bo SOCKS5 proxy Python → Chrome ket noi truc tiep qua IPv6 tren interface
-- ipv6_rotator.set_ipv6() da add IPv6 vao interface (netsh, routes, prefix policy)
-- Chrome tu dong dung IPv6 ma khong can proxy relay → nhanh hon nhieu
+- VM mode: Bo SOCKS5 proxy → Chrome dung IPv6 truc tiep tren interface
+- Firewall block IPv4 outbound cho ChromePortable → Chrome bat buoc dung IPv6
+- RDP/system van dung IPv4 binh thuong (chi block Chrome process)
 - Server mode: Van dung SOCKS5 proxy (nhieu workers can bind IPv6 khac nhau)
-- get_chrome_arg(): VM tra "" (direct), Server tra "socks5://..." (proxy)
-- Fix google_login.py: get_proxy_arg_from_settings() tra "" cho VM mode (truoc tu start SOCKS5)
-- Them _ensure_ipv6_on_interface(): chi dam bao IPv6 tren interface, khong tao proxy
+- _block_ipv4_for_chrome(): Add firewall rule block IPv4 khi setup
+- _unblock_ipv4_for_chrome(): Go rule khi stop
+- google_login.py: VM mode tra "" (khong proxy), dam bao IPv6 tren interface
 
 v1.0.611
 2026-03-30 (VN)

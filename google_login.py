@@ -70,15 +70,16 @@ def get_proxy_arg_from_settings(ensure_ready: bool = True) -> str:
             pp_type = 'ipv6_pool'
 
         if pp_type in ('ipv6', 'ipv6_pool'):
-            # v1.0.612: VM mode dung IPv6 truc tiep (khong can SOCKS5 proxy)
-            # ipv6_rotator.set_ipv6() da add IPv6 vao interface → Chrome tu dung
-            # Chi server mode (generation_mode=server) can SOCKS5 proxy (nhieu workers, nhieu IPv6)
+            # v1.0.613: VM mode dung IPv6 truc tiep + firewall block IPv4
+            # ipv6_rotator.set_ipv6() da add IPv6 vao interface
+            # Firewall block IPv4 cho Chrome → bat buoc dung IPv6
+            # Chi server mode can SOCKS5 proxy (nhieu workers, nhieu IPv6)
             gen_mode = cfg.get('generation_mode', 'api')
             if gen_mode != 'server':
-                # VM mode: dam bao IPv6 da tren interface (rotator set)
+                # VM mode: dam bao IPv6 da tren interface
                 if ensure_ready:
                     _ensure_ipv6_on_interface(cfg, pp_type)
-                log(f"[PROXY] IPv6 DIRECT mode (khong proxy, nhanh hon)", "INFO")
+                log(f"[PROXY] IPv6 DIRECT mode (firewall block IPv4, khong proxy)", "INFO")
                 return ""
 
             # Server mode: van can SOCKS5 proxy

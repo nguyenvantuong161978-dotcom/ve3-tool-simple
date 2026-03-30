@@ -33,16 +33,17 @@ class IPv6Provider(ProxyProvider):
         """
         Khoi tao IPv6 cho VM mode (API).
 
-        v1.0.612: Bo SOCKS5 proxy - dung IPv6 truc tiep tren interface.
-        ipv6_rotator.set_ipv6() da add IPv6 vao interface (netsh, routes, prefix policy)
-        → Chrome tu dong dung IPv6 ma khong can proxy → nhanh hon nhieu.
+        v1.0.613: DIRECT mode - khong SOCKS5 proxy.
+        - IPv6 da add vao interface boi ipv6_rotator.set_ipv6()
+        - Firewall block IPv4 outbound cho Chrome → bat buoc dung IPv6
+        - Khong proxy → Chrome ket noi truc tiep → nhanh hon
 
-        - worker_id=0: Tim IPv6 hoat dong, set len interface
+        - worker_id=0: Tim IPv6 hoat dong + block IPv4 cho Chrome
         - worker_id>0: Reuse IPv6 da set boi worker 0
         """
         self.worker_id = worker_id
         self.port = port
-        self._direct_mode = True  # v1.0.612: VM mode = direct (khong proxy)
+        self._direct_mode = True  # VM mode = direct
 
         try:
             from modules.ipv6_rotator import get_ipv6_rotator
@@ -61,22 +62,23 @@ class IPv6Provider(ProxyProvider):
             self._rotator.set_logger(self.log)
 
             if worker_id == 0:
-                # Chrome 1: Tim IPv6 hoat dong (set_ipv6 da add len interface)
+                # Chrome 1: Tim IPv6 hoat dong
                 working_ipv6 = self._rotator.init_with_working_ipv6()
                 if not working_ipv6:
                     self.log("[PROXY-IPv6] Khong tim duoc IPv6 hoat dong!")
                     return False
 
-                # v1.0.612: KHONG tao SOCKS5 proxy
-                # IPv6 da tren interface → Chrome dung truc tiep
+                # v1.0.613: Block IPv4 cho Chrome → buoc dung IPv6
+                self._block_ipv4_for_chrome()
+
                 self._activated = True
                 self._ready = True
-                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: IPv6={working_ipv6} (DIRECT - khong proxy)")
+                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: IPv6={working_ipv6} (DIRECT + IPv4 blocked)")
                 return True
             else:
-                # Worker khac: IPv6 da san sang tren interface (worker 0 da set)
+                # Worker khac: IPv6 + firewall da san sang (worker 0 da set)
                 self._ready = True
-                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: Reuse IPv6 tren interface (DIRECT)")
+                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: Reuse IPv6 (DIRECT)")
                 return True
 
         except ImportError as e:
@@ -143,6 +145,62 @@ class IPv6Provider(ProxyProvider):
         except Exception as e:
             self.log(f"[PROXY-IPv6] [WARN] Error: {e}")
             return False
+
+    # ================================================================
+    # v1.0.613: Firewall block IPv4 cho Chrome (VM direct mode)
+    # ================================================================
+    _FW_RULE_PREFIX = "VE3_Block_IPv4_Chrome"
+
+    def _get_chrome_paths(self) -> list:
+        """Lay duong dan Chrome Portable executables."""
+        from pathlib import Path
+        tool_dir = Path(__file__).parent.parent.parent
+        paths = []
+        for folder in ["GoogleChromePortable", "GoogleChromePortable - Copy"]:
+            exe = tool_dir / folder / "GoogleChromePortable.exe"
+            if exe.exists():
+                paths.append(str(exe))
+            # Cung check chrome.exe trong App
+            app_exe = tool_dir / folder / "App" / "Chrome-bin" / "chrome.exe"
+            if app_exe.exists():
+                paths.append(str(app_exe))
+        return paths
+
+    def _block_ipv4_for_chrome(self):
+        """
+        v1.0.613: Block outbound IPv4 cho Chrome executables.
+        Chrome khong the dung IPv4 → bat buoc IPv6 truc tiep.
+        RDP/system van dung IPv4 binh thuong.
+        """
+        # Xoa rules cu truoc (tranh duplicate)
+        self._unblock_ipv4_for_chrome()
+
+        chrome_paths = self._get_chrome_paths()
+        if not chrome_paths:
+            self.log("[PROXY-IPv6] [WARN] Khong tim thay Chrome Portable, skip firewall")
+            return
+
+        for i, exe_path in enumerate(chrome_paths):
+            rule_name = f"{self._FW_RULE_PREFIX}_{i}"
+            cmd = (
+                f'netsh advfirewall firewall add rule '
+                f'name="{rule_name}" dir=out action=block '
+                f'program="{exe_path}" '
+                f'protocol=any remoteip=0.0.0.0/0'
+            )
+            if self._run_cmd(cmd):
+                self.log(f"[PROXY-IPv6] [v] Firewall: Block IPv4 cho {Path(exe_path).parent.parent.name}")
+            else:
+                self.log(f"[PROXY-IPv6] [WARN] Firewall: Khong block duoc IPv4 cho {exe_path}")
+
+    def _unblock_ipv4_for_chrome(self):
+        """v1.0.613: Go tat ca firewall rules block IPv4 cho Chrome."""
+        for i in range(10):  # Max 10 rules
+            rule_name = f"{self._FW_RULE_PREFIX}_{i}"
+            self._run_cmd(
+                f'netsh advfirewall firewall delete rule name="{rule_name}"',
+                timeout=5
+            )
 
     def cleanup_old_addresses(self, keep_ips: list = None):
         """
@@ -421,11 +479,11 @@ class IPv6Provider(ProxyProvider):
     def get_chrome_arg(self) -> str:
         """Tra ve proxy arg cho Chrome.
 
-        v1.0.612: VM mode (direct) → "" (khong proxy, Chrome dung IPv6 truc tiep)
-        Server mode (dedicated) → "socks5://..." (can bind IPv6 cu the)
+        v1.0.613: VM mode (direct) → "" (firewall block IPv4, Chrome dung IPv6 truc tiep)
+        Server mode (dedicated) → "socks5://..." (nhieu workers can bind IPv6 khac nhau)
         """
         if getattr(self, '_direct_mode', False):
-            return ""  # VM: IPv6 da tren interface, Chrome dung truc tiep
+            return ""
         return f"socks5://127.0.0.1:{self.port}"
 
     def get_current_ip(self) -> str:
@@ -445,6 +503,9 @@ class IPv6Provider(ProxyProvider):
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
             self._current_ipv6 = None
+        # v1.0.613: Go firewall rule block IPv4 (VM mode)
+        if getattr(self, '_direct_mode', False):
+            self._unblock_ipv4_for_chrome()
         self._ready = False
         self.log("[PROXY-IPv6] Stopped")
 
