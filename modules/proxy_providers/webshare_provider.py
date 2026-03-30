@@ -239,7 +239,7 @@ class WebshareProxyBridge:
                     break
                 for sock in ready:
                     try:
-                        data = sock.recv(65536)
+                        data = sock.recv(262144)
                         if not data:
                             return
                         target = remote if sock is client else client

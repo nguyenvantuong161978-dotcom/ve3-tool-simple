@@ -1,3 +1,11 @@
+1.0.597
+2026-03-30 (VN)
+Change: Tang proxy buffer 64KB → 256KB - tai anh/video nhanh hon
+
+- recv buffer 64KB → 262144 (256KB)
+- Anh 500KB: 8 lan doc → 2 lan doc
+- Files: modules/ipv6_proxy.py, modules/proxy_providers/webshare_provider.py
+
 1.0.596
 2026-03-30 (VN)
 Change: FIX proxy load cham/dut giua chung - tang buffer + timeout + TCP_NODELAY

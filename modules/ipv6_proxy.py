@@ -281,8 +281,8 @@ class IPv6SocksProxy:
 
                 for sock in ready:
                     try:
-                        # 65536 bytes: giam so round-trip khi tai anh lon
-                        data = sock.recv(65536)
+                        # 262144 bytes (256KB): giam round-trip khi tai anh/video lon
+                        data = sock.recv(262144)
                         if not data:
                             return
 
