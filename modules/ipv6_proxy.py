@@ -226,12 +226,19 @@ class IPv6SocksProxy:
                     pass
 
             if not addrinfo:
-                # Chi log 1 lan cho moi host, tranh spam
-                no_ipv6_hosts = getattr(self, '_no_ipv6_hosts', set())
-                if host not in no_ipv6_hosts:
-                    self.log(f"[IPv6-Proxy] No IPv6 address for {host}")
-                    no_ipv6_hosts.add(host)
-                    self._no_ipv6_hosts = no_ipv6_hosts
+                # v1.0.572: Fallback IPv4 khi domain khong co AAAA record
+                # VD: accounts.google.com co the khong co IPv6 tren DNS nay
+                # → ket noi binh thuong qua IPv4 (khong bind IPv6)
+                try:
+                    ipv4_addrs = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+                    if ipv4_addrs:
+                        family, socktype, proto, canonname, sockaddr = ipv4_addrs[0]
+                        sock = socket.socket(family, socktype, proto)
+                        sock.settimeout(30)
+                        sock.connect(sockaddr)
+                        return sock
+                except Exception:
+                    pass
                 return None
 
             family, socktype, proto, canonname, sockaddr = addrinfo[0]
