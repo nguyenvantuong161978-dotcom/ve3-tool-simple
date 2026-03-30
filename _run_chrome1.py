@@ -1078,13 +1078,19 @@ def _do_pre_login_if_needed(project_code: str = None):
 
         # Login CẢ 2 Chrome TUẦN TỰ
         chrome1_exe = str(TOOL_DIR / "GoogleChromePortable" / "GoogleChromePortable.exe")
+        # v1.0.571: Lay proxy arg de login cung dung proxy
+        from google_login import get_proxy_arg_from_settings
+        _proxy_arg = get_proxy_arg_from_settings()
+        if _proxy_arg:
+            print(f"[PRE-LOGIN] Proxy: {_proxy_arg}")
+
         print("[PRE-LOGIN] Logging into Chrome 1...")
-        login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0)
+        login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0, proxy_arg=_proxy_arg)
         print("[PRE-LOGIN] Chrome 1 login done!")
 
         chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 2...")
-        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1)
+        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1, proxy_arg=_proxy_arg)
         print("[PRE-LOGIN] Chrome 2 login done!")
 
     except Exception as e:

@@ -28,6 +28,54 @@ from pathlib import Path
 TOOL_DIR = Path(__file__).parent
 sys.path.insert(0, str(TOOL_DIR))
 
+
+def get_proxy_arg_from_settings() -> str:
+    """
+    v1.0.571: Doc proxy arg tu settings.yaml.
+    Dung cho login de dam bao Chrome login cung dung proxy.
+
+    Returns:
+        Proxy arg string (vd: "socks5://127.0.0.1:1088") hoac "" neu khong co.
+    """
+    try:
+        import yaml
+        settings_path = TOOL_DIR / "config" / "settings.yaml"
+        if not settings_path.exists():
+            return ""
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+
+        # Check proxy_provider type
+        pp_cfg = cfg.get('proxy_provider', {})
+        pp_type = pp_cfg.get('type', 'none').lower()
+
+        # Backward compat
+        if not pp_cfg:
+            ipv6_cfg = cfg.get('ipv6_rotation', {})
+            if ipv6_cfg.get('enabled', False):
+                pp_type = 'ipv6'
+
+        # Pool API override
+        mikrotik_cfg = cfg.get('mikrotik', {})
+        pool_url = mikrotik_cfg.get('pool_api_url', '')
+        if pool_url and pp_type in ('ipv6', 'none'):
+            pp_type = 'ipv6_pool'
+
+        if pp_type in ('ipv6', 'ipv6_pool'):
+            port = cfg.get('ipv6_rotation', {}).get('local_proxy_port', 1088)
+            return f"socks5://127.0.0.1:{port}"
+        elif pp_type == 'webshare':
+            ws_cfg = pp_cfg.get('webshare', {})
+            host = ws_cfg.get('rotating_host', 'p.webshare.io')
+            ws_port = ws_cfg.get('rotating_port', 80)
+            user = ws_cfg.get('rotating_username', '')
+            pwd = ws_cfg.get('rotating_password', '')
+            if user and pwd:
+                return f"http://{user}:{pwd}@{host}:{ws_port}"
+        return ""
+    except Exception:
+        return ""
+
 CONFIG_FILE = TOOL_DIR / "config" / "config.json"
 ACCOUNT_INDEX_FILE = TOOL_DIR / "config" / ".account_index.json"  # Track account rotation
 SHEET_NAME = "THÔNG TIN"  # v1.0.105: Sheet mới chứa thông tin tài khoản
@@ -708,7 +756,7 @@ def get_account_info(machine_code: str, max_retries: int = 3) -> dict:
     return account
 
 
-def login_google_chrome(account_info: dict, chrome_portable: str = None, profile_dir: str = None, worker_id: int = 0) -> bool:
+def login_google_chrome(account_info: dict, chrome_portable: str = None, profile_dir: str = None, worker_id: int = 0, proxy_arg: str = "") -> bool:
     """
     Mở Chrome và đăng nhập Google bằng JavaScript.
 
@@ -724,6 +772,8 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         profile_dir: Đường dẫn profile Chrome cụ thể (nếu có).
                     Dùng cho Chrome 2 với profile riêng (ví dụ: pic2).
         worker_id: Worker ID để dùng port khác nhau cho mỗi Chrome.
+        proxy_arg: Proxy argument cho Chrome (vd: "socks5://127.0.0.1:1088").
+                   v1.0.571: Dam bao login cung dung proxy nhu khi tao anh.
     """
     try:
         from DrissionPage import ChromiumPage, ChromiumOptions
@@ -779,6 +829,12 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                         options.set_user_data_path(str(data_path))
                         log(f"Using default profile: {data_path}")
                         break
+
+        # v1.0.571: Proxy args - dam bao login dung cung proxy nhu tao anh
+        if proxy_arg:
+            options.set_argument(f'--proxy-server={proxy_arg}')
+            options.set_argument('--proxy-bypass-list=<-loopback>')
+            log(f"[NET] Login qua proxy: {proxy_arg}")
 
         # Mở Chrome mới
         driver = ChromiumPage(options)

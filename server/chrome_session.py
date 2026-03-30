@@ -1451,7 +1451,7 @@ class ChromeSession:
         # 2. Goi login
         try:
             sys.path.insert(0, str(TOOL_DIR))
-            from google_login import login_google_chrome
+            from google_login import login_google_chrome, get_proxy_arg_from_settings
 
             # Dong Chrome hien tai truoc khi login
             if self.page:
@@ -1464,11 +1464,15 @@ class ChromeSession:
             # Dung port rieng cho login (tranh trung voi port chinh)
             login_port = self.port + 100  # 19222 → 19322, etc.
 
+            # v1.0.571: Proxy arg de login cung dung proxy
+            _proxy_arg = get_proxy_arg_from_settings()
+
             success = login_google_chrome(
                 account_info=account,
                 chrome_portable=str(self.chrome_path),
                 profile_dir=str(self.chrome_data),
                 worker_id=login_port - 9222,  # worker_id de tinh port
+                proxy_arg=_proxy_arg,
             )
 
             if success:

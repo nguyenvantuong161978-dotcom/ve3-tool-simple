@@ -2174,11 +2174,19 @@ class DrissionFlowAPI:
                 self.log("Bắt đầu đăng nhập Google...")
 
                 try:
+                    # v1.0.571: Truyen proxy_arg de login cung dung proxy
+                    _login_proxy = ""
+                    if self._proxy_provider and self._proxy_provider.is_ready():
+                        _login_proxy = self._proxy_provider.get_chrome_arg()
+                    elif self._ipv6_proxy and self._ipv6_rotator:
+                        _login_proxy = "socks5://127.0.0.1:1088"
+
                     success = login_google_chrome(
                         account_info,
                         chrome_portable=self._chrome_portable,
                         profile_dir=str(self.profile_dir) if self.profile_dir else None,
-                        worker_id=self.worker_id
+                        worker_id=self.worker_id,
+                        proxy_arg=_login_proxy,
                     )
 
                     if success:
