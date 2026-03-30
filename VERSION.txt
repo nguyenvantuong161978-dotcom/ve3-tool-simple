@@ -1,3 +1,18 @@
+1.0.579
+2026-03-30 (VN)
+Change: FIX gateway phai la /64 (khong phai /128) de router route duoc subnet
+
+- BUG: Gateway ::1/128 chi la 1 host address tren router
+  * Router khong biet route ca subnet /64 → VM co IP nhung khong co connectivity
+  * Log: "no connectivity → burn" cho moi IP
+- FIX: Gateway tao voi /64 thay vi /128
+  * rotate_all(): Tao gateway "prefix:subnet::1/64" (connected route cho ca subnet)
+  * Router biet subnet::random nam trong subnet /64 → route duoc
+- FIX: Skip gateway khi load pool
+  * _load_all_from_router(): Skip IP ket thuc bang ::1 (gateway, khong phai worker IP)
+  * _refill(): Tuong tu
+- Files: ipv6/ipv6_pool.py, VERSION.txt
+
 1.0.578
 2026-03-30 (VN)
 Change: Pool tao gateway rieng cho moi subnet - Google thay IP hoan toan khac nhau

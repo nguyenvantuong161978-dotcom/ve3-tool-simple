@@ -277,6 +277,10 @@ class IPv6Pool:
             if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
                 continue
 
+            # v1.0.579: Skip gateway addresses (::1/64) - khong phai worker IP
+            if addr_clean.endswith("::1") or addr_clean.endswith(":0001"):
+                continue
+
             # Skip neu da co trong pool hoac da burned
             if addr_clean in pool_addresses:
                 continue
@@ -340,6 +344,10 @@ class IPv6Pool:
             if subnet is None:
                 continue
             if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
+                continue
+
+            # v1.0.579: Skip gateway addresses (::1/64)
+            if addr_clean.endswith("::1") or addr_clean.endswith(":0001"):
                 continue
 
             # Skip neu da co trong pool hoac da burned
@@ -462,8 +470,10 @@ class IPv6Pool:
             # v1.0.578: Tao gateway ::1/128 rieng cho moi subnet
             added = 0
             for subnet in selected:
-                # Tao gateway ::1/128 cho subnet nay (de VM dung lam default route)
-                gw_addr = self.api.build_ipv6_address(subnet, host_id=1, full_random=False)
+                # Tao gateway ::1/64 cho subnet nay (de VM dung lam default route)
+                # PHAI la /64 de router biet route ca subnet (khong phai /128)
+                subnet_str = f"{subnet:02x}"
+                gw_addr = f"{self.api.prefix}{subnet_str}::1/64"
                 gw_result = self.api.add_ipv6_address(gw_addr)
                 if not gw_result:
                     self.log(f"[POOL] [!] Cannot create gateway for subnet {subnet:02x}, skip")
