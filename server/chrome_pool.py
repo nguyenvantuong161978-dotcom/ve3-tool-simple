@@ -276,10 +276,14 @@ class ChromePool:
             # v1.0.561: Pool mode - lay IPv6 tu pool API thay vi config/sheet
             if self._pool_mode and not ipv6:
                 worker_name = f"server_chrome{i}"
-                pool_ip = self.get_pool_ip(worker_name)
-                if pool_ip:
-                    ipv6 = pool_ip
-                    self._log(f"  [IPv6 Pool] Worker {i}: got {ipv6}")
+                pool_result = self.get_pool_ip(worker_name)
+                if pool_result:
+                    # v1.0.606: Pool API tra ve dict {"ip": "...", "gateway": "..."}
+                    if isinstance(pool_result, dict):
+                        ipv6 = pool_result.get("ip", "")
+                    else:
+                        ipv6 = pool_result
+                    self._log(f"  [IPv6 Pool] Worker {i}: {ipv6}")
 
             worker = ChromeWorker(
                 index=chrome_info["index"],
@@ -727,9 +731,11 @@ class ChromePool:
                                 elif self._pool_mode and self._pool_client:
                                     # v1.0.561: Pool mode - lay IPv6 tu pool API
                                     pool_worker = f"server_chrome{worker.index}"
-                                    new_ip = self.rotate_pool_ip(
+                                    pool_result = self.rotate_pool_ip(
                                         worker.ipv6, worker_name=pool_worker, reason="403"
                                     )
+                                    # v1.0.606: Pool API tra ve dict {"ip": "...", "gateway": "..."}
+                                    new_ip = pool_result.get("ip", "") if isinstance(pool_result, dict) else pool_result
                                     if new_ip and new_ip != worker.ipv6:
                                         self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} → {new_ip}", "WARN")
                                         worker.session.rotate_ipv6(new_ip)

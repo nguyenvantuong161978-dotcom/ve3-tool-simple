@@ -1,3 +1,15 @@
+1.0.606
+2026-03-30 (VN)
+Change: FIX server chrome_pool.py - Pool API tra ve dict thay vi string
+
+- BUG: Pool API tra ve dict {"ip": "...", "gateway": "..."} nhung code xu ly nhu string
+  * ipv6[:30] tren dict → TypeError: unhashable type: 'slice'
+  * rotate_pool_ip() ket qua cung la dict → crash khi so sanh
+- FIX: Them isinstance(pool_result, dict) check o 2 cho:
+  * init_workers(): Extract "ip" tu dict truoc khi gan ipv6
+  * 403 rotation: Extract "ip" tu rotate result truoc khi so sanh
+- File: server/chrome_pool.py
+
 1.0.605
 2026-03-30 (VN)
 Change: IPv6 rotator register IP truoc khi get_ip moi
