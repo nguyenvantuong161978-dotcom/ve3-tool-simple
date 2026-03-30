@@ -1,3 +1,18 @@
+1.0.563
+2026-03-30 (VN)
+Change: Pool load TAT CA IP tu router - khong gioi han max_pool_size khi init
+
+- BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
+  * _refill_if_needed() chi them khi available < min_pool_size (3)
+  * _refill() bi gioi han boi max_pool_size (20)
+  * Ket qua: Pool chi hien 6 IP, khong thay het kho IPv6
+- FIX: Them _load_all_from_router() - load TAT CA IP trong allowed range
+  * Scan router → lay moi IP trong subnet 65-ff chua co trong pool
+  * Khong gioi han max_pool_size (pool la kho, can thay het)
+  * Skip IP da burned hoac da co trong pool
+  * Chay 1 lan khi init() → sau do dung refill binh thuong
+- File: ipv6/ipv6_pool.py
+
 1.0.562
 2026-03-30 (VN)
 Change: VM GUI IPv6 Pool + Thong ke API + Doi IPv6 thu cong

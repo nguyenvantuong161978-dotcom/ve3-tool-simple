@@ -70,7 +70,7 @@ class IPv6Pool:
         Khoi tao pool:
         1. Load pool.json (neu co)
         2. Scan router, lay IP trong allowed range vao pool
-        3. Refill neu pool qua it
+        3. Load TAT CA IP trong range vao pool (day la kho IPv6)
         """
         self.log("[POOL] Initializing IPv6 pool (existing IPs mode)...")
 
@@ -80,13 +80,15 @@ class IPv6Pool:
         # Scan router va dong bo
         self._sync_with_router()
 
-        # Refill neu can
-        self._refill_if_needed()
+        # v1.0.563: Load TAT CA IP trong allowed range vao pool (khong gioi han)
+        # Pool la KHO IPv6 → can thay het tat ca IP de quan ly
+        self._load_all_from_router()
 
         available = [p for p in self.pool if p["status"] == "available"]
         in_use = [p for p in self.pool if p["status"] == "in_use"]
         burned = len(self._burned_addresses)
-        self.log(f"[POOL] Ready: {len(available)} available, {len(in_use)} in_use, {burned} burned")
+        total_range = self.api.subnet_end - self.api.subnet_start + 1
+        self.log(f"[POOL] Ready: {len(available)} available, {len(in_use)} in_use, {burned} burned (range: {total_range})")
         return len(available) > 0
 
     def _load_pool(self):
@@ -224,6 +226,55 @@ class IPv6Pool:
     # =========================================================================
     # POOL MANAGEMENT
     # =========================================================================
+
+    def _load_all_from_router(self):
+        """
+        v1.0.563: Load TAT CA IP trong allowed range tu router vao pool.
+        Khong gioi han max_pool_size - pool la kho IPv6, can thay het.
+        """
+        router_addrs = self.api.list_ipv6_addresses()
+        pool_addresses = {e["address"] for e in self.pool}
+        added = 0
+
+        for entry in router_addrs:
+            addr_full = entry.get("address", "")
+            addr_clean = addr_full.split("/")[0]
+            interface = entry.get("interface", "")
+
+            if interface != self.api.interface:
+                continue
+
+            subnet = self.api._extract_subnet(addr_full)
+            if subnet is None:
+                continue
+            if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
+                continue
+
+            # Skip neu da co trong pool hoac da burned
+            if addr_clean in pool_addresses:
+                continue
+            if addr_clean in self._burned_addresses:
+                continue
+
+            new_entry = {
+                "address": addr_clean,
+                "full_address": addr_full,
+                "subnet": subnet,
+                "subnet_hex": f"{subnet:02x}",
+                "router_id": entry.get(".id", ""),
+                "interface": interface,
+                "status": "available",
+                "use_count": 0,
+                "created_at": time.time(),
+                "used_at": None,
+            }
+            self.pool.append(new_entry)
+            pool_addresses.add(addr_clean)
+            added += 1
+
+        if added > 0:
+            self._save_pool()
+            self.log(f"[POOL] Loaded {added} IPs from router (total pool: {len(self.pool)})")
 
     def _refill_if_needed(self):
         """Them IP tu router neu pool duoi min_pool_size."""
