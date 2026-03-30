@@ -1,6 +1,6 @@
-1.0.558
+1.0.559
 2026-03-30 (VN)
-Change: Fix Doi TAT CA - burn tat ca truoc roi refill 1 lan (tranh IP bi nhan doi)
+Change: IPv6 Pool HTTP API Server + Client - VM/Server tu dong lay/doi IPv6 qua API
 
 - MikroTik www-ssl can certificate → nhieu router chua cau hinh
 - FIX: Thu HTTPS truoc, neu fail tu dong thu HTTP

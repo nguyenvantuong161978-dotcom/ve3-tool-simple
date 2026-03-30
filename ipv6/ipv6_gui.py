@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ipv6.mikrotik_api import MikroTikAPI
 from ipv6.ipv6_pool import IPv6Pool
+from ipv6.ipv6_server import start_api_server, stop_api_server, is_running as api_is_running
 from ipv6 import create_pool
 
 CONFIG_FILE = Path(__file__).parent / "config_test.json"
@@ -38,7 +39,7 @@ class IPv6PoolGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("IPv6 Pool Manager")
-        self.root.geometry("820x700")
+        self.root.geometry("820x760")
         self.root.resizable(True, True)
 
         self.pool = None
@@ -108,6 +109,26 @@ class IPv6PoolGUI:
             l = ttk.Label(f, textvariable=var, font=("Segoe UI", 11, "bold"))
             l.pack(side="left", padx=4)
             l.configure(foreground=color)
+
+        # ---- API SERVER ----
+        api_frame = ttk.LabelFrame(self.root, text="API Server (cho VM/Server)", padding=8)
+        api_frame.pack(fill="x", padx=8, pady=4)
+
+        api_row = ttk.Frame(api_frame)
+        api_row.pack(fill="x")
+
+        ttk.Label(api_row, text="Port:").pack(side="left")
+        self.var_port = tk.StringVar(value="8765")
+        ttk.Entry(api_row, textvariable=self.var_port, width=6).pack(side="left", padx=(2, 10))
+
+        self.btn_api = ttk.Button(api_row, text="Start API", command=self._on_toggle_api)
+        self.btn_api.pack(side="left", padx=4)
+
+        self.lbl_api_status = ttk.Label(api_row, text="API: Chua chay", style="Red.TLabel")
+        self.lbl_api_status.pack(side="left", padx=8)
+
+        self.lbl_api_url = ttk.Label(api_row, text="", foreground="gray")
+        self.lbl_api_url.pack(side="left", padx=4)
 
         # ---- IP LIST ----
         list_frame = ttk.LabelFrame(self.root, text="Danh sach IP trong Pool", padding=4)
@@ -257,6 +278,45 @@ class IPv6PoolGUI:
                 self.root.after(0, lambda: self.btn_connect.configure(state="normal"))
 
         threading.Thread(target=do_connect, daemon=True).start()
+
+    # =========================================================================
+    # API SERVER
+    # =========================================================================
+
+    def _on_toggle_api(self):
+        """Start/Stop API server."""
+        if api_is_running():
+            stop_api_server()
+            self.btn_api.configure(text="Start API")
+            self.lbl_api_status.configure(text="API: Dung", style="Red.TLabel")
+            self.lbl_api_url.configure(text="")
+            self._log("API Server dung")
+        else:
+            if not self._check_connected():
+                return
+            try:
+                port = int(self.var_port.get())
+            except ValueError:
+                port = 8765
+
+            ok = start_api_server(self.pool, host="0.0.0.0", port=port, log_func=self._log)
+            if ok:
+                # Tim IP cua may nay de hien thi URL
+                import socket
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("192.168.88.1", 80))
+                    local_ip = s.getsockname()[0]
+                    s.close()
+                except Exception:
+                    local_ip = "localhost"
+
+                self.btn_api.configure(text="Stop API")
+                self.lbl_api_status.configure(text="API: Dang chay", style="Green.TLabel")
+                self.lbl_api_url.configure(text=f"http://{local_ip}:{port}")
+                self._log(f"API Server: http://{local_ip}:{port}")
+            else:
+                self._log("API Server start that bai!")
 
     # =========================================================================
     # ACTIONS
