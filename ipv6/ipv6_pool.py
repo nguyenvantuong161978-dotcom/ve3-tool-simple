@@ -453,8 +453,38 @@ class IPv6Pool:
             })
 
         if not candidates:
-            self.log("[POOL] No more subnets available!")
-            return 0
+            # v1.0.602: Khong co gateway co san → tao gateway MOI cho subnets chua dung
+            pool_subnets_int = {e.get("subnet") for e in self.pool if e.get("subnet") is not None}
+            full_range = list(range(self.api.subnet_start, self.api.subnet_end + 1))
+            random.shuffle(full_range)
+
+            for s in full_range:
+                if len(candidates) >= count:
+                    break
+                if s in pool_subnets_int:
+                    continue
+
+                # Tao gateway moi tren router
+                s_hex = f"{s:02x}"
+                gw_addr = f"{self.api.prefix}{s_hex}::1/64"
+                if self.api.add_ipv6_address(gw_addr):
+                    worker_ip_full = self.api.build_ipv6_address(s, full_random=True)
+                    worker_ip = worker_ip_full.split("/")[0]
+                    candidates.append({
+                        "address": worker_ip,
+                        "full_address": worker_ip_full,
+                        "subnet": s,
+                        "subnet_hex": s_hex,
+                        "router_id": "",
+                        "interface": self.api.interface,
+                    })
+                    self.log(f"[POOL] TAO MOI gateway subnet {s_hex} tren router")
+                else:
+                    self.log(f"[POOL] [!] Khong tao duoc gateway subnet {s_hex}")
+
+            if not candidates:
+                self.log("[POOL] No more subnets available!")
+                return 0
 
         random.shuffle(candidates)
 

@@ -1,3 +1,17 @@
+1.0.602
+2026-03-30 (VN)
+Change: FIX refill tao gateway moi khi pool thieu IP
+
+- BUG: _refill() chi tim gateway CO SAN tren router
+  * Neu gateway bi xoa (do burn cu) → khong tim thay → "No more subnets available"
+  * Pool bi ket o 154 du range co 155 subnets
+- FIX: Khi khong co gateway co san, TU DONG TAO gateway moi tren router
+  * Tim subnet chua dung trong pool
+  * Tao gateway ::1/64 tren router
+  * Generate random worker IP
+  * Pool tu dong day lai du 155 IP
+- File: ipv6/ipv6_pool.py - _refill()
+
 1.0.601
 2026-03-30 (VN)
 Change: FIX burn_ip het subnet - dung lai subnet cu voi worker IP random moi
