@@ -1,3 +1,17 @@
+1.0.561
+2026-03-30 (VN)
+Change: Server IPv6 Pool - Server tu dong lay/doi IPv6 qua Pool API cho moi Chrome worker
+
+- Server mode: ChromePool ket noi Pool API de lay IPv6 cho moi Chrome
+  * setup_pool_client(): Ket noi Pool API server (vd: http://192.168.88.1:8765)
+  * init_workers(): Tu dong get_ip() cho moi worker neu chua co IPv6
+  * 403 recovery: Dung rotate_pool_ip() thay vi static list (get_next_ipv6)
+  * close_all(): Release tat ca IPv6 ve pool khi dong server
+- Backward compat: Khong co Pool API → van dung static IPv6 list nhu cu
+- Config: Doc pool_api_url tu server_gui.json hoac fallback settings.yaml
+- Server GUI: Them truong "IPv6 Pool API" trong setup page
+- Files: server/chrome_pool.py, server/app.py, server/server_gui.py
+
 1.0.560
 2026-03-30 (VN)
 Change: Tich hop IPv6 Pool vao ipv6_rotator - VM tu dong lay/doi IPv6 qua Pool API khi co config

@@ -1021,6 +1021,28 @@ def _do_start_workers():
 
     chrome_pool = ChromePool(log_callback=pool_log)
 
+    # v1.0.561: Setup IPv6 Pool Client (MikroTik dynamic pool)
+    # Doc tu settings.yaml hoac server_gui settings
+    pool_api_url = ""
+    pool_api_timeout = 5
+    with settings_lock:
+        pool_api_url = server_settings.get('pool_api_url', '')
+    if not pool_api_url:
+        # Fallback: doc tu settings.yaml
+        try:
+            import yaml
+            settings_yaml = TOOL_DIR / "config" / "settings.yaml"
+            if settings_yaml.exists():
+                with open(settings_yaml, 'r', encoding='utf-8') as f:
+                    yaml_cfg = yaml.safe_load(f) or {}
+                mikrotik_cfg = yaml_cfg.get('mikrotik', {})
+                pool_api_url = mikrotik_cfg.get('pool_api_url', '')
+                pool_api_timeout = mikrotik_cfg.get('pool_api_timeout', 5)
+        except Exception as e:
+            server_log(f"[IPv6 Pool] Cannot read settings.yaml: {e}", "WARN")
+    if pool_api_url and use_ipv6:
+        chrome_pool.setup_pool_client(pool_api_url, timeout=pool_api_timeout)
+
     # Discover chromes and store globally for /internal/worker-config
     _stored_chromes = chrome_pool.discover_chromes()
 

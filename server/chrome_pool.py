@@ -158,9 +158,76 @@ class ChromePool:
         self._ipv6_usage: Dict[str, int] = {}  # ipv6 -> so lan da dung
         self._all_accounts: List[Dict] = []  # Tat ca tai khoan
         self._account_usage: Dict[str, int] = {}  # email -> so lan da dung
+        # v1.0.561: IPv6 Pool Client (MikroTik dynamic pool)
+        self._pool_client = None  # IPv6PoolClient instance
+        self._pool_mode = False  # True = dung pool API thay vi static list
 
     def _log(self, msg: str, level: str = "INFO"):
         self._log_fn(msg, level)
+
+    def setup_pool_client(self, pool_api_url: str, timeout: int = 5):
+        """
+        v1.0.561: Setup IPv6 Pool Client cho server.
+        Khi co pool client, 403 recovery se lay IPv6 tu pool thay vi static list.
+
+        Args:
+            pool_api_url: URL cua Pool API server (vd: "http://192.168.88.1:8765")
+            timeout: Timeout cho moi request (giay)
+        """
+        if not pool_api_url:
+            return
+
+        try:
+            from modules.ipv6_pool_client import IPv6PoolClient
+            client = IPv6PoolClient(
+                api_url=pool_api_url,
+                timeout=timeout,
+                log_func=lambda msg: self._log(msg),
+            )
+            if client.ping():
+                self._pool_client = client
+                self._pool_mode = True
+                self._log(f"[IPv6 Pool] Connected: {pool_api_url}", "OK")
+            else:
+                self._log(f"[IPv6 Pool] Not available: {pool_api_url}", "WARN")
+        except Exception as e:
+            self._log(f"[IPv6 Pool] Init error: {e}", "ERROR")
+
+    def get_pool_ip(self, worker_name: str = "unknown") -> Optional[str]:
+        """
+        v1.0.561: Lay IPv6 tu Pool API cho 1 worker.
+
+        Args:
+            worker_name: Ten worker (vd: "server_chrome0")
+
+        Returns:
+            IPv6 address hoac None
+        """
+        if not self._pool_mode or not self._pool_client:
+            return None
+        return self._pool_client.get_ip(worker=worker_name)
+
+    def rotate_pool_ip(self, current_ip: str, worker_name: str = "unknown",
+                       reason: str = "403") -> Optional[str]:
+        """
+        v1.0.561: Doi IPv6 qua Pool API (burn cu, lay moi).
+
+        Args:
+            current_ip: IPv6 hien tai
+            worker_name: Ten worker
+            reason: Ly do doi
+
+        Returns:
+            IPv6 moi hoac None
+        """
+        if not self._pool_mode or not self._pool_client:
+            return None
+        return self._pool_client.rotate_ip(current_ip, reason=reason, worker=worker_name)
+
+    def release_pool_ip(self, ip: str, worker_name: str = "unknown"):
+        """v1.0.561: Tra IPv6 ve pool (IP van OK, khong bi 403)."""
+        if self._pool_mode and self._pool_client and ip:
+            self._pool_client.release_ip(ip, worker=worker_name)
 
     def discover_chromes(self) -> List[Dict]:
         """Tim cac Chrome Portable folder co san."""
@@ -205,6 +272,14 @@ class ChromePool:
             cfg = server_configs[i] if i < len(server_configs) else {}
             account = cfg.get("account")
             ipv6 = cfg.get("ipv6", "")
+
+            # v1.0.561: Pool mode - lay IPv6 tu pool API thay vi config/sheet
+            if self._pool_mode and not ipv6:
+                worker_name = f"server_chrome{i}"
+                pool_ip = self.get_pool_ip(worker_name)
+                if pool_ip:
+                    ipv6 = pool_ip
+                    self._log(f"  [IPv6 Pool] Worker {i}: got {ipv6}")
 
             worker = ChromeWorker(
                 index=chrome_info["index"],
@@ -649,8 +724,20 @@ class ChromePool:
                                         self._log(f"[{worker_name}] [403] Proxy rotated: → {worker.session._proxy_provider.get_current_ip()}", "WARN")
                                     else:
                                         self._log(f"[{worker_name}] [403] Proxy rotate failed", "WARN")
+                                elif self._pool_mode and self._pool_client:
+                                    # v1.0.561: Pool mode - lay IPv6 tu pool API
+                                    pool_worker = f"server_chrome{worker.index}"
+                                    new_ip = self.rotate_pool_ip(
+                                        worker.ipv6, worker_name=pool_worker, reason="403"
+                                    )
+                                    if new_ip and new_ip != worker.ipv6:
+                                        self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} → {new_ip}", "WARN")
+                                        worker.session.rotate_ipv6(new_ip)
+                                        worker.ipv6 = new_ip
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Pool: khong co IPv6 khac", "WARN")
                                 else:
-                                    # Backward compat: IPv6 truc tiep
+                                    # Backward compat: IPv6 static list
                                     new_ip = self.get_next_ipv6(worker.ipv6)
                                     if new_ip and new_ip != worker.ipv6:
                                         self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6} → {new_ip}", "WARN")
@@ -761,6 +848,12 @@ class ChromePool:
                     w.session.close()
             except Exception:
                 pass
+            # v1.0.561: Tra IPv6 ve pool khi dong
+            if self._pool_mode and w.ipv6:
+                try:
+                    self.release_pool_ip(w.ipv6, f"server_chrome{w.index}")
+                except Exception:
+                    pass
             w.ready = False
             w.busy = False
         self._log("All Chrome sessions closed")

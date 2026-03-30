@@ -119,6 +119,19 @@ class ServerGUI(tk.Tk):
                                            bg=BG2, fg=FG2)
         self.ipv6_status_label.pack(side='left', padx=10)
 
+        # v1.0.561: IPv6 Pool API URL
+        pool_row = tk.Frame(card, bg=BG2)
+        pool_row.pack(fill='x', padx=20, pady=(5, 2))
+        tk.Label(pool_row, text="IPv6 Pool API:", font=("Segoe UI", 9, "bold"),
+                 bg=BG2, fg=FG).pack(side='left')
+        self.pool_api_var = tk.StringVar(value="")
+        pool_entry = tk.Entry(pool_row, textvariable=self.pool_api_var, width=40,
+                              font=("Consolas", 9), bg='#0f172a', fg=FG,
+                              insertbackground=FG, relief='solid', bd=1)
+        pool_entry.pack(side='left', padx=(8, 0), fill='x', expand=True)
+        tk.Label(card, text="VD: http://192.168.88.1:8765 - Lay IPv6 tu MikroTik Pool (thay cho danh sach tren)",
+                 font=("Segoe UI", 8), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
+
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=8)
 
@@ -276,6 +289,9 @@ class ServerGUI(tk.Tk):
                     self.ws_password_var.set(data['ws_password'])
                 if data.get('ws_machine_id'):
                     self.ws_machine_var.set(str(data['ws_machine_id']))
+                # v1.0.561: Pool API URL
+                if data.get('pool_api_url'):
+                    self.pool_api_var.set(data['pool_api_url'])
         except Exception:
             pass
 
@@ -293,6 +309,8 @@ class ServerGUI(tk.Tk):
                 'ws_username': self.ws_username_var.get().strip(),
                 'ws_password': self.ws_password_var.get().strip(),
                 'ws_machine_id': int(self.ws_machine_var.get().strip() or '1'),
+                # v1.0.561: Pool API URL
+                'pool_api_url': self.pool_api_var.get().strip(),
             }
             self._settings_file.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False),
@@ -748,6 +766,8 @@ class ServerGUI(tk.Tk):
             server_settings['started'] = True
             # v1.0.545: Proxy Provider config
             server_settings['proxy_config'] = self._get_proxy_config()
+            # v1.0.561: Pool API URL
+            server_settings['pool_api_url'] = self.pool_api_var.get().strip()
 
         # Redirect server_log to our GUI
         self._server_logs_ref = server_logs
