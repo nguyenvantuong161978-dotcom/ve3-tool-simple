@@ -506,6 +506,13 @@ class IPv6Rotator:
             # Collect all netsh commands
             commands = []
 
+            # v1.0.586: Dam bao Windows Firewall cho phep ICMPv6 (NDP)
+            # Neu khong co rule nay → MikroTik khong tim duoc VM → gateway UNREACHABLE
+            if not getattr(self, '_icmpv6_rule_added', False):
+                commands.append('netsh advfirewall firewall add rule name="ICMPv6-NDP-In" dir=in action=allow protocol=icmpv6')
+                commands.append('netsh advfirewall firewall add rule name="ICMPv6-NDP-Out" dir=out action=allow protocol=icmpv6')
+                self._icmpv6_rule_added = True
+
             # Bước 0: Tắt IPv4 để Chrome phải dùng IPv6 (nếu bật)
             if self.disable_ipv4 and not self._ipv4_disabled:
                 self.log("[IPv6] [PLUG] Disabling IPv4 to force IPv6...")

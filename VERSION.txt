@@ -1,3 +1,19 @@
+1.0.586
+2026-03-30 (VN)
+Change: FIX ROOT CAUSE - Windows Firewall chan ICMPv6 → NDP fail → gateway unreachable
+
+- ROOT CAUSE: Windows Firewall tren VM KHONG co rule cho ICMPv6
+  * MikroTik gui NDP (Neighbor Solicitation) hoi "ai la 3075::1?" → VM khong tra loi
+  * MikroTik neighbor table: VM address = "failed"
+  * Ket qua: gateway UNREACHABLE → IPv6 khong hoat dong → Chrome dung IPv4
+- FIX: Tu dong them firewall rules cho ICMPv6 khi set_ipv6()
+  * "ICMPv6-NDP-In" - cho phep NDP vao (MikroTik tim VM)
+  * "ICMPv6-NDP-Out" - cho phep NDP ra (VM tim gateway)
+  * Chi chay 1 lan dau (flag _icmpv6_rule_added)
+- THEM: on-link route /64 cho subnet (v1.0.585)
+  * Windows can biet gateway nam cung mang de gui packet
+- File: modules/ipv6_rotator.py
+
 1.0.584
 2026-03-30 (VN)
 Change: FIX Chrome dung IPv4 - gateway ping chay SAU adapter wait + fix leading zeros
