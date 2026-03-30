@@ -1,6 +1,6 @@
-1.0.571
+1.0.572
 2026-03-30 (VN)
-Change: Login Google cung dung proxy (IPv6/Pool/Webshare) - khong lo IPv4 cua may
+Change: PRE-LOGIN tu start SOCKS5 proxy truoc khi login (fix khong co internet)
 
 - BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
   * _refill_if_needed() chi them khi available < min_pool_size (3)

@@ -29,10 +29,18 @@ TOOL_DIR = Path(__file__).parent
 sys.path.insert(0, str(TOOL_DIR))
 
 
-def get_proxy_arg_from_settings() -> str:
+def get_proxy_arg_from_settings(ensure_ready: bool = True) -> str:
     """
-    v1.0.571: Doc proxy arg tu settings.yaml.
+    v1.0.572: Doc proxy arg tu settings.yaml.
     Dung cho login de dam bao Chrome login cung dung proxy.
+
+    Khi ensure_ready=True (default):
+    - Kiem tra port proxy da san sang chua (SOCKS5 dang chay)
+    - Neu chua → tu start SOCKS5 proxy (lay IP tu pool/rotator)
+    - Neu khong start duoc → tra ve "" (login khong qua proxy)
+
+    Args:
+        ensure_ready: True = tu dong start proxy neu chua chay
 
     Returns:
         Proxy arg string (vd: "socks5://127.0.0.1:1088") hoac "" neu khong co.
@@ -63,7 +71,19 @@ def get_proxy_arg_from_settings() -> str:
 
         if pp_type in ('ipv6', 'ipv6_pool'):
             port = cfg.get('ipv6_rotation', {}).get('local_proxy_port', 1088)
-            return f"socks5://127.0.0.1:{port}"
+            proxy_arg = f"socks5://127.0.0.1:{port}"
+
+            if ensure_ready and not _is_port_open(port):
+                # Port chua mo → tu start proxy
+                log(f"[PROXY] Port {port} chua san sang, dang khoi tao...", "INFO")
+                if _ensure_socks5_proxy(cfg, pp_type, port):
+                    log(f"[PROXY] SOCKS5 proxy started on port {port}", "INFO")
+                else:
+                    log(f"[PROXY] Khong start duoc proxy → login KHONG qua proxy", "WARN")
+                    return ""
+
+            return proxy_arg
+
         elif pp_type == 'webshare':
             ws_cfg = pp_cfg.get('webshare', {})
             host = ws_cfg.get('rotating_host', 'p.webshare.io')
@@ -73,8 +93,81 @@ def get_proxy_arg_from_settings() -> str:
             if user and pwd:
                 return f"http://{user}:{pwd}@{host}:{ws_port}"
         return ""
-    except Exception:
+    except Exception as e:
+        log(f"[PROXY] Error reading settings: {e}", "WARN")
         return ""
+
+
+def _is_port_open(port: int) -> bool:
+    """Check xem port co dang listen khong."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1)
+        s.connect(('127.0.0.1', port))
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
+def _ensure_socks5_proxy(cfg: dict, pp_type: str, port: int) -> bool:
+    """
+    Start SOCKS5 proxy neu chua chay.
+    Lay IPv6 tu pool API hoac rotator.
+
+    Returns:
+        True neu proxy san sang.
+    """
+    try:
+        ipv6_address = None
+
+        if pp_type == 'ipv6_pool':
+            # Lay IP tu Pool API
+            mikrotik_cfg = cfg.get('mikrotik', {})
+            api_url = mikrotik_cfg.get('pool_api_url', '')
+            timeout = mikrotik_cfg.get('pool_api_timeout', 5)
+            worker_name = mikrotik_cfg.get('worker_name', 'vm1')
+
+            if not api_url:
+                return False
+
+            from modules.ipv6_pool_client import IPv6PoolClient
+            client = IPv6PoolClient(api_url=api_url, timeout=timeout, log_func=log)
+            ipv6_address = client.get_ip(worker=f"{worker_name}_login")
+            if not ipv6_address:
+                log("[PROXY] Pool API: khong lay duoc IP", "WARN")
+                return False
+            log(f"[PROXY] Pool API: got {ipv6_address}", "INFO")
+
+        elif pp_type == 'ipv6':
+            # Lay IP tu rotator (ipv6.txt)
+            try:
+                from modules.ipv6_rotator import get_ipv6_rotator
+                rotator = get_ipv6_rotator()
+                if rotator and rotator.enabled and rotator.ipv6_list:
+                    ipv6_address = rotator.current_ipv6 or rotator.ipv6_list[0]
+                else:
+                    return False
+            except Exception:
+                return False
+
+        if not ipv6_address:
+            return False
+
+        # Start SOCKS5 proxy
+        from modules.ipv6_proxy import start_ipv6_proxy
+        proxy = start_ipv6_proxy(ipv6_address=ipv6_address, port=port, log_func=log)
+        if proxy:
+            # Doi 1 giay de proxy san sang
+            import time as _time
+            _time.sleep(1)
+            return _is_port_open(port)
+        return False
+
+    except Exception as e:
+        log(f"[PROXY] Ensure proxy error: {e}", "WARN")
+        return False
 
 CONFIG_FILE = TOOL_DIR / "config" / "config.json"
 ACCOUNT_INDEX_FILE = TOOL_DIR / "config" / ".account_index.json"  # Track account rotation
