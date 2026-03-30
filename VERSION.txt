@@ -1,3 +1,22 @@
+1.0.598
+2026-03-30 (VN)
+Change: FIX 2 van de: netsh timeout/routes tich tu + Chrome mode sai
+
+- BUG 1: netsh timeout 5s qua ngan → routes ::/0 tich tu → routing loan
+  * Delete route timeout → route cu van con → them route moi → 3-5 routes
+  * Windows gui packet di gateway sai → trang load cham/dut
+- FIX 1:
+  * CLEANUP truoc: xoa TAT CA routes ::/0 cu truoc khi them moi
+  * Tang timeout: 5s → 20s (retry 30s neu fail)
+  * Tang get_current_ipv6 timeout: 10s → 20s
+  * Tang verify timeout: 5s → 15s
+  * Canh bao khi co >1 default route
+- BUG 2: Chrome dung LOCAL SERVER mode du generation_mode=api
+  * smart_engine.py chi check local_server_enabled, khong check generation_mode
+  * v1.0.589 chi fix cho thumbnail, chua fix cho generate_images_api
+- FIX 2: Them check generation_mode != 'api' cho generate_images_api
+- Files: modules/ipv6_rotator.py, modules/smart_engine.py
+
 1.0.597
 2026-03-30 (VN)
 Change: Tang proxy buffer 64KB → 256KB - tai anh/video nhanh hon

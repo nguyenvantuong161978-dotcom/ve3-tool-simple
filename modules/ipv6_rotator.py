@@ -398,7 +398,7 @@ class IPv6Rotator:
             # netsh interface ipv6 show addresses "Ethernet"
             cmd = f'netsh interface ipv6 show addresses "{self.interface_name}"'
             result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=10
+                cmd, shell=True, capture_output=True, text=True, timeout=20
             )
 
             if result.returncode == 0:
@@ -588,9 +588,41 @@ class IPv6Rotator:
             if _is_admin():
                 # Đã có quyền admin - chạy trực tiếp
                 self.log("[IPv6] Running with admin privileges...")
+
+                # v1.0.598: CLEANUP - xoa TAT CA routes ::/0 cu truoc khi them moi
+                # Tranh tich tu nhieu default routes → routing loan
+                try:
+                    route_check = subprocess.run(
+                        'netsh interface ipv6 show route',
+                        shell=True, capture_output=True, text=True, timeout=15
+                    )
+                    if route_check.returncode == 0:
+                        route_lines = (route_check.stdout or "").split('\n')
+                        # Tim TAT CA dong co ::/0 va extract gateway
+                        import re as _re
+                        for rl in route_lines:
+                            if '::/0' in rl and self.interface_name.lower() in rl.lower():
+                                # Tim gateway trong dong (IPv6 address sau interface index)
+                                # Format: "No  Manual  256  ::/0   5  2001:ee0:b004:30d7::1"
+                                parts = rl.strip().split()
+                                for p in parts:
+                                    if ':' in p and '::' in p and p != '::/0':
+                                        # Day la gateway - xoa route nay
+                                        if new_gateway and p == new_gateway:
+                                            continue  # Giu route moi (neu da ton tai)
+                                        del_cmd = f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {p}'
+                                        try:
+                                            subprocess.run(del_cmd, shell=True, capture_output=True, text=True, timeout=15)
+                                            self.log(f"[IPv6] [CLEANUP] Xoa route cu: ::/0 via {p}")
+                                        except subprocess.TimeoutExpired:
+                                            self.log(f"[IPv6] [WARN] cleanup timeout: {del_cmd}")
+                except Exception as cleanup_err:
+                    self.log(f"[IPv6] [WARN] Route cleanup error: {cleanup_err}")
+
+                # v1.0.598: Tang timeout 5s → 20s de netsh khong bi timeout
                 for cmd in commands:
                     try:
-                        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+                        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
                         # v1.0.581: Log errors de debug connectivity
                         if r.returncode != 0:
                             stderr = (r.stderr or "").strip()
@@ -603,20 +635,30 @@ class IPv6Rotator:
                                     self.log(f"[IPv6] [WARN] stderr: {stderr[:200]}")
                     except subprocess.TimeoutExpired:
                         self.log(f"[IPv6] [WARN] cmd timeout: {cmd}")
+                        # v1.0.598: Retry 1 lan voi timeout dai hon
+                        try:
+                            r2 = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                            if r2.returncode == 0:
+                                self.log(f"[IPv6] [v] cmd OK sau retry")
+                        except Exception:
+                            self.log(f"[IPv6] [!] cmd FAIL ca sau retry: {cmd}")
 
                 # v1.0.584: Verify route + addresses (gateway ping moved to AFTER adapter wait)
                 try:
                     # Show all IPv6 routes (netsh show route khong ho tro filter)
                     verify = subprocess.run(
                         'netsh interface ipv6 show route',
-                        shell=True, capture_output=True, text=True, timeout=5
+                        shell=True, capture_output=True, text=True, timeout=15
                     )
                     route_out = (verify.stdout or "").strip()
                     # Tim default route ::/0
-                    default_lines = [l for l in route_out.split('\n') if '::/0' in l or (new_gateway and new_gateway in l)]
+                    default_lines = [l for l in route_out.split('\n') if '::/0' in l]
                     if default_lines:
+                        # v1.0.598: Canh bao neu co nhieu hon 1 default route
+                        if len(default_lines) > 1:
+                            self.log(f"[IPv6] [!] CO {len(default_lines)} default routes (nen chi co 1)!")
                         self.log(f"[IPv6] [v] Default route found:")
-                        for dl in default_lines[:3]:
+                        for dl in default_lines[:5]:
                             self.log(f"[IPv6]     {dl.strip()}")
                     else:
                         self.log(f"[IPv6] [!] DEFAULT ROUTE ::/0 MISSING in route table!")
@@ -681,7 +723,7 @@ class IPv6Rotator:
                 try:
                     addr_verify = subprocess.run(
                         f'netsh interface ipv6 show addresses "{self.interface_name}"',
-                        shell=True, capture_output=True, text=True, timeout=5
+                        shell=True, capture_output=True, text=True, timeout=15
                     )
                     addr_out = (addr_verify.stdout or "").strip()
                     addr_lines = [l.strip() for l in addr_out.split('\n') if l.strip() and ('Address' in l or '2001:' in l or 'DAD' in l)]

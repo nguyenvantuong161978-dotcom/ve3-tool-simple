@@ -1976,7 +1976,8 @@ class SmartEngine:
             pass
 
         # Local server mode: khong can proxy_token
-        if local_server_enabled and local_server_url:
+        # v1.0.598: Neu generation_mode = 'api' → KHONG dung server (giong fix thumbnail v1.0.589)
+        if local_server_enabled and local_server_url and generation_mode != 'api':
             self.log(f"[LOCAL SERVER] Mode: {local_server_url}")
             self.log(f"[LOCAL SERVER] VM gui anh qua server, khong dung Chrome local")
         elif generation_mode in ('api+server', 'server'):
