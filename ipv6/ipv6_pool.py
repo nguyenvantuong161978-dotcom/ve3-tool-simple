@@ -441,11 +441,10 @@ class IPv6Pool:
             self.log(f"[POOL] Chon {len(selected)} subnets ({len(new_subnets)} moi, "
                      f"{max(0, count_needed - len(new_subnets))} tai su dung)")
 
-            # 5. Add IP moi voi random subnet + random host
+            # 5. Add IP moi voi random subnet + 64-bit random host (giong Privacy Extension)
             added = 0
             for subnet in selected:
-                host_id = random.randint(2, 0xFFFF)
-                new_addr = self.api.build_ipv6_address(subnet, host_id=host_id)
+                new_addr = self.api.build_ipv6_address(subnet, full_random=True)
                 result = self.api.add_ipv6_address(new_addr)
                 if result:
                     added += 1

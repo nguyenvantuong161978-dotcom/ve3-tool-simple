@@ -175,26 +175,74 @@ class MikroTikAPI:
     # SUBNET HELPERS
     # =========================================================================
 
-    def build_ipv6_address(self, subnet_hex: int, host_id: int = 1) -> str:
+    def build_ipv6_address(self, subnet_hex: int, host_id: int = 1, full_random: bool = False) -> str:
         """
         Tao IPv6 address tu subnet hex.
 
         Args:
             subnet_hex: Subnet number (vd: 0x52 → 3052)
-            host_id: Host part (mac dinh ::1)
+            host_id: Host part (mac dinh ::1, chi dung khi full_random=False)
+            full_random: True = tao 64-bit Privacy Extension host (RFC 4941)
 
         Returns:
-            Full IPv6 address voi /128 (vd: "2001:ee0:4f89:3052::1/128")
+            Full IPv6 address voi /128
 
         Note: Dung /128 de chi assign 1 IP duy nhat (khong phai ca subnet)
-        """
-        # prefix = "2001:ee0:4f89:30" → "2001:ee0:4f89:30{52}"
-        subnet_str = f"{subnet_hex:02x}"
 
-        # Prefix da chua phan dau (vd: "2001:ee0:4f89:30")
-        # Them subnet hex vao cuoi
+        Examples:
+            full_random=False: 2001:ee0:b004:3052::1/128
+            full_random=True:  2001:ee0:b004:3052:8f2e:41bc:d7a0:3e15/128
+        """
+        subnet_str = f"{subnet_hex:02x}"
         full_prefix = f"{self.prefix}{subnet_str}"
-        return f"{full_prefix}::{host_id:x}/128"
+
+        if full_random:
+            host_str = self._generate_privacy_host()
+            return f"{full_prefix}:{host_str}/128"
+        else:
+            return f"{full_prefix}::{host_id:x}/128"
+
+    @staticmethod
+    def _generate_privacy_host() -> str:
+        """
+        Tao 64-bit Interface ID giong Privacy Extension (RFC 4941).
+
+        Dac diem cua Privacy Extension address:
+        - 64-bit random Interface ID
+        - Bit U (bit 6 cua byte dau) = 0 (khong phai tu MAC)
+        - Bit G (bit 7 cua byte dau) = 0 (unicast)
+        - Trong giong IP that cua Windows/Linux/macOS
+
+        Returns:
+            Host string 4 groups: "8f2e:41bc:d7a0:3e15"
+        """
+        import random as _rnd
+
+        # Tao 8 bytes random
+        host_bytes = [_rnd.randint(0, 255) for _ in range(8)]
+
+        # RFC 4941: Clear bit U (bit 6) va bit G (bit 7) cua byte dau
+        # Bit 6 = 0: "not globally unique" (Privacy Extension)
+        # Bit 7 = 0: "unicast"
+        host_bytes[0] &= 0b11111100  # Clear bit 1 (G) va bit 0... wait
+
+        # IPv6 Interface ID: byte 0 bit 6 = Universal/Local flag
+        # RFC 4941: set bit 6 = 0 (locally assigned, khong phai tu MAC)
+        host_bytes[0] &= ~0x02  # Clear bit 6 (U flag) → local
+
+        # Tranh host = 0 (network address) hoac ffff:ffff:ffff:ffff (broadcast-like)
+        if all(b == 0 for b in host_bytes):
+            host_bytes[7] = _rnd.randint(1, 254)
+        if all(b == 0xFF for b in host_bytes):
+            host_bytes[7] = _rnd.randint(0, 254)
+
+        # Format thanh 4 groups
+        g1 = (host_bytes[0] << 8) | host_bytes[1]
+        g2 = (host_bytes[2] << 8) | host_bytes[3]
+        g3 = (host_bytes[4] << 8) | host_bytes[5]
+        g4 = (host_bytes[6] << 8) | host_bytes[7]
+
+        return f"{g1:x}:{g2:x}:{g3:x}:{g4:x}"
 
     def get_available_subnets(self) -> List[int]:
         """

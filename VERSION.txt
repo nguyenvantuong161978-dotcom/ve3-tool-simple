@@ -1,6 +1,6 @@
-1.0.567
+1.0.568
 2026-03-30 (VN)
-Change: Doi tat ca IP - doi ca SUBNET + host (Google block theo /64)
+Change: Privacy Extension (RFC 4941) - IP moi giong IP that cua OS
 
 - BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
   * _refill_if_needed() chi them khi available < min_pool_size (3)
