@@ -1,3 +1,15 @@
+1.0.589
+2026-03-30 (VN)
+Change: FIX Thumbnail chay sai mode - ton trong generation_mode setting
+
+- BUG: Thumbnail luon dung LOCAL SERVER MODE khi local_server_enabled=true
+  * Bo qua generation_mode setting → Chrome 2 chay server mode du chon API
+  * "Khong co bearer_token" → thumbnail fail
+- FIX: Chi dung server mode khi generation_mode KHONG phai 'api'
+  * generation_mode=api → thumbnail dung API (giong Chrome 1)
+  * generation_mode=server/chrome → thumbnail dung server
+- File: modules/smart_engine.py
+
 1.0.588
 2026-03-30 (VN)
 Change: Chan WebRTC leak IPv4 trong Chrome

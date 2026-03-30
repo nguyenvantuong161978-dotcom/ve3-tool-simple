@@ -6104,9 +6104,11 @@ class SmartEngine:
         generation_mode = cfg.get('generation_mode', 'api')
 
         # === LOCAL SERVER MODE: Thumbnail qua server ===
+        # CHI dung server mode khi generation_mode KHONG phai 'api'
+        # Neu generation_mode = 'api' → luon dung API, khong qua server
         local_server_enabled = cfg.get('local_server_enabled', False)
         local_server_url = cfg.get('local_server_url', '')
-        if local_server_enabled and local_server_url:
+        if local_server_enabled and local_server_url and generation_mode != 'api':
             self.log(f"[THUMB] LOCAL SERVER MODE: {local_server_url}")
             # Load media_ids tu Excel (nv1 → media_id, loc1 → media_id)
             try:
