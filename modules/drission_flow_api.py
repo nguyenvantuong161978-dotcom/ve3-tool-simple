@@ -3343,7 +3343,7 @@ class DrissionFlowAPI:
                             pass
                         time.sleep(1)
                     # Doi them sau lan F5 cuoi de page on dinh
-                    time.sleep(2)
+                    time.sleep(5)
 
                     # Check có textarea không (đợi 5s)
                     textarea_found = False

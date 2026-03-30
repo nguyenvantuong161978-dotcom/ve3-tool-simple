@@ -1,4 +1,4 @@
-1.0.590
+1.0.591
 2026-03-30 (VN)
 Change: Tang retry vao project 3→5 + F5 refresh 3 lan moi page load
 
