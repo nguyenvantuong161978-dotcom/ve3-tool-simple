@@ -282,6 +282,42 @@ _server: Optional[HTTPServer] = None
 _server_thread: Optional[threading.Thread] = None
 
 
+def _ensure_firewall_rule(port: int, log_func=print):
+    """
+    v1.0.565: Tu dong them Windows Firewall rule cho API port.
+    Chay khi API server start de VM/Server co the ket noi.
+    """
+    import subprocess
+    import sys
+
+    if sys.platform != "win32":
+        return
+
+    rule_name = f"IPv6 Pool API (port {port})"
+    try:
+        # Check rule da ton tai chua
+        check = subprocess.run(
+            ["netsh", "advfirewall", "firewall", "show", "rule", f"name={rule_name}"],
+            capture_output=True, text=True, timeout=10
+        )
+        if check.returncode == 0 and rule_name in check.stdout:
+            return  # Da co rule
+
+        # Them rule moi
+        result = subprocess.run(
+            ["netsh", "advfirewall", "firewall", "add", "rule",
+             f"name={rule_name}", "dir=in", "action=allow",
+             "protocol=TCP", f"localport={port}"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            log_func(f"[API] Firewall rule added: {rule_name}")
+        else:
+            log_func(f"[API] Firewall rule failed (can quyen Admin): {result.stderr.strip()}")
+    except Exception as e:
+        log_func(f"[API] Firewall check skipped: {e}")
+
+
 def start_api_server(pool, host: str = "0.0.0.0", port: int = 8765, log_func=print) -> bool:
     """
     Start HTTP API server trong background thread.
@@ -304,6 +340,9 @@ def start_api_server(pool, host: str = "0.0.0.0", port: int = 8765, log_func=pri
     set_pool(pool, log_func)
     with _stats_lock:
         _stats["started_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # v1.0.565: Tu dong mo firewall cho port API
+    _ensure_firewall_rule(port, log_func)
 
     try:
         _server = HTTPServer((host, port), IPv6APIHandler)
