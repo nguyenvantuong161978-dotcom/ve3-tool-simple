@@ -1,17 +1,13 @@
-1.0.581
+1.0.582
 2026-03-30 (VN)
-Change: DEBUG IPv6 connectivity - log netsh errors + verify route + ping gateway
+Change: DEBUG IPv6 - fix verify command + show addresses + route table
 
-- BUG: netsh commands chay nhung errors bi nuot hoan toan (khong check returncode, khong log stderr)
-  * Khong biet command nao fail → khong biet tai sao no connectivity
-- FIX: Log chi tiet moi netsh command:
-  * Log returncode + stderr khi command fail (bo qua expected delete errors)
-  * Verify default route ::/0 da duoc set dung (check gateway trong route table)
-  * Ping gateway de test NDP reachability (gateway co phan hoi khong?)
-- Ket qua: Log se cho biet chinh xac:
-  * "DEFAULT ROUTE MISSING!" → route khong duoc set
-  * "Gateway UNREACHABLE" → router khong phan hoi NDP → van de mang/router
-  * "cmd failed" → netsh command cu the nao fail
+- v1.0.581 verify dung "show route ::/0" → "The parameter is incorrect" (netsh khong ho tro filter)
+- FIX: Dung "show route" (khong filter) roi grep "::/0" trong output
+- THEM: Show IPv6 addresses tren interface (xac nhan IP da duoc add dung)
+- THEM: Show route table context khi default route missing
+- Log netsh command errors (rc + stderr) khi fail
+- Ping gateway test NDP reachability
 - File: modules/ipv6_rotator.py - set_ipv6()
 
 1.0.580

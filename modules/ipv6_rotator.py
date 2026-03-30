@@ -573,31 +573,56 @@ class IPv6Rotator:
                     except subprocess.TimeoutExpired:
                         self.log(f"[IPv6] [WARN] cmd timeout: {cmd}")
 
-                # v1.0.581: Verify route da duoc set
+                # v1.0.582: Verify route + addresses + gateway reachability
                 try:
+                    # Show all IPv6 routes (netsh show route khong ho tro filter)
                     verify = subprocess.run(
-                        f'netsh interface ipv6 show route ::/0',
+                        'netsh interface ipv6 show route',
                         shell=True, capture_output=True, text=True, timeout=5
                     )
-                    if new_gateway and new_gateway not in (verify.stdout or ""):
-                        self.log(f"[IPv6] [!] DEFAULT ROUTE MISSING! Gateway {new_gateway} not in route table")
-                        self.log(f"[IPv6] [!] Route output: {(verify.stdout or '').strip()[:300]}")
+                    route_out = (verify.stdout or "").strip()
+                    # Tim default route ::/0
+                    default_lines = [l for l in route_out.split('\n') if '::/0' in l or (new_gateway and new_gateway in l)]
+                    if default_lines:
+                        self.log(f"[IPv6] [v] Default route found:")
+                        for dl in default_lines[:3]:
+                            self.log(f"[IPv6]     {dl.strip()}")
                     else:
-                        self.log(f"[IPv6] [v] Default route verified: ::/0 → {new_gateway}")
+                        self.log(f"[IPv6] [!] DEFAULT ROUTE ::/0 MISSING in route table!")
+                        # Show last 5 routes for context
+                        route_lines = [l.strip() for l in route_out.split('\n') if l.strip()]
+                        for rl in route_lines[-5:]:
+                            self.log(f"[IPv6] [!] route: {rl[:200]}")
+                except Exception as e:
+                    self.log(f"[IPv6] [WARN] Route verify error: {e}")
+
+                try:
+                    # Show addresses on interface
+                    addr_verify = subprocess.run(
+                        f'netsh interface ipv6 show addresses "{self.interface_name}"',
+                        shell=True, capture_output=True, text=True, timeout=5
+                    )
+                    addr_out = (addr_verify.stdout or "").strip()
+                    # Log first few address lines
+                    addr_lines = [l.strip() for l in addr_out.split('\n') if l.strip() and ('Address' in l or '2001:' in l or 'fe80' in l)]
+                    if addr_lines:
+                        self.log(f"[IPv6] Addresses on {self.interface_name}:")
+                        for al in addr_lines[:5]:
+                            self.log(f"[IPv6]     {al[:150]}")
                 except Exception:
                     pass
 
-                # v1.0.581: Test gateway reachability (NDP)
+                # Test gateway reachability (NDP)
                 try:
                     ping_gw = subprocess.run(
                         f'ping -6 -n 1 -w 3000 {new_gateway}',
-                        shell=True, capture_output=True, text=True, timeout=5
+                        shell=True, capture_output=True, text=True, timeout=6
                     )
                     if ping_gw.returncode == 0 and 'Reply from' in (ping_gw.stdout or ''):
                         self.log(f"[IPv6] [v] Gateway reachable: {new_gateway}")
                     else:
                         self.log(f"[IPv6] [!] Gateway UNREACHABLE: {new_gateway}")
-                        self.log(f"[IPv6] [!] Ping output: {(ping_gw.stdout or '').strip()[:200]}")
+                        self.log(f"[IPv6] [!] Ping: {(ping_gw.stdout or '').strip()[:200]}")
                 except Exception:
                     pass
 
