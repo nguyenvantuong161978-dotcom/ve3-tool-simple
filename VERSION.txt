@@ -1,3 +1,13 @@
+1.0.594
+2026-03-30 (VN)
+Change: Don gian hoa Settings Dialog trong Master Control
+
+- Bo checkbox phuc tap, dung "--" lam gia tri mac dinh (= khong sync)
+- Grid layout don gian thay vi scrollable canvas
+- Combo box: chon gia tri = master kiem soat, de "--" = VM giu local
+- Cua so nho hon, de su dung hon
+- File: control/master_control.py
+
 1.0.593
 2026-03-30 (VN)
 Change: Them control/ vao danh sach cap nhat GitHub ZIP
