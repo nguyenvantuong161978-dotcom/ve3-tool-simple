@@ -1,3 +1,19 @@
+1.0.607
+2026-03-30 (VN)
+Change: Server GUI - Gop IPv6 toggle + Proxy Provider thanh 1 selector ro rang
+
+- TRUOC: 3 thanh phan rieng biet (IPv6 toggle, IPv6 list, Pool API URL, Proxy Provider combo)
+  * User phai hieu cach ket hop chung → de nham
+- SAU: 1 dropdown "Che do IPv6" voi 4 lua chon:
+  * Tat: Khong IPv6, khong proxy
+  * IPv6 Pool: Nhap Pool API URL → tu dong lay/rotate IPv6 (KHUYẾN DÙNG)
+  * IPv6 Thu cong: Nhap danh sach IPv6 thu cong
+  * Webshare: Dung Webshare.io rotating proxy
+- Moi che do chi hien settings lien quan (an phan khong can)
+- Them nut TEST KET NOI cho IPv6 Pool (goi /api/status, hien so IP)
+- Backward compat: Migrate settings cu tu ipv6_toggle + proxy_type sang ipv6_mode
+- File: server/server_gui.py
+
 1.0.606
 2026-03-30 (VN)
 Change: FIX server chrome_pool.py - Pool API tra ve dict thay vi string

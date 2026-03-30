@@ -70,38 +70,69 @@ class ServerGUI(tk.Tk):
         card = tk.Frame(self.setup_frame, bg=BG2, highlightbackground=BORDER, highlightthickness=1)
         card.pack(padx=80, fill='x')
 
-        # IPv6 toggle
-        row1 = tk.Frame(card, bg=BG2)
-        row1.pack(fill='x', padx=20, pady=(20, 10))
+        # ============ CHE DO IPv6 ============
+        row_mode = tk.Frame(card, bg=BG2)
+        row_mode.pack(fill='x', padx=20, pady=(20, 5))
 
-        tk.Label(row1, text="IPv6 Proxy", font=("Segoe UI", 13, "bold"),
+        tk.Label(row_mode, text="Che do IPv6", font=("Segoe UI", 13, "bold"),
                  bg=BG2, fg=FG).pack(side='left')
 
-        self.ipv6_var = tk.BooleanVar(value=True)
-        self.ipv6_btn = tk.Button(row1, text="BAT", font=("Segoe UI", 11, "bold"),
-                                  bg=GREEN, fg='white', width=6, relief='flat',
-                                  command=self._toggle_ipv6)
-        self.ipv6_btn.pack(side='right')
+        # v1.0.607: Unified IPv6 mode selector
+        self.ipv6_mode_var = tk.StringVar(value="pool")
+        mode_options = ["Tat", "IPv6 Pool", "IPv6 Thu cong", "Webshare"]
+        self.ipv6_mode_combo = ttk.Combobox(row_mode, textvariable=self.ipv6_mode_var,
+                                             values=mode_options, state='readonly', width=14)
+        self.ipv6_mode_combo.set("IPv6 Pool")
+        self.ipv6_mode_combo.pack(side='right')
+        self.ipv6_mode_combo.bind("<<ComboboxSelected>>", self._on_ipv6_mode_changed)
 
-        tk.Label(card, text="BAT: Moi Chrome dung IPv6 rieng (chong 403).  TAT: Dung IPv4 chung.",
-                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
+        # Mode description
+        self.mode_desc = tk.Label(card, text="", font=("Segoe UI", 9), bg=BG2, fg=FG2)
+        self.mode_desc.pack(padx=20, anchor='w', pady=(0, 5))
 
-        # IPv6 list input (optional - bo sung them IPv6 ngoai sheet)
-        tk.Label(card, text="IPv6 (moi dong 1 IP):",
-                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w', pady=(8, 2))
+        # --- IPv6 Pool frame (hien khi chon "IPv6 Pool") ---
+        self.pool_frame = tk.Frame(card, bg=BG2)
 
-        ipv6_text_frame = tk.Frame(card, bg=BG2)
-        ipv6_text_frame.pack(fill='x', padx=20, pady=(0, 2))
+        pool_row = tk.Frame(self.pool_frame, bg=BG2)
+        pool_row.pack(fill='x', pady=(0, 2))
+        tk.Label(pool_row, text="Pool API URL:", font=("Segoe UI", 10, "bold"),
+                 bg=BG2, fg=FG).pack(side='left')
+        self.pool_api_var = tk.StringVar(value="")
+        pool_entry = tk.Entry(pool_row, textvariable=self.pool_api_var, width=35,
+                              font=("Consolas", 10), bg='#0f172a', fg=FG,
+                              insertbackground=FG, relief='solid', bd=1)
+        pool_entry.pack(side='left', padx=(8, 0), fill='x', expand=True)
 
-        self.ipv6_text = tk.Text(ipv6_text_frame, height=3, width=50,
+        pool_hint = tk.Label(self.pool_frame, text="VD: http://192.168.88.1:8765",
+                             font=("Segoe UI", 8), bg=BG2, fg=FG2)
+        pool_hint.pack(anchor='w', pady=(0, 2))
+
+        # Pool test button
+        pool_btn_row = tk.Frame(self.pool_frame, bg=BG2)
+        pool_btn_row.pack(fill='x', pady=(2, 5))
+        self.pool_test_btn = tk.Button(pool_btn_row, text="TEST KET NOI",
+                                        font=("Segoe UI", 9, "bold"),
+                                        bg=ORANGE, fg='#0f172a', relief='flat', cursor='hand2',
+                                        command=self._test_pool)
+        self.pool_test_btn.pack(side='left')
+        self.pool_status_label = tk.Label(pool_btn_row, text="", font=("Segoe UI", 9),
+                                           bg=BG2, fg=FG2)
+        self.pool_status_label.pack(side='left', padx=10)
+
+        # --- IPv6 Thu cong frame (hien khi chon "IPv6 Thu cong") ---
+        self.manual_ipv6_frame = tk.Frame(card, bg=BG2)
+
+        tk.Label(self.manual_ipv6_frame, text="IPv6 (moi dong 1 IP):",
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(anchor='w', pady=(0, 2))
+
+        self.ipv6_text = tk.Text(self.manual_ipv6_frame, height=3, width=50,
                                   font=("Consolas", 9), bg='#0f172a', fg=FG,
                                   insertbackground=FG, relief='solid', bd=1,
                                   highlightbackground=BORDER)
         self.ipv6_text.pack(fill='x')
 
-        # IPv6 buttons: THEM VAO MAY + TEST
-        ipv6_btn_frame = tk.Frame(card, bg=BG2)
-        ipv6_btn_frame.pack(fill='x', padx=20, pady=(2, 5))
+        ipv6_btn_frame = tk.Frame(self.manual_ipv6_frame, bg=BG2)
+        ipv6_btn_frame.pack(fill='x', pady=(4, 5))
 
         self.ipv6_add_btn = tk.Button(ipv6_btn_frame, text="THEM VAO MAY",
                                        font=("Segoe UI", 9, "bold"),
@@ -119,43 +150,8 @@ class ServerGUI(tk.Tk):
                                            bg=BG2, fg=FG2)
         self.ipv6_status_label.pack(side='left', padx=10)
 
-        # v1.0.561: IPv6 Pool API URL
-        pool_row = tk.Frame(card, bg=BG2)
-        pool_row.pack(fill='x', padx=20, pady=(5, 2))
-        tk.Label(pool_row, text="IPv6 Pool API:", font=("Segoe UI", 9, "bold"),
-                 bg=BG2, fg=FG).pack(side='left')
-        self.pool_api_var = tk.StringVar(value="")
-        pool_entry = tk.Entry(pool_row, textvariable=self.pool_api_var, width=40,
-                              font=("Consolas", 9), bg='#0f172a', fg=FG,
-                              insertbackground=FG, relief='solid', bd=1)
-        pool_entry.pack(side='left', padx=(8, 0), fill='x', expand=True)
-        tk.Label(card, text="VD: http://192.168.88.1:8765 - Lay IPv6 tu MikroTik Pool (thay cho danh sach tren)",
-                 font=("Segoe UI", 8), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
-
-        # Separator
-        tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=8)
-
-        # === v1.0.545: Proxy Provider (Webshare Rotating Residential) ===
-        row_proxy = tk.Frame(card, bg=BG2)
-        row_proxy.pack(fill='x', padx=20, pady=(0, 5))
-
-        tk.Label(row_proxy, text="Proxy Provider", font=("Segoe UI", 13, "bold"),
-                 bg=BG2, fg=FG).pack(side='left')
-
-        self.proxy_type_var = tk.StringVar(value="none")
-        proxy_options = ["none", "ipv6", "webshare"]
-        self.proxy_combo = ttk.Combobox(row_proxy, textvariable=self.proxy_type_var,
-                                         values=proxy_options, state='readonly', width=12)
-        self.proxy_combo.set("none")
-        self.proxy_combo.pack(side='right')
-        self.proxy_combo.bind("<<ComboboxSelected>>", self._on_proxy_type_changed)
-
-        tk.Label(card, text="none: Khong proxy | ipv6: IPv6 rotation | webshare: Webshare.io Rotating",
-                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(padx=20, anchor='w')
-
-        # Webshare settings frame (an/hien theo proxy_type)
+        # --- Webshare frame (hien khi chon "Webshare") ---
         self.ws_frame = tk.Frame(card, bg=BG2)
-        self.ws_frame.pack(fill='x', padx=20, pady=(5, 5))
 
         ws_row1 = tk.Frame(self.ws_frame, bg=BG2)
         ws_row1.pack(fill='x', pady=2)
@@ -183,8 +179,12 @@ class ServerGUI(tk.Tk):
                                       command=self._test_webshare)
         self.ws_test_btn.pack(side='right')
 
-        # Mac dinh an webshare settings
-        self.ws_frame.pack_forget()
+        # Backward compat vars
+        self.ipv6_var = tk.BooleanVar(value=True)
+        self.proxy_type_var = tk.StringVar(value="none")
+
+        # Show correct sub-frame
+        self._on_ipv6_mode_changed()
 
         # Separator
         tk.Frame(card, bg=BORDER, height=1).pack(fill='x', padx=20, pady=8)
@@ -255,18 +255,84 @@ class ServerGUI(tk.Tk):
         tk.Label(self.setup_frame, text=f"v{version}", font=("Segoe UI", 9),
                  bg=BG, fg=FG2).pack(side='bottom', pady=10)
 
+    def _on_ipv6_mode_changed(self, event=None):
+        """v1.0.607: Show/hide sub-frames based on IPv6 mode selection."""
+        mode = self.ipv6_mode_combo.get() if hasattr(self, 'ipv6_mode_combo') else "Tat"
+
+        # Hide all sub-frames
+        self.pool_frame.pack_forget()
+        self.manual_ipv6_frame.pack_forget()
+        self.ws_frame.pack_forget()
+
+        # Update backward compat vars
+        if mode == "Tat":
+            self.ipv6_var.set(False)
+            self.proxy_type_var.set("none")
+            self.mode_desc.config(text="Khong dung IPv6. Chrome dung IPv4 chung (de bi 403).")
+        elif mode == "IPv6 Pool":
+            self.ipv6_var.set(True)
+            self.proxy_type_var.set("ipv6")
+            self.mode_desc.config(text="Lay IPv6 tu MikroTik Pool API. Tu dong rotate khi 403.")
+            self.pool_frame.pack(fill='x', padx=20, pady=(0, 5))
+        elif mode == "IPv6 Thu cong":
+            self.ipv6_var.set(True)
+            self.proxy_type_var.set("ipv6")
+            self.mode_desc.config(text="Nhap IPv6 thu cong. Moi Chrome 1 IPv6 rieng.")
+            self.manual_ipv6_frame.pack(fill='x', padx=20, pady=(0, 5))
+        elif mode == "Webshare":
+            self.ipv6_var.set(False)
+            self.proxy_type_var.set("webshare")
+            self.mode_desc.config(text="Dung Webshare.io Rotating Residential Proxy.")
+            self.ws_frame.pack(fill='x', padx=20, pady=(0, 5))
+
+    def _test_pool(self):
+        """Test ket noi IPv6 Pool API."""
+        url = self.pool_api_var.get().strip()
+        if not url:
+            self.pool_status_label.config(text="Chua nhap URL!", fg=RED)
+            return
+
+        self.pool_test_btn.config(state='disabled', text="DANG TEST...")
+        self.pool_status_label.config(text="", fg=FG2)
+
+        def _do_test():
+            try:
+                import urllib.request
+                test_url = url.rstrip('/') + '/api/status'
+                req = urllib.request.Request(test_url, method='GET')
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode())
+                    total = data.get('total', 0)
+                    available = data.get('available', 0)
+                    msg = f"OK! Pool: {available}/{total} IP san sang"
+                    self.after(0, lambda: self.pool_status_label.config(text=msg, fg=GREEN))
+            except Exception as e:
+                self.after(0, lambda: self.pool_status_label.config(text=f"Loi: {e}", fg=RED))
+            finally:
+                self.after(0, lambda: self.pool_test_btn.config(state='normal', text="TEST KET NOI"))
+
+        threading.Thread(target=_do_test, daemon=True).start()
+
     def _load_settings(self):
         """Load settings tu file JSON."""
         try:
             if self._settings_file.exists():
                 data = json.loads(self._settings_file.read_text(encoding='utf-8'))
-                # IPv6 toggle
-                if 'use_ipv6' in data:
-                    self.ipv6_var.set(data['use_ipv6'])
-                    if data['use_ipv6']:
-                        self.ipv6_btn.config(text="BAT", bg=GREEN)
-                    else:
-                        self.ipv6_btn.config(text="TAT", bg='#475569')
+                # v1.0.607: Unified IPv6 mode
+                if 'ipv6_mode' in data:
+                    self.ipv6_mode_combo.set(data['ipv6_mode'])
+                elif data.get('pool_api_url'):
+                    # Migrate: co pool URL = dang dung pool
+                    self.ipv6_mode_combo.set("IPv6 Pool")
+                elif data.get('proxy_type') == 'webshare':
+                    self.ipv6_mode_combo.set("Webshare")
+                elif data.get('use_ipv6') and data.get('ipv6_list'):
+                    self.ipv6_mode_combo.set("IPv6 Thu cong")
+                elif not data.get('use_ipv6', True):
+                    self.ipv6_mode_combo.set("Tat")
+                # Pool API URL
+                if data.get('pool_api_url'):
+                    self.pool_api_var.set(data['pool_api_url'])
                 # IPv6 list
                 if data.get('ipv6_list'):
                     self.ipv6_text.delete("1.0", "end")
@@ -279,19 +345,15 @@ class ServerGUI(tk.Tk):
                 if data.get('accounts_raw'):
                     self.accounts_text.delete("1.0", "end")
                     self.accounts_text.insert("1.0", "\n".join(data['accounts_raw']))
-                # v1.0.545: Proxy Provider
-                if data.get('proxy_type'):
-                    self.proxy_type_var.set(data['proxy_type'])
-                    self._on_proxy_type_changed()
+                # Webshare settings
                 if data.get('ws_username'):
                     self.ws_username_var.set(data['ws_username'])
                 if data.get('ws_password'):
                     self.ws_password_var.set(data['ws_password'])
                 if data.get('ws_machine_id'):
                     self.ws_machine_var.set(str(data['ws_machine_id']))
-                # v1.0.561: Pool API URL
-                if data.get('pool_api_url'):
-                    self.pool_api_var.set(data['pool_api_url'])
+                # Apply mode UI
+                self._on_ipv6_mode_changed()
         except Exception:
             pass
 
@@ -300,16 +362,16 @@ class ServerGUI(tk.Tk):
         try:
             self._settings_file.parent.mkdir(parents=True, exist_ok=True)
             data = {
+                # v1.0.607: Unified mode
+                'ipv6_mode': self.ipv6_mode_combo.get(),
                 'use_ipv6': self.ipv6_var.get(),
                 'ipv6_list': self._get_ipv6_list(),
                 'chrome_count': self._get_chrome_count(),
                 'accounts_raw': self._get_accounts_raw(),
-                # v1.0.545: Proxy Provider
                 'proxy_type': self.proxy_type_var.get(),
                 'ws_username': self.ws_username_var.get().strip(),
                 'ws_password': self.ws_password_var.get().strip(),
                 'ws_machine_id': int(self.ws_machine_var.get().strip() or '1'),
-                # v1.0.561: Pool API URL
                 'pool_api_url': self.pool_api_var.get().strip(),
             }
             self._settings_file.write_text(
@@ -318,14 +380,6 @@ class ServerGUI(tk.Tk):
             )
         except Exception:
             pass
-
-    def _on_proxy_type_changed(self, event=None):
-        """v1.0.545: Hien/an webshare settings khi doi proxy type."""
-        ptype = self.proxy_type_var.get()
-        if ptype == "webshare":
-            self.ws_frame.pack(fill='x', padx=20, pady=(5, 5))
-        else:
-            self.ws_frame.pack_forget()
 
     def _test_webshare(self):
         """v1.0.545: Test ket noi Webshare proxy."""
@@ -372,14 +426,6 @@ class ServerGUI(tk.Tk):
                 },
             }
         }
-
-    def _toggle_ipv6(self):
-        current = self.ipv6_var.get()
-        self.ipv6_var.set(not current)
-        if not current:
-            self.ipv6_btn.config(text="BAT", bg=GREEN)
-        else:
-            self.ipv6_btn.config(text="TAT", bg='#475569')
 
     def _get_ipv6_list(self):
         """Lay danh sach IPv6 tu text box."""
