@@ -276,24 +276,46 @@ class MikroTikAPI:
 
     def test_ipv6_connectivity(self, address: str) -> bool:
         """
-        Test xem IPv6 address co bind duoc khong (ping tu may local).
+        Test IPv6 connectivity tu router (ping Google DNS qua REST API).
 
         Args:
-            address: IPv6 address (khong co /prefix)
+            address: IPv6 address (khong co /prefix) - dung lam src-address
         """
-        import subprocess
-
         try:
-            # Ping Google DNS qua IPv6 address nay
-            cmd = f"ping -6 -n 1 -w 3000 -S {address} 2001:4860:4860::8888"
-            result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=5
+            # Dung MikroTik REST API /tool/ping
+            data = {
+                "address": "2001:4860:4860::8888",
+                "src-address": address,
+                "count": "2",
+            }
+            self.log(f"[MikroTik] Ping test: {address} → Google DNS...")
+            resp = self.session.post(
+                f"{self.base_url}/tool/ping",
+                json=data,
+                timeout=15,
             )
-            if result.returncode == 0 and "Reply from" in result.stdout:
-                self.log(f"[MikroTik] IPv6 OK: {address}")
-                return True
+
+            if resp.status_code == 200:
+                results = resp.json()
+                # MikroTik tra ve list cac ping results
+                if isinstance(results, list):
+                    for r in results:
+                        # Tim result co "time" (thanh cong) hoac "sent"/"received"
+                        if r.get("time"):
+                            self.log(f"[MikroTik] IPv6 OK: {address} ({r.get('time')})")
+                            return True
+                        # Check sent/received summary
+                        received = r.get("received", 0)
+                        if isinstance(received, str):
+                            received = int(received) if received.isdigit() else 0
+                        if received > 0:
+                            self.log(f"[MikroTik] IPv6 OK: {address} (received={received})")
+                            return True
+
+                self.log(f"[MikroTik] IPv6 FAIL: {address} - no reply")
+                return False
             else:
-                self.log(f"[MikroTik] IPv6 FAIL: {address}")
+                self.log(f"[MikroTik] Ping API error ({resp.status_code}): {resp.text[:200]}")
                 return False
         except Exception as e:
             self.log(f"[MikroTik] IPv6 test error: {e}")

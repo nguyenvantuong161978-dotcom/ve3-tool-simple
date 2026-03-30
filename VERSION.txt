@@ -1,6 +1,6 @@
-1.0.556
+1.0.557
 2026-03-30 (VN)
-Change: IPv6 Pool Manager GUI - giao dien quan ly IPv6 pool, doi IP thu cong, test connectivity
+Change: Fix IPv6 test - dung MikroTik REST API ping thay vi local ping
 
 - MikroTik www-ssl can certificate → nhieu router chua cau hinh
 - FIX: Thu HTTPS truoc, neu fail tu dong thu HTTP
