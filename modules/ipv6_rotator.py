@@ -513,10 +513,14 @@ class IPv6Rotator:
             commands.append(f'netsh interface ipv6 add address "{self.interface_name}" {new_ipv6}')
 
             # Bước 3: Set gateway
-            # Ưu tiên custom gateway từ file, nếu không có thì tự tính
+            # v1.0.576: Uu tien: 1) per-IP gateway, 2) config gateway, 3) auto-compute
             if new_ipv6 in self.ipv6_gateways:
                 new_gateway = self.ipv6_gateways[new_ipv6]
                 self.log(f"[IPv6] Using custom gateway: {new_gateway}")
+            elif self.gateway:
+                # Gateway co dinh tu settings.yaml (dung cho Pool mode)
+                new_gateway = self.gateway
+                self.log(f"[IPv6] Using config gateway: {new_gateway}")
             else:
                 new_gateway = _get_gateway_for_ipv6(new_ipv6)
                 self.log(f"[IPv6] Auto gateway: {new_gateway}")
