@@ -3010,13 +3010,18 @@ class DrissionFlowAPI:
             if self._proxy_provider and self._proxy_provider.is_ready():
                 chrome_arg = self._proxy_provider.get_chrome_arg()
                 if chrome_arg:
+                    # Server mode: SOCKS5 proxy
                     options.set_argument(f'--proxy-server={chrome_arg}')
                     options.set_argument('--proxy-bypass-list=<-loopback>')
                     # v1.0.588: Chan WebRTC leak IPv4
                     options.set_argument('--force-webrtc-ip-handling-policy=disable_non_proxied_udp')
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
                     self.log(f"[NET] Chrome → {chrome_arg} (WebRTC blocked)")
-                    _using_proxy_provider = True
+                else:
+                    # v1.0.612: VM mode DIRECT - IPv6 da tren interface, Chrome dung truc tiep
+                    self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
+                    self.log(f"[NET] Chrome → IPv6 DIRECT (khong proxy, nhanh hon)")
+                _using_proxy_provider = True
 
             # === IPv6 MODE - BẬT NGAY KHI MỞ CHROME ===
             # Dùng IPv6 ngay từ đầu, nếu 403 thì đổi IPv6 khác

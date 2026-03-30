@@ -1,4 +1,14 @@
-1.0.611
+1.0.612
+2026-03-30 (VN)
+Perf: VM mode IPv6 DIRECT - bo SOCKS5 proxy, Chrome dung IPv6 truc tiep
+
+- VM mode (API): Bo SOCKS5 proxy Python → Chrome ket noi truc tiep qua IPv6 tren interface
+- ipv6_rotator.set_ipv6() da add IPv6 vao interface (netsh, routes, prefix policy)
+- Chrome tu dong dung IPv6 ma khong can proxy relay → nhanh hon nhieu
+- Server mode: Van dung SOCKS5 proxy (nhieu workers can bind IPv6 khac nhau)
+- get_chrome_arg(): VM tra "" (direct), Server tra "socks5://..." (proxy)
+
+v1.0.611
 2026-03-30 (VN)
 Fix: Server IPv6 Pool - firewall TCP/UDP + cleanup static IPs
 

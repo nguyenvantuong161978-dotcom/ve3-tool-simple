@@ -31,13 +31,18 @@ class IPv6Provider(ProxyProvider):
 
     def setup(self, worker_id: int = 0, port: int = 1088) -> bool:
         """
-        Khoi tao IPv6 proxy.
+        Khoi tao IPv6 cho VM mode (API).
 
-        - worker_id=0: Tao SOCKS5 proxy + tim IPv6 hoat dong
-        - worker_id>0: Reuse proxy tu worker 0 (VM mode) hoac tao rieng (Server mode)
+        v1.0.612: Bo SOCKS5 proxy - dung IPv6 truc tiep tren interface.
+        ipv6_rotator.set_ipv6() da add IPv6 vao interface (netsh, routes, prefix policy)
+        → Chrome tu dong dung IPv6 ma khong can proxy → nhanh hon nhieu.
+
+        - worker_id=0: Tim IPv6 hoat dong, set len interface
+        - worker_id>0: Reuse IPv6 da set boi worker 0
         """
         self.worker_id = worker_id
         self.port = port
+        self._direct_mode = True  # v1.0.612: VM mode = direct (khong proxy)
 
         try:
             from modules.ipv6_rotator import get_ipv6_rotator
@@ -56,40 +61,23 @@ class IPv6Provider(ProxyProvider):
             self._rotator.set_logger(self.log)
 
             if worker_id == 0:
-                # Chrome 1: Tim IPv6 hoat dong + tao SOCKS5 proxy
+                # Chrome 1: Tim IPv6 hoat dong (set_ipv6 da add len interface)
                 working_ipv6 = self._rotator.init_with_working_ipv6()
                 if not working_ipv6:
                     self.log("[PROXY-IPv6] Khong tim duoc IPv6 hoat dong!")
                     return False
 
-                from modules.ipv6_proxy import start_ipv6_proxy
-                self._proxy = start_ipv6_proxy(
-                    ipv6_address=working_ipv6,
-                    port=port,
-                    log_func=self.log
-                )
-                if not self._proxy:
-                    self.log("[PROXY-IPv6] Khong tao duoc SOCKS5 proxy!")
-                    return False
-
+                # v1.0.612: KHONG tao SOCKS5 proxy
+                # IPv6 da tren interface → Chrome dung truc tiep
                 self._activated = True
                 self._ready = True
-                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: IPv6={working_ipv6}, port={port}")
+                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: IPv6={working_ipv6} (DIRECT - khong proxy)")
                 return True
             else:
-                # Worker khac: verify proxy port dang chay
-                import socket
-                try:
-                    _test = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    _test.settimeout(2)
-                    _test.connect(('127.0.0.1', port))
-                    _test.close()
-                    self._ready = True
-                    self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: Reuse proxy port {port}")
-                    return True
-                except Exception:
-                    self.log(f"[PROXY-IPv6] Worker {worker_id}: Proxy port {port} chua san sang")
-                    return False
+                # Worker khac: IPv6 da san sang tren interface (worker 0 da set)
+                self._ready = True
+                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: Reuse IPv6 tren interface (DIRECT)")
+                return True
 
         except ImportError as e:
             self.log(f"[PROXY-IPv6] Import error: {e}")
@@ -389,7 +377,8 @@ class IPv6Provider(ProxyProvider):
 
         new_ip = self._rotator.rotate()
         if new_ip:
-            # Cap nhat SOCKS5 proxy voi IP moi
+            # v1.0.612: Direct mode (VM) - rotator.rotate() da set_ipv6() len interface
+            # Server mode (dedicated) - van can update SOCKS5 proxy
             if self._proxy:
                 self._proxy.set_ipv6(new_ip)
             self.log(f"[PROXY-IPv6] [v] Rotated ({reason}): → {new_ip}")
@@ -430,7 +419,13 @@ class IPv6Provider(ProxyProvider):
             return False
 
     def get_chrome_arg(self) -> str:
-        """Tra ve SOCKS5 proxy URL cho Chrome."""
+        """Tra ve proxy arg cho Chrome.
+
+        v1.0.612: VM mode (direct) → "" (khong proxy, Chrome dung IPv6 truc tiep)
+        Server mode (dedicated) → "socks5://..." (can bind IPv6 cu the)
+        """
+        if getattr(self, '_direct_mode', False):
+            return ""  # VM: IPv6 da tren interface, Chrome dung truc tiep
         return f"socks5://127.0.0.1:{self.port}"
 
     def get_current_ip(self) -> str:
@@ -442,11 +437,11 @@ class IPv6Provider(ProxyProvider):
         return "unknown"
 
     def stop(self):
-        """Dung SOCKS5 proxy."""
+        """Dung proxy/cleanup."""
         if self._proxy:
             self._proxy.stop()
             self._proxy = None
-        # v1.0.609: Remove IP from interface khi stop (dedicated mode)
+        # v1.0.609: Remove IP from interface khi stop (dedicated/server mode)
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
             self._current_ipv6 = None
