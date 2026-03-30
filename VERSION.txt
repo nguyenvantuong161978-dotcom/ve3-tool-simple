@@ -7,6 +7,8 @@ Perf: VM mode IPv6 DIRECT - bo SOCKS5 proxy, Chrome dung IPv6 truc tiep
 - Chrome tu dong dung IPv6 ma khong can proxy relay → nhanh hon nhieu
 - Server mode: Van dung SOCKS5 proxy (nhieu workers can bind IPv6 khac nhau)
 - get_chrome_arg(): VM tra "" (direct), Server tra "socks5://..." (proxy)
+- Fix google_login.py: get_proxy_arg_from_settings() tra "" cho VM mode (truoc tu start SOCKS5)
+- Them _ensure_ipv6_on_interface(): chi dam bao IPv6 tren interface, khong tao proxy
 
 v1.0.611
 2026-03-30 (VN)

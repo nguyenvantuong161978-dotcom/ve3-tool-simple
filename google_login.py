@@ -70,6 +70,18 @@ def get_proxy_arg_from_settings(ensure_ready: bool = True) -> str:
             pp_type = 'ipv6_pool'
 
         if pp_type in ('ipv6', 'ipv6_pool'):
+            # v1.0.612: VM mode dung IPv6 truc tiep (khong can SOCKS5 proxy)
+            # ipv6_rotator.set_ipv6() da add IPv6 vao interface → Chrome tu dung
+            # Chi server mode (generation_mode=server) can SOCKS5 proxy (nhieu workers, nhieu IPv6)
+            gen_mode = cfg.get('generation_mode', 'api')
+            if gen_mode != 'server':
+                # VM mode: dam bao IPv6 da tren interface (rotator set)
+                if ensure_ready:
+                    _ensure_ipv6_on_interface(cfg, pp_type)
+                log(f"[PROXY] IPv6 DIRECT mode (khong proxy, nhanh hon)", "INFO")
+                return ""
+
+            # Server mode: van can SOCKS5 proxy
             port = cfg.get('ipv6_rotation', {}).get('local_proxy_port', 1088)
             proxy_arg = f"socks5://127.0.0.1:{port}"
 
@@ -108,6 +120,40 @@ def _is_port_open(port: int) -> bool:
         s.close()
         return True
     except Exception:
+        return False
+
+
+def _ensure_ipv6_on_interface(cfg: dict, pp_type: str) -> bool:
+    """
+    v1.0.612: Dam bao IPv6 da tren interface (VM mode, KHONG tao SOCKS5 proxy).
+    ipv6_rotator.init_with_working_ipv6() se:
+    - Pool mode: lay IP tu API → set_ipv6 (netsh add) → test
+    - File mode: doc ipv6.txt → set_ipv6 (netsh add) → test
+    """
+    try:
+        from modules.ipv6_rotator import get_ipv6_rotator
+        rotator = get_ipv6_rotator(settings=cfg)
+
+        if not rotator or not rotator.enabled:
+            return False
+
+        rotator.set_logger(log)
+
+        # Check xem da co IPv6 hoat dong chua
+        if rotator.current_ipv6:
+            log(f"[PROXY] IPv6 da san sang: {rotator.current_ipv6}", "INFO")
+            return True
+
+        # Chua co → tim va set IPv6 len interface
+        working_ipv6 = rotator.init_with_working_ipv6()
+        if working_ipv6:
+            log(f"[PROXY] IPv6 active: {working_ipv6}", "INFO")
+            return True
+
+        log("[PROXY] Khong tim duoc IPv6 hoat dong", "WARN")
+        return False
+    except Exception as e:
+        log(f"[PROXY] Ensure IPv6 error: {e}", "WARN")
         return False
 
 
