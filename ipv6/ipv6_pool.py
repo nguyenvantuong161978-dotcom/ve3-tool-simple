@@ -262,20 +262,26 @@ class IPv6Pool:
 
             # 3. Chon subnet MOI (random, chua co trong pool va chua burned)
             pool_subnets = {e.get("subnet") for e in self.pool if e.get("subnet") is not None}
-            # Them subnet cu vao danh sach tranh
-            pool_subnets.add(old_subnet)
+            # Uu tien tranh subnet cu (vi bi 403)
+            pool_subnets_strict = pool_subnets | {old_subnet}
 
             full_range = list(range(self.api.subnet_start, self.api.subnet_end + 1))
             random.shuffle(full_range)
 
             new_subnet = None
+            # Lan 1: Tim subnet KHONG trung pool VA khong phai subnet cu
             for s in full_range:
-                if s not in pool_subnets:
+                if s not in pool_subnets_strict:
                     new_subnet = s
                     break
 
+            # Lan 2: Neu het subnet moi, dung lai subnet cu (gateway da xoa, worker IP moi random)
+            if new_subnet is None and old_subnet is not None:
+                new_subnet = old_subnet
+                self.log(f"[POOL] BURN: Het subnet moi → dung lai subnet {old_subnet:02x} (IP se random moi)")
+
             if new_subnet is None:
-                self.log(f"[POOL] BURN: {address} ({reason}) → het subnet moi!")
+                self.log(f"[POOL] BURN: {address} ({reason}) → khong tim duoc subnet!")
                 self._save_pool()
                 return
 

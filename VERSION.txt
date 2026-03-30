@@ -1,3 +1,16 @@
+1.0.601
+2026-03-30 (VN)
+Change: FIX burn_ip het subnet - dung lai subnet cu voi worker IP random moi
+
+- BUG: Pool 155 IP dung het 155 subnets (range 101-255)
+  * Burn xoa 1 subnet + loai tru subnet cu = 155/155 da dung → "het subnet moi!"
+  * Pool mat 1 IP moi lan burn (155 → 154 → 153...)
+- FIX: Khi het subnet moi, cho phep dung lai subnet cu
+  * Gateway cu da bi xoa → tao lai gateway moi cho cung subnet
+  * Worker IP se duoc random moi hoan toan → Google khong nhan ra
+  * Pool luon giu du so luong IP
+- File: ipv6/ipv6_pool.py - burn_ip()
+
 1.0.600
 2026-03-30 (VN)
 Change: Redesign IPv6 Pool GUI - auto start + dark theme + workers panel
