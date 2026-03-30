@@ -1,3 +1,14 @@
+1.0.587
+2026-03-30 (VN)
+Change: SOCKS proxy chi dung IPv6 - bo IPv4 fallback
+
+- Truoc (v1.0.572): Proxy fallback IPv4 khi target khong co AAAA record
+  * IP checker thay ca IPv6 va IPv4 → user thay Chrome van dung IPv4
+- Sau: Proxy CHI ket noi qua IPv6, KHONG fallback IPv4
+  * Chrome chi thay IPv6 (IP pool)
+  * RDP van hoat dong binh thuong (khong qua proxy)
+- File: modules/ipv6_proxy.py - _connect_via_ipv6()
+
 1.0.586
 2026-03-30 (VN)
 Change: FIX ROOT CAUSE - Windows Firewall chan ICMPv6 → NDP fail → gateway unreachable

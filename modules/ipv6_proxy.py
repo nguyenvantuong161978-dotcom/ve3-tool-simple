@@ -226,19 +226,9 @@ class IPv6SocksProxy:
                     pass
 
             if not addrinfo:
-                # v1.0.572: Fallback IPv4 khi domain khong co AAAA record
-                # VD: accounts.google.com co the khong co IPv6 tren DNS nay
-                # → ket noi binh thuong qua IPv4 (khong bind IPv6)
-                try:
-                    ipv4_addrs = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-                    if ipv4_addrs:
-                        family, socktype, proto, canonname, sockaddr = ipv4_addrs[0]
-                        sock = socket.socket(family, socktype, proto)
-                        sock.settimeout(30)
-                        sock.connect(sockaddr)
-                        return sock
-                except Exception:
-                    pass
+                # v1.0.587: KHONG fallback IPv4 - chi dung IPv6
+                # Truoc (v1.0.572): fallback IPv4 → Chrome van hien IPv4
+                # Sau: Khong co AAAA record → tu choi ket noi (Chrome chi thay IPv6)
                 return None
 
             family, socktype, proto, canonname, sockaddr = addrinfo[0]
