@@ -3442,29 +3442,49 @@ class SimpleGUI(tk.Tk):
             def _do_test():
                 try:
                     from modules.ipv6_pool_client import IPv6PoolClient
-                    client = IPv6PoolClient(api_url=url, timeout=5)
-                    if client.ping():
-                        status = client.get_status()
-                        def _show():
-                            pool_status_var.set("OK! Ket noi Pool thanh cong")
-                            pool_status_lbl.config(fg='#00ff88')
-                            if status:
-                                avail = status.get('available', 0)
-                                in_use = status.get('in_use', 0)
-                                burned = status.get('burned', 0)
-                                total = avail + in_use + burned
-                                stats_text = (
-                                    f"Tong: {total} IP | San sang: {avail} | "
-                                    f"Dang dung: {in_use} | Da burn: {burned}"
-                                )
-                                pool_stats_var.set(stats_text)
-                        popup.after(0, _show)
-                    else:
-                        popup.after(0, lambda: (
-                            pool_status_var.set("THAT BAI! Khong ket noi duoc"),
-                            pool_status_lbl.config(fg='#e94560'),
-                            pool_stats_var.set("")
-                        ))
+                    import requests
+
+                    # Test 1: Raw HTTP request to show exact error
+                    test_url = f"{url.rstrip('/')}/api/ping"
+                    try:
+                        resp = requests.get(test_url, timeout=5)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if data.get("ok"):
+                                # Ping OK - get status
+                                client = IPv6PoolClient(api_url=url, timeout=5)
+                                status = client.get_status()
+                                def _show():
+                                    pool_status_var.set("OK! Ket noi Pool thanh cong")
+                                    pool_status_lbl.config(fg='#00ff88')
+                                    if status:
+                                        avail = status.get('available', 0)
+                                        in_use = status.get('in_use', 0)
+                                        burned = status.get('burned', 0)
+                                        total = avail + in_use + burned
+                                        stats_text = (
+                                            f"Tong: {total} IP | San sang: {avail} | "
+                                            f"Dang dung: {in_use} | Da burn: {burned}"
+                                        )
+                                        pool_stats_var.set(stats_text)
+                                popup.after(0, _show)
+                                return
+                            else:
+                                err_msg = f"API tra ve: {data}"
+                        else:
+                            err_msg = f"HTTP {resp.status_code}"
+                    except requests.exceptions.ConnectionError:
+                        err_msg = f"Khong ket noi duoc {url} - Kiem tra IP/port va firewall"
+                    except requests.exceptions.Timeout:
+                        err_msg = f"Timeout sau 5s - Server cham hoac khong phan hoi"
+                    except Exception as e:
+                        err_msg = str(e)[:80]
+
+                    popup.after(0, lambda: (
+                        pool_status_var.set(f"THAT BAI! {err_msg[:60]}"),
+                        pool_status_lbl.config(fg='#e94560'),
+                        pool_stats_var.set("")
+                    ))
                 except Exception as e:
                     popup.after(0, lambda: (
                         pool_status_var.set(f"LOI: {str(e)[:50]}"),

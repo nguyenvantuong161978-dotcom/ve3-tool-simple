@@ -431,39 +431,22 @@ class IPv6PoolGUI:
     def _on_rotate_all(self):
         if not self._check_connected():
             return
-        active = [e for e in self.pool.pool if e["status"] in ("available", "in_use")]
-        if not active:
-            messagebox.showinfo("Thong bao", "Pool trong, khong co IP de doi")
-            return
+
+        # Dem IP trong pool + tren router
+        total_range = self.pool.api.subnet_end - self.pool.api.subnet_start + 1
 
         ok = messagebox.askyesno("Xac nhan",
-            f"Doi TAT CA {len(active)} IP trong pool?\n"
-            f"Tat ca IP hien tai se bi burn va lay IP moi.")
+            f"Doi TAT CA IP trong range ({total_range} subnets)?\n\n"
+            f"Se xoa IP cu tren router va tao IP moi\n"
+            f"(cung subnet, khac host ID → Google thay IP khac).\n\n"
+            f"Qua trinh mat khoang 1-2 phut.")
         if not ok:
             return
 
         def do():
-            self._log(f"Dang doi tat ca {len(active)} IP...")
-            addresses = [e["address"] for e in active]
-
-            # Burn tat ca TRUOC (khong refill giua chung)
-            with self.pool._lock:
-                for entry in self.pool.pool:
-                    if entry["address"] in addresses:
-                        entry["status"] = "burned"
-                        entry["burned_at"] = time.time()
-                        entry["burn_reason"] = "manual_rotate_all"
-                        self.pool._burned_addresses.add(entry["address"])
-                self.pool._save_pool()
-
-            self._log(f"Burned {len(addresses)} IP")
-
-            # Sync de xoa burned entries
-            self.pool._sync_with_router()
-
-            # Refill dung so luong can
-            added = self.pool._refill(count=len(addresses))
-            self._log(f"Da doi xong: burn {len(addresses)}, them moi {added}")
+            self._log(f"Dang doi tat ca IP (xoa cu, tao moi)...")
+            added = self.pool.rotate_all()
+            self._log(f"Da doi xong: {added} IP moi da them")
             self.root.after(0, self._refresh_ui)
 
         threading.Thread(target=do, daemon=True).start()
@@ -521,7 +504,7 @@ class IPv6PoolGUI:
             return
 
         self.pool.reset_pool()
-        self.pool._refill_if_needed()
+        self.pool._load_all_from_router()
         self._refresh_ui()
         self._log("Da reset pool")
 

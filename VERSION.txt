@@ -1,6 +1,6 @@
-1.0.563
+1.0.564
 2026-03-30 (VN)
-Change: Pool load TAT CA IP tu router - khong gioi han max_pool_size khi init
+Change: FIX "Doi tat ca IP" - xoa IP cu tren router, tao IP moi voi host ID random
 
 - BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
   * _refill_if_needed() chi them khi available < min_pool_size (3)

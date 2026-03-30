@@ -366,6 +366,78 @@ class IPv6Pool:
             self._save_pool()
         return added
 
+    def rotate_all(self) -> int:
+        """
+        v1.0.564: Doi TAT CA IP - xoa IP cu tren router, tao IP moi voi host ID random.
+
+        Flow:
+            1. Xoa tat ca IP trong allowed range tren router
+            2. Clear pool + burned_addresses
+            3. Add IP moi: cung subnet, host ID random (Google thay IP khac)
+            4. Load vao pool
+
+        Returns:
+            So IP moi da them
+        """
+        with self._lock:
+            self.log("[POOL] === ROTATE ALL: Doi tat ca IP ===")
+
+            # 1. Lay tat ca IP trong allowed range tren router
+            router_addrs = self.api.list_ipv6_addresses()
+            old_ids = []  # router .id de xoa
+            subnets_to_recreate = []  # subnet hex de tao lai
+
+            for entry in router_addrs:
+                addr_full = entry.get("address", "")
+                interface = entry.get("interface", "")
+                addr_id = entry.get(".id", "")
+
+                if interface != self.api.interface:
+                    continue
+
+                subnet = self.api._extract_subnet(addr_full)
+                if subnet is None:
+                    continue
+                if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
+                    continue
+
+                old_ids.append(addr_id)
+                subnets_to_recreate.append(subnet)
+
+            self.log(f"[POOL] Tim thay {len(old_ids)} IP cu tren router")
+
+            # 2. Xoa tat ca IP cu tren router
+            removed = 0
+            for addr_id in old_ids:
+                if self.api.remove_ipv6_address(addr_id):
+                    removed += 1
+            self.log(f"[POOL] Da xoa {removed}/{len(old_ids)} IP cu tren router")
+
+            # 3. Clear pool va burned list
+            self.pool = []
+            self._burned_addresses = set()
+            self._save_pool()
+            self.log("[POOL] Da clear pool va burned list")
+
+            # 4. Add IP moi voi random host ID
+            added = 0
+            for subnet in subnets_to_recreate:
+                # Random host ID (2-65535) de Google thay IP khac
+                host_id = random.randint(2, 0xFFFF)
+                new_addr = self.api.build_ipv6_address(subnet, host_id=host_id)
+                result = self.api.add_ipv6_address(new_addr)
+                if result:
+                    added += 1
+
+            self.log(f"[POOL] Da them {added}/{len(subnets_to_recreate)} IP moi tren router")
+
+            # 5. Load tat ca IP moi vao pool
+            self._load_all_from_router()
+
+            available = [p for p in self.pool if p["status"] == "available"]
+            self.log(f"[POOL] === ROTATE ALL DONE: {len(available)} IP san sang ===")
+            return added
+
     def _sync_with_router(self):
         """
         Dong bo pool voi trang thai thuc tren router.
