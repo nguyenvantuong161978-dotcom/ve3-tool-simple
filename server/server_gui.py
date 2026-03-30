@@ -666,6 +666,14 @@ class ServerGUI(tk.Tk):
                         for py_file in src_server.glob("*.py"):
                             shutil.copy2(str(py_file), str(dst_server / py_file.name))
 
+                    # Copy ipv6/ (IPv6 Dynamic Pool)
+                    src_ipv6 = extracted_folder / "ipv6"
+                    dst_ipv6 = TOOL_DIR / "ipv6"
+                    if src_ipv6.exists():
+                        dst_ipv6.mkdir(exist_ok=True)
+                        for py_file in src_ipv6.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_ipv6 / py_file.name))
+
                     # Cleanup
                     if zip_path.exists():
                         zip_path.unlink()

@@ -1,3 +1,15 @@
+1.0.552
+2026-03-30 (VN)
+Change: FIX UPDATE thieu thu muc ipv6/ - them copy ipv6/ khi update qua ZIP
+
+- BUG: Nut UPDATE (ZIP mode) chi copy modules/ va server/ → thieu ipv6/
+  * May khong co Git → tai ZIP → giai nen → chi copy file cu
+  * Thu muc ipv6/ (IPv6 Dynamic Pool) khong duoc copy sang
+- FIX: Them copy ipv6/ folder trong ca 2 GUI:
+  * vm_manager_gui.py: Copy ipv6/*.py khi update
+  * server/server_gui.py: Copy ipv6/*.py khi update
+- Files: vm_manager_gui.py, server/server_gui.py
+
 1.0.551
 2026-03-30 (VN)
 Change: THUMB cho server - Chrome 2 doi server san sang thay vi bo qua
