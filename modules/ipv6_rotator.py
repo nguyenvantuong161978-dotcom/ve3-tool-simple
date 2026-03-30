@@ -141,10 +141,36 @@ class IPv6Rotator:
         self.use_local_proxy = ipv6_cfg.get('use_local_proxy', False)  # False = Chrome chạy trực tiếp, không qua proxy
         self.local_proxy_port = ipv6_cfg.get('local_proxy_port', 1088)
 
-        # Load IPv6 list from file
+        # IPv6 Pool Client (MikroTik dynamic pool)
+        self._pool_client = None
+        self._pool_mode = False  # True = dung pool API thay vi file
+        mikrotik_cfg = settings.get('mikrotik', {})
+        pool_api_url = mikrotik_cfg.get('pool_api_url', '')
+        if pool_api_url:
+            try:
+                from modules.ipv6_pool_client import IPv6PoolClient
+                self._pool_client = IPv6PoolClient(
+                    api_url=pool_api_url,
+                    timeout=mikrotik_cfg.get('pool_api_timeout', 5),
+                    log_func=print,
+                )
+                # Test ket noi
+                if self._pool_client.ping():
+                    self._pool_mode = True
+                    self.enabled = True
+                    print(f"[IPv6] Pool API connected: {pool_api_url}")
+                else:
+                    print(f"[IPv6] Pool API not available: {pool_api_url}, fallback to file")
+                    self._pool_client = None
+            except Exception as e:
+                print(f"[IPv6] Pool API init error: {e}, fallback to file")
+                self._pool_client = None
+
+        # Load IPv6 list from file (fallback khi khong co pool)
         self.ipv6_list: List[str] = []
         self.current_index = 0
-        self._load_ipv6_list()
+        if not self._pool_mode:
+            self._load_ipv6_list()
 
         # State
         self.consecutive_403 = 0
@@ -154,6 +180,7 @@ class IPv6Rotator:
         self._ipv4_disabled = False  # Track trạng thái IPv4
         self._local_proxy = None  # Local SOCKS5 proxy
         self.ipv6_gateways = {}  # Map IP -> custom gateway (loaded from file)
+        self._worker_name = mikrotik_cfg.get('worker_name', 'unknown')
 
         # Log function (có thể override)
         self.log = print
@@ -233,6 +260,8 @@ class IPv6Rotator:
     def set_logger(self, log_func):
         """Set custom log function."""
         self.log = log_func
+        if self._pool_client:
+            self._pool_client.log = log_func
 
     def increment_403(self) -> bool:
         """
@@ -263,6 +292,10 @@ class IPv6Rotator:
         Returns:
             IPv6 hoạt động hoặc None
         """
+        # Pool mode: lay IP tu pool API
+        if self._pool_mode and self._pool_client:
+            return self._init_via_pool()
+
         if not self.ipv6_list:
             self.log("[IPv6] No IPv6 list!")
             return None
@@ -302,6 +335,32 @@ class IPv6Rotator:
             self._remove_dead_ipv6(dead_ip)
 
         self.log("[IPv6] [x] No working IPv6 found in entire list!")
+        return None
+
+    def _init_via_pool(self, max_retries: int = 5) -> Optional[str]:
+        """Lay IPv6 tu Pool API va set len may."""
+        self.log("[IPv6] Pool: finding working IP...")
+        for attempt in range(max_retries):
+            ip = self._pool_client.get_ip(worker=self._worker_name)
+            if not ip:
+                self.log("[IPv6] Pool: no IPs available!")
+                break
+
+            self.log(f"[IPv6] Pool trying {attempt + 1}/{max_retries}: {ip}")
+            if self.set_ipv6(ip):
+                if self.test_ipv6_connectivity():
+                    self.log(f"[IPv6] [v] Pool found working IP: {ip}")
+                    if self.use_local_proxy:
+                        self._start_local_proxy(ip)
+                    return ip
+                else:
+                    self.log(f"[IPv6] [x] Pool IP no connectivity: {ip} → burn")
+                    self._pool_client.burn_ip(ip, reason="no_connectivity", worker=self._worker_name)
+            else:
+                self.log(f"[IPv6] [x] Pool IP set failed: {ip} → burn")
+                self._pool_client.burn_ip(ip, reason="set_failed", worker=self._worker_name)
+
+        self.log("[IPv6] [x] Pool: no working IP found!")
         return None
 
     def get_current_ipv6(self) -> Optional[str]:
@@ -569,6 +628,15 @@ class IPv6Rotator:
             self.log("[IPv6] Rotation is disabled")
             return None
 
+        # =====================================================
+        # MODE 1: Pool API (MikroTik dynamic pool)
+        # =====================================================
+        if self._pool_mode and self._pool_client:
+            return self._rotate_via_pool(max_retries)
+
+        # =====================================================
+        # MODE 2: Static file list (ipv6.txt) - cach cu
+        # =====================================================
         if not self.ipv6_list:
             self.log("[IPv6] No IPv6 list available!")
             return None
@@ -625,6 +693,61 @@ class IPv6Rotator:
             self._remove_dead_ipv6(dead_ip)
 
         self.log("[IPv6] [x] All rotation attempts failed")
+        return None
+
+    def _rotate_via_pool(self, max_retries: int = 5) -> Optional[str]:
+        """
+        Rotate IPv6 qua Pool API.
+        Lay IP tu pool → set vao may → test → OK thi dung, fail thi burn va thu IP khac.
+        """
+        current = self.get_current_ipv6() or self.current_ipv6
+
+        for attempt in range(max_retries):
+            try:
+                # Lay IP moi tu pool
+                if current and attempt == 0:
+                    # Lan dau: rotate (burn cu + lay moi)
+                    new_ipv6 = self._pool_client.rotate_ip(
+                        current, reason="403", worker=self._worker_name
+                    )
+                else:
+                    # Lan sau: chi lay moi (IP cu da burn roi)
+                    new_ipv6 = self._pool_client.get_ip(worker=self._worker_name)
+
+                if not new_ipv6:
+                    self.log("[IPv6] Pool: No more IPs available!")
+                    break
+
+                self.log(f"[IPv6] Pool rotate: {current} → {new_ipv6} (attempt {attempt + 1})")
+
+                # Set IPv6 len may
+                if self.set_ipv6(new_ipv6):
+                    if self.test_ipv6_connectivity():
+                        self.log(f"[IPv6] [v] Pool OK: {new_ipv6}")
+
+                        if self.use_local_proxy:
+                            self._start_local_proxy(new_ipv6)
+
+                        self.reset_403()
+                        self.last_rotated = time.time()
+                        return new_ipv6
+                    else:
+                        # IP khong ket noi duoc → burn va thu cai khac
+                        self.log(f"[IPv6] [x] Pool IP no connectivity: {new_ipv6} → burn")
+                        self._pool_client.burn_ip(new_ipv6, reason="no_connectivity", worker=self._worker_name)
+                        current = None  # Da burn, lan sau chi get_ip
+                        continue
+                else:
+                    self.log(f"[IPv6] [x] Pool IP set failed: {new_ipv6} → burn")
+                    self._pool_client.burn_ip(new_ipv6, reason="set_failed", worker=self._worker_name)
+                    current = None
+                    continue
+
+            except Exception as e:
+                self.log(f"[IPv6] Pool rotation error: {e}")
+                continue
+
+        self.log("[IPv6] [x] Pool rotation failed - all attempts exhausted")
         return None
 
     def _start_local_proxy(self, ipv6_address: str):

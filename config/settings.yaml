@@ -42,6 +42,12 @@ ipv6_rotation:
   prefix_length: 56
   subnet_prefix: ''
   use_local_proxy: false
+# IPv6 Pool API (MikroTik dynamic pool)
+# Khi co pool_api_url, tool se lay IPv6 tu pool thay vi doc file ipv6.txt
+mikrotik:
+  pool_api_url: ''
+  pool_api_timeout: 5
+  worker_name: vm1
 ken_burns_intensity: normal
 log_level: INFO
 max_parallel_api: 10
