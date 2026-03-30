@@ -524,21 +524,47 @@ class MasterControlGUI:
 SKIP = "--"  # Gia tri mac dinh = khong sync key nay
 
 # (key, label, type, options)
+# Nhom theo chuc nang, giong settings.yaml tren VM
 SETTINGS_DEFS = [
+    # --- CHE DO CHAY ---
     ("generation_mode", "Mode chay", "combo", ["api", "browser", "chrome", "server"]),
     ("chrome_model_index", "Model Chrome", "combo", ["0 - Nano Banana Pro", "1 - Nano Banana 2", "2 - Imagen 4"]),
     ("topic", "Chu de", "combo", ["story", "psychology", "finance_history"]),
-    ("excel_mode", "Excel", "combo", ["full", "basic"]),
-    ("video_mode", "Video", "combo", ["full", "basic"]),
-    ("flow_aspect_ratio", "Ti le anh", "combo", ["landscape", "portrait", "square"]),
-    ("use_proxy", "Dung Proxy", "combo", ["true", "false"]),
+    ("excel_mode", "Excel mode", "combo", ["full", "basic"]),
     ("distributed_mode", "Distributed", "combo", ["true", "false"]),
+    # --- ANH ---
+    ("flow_aspect_ratio", "Ti le anh", "combo", ["landscape", "portrait", "square"]),
+    ("flow_image_count", "So anh/prompt", "entry", ""),
+    ("flow_delay", "Delay giua anh (s)", "entry", ""),
+    ("flow_timeout", "Timeout anh (s)", "entry", ""),
+    ("force_model", "Force model", "entry", ""),
+    ("ken_burns_intensity", "Ken Burns", "combo", ["normal", "low", "high", "none"]),
+    # --- VIDEO ---
+    ("video_mode", "Video mode", "combo", ["full", "small", "none"]),
+    ("video_model", "Video model", "combo", ["fast", "quality"]),
+    ("video_generation_mode", "Video gen mode", "combo", ["t2v", "i2v"]),
+    ("video_aspect_ratio", "Ti le video", "combo", ["landscape", "portrait", "square"]),
+    ("video_compose_mode", "Compose mode", "combo", ["fast", "quality"]),
+    ("video_count", "So video", "combo", ["full", "half", "1"]),
+    ("video_paygate_tier", "Paygate tier", "combo", ["PAYGATE_TIER_TWO", "PAYGATE_TIER_ONE"]),
+    # --- BROWSER / CHROME ---
+    ("browser_headless", "Headless", "combo", ["false", "true"]),
+    ("browser_generate_timeout", "Timeout tao (s)", "entry", ""),
+    ("browser_delay_between_prompts", "Delay prompts (ms)", "entry", ""),
+    ("parallel_browsers", "So browser", "entry", ""),
+    ("parallel_chrome", "So Chrome", "entry", ""),
+    # --- GIOI HAN ---
+    ("retry_count", "So lan thu lai", "entry", ""),
+    ("max_scenes_per_account", "Max scenes/acc", "entry", ""),
+    ("max_parallel_api", "Max API song song", "entry", ""),
+    ("max_scene_duration", "Max scene (s)", "entry", ""),
+    ("min_scene_duration", "Min scene (s)", "entry", ""),
+    ("early_video_start", "Early video start", "entry", ""),
+    ("wait_timeout", "Wait timeout (s)", "entry", ""),
+    # --- PROXY / SERVER ---
+    ("use_proxy", "Dung Proxy", "combo", ["true", "false"]),
     ("local_server_enabled", "Local Server", "combo", ["false", "true"]),
     ("local_server_url", "Server URL", "entry", ""),
-    ("parallel_chrome", "So Chrome", "entry", ""),
-    ("browser_generate_timeout", "Timeout (s)", "entry", ""),
-    ("retry_count", "So lan thu", "entry", ""),
-    ("max_scenes_per_account", "Max scenes/acc", "entry", ""),
 ]
 
 
@@ -549,7 +575,7 @@ class SettingsDialog:
         self.win = tk.Toplevel(parent)
         self.win.title("SETTINGS - Dieu khien VM tu xa")
         self.win.configure(bg=BG)
-        self.win.geometry("550x580")
+        self.win.geometry("580x750")
         self.win.transient(parent)
 
         self.auto_path = auto_path
@@ -584,31 +610,69 @@ class SettingsDialog:
         tk.Label(self.win, text='Chon gia tri = master kiem soat.  De "--" = VM giu nguyen.',
                  font=("Consolas", 8), bg=BG, fg=FG_DIM, anchor=tk.W).pack(fill=tk.X, padx=12, pady=2)
 
-        # === SETTINGS GRID ===
-        grid = tk.Frame(self.win, bg=BG)
-        grid.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+        # === SETTINGS GRID (scrollable) ===
+        canvas_frame = tk.Frame(self.win, bg=BG)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        canvas = tk.Canvas(canvas_frame, bg=BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(canvas_frame, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        grid = tk.Frame(canvas, bg=BG)
+        canvas.create_window((0, 0), window=grid, anchor=tk.NW)
+
+        row = 0
+        section_labels = {
+            0: "CHE DO CHAY",
+            5: "ANH",
+            10: "VIDEO",
+            17: "BROWSER / CHROME",
+            21: "GIOI HAN",
+            28: "PROXY / SERVER",
+        }
 
         for i, (key, label, stype, options) in enumerate(SETTINGS_DEFS):
-            bg_row = BG_CARD if i % 2 == 0 else BG
+            # Section header
+            if i in section_labels:
+                tk.Label(grid, text=f"  {section_labels[i]}  ", font=("Segoe UI", 9, "bold"),
+                         bg=BLUE, fg="white").grid(row=row, column=0, columnspan=2,
+                         sticky=tk.W+tk.E, padx=4, pady=(6, 2))
+                row += 1
+
+            bg_row = BG_CARD if row % 2 == 0 else BG
 
             # Label
-            tk.Label(grid, text=label, font=("Consolas", 10), width=16, anchor=tk.W,
-                     bg=bg_row, fg=FG).grid(row=i, column=0, sticky=tk.W, padx=(4, 8), pady=2)
+            tk.Label(grid, text=label, font=("Consolas", 10), width=20, anchor=tk.W,
+                     bg=bg_row, fg=FG).grid(row=row, column=0, sticky=tk.W, padx=(8, 8), pady=2)
 
             # Input
             var = tk.StringVar(value=SKIP)
             if stype == "combo":
                 cb = ttk.Combobox(grid, textvariable=var, values=[SKIP] + options,
                                   width=28, state="readonly")
-                cb.grid(row=i, column=1, sticky=tk.W, pady=2)
+                cb.grid(row=row, column=1, sticky=tk.W, pady=2)
             else:
                 en = tk.Entry(grid, textvariable=var, width=30, bg=BG2, fg=FG,
                               insertbackground=FG, font=("Consolas", 10))
-                en.grid(row=i, column=1, sticky=tk.W, pady=2)
+                en.grid(row=row, column=1, sticky=tk.W, pady=2)
 
             self.vars[key] = var
+            row += 1
 
         grid.columnconfigure(1, weight=1)
+
+        # Update scroll region khi grid thay doi
+        grid.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+        # Mouse wheel scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.win.protocol("WM_DELETE_WINDOW", lambda: (canvas.unbind_all("<MouseWheel>"), self.win.destroy()))
 
         # === STATUS ===
         self.status_lbl = tk.Label(self.win, text="", font=("Consolas", 9),

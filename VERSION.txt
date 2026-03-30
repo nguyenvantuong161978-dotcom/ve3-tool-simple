@@ -1,3 +1,15 @@
+1.0.595
+2026-03-30 (VN)
+Change: Bo sung day du settings trong Dialog - giong VM settings.yaml
+
+- Them 20+ settings con thieu: video_model, video_aspect_ratio, flow_delay,
+  flow_timeout, ken_burns_intensity, max_parallel_api, min/max_scene_duration,
+  browser_headless, browser_delay_between_prompts, parallel_browsers, v.v.
+- Nhom theo chuc nang: CHE DO CHAY / ANH / VIDEO / BROWSER / GIOI HAN / PROXY
+- Them section header mau xanh de de phan biet
+- Scrollable khi man hinh nho
+- File: control/master_control.py
+
 1.0.594
 2026-03-30 (VN)
 Change: Don gian hoa Settings Dialog trong Master Control
