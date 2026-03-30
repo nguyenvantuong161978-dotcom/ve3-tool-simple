@@ -110,14 +110,25 @@ def _get_gateway_for_ipv6(ipv6_address: str) -> str:
     Ví dụ:
         2001:ee0:b004:1f00::2 → 2001:ee0:b004:1f00::1
         2001:ee0:b004:1fee::238 → 2001:ee0:b004:1fee::1
+        2001:ee0:b004:308d:98f4:ed82:428f:e4c5 → 2001:ee0:b004:308d::1
     """
-    # Parse IPv6 address để lấy prefix
-    # Format: 2001:ee0:b004:XXXX::Y
-    parts = ipv6_address.split('::')
-    if len(parts) >= 1:
-        prefix = parts[0]  # "2001:ee0:b004:1f00" hoặc tương tự
+    # v1.0.576: Expand full IPv6 roi lay 4 groups dau (/64 prefix)
+    import ipaddress
+    try:
+        addr = ipaddress.IPv6Address(ipv6_address)
+        # Lay /64 prefix (4 groups dau = 64 bits)
+        full = addr.exploded  # "2001:0ee0:b004:308d:98f4:ed82:428f:e4c5"
+        groups = full.split(':')
+        prefix = ':'.join(groups[:4])  # "2001:0ee0:b004:308d"
         return f"{prefix}::1"
-    return ""
+    except Exception:
+        # Fallback: logic cu cho format don gian (co ::)
+        parts = ipv6_address.split('::')
+        if len(parts) >= 1:
+            prefix = parts[0]
+            if len(prefix.split(':')) <= 4:
+                return f"{prefix}::1"
+        return ""
 
 
 class IPv6Rotator:
