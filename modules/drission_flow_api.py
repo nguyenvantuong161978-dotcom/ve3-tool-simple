@@ -3012,8 +3012,10 @@ class DrissionFlowAPI:
                 if chrome_arg:
                     options.set_argument(f'--proxy-server={chrome_arg}')
                     options.set_argument('--proxy-bypass-list=<-loopback>')
+                    # v1.0.588: Chan WebRTC leak IPv4
+                    options.set_argument('--force-webrtc-ip-handling-policy=disable_non_proxied_udp')
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
-                    self.log(f"[NET] Chrome → {chrome_arg}")
+                    self.log(f"[NET] Chrome → {chrome_arg} (WebRTC blocked)")
                     _using_proxy_provider = True
 
             # === IPv6 MODE - BẬT NGAY KHI MỞ CHROME ===
@@ -3097,7 +3099,9 @@ class DrissionFlowAPI:
                             if self._ipv6_proxy:
                                 options.set_argument(f'--proxy-server=socks5://127.0.0.1:{proxy_port}')
                                 options.set_argument('--proxy-bypass-list=<-loopback>')
-                                self.log(f"[NET] Chrome → SOCKS5 proxy → IPv6 ONLY")
+                                # v1.0.588: Chan WebRTC leak IPv4
+                                options.set_argument('--force-webrtc-ip-handling-policy=disable_non_proxied_udp')
+                                self.log(f"[NET] Chrome → SOCKS5 proxy → IPv6 ONLY (WebRTC blocked)")
                                 self.log(f"   Proxy: socks5://127.0.0.1:{proxy_port}")
                             _using_ipv6_proxy = bool(self._ipv6_proxy)
                         except Exception as proxy_err:

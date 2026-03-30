@@ -1,3 +1,12 @@
+1.0.588
+2026-03-30 (VN)
+Change: Chan WebRTC leak IPv4 trong Chrome
+
+- Chrome co the lo IPv4 qua WebRTC du dung proxy
+- Them flag: --force-webrtc-ip-handling-policy=disable_non_proxied_udp
+- Ket hop v1.0.587 (proxy khong fallback IPv4) → Chrome CHI dung IPv6
+- File: modules/drission_flow_api.py
+
 1.0.587
 2026-03-30 (VN)
 Change: SOCKS proxy chi dung IPv6 - bo IPv4 fallback
