@@ -1,3 +1,17 @@
+1.0.604
+2026-03-30 (VN)
+Change: FIX IPv6 cu tich tu tren interface - xoa TAT CA IP co prefix pool truoc khi set moi
+
+- BUG: Khi doi IPv6, chi xoa IP dang track (current_ip) va IP trong file
+  * IP tu session truoc (pool) KHONG bi xoa → van nam tren interface
+  * Windows co the gui traffic qua IP cu (khong co gateway) → timeout
+  * Nhieu default routes tich tu → routing loan → WinError 10060
+- FIX: Truoc khi set IP moi, scan TAT CA IPv6 tren interface
+  * Tim IP co prefix pool (vd: 2001:ee0:b004:30xx)
+  * Xoa TAT CA ngoai tru IP moi dang set
+  * Interface luon chi co 1 IPv6 pool → routing sach
+- File: modules/ipv6_rotator.py - set_ipv6()
+
 1.0.603
 2026-03-30 (VN)
 Change: Them register_ip - VM dang ky IPv6 dang dung voi pool

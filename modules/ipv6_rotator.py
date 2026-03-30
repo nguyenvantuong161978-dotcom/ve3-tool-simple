@@ -589,6 +589,45 @@ class IPv6Rotator:
                 # Đã có quyền admin - chạy trực tiếp
                 self.log("[IPv6] Running with admin privileges...")
 
+                # v1.0.604: CLEANUP - xoa TAT CA IPv6 addresses co prefix pool tren interface
+                # Tranh IP cu tu session truoc van nam tren interface → routing loan
+                try:
+                    addr_check = subprocess.run(
+                        f'netsh interface ipv6 show address "{self.interface_name}"',
+                        shell=True, capture_output=True, text=True, timeout=15
+                    )
+                    if addr_check.returncode == 0:
+                        # Tim prefix cua pool (vd: "2001:ee0:b004:30")
+                        pool_prefix = ""
+                        if hasattr(self, '_pool_client') and self._pool_client:
+                            # Lay prefix tu config
+                            _mk_cfg = self._settings.get('mikrotik', {}) if hasattr(self, '_settings') else {}
+                            pool_prefix = _mk_cfg.get('prefix', '')
+                        if not pool_prefix and new_ipv6:
+                            # Auto-detect prefix tu IP moi (lay 4 octets dau)
+                            _parts = new_ipv6.split(":")
+                            if len(_parts) >= 4:
+                                pool_prefix = ":".join(_parts[:3]) + ":"  # "2001:ee0:b004:"
+
+                        if pool_prefix:
+                            pool_prefix_clean = pool_prefix.rstrip(":")
+                            for line in (addr_check.stdout or "").split('\n'):
+                                line = line.strip()
+                                # Tim dong co "Address" va prefix pool
+                                if pool_prefix_clean in line and 'Address' in line:
+                                    parts = line.split()
+                                    for p in parts:
+                                        if pool_prefix_clean in p and p != new_ipv6:
+                                            # Xoa IP cu nay
+                                            del_cmd = f'netsh interface ipv6 delete address "{self.interface_name}" {p}'
+                                            try:
+                                                subprocess.run(del_cmd, shell=True, capture_output=True, text=True, timeout=15)
+                                                self.log(f"[IPv6] [CLEANUP] Xoa IP cu: {p}")
+                                            except subprocess.TimeoutExpired:
+                                                self.log(f"[IPv6] [WARN] cleanup IP timeout: {p}")
+                except Exception as addr_cleanup_err:
+                    self.log(f"[IPv6] [WARN] Address cleanup error: {addr_cleanup_err}")
+
                 # v1.0.598: CLEANUP - xoa TAT CA routes ::/0 cu truoc khi them moi
                 # Tranh tich tu nhieu default routes → routing loan
                 try:
