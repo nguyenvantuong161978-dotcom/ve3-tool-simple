@@ -55,7 +55,7 @@ def create_pool(config: dict = None, log_func=print) -> IPv6Pool:
         password=mk_cfg.get("password", ""),
         interface=mk_cfg.get("interface", "ether1"),
         prefix=mk_cfg.get("prefix", ""),
-        subnet_start=mk_cfg.get("subnet_start", 0x52),
+        subnet_start=mk_cfg.get("subnet_start", 0x65),
         subnet_end=mk_cfg.get("subnet_end", 0xFF),
         log_func=log_func,
     )
@@ -63,7 +63,7 @@ def create_pool(config: dict = None, log_func=print) -> IPv6Pool:
     pool = IPv6Pool(
         mikrotik=api,
         min_pool_size=mk_cfg.get("pool_min", 3),
-        max_pool_size=mk_cfg.get("pool_max", 10),
+        max_pool_size=mk_cfg.get("pool_max", 20),
         cooldown_seconds=mk_cfg.get("cooldown_seconds", 3600),
         log_func=log_func,
     )

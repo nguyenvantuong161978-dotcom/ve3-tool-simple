@@ -1,6 +1,6 @@
-1.0.554
+1.0.555
 2026-03-30 (VN)
-Change: IPv6 tool ho tro HTTP - thu HTTPS roi fallback HTTP khi ket noi MikroTik
+Change: IPv6 Pool existing mode - dung IP da co tren router, giu 100 IP dau, dung 155 IP con lai (subnet 65-ff)
 
 - MikroTik www-ssl can certificate → nhieu router chua cau hinh
 - FIX: Thu HTTPS truoc, neu fail tu dong thu HTTP

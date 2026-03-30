@@ -40,10 +40,10 @@ DEFAULT_CONFIG = {
         "password": "",
         "interface": "ether1",
         "prefix": "2001:ee0:4f89:30",
-        "subnet_start": 82,
+        "subnet_start": 101,
         "subnet_end": 255,
         "pool_min": 3,
-        "pool_max": 10,
+        "pool_max": 20,
     }
 }
 
@@ -207,10 +207,9 @@ def show_status(config: dict):
     print(f"\nTong quan:")
     print(f"  Available:  {status['available']}")
     print(f"  In use:     {status['in_use']}")
-    print(f"  Burned:     {status['burned']}")
-    print(f"  Total:      {status['total']}")
-    print(f"  Subnets used:      {status['subnets_used']}")
-    print(f"  Subnets remaining: {status['subnets_remaining']}")
+    print(f"  In pool:    {status['total']}")
+    print(f"  Burned:     {status.get('burned_total', 0)}")
+    print(f"  Range:      {status.get('range_remaining', '?')} / {status.get('range_total', '?')} con dung duoc")
 
     print(f"\nChi tiet:")
     for entry in pool.pool:
@@ -404,23 +403,18 @@ def auto_detect(config: dict):
     print(f"  Subnets dung:  {len(used_subnets)} ({', '.join(f'0x{s:02x}' for s in used_subnets[:10])}{'...' if len(used_subnets) > 10 else ''})")
 
     # Goi y range
-    # Tim range trong con (chua dung)
-    min_sub = min(used_subnets) if used_subnets else 0x00
-    # Bat dau tu subnet cao hon cac subnet hien tai + 10
-    suggested_start = max(min_sub + 1, 0x52)
-    suggested_end = 0xFF
+    # Giu 100 IP dau (subnet 01-64) cho muc dich khac
+    # Dung 155 IP con lai (subnet 65-ff) cho pool rotate
+    suggested_start = 0x65  # 101 decimal
+    suggested_end = 0xFF    # 255 decimal
 
-    # Dam bao khong trung voi cac subnet hien tai
-    while suggested_start in used_subnets and suggested_start < suggested_end:
-        suggested_start += 1
+    available_in_range = sum(1 for s in used_subnets if suggested_start <= s <= suggested_end)
+    total_in_range = suggested_end - suggested_start + 1
 
-    available_count = 0
-    for s in range(suggested_start, suggested_end + 1):
-        if s not in used_subnets:
-            available_count += 1
-
-    print(f"\n  Subnet range goi y: 0x{suggested_start:02x} → 0x{suggested_end:02x} ({available_count} subnets trong)")
-    print(f"  Moi subnet = 1 IPv6 address de rotate")
+    print(f"\n  Giu lai:       100 IP dau (subnet 01-64) cho muc dich khac")
+    print(f"  Pool range:    subnet 0x{suggested_start:02x} → 0x{suggested_end:02x} ({total_in_range} subnets)")
+    print(f"  IP da co:      {available_in_range} / {total_in_range} (da co tren router)")
+    print(f"  Mode:          EXISTING IPs - chi quan ly, khong add/remove tren router")
 
     # Tao config goi y
     suggested_config = {
@@ -433,7 +427,7 @@ def auto_detect(config: dict):
             "subnet_start": suggested_start,
             "subnet_end": suggested_end,
             "pool_min": 3,
-            "pool_max": 10
+            "pool_max": 20
         }
     }
 
