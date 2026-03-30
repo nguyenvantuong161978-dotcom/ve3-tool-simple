@@ -1,3 +1,18 @@
+1.0.605
+2026-03-30 (VN)
+Change: IPv6 rotator register IP truoc khi get_ip moi
+
+- VAN DE: Pool chay SAU VM → VM da co IPv6 tren interface
+  * _init_via_pool() luon goi get_ip → lay IP MOI (bo IP cu)
+  * 8 VM × 2 setup (login + API) = 16 get_ip → chiem 16 IP thay vi 8
+  * IP cu van nam tren interface nhung pool khong biet
+- FIX: _init_via_pool() thu register IP hien tai truoc
+  * get_current_ipv6() → lay IP tren interface
+  * register_ip(current_ip) → pool danh dau in_use (match subnet)
+  * Chi get_ip moi neu register fail hoac no connectivity
+  * Giam so IP bi chiem tu 16 → 8
+- File: modules/ipv6_rotator.py - _init_via_pool()
+
 1.0.604
 2026-03-30 (VN)
 Change: FIX IPv6 cu tich tu tren interface - xoa TAT CA IP co prefix pool truoc khi set moi

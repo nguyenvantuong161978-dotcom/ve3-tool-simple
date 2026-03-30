@@ -360,6 +360,24 @@ class IPv6Rotator:
     def _init_via_pool(self, max_retries: int = 5) -> Optional[str]:
         """Lay IPv6 tu Pool API va set len may."""
         self.log("[IPv6] Pool: finding working IP...")
+
+        # v1.0.605: Thu register IP hien tai truoc (tranh lay IP moi khi da co)
+        current_ip = self.get_current_ipv6()
+        if current_ip and hasattr(self._pool_client, 'register_ip'):
+            self.log(f"[IPv6] Pool: register IP hien tai: {current_ip}")
+            reg_result = self._pool_client.register_ip(current_ip, worker=self._worker_name)
+            if reg_result:
+                pool_ip = reg_result["ip"] if isinstance(reg_result, dict) else reg_result
+                pool_gw = reg_result.get("gateway", "") if isinstance(reg_result, dict) else ""
+                # Set IP tu pool (co the khac worker IP nhung cung subnet)
+                if self.set_ipv6(pool_ip, gateway_override=pool_gw):
+                    if self.test_ipv6_connectivity():
+                        self.log(f"[IPv6] [v] Pool registered OK: {pool_ip}")
+                        if self.use_local_proxy:
+                            self._start_local_proxy(pool_ip)
+                        return pool_ip
+                self.log(f"[IPv6] Pool: register IP khong connectivity, lay IP moi...")
+
         for attempt in range(max_retries):
             result = self._pool_client.get_ip(worker=self._worker_name)
             if not result:
