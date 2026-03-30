@@ -112,15 +112,13 @@ def _get_gateway_for_ipv6(ipv6_address: str) -> str:
         2001:ee0:b004:1fee::238 → 2001:ee0:b004:1fee::1
         2001:ee0:b004:308d:98f4:ed82:428f:e4c5 → 2001:ee0:b004:308d::1
     """
-    # v1.0.576: Expand full IPv6 roi lay 4 groups dau (/64 prefix)
+    # v1.0.584: Dung ipaddress.IPv6Network cho compressed format (khong leading zeros)
     import ipaddress
     try:
         addr = ipaddress.IPv6Address(ipv6_address)
-        # Lay /64 prefix (4 groups dau = 64 bits)
-        full = addr.exploded  # "2001:0ee0:b004:308d:98f4:ed82:428f:e4c5"
-        groups = full.split(':')
-        prefix = ':'.join(groups[:4])  # "2001:0ee0:b004:308d"
-        return f"{prefix}::1"
+        network = ipaddress.IPv6Network(f"{addr}/64", strict=False)
+        gateway = network.network_address + 1
+        return str(gateway)  # compressed: "2001:ee0:b004:3075::1" (KHONG co 0ee0)
     except Exception:
         # Fallback: logic cu cho format don gian (co ::)
         parts = ipv6_address.split('::')
@@ -573,7 +571,7 @@ class IPv6Rotator:
                     except subprocess.TimeoutExpired:
                         self.log(f"[IPv6] [WARN] cmd timeout: {cmd}")
 
-                # v1.0.582: Verify route + addresses + gateway reachability
+                # v1.0.584: Verify route + addresses (gateway ping moved to AFTER adapter wait)
                 try:
                     # Show all IPv6 routes (netsh show route khong ho tro filter)
                     verify = subprocess.run(
@@ -589,42 +587,11 @@ class IPv6Rotator:
                             self.log(f"[IPv6]     {dl.strip()}")
                     else:
                         self.log(f"[IPv6] [!] DEFAULT ROUTE ::/0 MISSING in route table!")
-                        # Show last 5 routes for context
                         route_lines = [l.strip() for l in route_out.split('\n') if l.strip()]
                         for rl in route_lines[-5:]:
                             self.log(f"[IPv6] [!] route: {rl[:200]}")
                 except Exception as e:
                     self.log(f"[IPv6] [WARN] Route verify error: {e}")
-
-                try:
-                    # Show addresses on interface
-                    addr_verify = subprocess.run(
-                        f'netsh interface ipv6 show addresses "{self.interface_name}"',
-                        shell=True, capture_output=True, text=True, timeout=5
-                    )
-                    addr_out = (addr_verify.stdout or "").strip()
-                    # Log first few address lines
-                    addr_lines = [l.strip() for l in addr_out.split('\n') if l.strip() and ('Address' in l or '2001:' in l or 'fe80' in l)]
-                    if addr_lines:
-                        self.log(f"[IPv6] Addresses on {self.interface_name}:")
-                        for al in addr_lines[:5]:
-                            self.log(f"[IPv6]     {al[:150]}")
-                except Exception:
-                    pass
-
-                # Test gateway reachability (NDP)
-                try:
-                    ping_gw = subprocess.run(
-                        f'ping -6 -n 1 -w 3000 {new_gateway}',
-                        shell=True, capture_output=True, text=True, timeout=6
-                    )
-                    if ping_gw.returncode == 0 and 'Reply from' in (ping_gw.stdout or ''):
-                        self.log(f"[IPv6] [v] Gateway reachable: {new_gateway}")
-                    else:
-                        self.log(f"[IPv6] [!] Gateway UNREACHABLE: {new_gateway}")
-                        self.log(f"[IPv6] [!] Ping: {(ping_gw.stdout or '').strip()[:200]}")
-                except Exception:
-                    pass
 
                 # Bước 5: v1.0.375 - Set DNS IPv6 (Google Public DNS)
                 # Chạy RIÊNG với timeout dài hơn, fail thì chỉ warn (không fail IPv6)
@@ -650,26 +617,60 @@ class IPv6Rotator:
                 ]
                 _run_netsh_admin(dns_commands, self.log)  # Best-effort
 
-            # Đợi adapter cập nhật (quan trọng: cần đủ thời gian để Windows nhận IPv6)
-            self.log("[IPv6] Waiting for network adapter to update...")
-            time.sleep(5)
+            # Đợi adapter cập nhật + NDP discovery (quan trọng!)
+            # v1.0.584: Tang 5s → 8s de NDP kip hoan thanh truoc khi test connectivity
+            self.log("[IPv6] Doi adapter cap nhat + NDP discovery (8s)...")
+            time.sleep(8)
 
             # Track IPv4 disabled status
             if self.disable_ipv4:
                 self._ipv4_disabled = True
 
+            # v1.0.584: Gateway ping SAU khi doi adapter (truoc day chay TRUOC → luon fail)
+            if new_gateway and _is_admin():
+                try:
+                    # Ping gateway voi timeout 5s (du cho NDP da hoan thanh)
+                    ping_gw = subprocess.run(
+                        f'ping -6 -n 1 -w 5000 {new_gateway}',
+                        shell=True, capture_output=True, text=True, timeout=8
+                    )
+                    if ping_gw.returncode == 0 and 'Reply from' in (ping_gw.stdout or ''):
+                        self.log(f"[IPv6] [v] Gateway reachable: {new_gateway}")
+                    else:
+                        self.log(f"[IPv6] [!] Gateway UNREACHABLE: {new_gateway}")
+                        ping_out = (ping_gw.stdout or '').strip()
+                        if ping_out:
+                            self.log(f"[IPv6] [!] {ping_out[:200]}")
+                except Exception:
+                    pass
+
+                # Show addresses (debug)
+                try:
+                    addr_verify = subprocess.run(
+                        f'netsh interface ipv6 show addresses "{self.interface_name}"',
+                        shell=True, capture_output=True, text=True, timeout=5
+                    )
+                    addr_out = (addr_verify.stdout or "").strip()
+                    addr_lines = [l.strip() for l in addr_out.split('\n') if l.strip() and ('Address' in l or '2001:' in l or 'DAD' in l)]
+                    if addr_lines:
+                        self.log(f"[IPv6] Addresses on {self.interface_name}:")
+                        for al in addr_lines[:6]:
+                            self.log(f"[IPv6]     {al[:150]}")
+                except Exception:
+                    pass
+
             # Verify
             current = self.get_current_ipv6()
             if current:
-                self.log(f"[IPv6] [v] Now using: {current}")
+                self.log(f"[IPv6] [v] Dang dung: {current}")
                 self.log(f"[IPv6] [v] Gateway: {new_gateway}")
                 if self.disable_ipv4:
-                    self.log("[IPv6] [v] IPv4 disabled - Chrome sẽ dùng IPv6")
+                    self.log("[IPv6] [v] IPv4 disabled - Chrome se dung IPv6")
                 self.current_ipv6 = current
-                self.current_gateway = new_gateway  # Track gateway để lần sau xóa đúng
+                self.current_gateway = new_gateway  # Track gateway de lan sau xoa dung
                 return True
             else:
-                self.log("[IPv6] [x] Failed to verify new IP")
+                self.log("[IPv6] [x] Khong verify duoc IP moi")
                 return False
 
         except Exception as e:
