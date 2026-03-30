@@ -240,6 +240,211 @@ def reset_pool(config: dict):
     print("Da reset pool!")
 
 
+def auto_detect(config: dict):
+    """
+    Tu dong detect interface, prefix, subnet range tu MikroTik router.
+    Chi can host + username + password.
+    """
+    print("\n" + "=" * 60)
+    print("AUTO DETECT - Tu dong lay thong tin tu router")
+    print("=" * 60)
+
+    mk_cfg = config.get("mikrotik", {})
+    host = mk_cfg.get("host", "192.168.88.1")
+    username = mk_cfg.get("username", "admin")
+    password = mk_cfg.get("password", "")
+
+    if not password:
+        print("[!] Chua co password trong config!")
+        print(f"    Sua file: {CONFIG_FILE}")
+        return
+
+    print(f"\nKet noi toi {host} (user: {username})...")
+
+    # Test connection truoc
+    import requests
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    session = requests.Session()
+    session.auth = (username, password)
+    session.verify = False
+
+    try:
+        resp = session.get(f"https://{host}/rest/system/identity", timeout=5)
+        if resp.status_code == 401:
+            print("[x] SAI MAT KHAU! Kiem tra lai username/password")
+            return
+        elif resp.status_code != 200:
+            print(f"[x] Loi HTTP {resp.status_code}")
+            print(f"    MikroTik can bat REST API (RouterOS 7+)")
+            print(f"    Vao router chay: /ip/service/set www-ssl disabled=no")
+            return
+        identity = resp.json().get("name", "unknown")
+        print(f"[v] Ket noi OK! Router: {identity}")
+    except requests.exceptions.ConnectionError:
+        print(f"[x] Khong ket noi duoc toi {host}")
+        print(f"    Kiem tra:")
+        print(f"    1. Router co bat khong?")
+        print(f"    2. IP {host} co dung khong?")
+        print(f"    3. REST API da bat chua? (RouterOS 7+)")
+        print(f"       Vao router chay: /ip/service/set www-ssl disabled=no")
+        return
+    except Exception as e:
+        print(f"[x] Loi: {e}")
+        return
+
+    # Lay tat ca IPv6 addresses
+    print("\nDang lay danh sach IPv6...")
+    try:
+        resp = session.get(f"https://{host}/rest/ipv6/address", timeout=10)
+        addrs = resp.json() if resp.status_code == 200 else []
+    except Exception as e:
+        print(f"[x] Loi lay IPv6: {e}")
+        return
+
+    if not addrs:
+        print("[!] Khong co IPv6 nao tren router!")
+        print("    Kiem tra ISP da cap IPv6 chua")
+        return
+
+    # Hien thi tat ca IPv6
+    print(f"\nTim thay {len(addrs)} IPv6 addresses:")
+    print("-" * 70)
+
+    # Phan tich de tim prefix va interface
+    global_addrs = []  # IPv6 global (khong phai link-local)
+    interfaces_found = {}
+
+    for addr in addrs:
+        address = addr.get("address", "")
+        interface = addr.get("interface", "")
+        dynamic = addr.get("dynamic", "false")
+        invalid = addr.get("invalid", "false")
+        disabled = addr.get("disabled", "false")
+
+        # Phan loai
+        is_link_local = address.startswith("fe80")
+        is_global = not is_link_local and "::" in address
+
+        status = ""
+        if dynamic == "true":
+            status += " [dynamic]"
+        if invalid == "true":
+            status += " [invalid]"
+        if disabled == "true":
+            status += " [disabled]"
+
+        marker = "[GLOBAL]" if is_global else "[local] "
+        print(f"  {marker} {address:<45} {interface:<12}{status}")
+
+        if is_global and invalid != "true" and disabled != "true":
+            global_addrs.append({"address": address, "interface": interface, "dynamic": dynamic})
+            if interface not in interfaces_found:
+                interfaces_found[interface] = []
+            interfaces_found[interface].append(address)
+
+    print("-" * 70)
+
+    if not global_addrs:
+        print("\n[!] Khong co IPv6 global nao!")
+        print("    ISP chua cap IPv6 hoac chua cau hinh")
+        return
+
+    # Phan tich prefix
+    print(f"\n{'='*60}")
+    print("PHAN TICH KET QUA")
+    print(f"{'='*60}")
+
+    # Tim prefix chung
+    prefixes = {}
+    for ga in global_addrs:
+        addr = ga["address"].split("/")[0]
+        groups = addr.split(":")
+        if len(groups) >= 4:
+            # Lay 3 groups dau (vd: 2001:ee0:4f89)
+            prefix_3 = ":".join(groups[:3])
+            group4 = groups[3]
+            if len(group4) >= 2:
+                # prefix = 3 groups + 2 ky tu dau cua group 4 (vd: 2001:ee0:4f89:30)
+                prefix_full = f"{prefix_3}:{group4[:2]}"
+                if prefix_full not in prefixes:
+                    prefixes[prefix_full] = {"subnets": [], "interfaces": set()}
+                try:
+                    subnet_hex = int(group4[2:], 16) if len(group4) > 2 else int(group4, 16)
+                    prefixes[prefix_full]["subnets"].append(subnet_hex)
+                except ValueError:
+                    pass
+                prefixes[prefix_full]["interfaces"].add(ga["interface"])
+
+    if not prefixes:
+        print("[!] Khong phan tich duoc prefix!")
+        return
+
+    # Chon prefix tot nhat (co nhieu subnet nhat)
+    best_prefix = max(prefixes.keys(), key=lambda p: len(prefixes[p]["subnets"]))
+    best_info = prefixes[best_prefix]
+    best_interface = list(best_info["interfaces"])[0]
+    used_subnets = sorted(best_info["subnets"])
+
+    print(f"\n  Interface:     {best_interface}")
+    print(f"  Prefix:        {best_prefix}")
+    print(f"  Subnets dung:  {len(used_subnets)} ({', '.join(f'0x{s:02x}' for s in used_subnets[:10])}{'...' if len(used_subnets) > 10 else ''})")
+
+    # Goi y range
+    # Tim range trong con (chua dung)
+    min_sub = min(used_subnets) if used_subnets else 0x00
+    # Bat dau tu subnet cao hon cac subnet hien tai + 10
+    suggested_start = max(min_sub + 1, 0x52)
+    suggested_end = 0xFF
+
+    # Dam bao khong trung voi cac subnet hien tai
+    while suggested_start in used_subnets and suggested_start < suggested_end:
+        suggested_start += 1
+
+    available_count = 0
+    for s in range(suggested_start, suggested_end + 1):
+        if s not in used_subnets:
+            available_count += 1
+
+    print(f"\n  Subnet range goi y: 0x{suggested_start:02x} → 0x{suggested_end:02x} ({available_count} subnets trong)")
+    print(f"  Moi subnet = 1 IPv6 address de rotate")
+
+    # Tao config goi y
+    suggested_config = {
+        "mikrotik": {
+            "host": host,
+            "username": username,
+            "password": password,
+            "interface": best_interface,
+            "prefix": best_prefix,
+            "subnet_start": suggested_start,
+            "subnet_end": suggested_end,
+            "pool_min": 3,
+            "pool_max": 10
+        }
+    }
+
+    print(f"\n{'='*60}")
+    print("CONFIG GOI Y")
+    print(f"{'='*60}")
+    print(json.dumps(suggested_config, indent=2))
+
+    # Hoi luu
+    print(f"\nLuu config nay vao {CONFIG_FILE}?")
+    confirm = input("(yes/no): ").strip().lower()
+    if confirm == "yes":
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(suggested_config, f, indent=2, ensure_ascii=False)
+        print(f"[v] Da luu! Gio co the chay:")
+        print(f"    python -m ipv6.test_pool --connect   # Test ket noi")
+        print(f"    python -m ipv6.test_pool --pool      # Test pool")
+        print(f"    python -m ipv6.test_pool --rotate     # Test doi IPv6")
+    else:
+        print("Khong luu. Ban co the copy config tren va dan vao file:")
+        print(f"  {CONFIG_FILE}")
+
+
 # =========================================================================
 # MAIN
 # =========================================================================
@@ -251,11 +456,14 @@ if __name__ == "__main__":
     parser.add_argument("--rotate", action="store_true", help="Test rotate flow")
     parser.add_argument("--status", action="store_true", help="Xem trang thai pool")
     parser.add_argument("--reset", action="store_true", help="Reset pool")
+    parser.add_argument("--detect", action="store_true", help="Tu dong detect config tu router")
 
     args = parser.parse_args()
     config = load_config()
 
-    if args.connect:
+    if args.detect:
+        auto_detect(config)
+    elif args.connect:
         test_connection(config)
     elif args.pool:
         test_pool_operations(config)

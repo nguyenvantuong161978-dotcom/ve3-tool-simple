@@ -1,3 +1,15 @@
+1.0.553
+2026-03-30 (VN)
+Change: IPv6 AUTO DETECT - tu dong lay interface/prefix/subnet tu MikroTik router
+
+- Them --detect mode: chi can host + username + password
+  * Ket noi router → lay tat ca IPv6 → phan tich prefix + interface + subnet range
+  * Hien thi tat ca IPv6 (global vs link-local, dynamic, invalid)
+  * Goi y config toi uu (tranh trung subnet dang dung)
+  * Hoi luu vao config_test.json
+- Usage: python -m ipv6.test_pool --detect
+- File: ipv6/test_pool.py
+
 1.0.552
 2026-03-30 (VN)
 Change: FIX UPDATE thieu thu muc ipv6/ - them copy ipv6/ khi update qua ZIP
