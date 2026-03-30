@@ -129,6 +129,17 @@ def _get_gateway_for_ipv6(ipv6_address: str) -> str:
         return ""
 
 
+def _get_onlink_prefix(gateway: str) -> str:
+    """Tinh /64 prefix tu gateway address. VD: 2001:ee0:b004:3075::1 → 2001:ee0:b004:3075::/64"""
+    import ipaddress
+    try:
+        addr = ipaddress.IPv6Address(gateway)
+        network = ipaddress.IPv6Network(f"{addr}/64", strict=False)
+        return str(network)
+    except Exception:
+        return ""
+
+
 class IPv6Rotator:
     """Quản lý việc đổi IPv6 khi bị block."""
 
@@ -532,16 +543,31 @@ class IPv6Rotator:
                 self.log(f"[IPv6] Auto gateway: {new_gateway}")
 
             if new_gateway:
-                # Xóa route cũ trước - phải chỉ định cả gateway cũ nếu có
-                # Nếu không chỉ định gateway cũ, Windows có thể không xóa đúng route
+                # Xóa route cũ trước
                 if self.current_gateway:
-                    self.log(f"[IPv6] Deleting old route with gateway: {self.current_gateway}")
+                    self.log(f"[IPv6] Xoa route cu: gateway {self.current_gateway}")
                     commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {self.current_gateway}')
+                    # v1.0.585: Xoa on-link route cu (subnet cu)
+                    old_onlink = _get_onlink_prefix(self.current_gateway)
+                    if old_onlink:
+                        commands.append(f'netsh interface ipv6 delete route {old_onlink} "{self.interface_name}"')
                 else:
-                    # Fallback: xóa tất cả default routes (có thể có nhiều)
                     commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}"')
 
-                # Thêm route mới với gateway MỚI
+                # v1.0.585: QUAN TRONG - Them on-link route cho /64 subnet
+                # Neu khong co route nay, Windows khong biet gateway nam cung mang
+                # → gateway UNREACHABLE → IPv6 khong hoat dong!
+                import ipaddress as _ipaddr
+                try:
+                    _gw_addr = _ipaddr.IPv6Address(new_gateway)
+                    _gw_net = _ipaddr.IPv6Network(f"{_gw_addr}/64", strict=False)
+                    _onlink_prefix = str(_gw_net)  # "2001:ee0:b004:3075::/64"
+                    commands.append(f'netsh interface ipv6 add route {_onlink_prefix} "{self.interface_name}"')
+                    self.log(f"[IPv6] Them on-link route: {_onlink_prefix}")
+                except Exception:
+                    pass
+
+                # Them default route qua gateway
                 commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {new_gateway}')
 
             # Bước 4: Set Windows prefer IPv6 over IPv4 (quan trọng!)
