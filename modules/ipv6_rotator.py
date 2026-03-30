@@ -558,7 +558,48 @@ class IPv6Rotator:
                 # Đã có quyền admin - chạy trực tiếp
                 self.log("[IPv6] Running with admin privileges...")
                 for cmd in commands:
-                    subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+                    try:
+                        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+                        # v1.0.581: Log errors de debug connectivity
+                        if r.returncode != 0:
+                            stderr = (r.stderr or "").strip()
+                            # delete address/route fail khi chua co → OK, bo qua
+                            if "delete" in cmd and ("not found" in stderr.lower() or "object" in stderr.lower()):
+                                pass
+                            else:
+                                self.log(f"[IPv6] [WARN] cmd failed (rc={r.returncode}): {cmd}")
+                                if stderr:
+                                    self.log(f"[IPv6] [WARN] stderr: {stderr[:200]}")
+                    except subprocess.TimeoutExpired:
+                        self.log(f"[IPv6] [WARN] cmd timeout: {cmd}")
+
+                # v1.0.581: Verify route da duoc set
+                try:
+                    verify = subprocess.run(
+                        f'netsh interface ipv6 show route ::/0',
+                        shell=True, capture_output=True, text=True, timeout=5
+                    )
+                    if new_gateway and new_gateway not in (verify.stdout or ""):
+                        self.log(f"[IPv6] [!] DEFAULT ROUTE MISSING! Gateway {new_gateway} not in route table")
+                        self.log(f"[IPv6] [!] Route output: {(verify.stdout or '').strip()[:300]}")
+                    else:
+                        self.log(f"[IPv6] [v] Default route verified: ::/0 → {new_gateway}")
+                except Exception:
+                    pass
+
+                # v1.0.581: Test gateway reachability (NDP)
+                try:
+                    ping_gw = subprocess.run(
+                        f'ping -6 -n 1 -w 3000 {new_gateway}',
+                        shell=True, capture_output=True, text=True, timeout=5
+                    )
+                    if ping_gw.returncode == 0 and 'Reply from' in (ping_gw.stdout or ''):
+                        self.log(f"[IPv6] [v] Gateway reachable: {new_gateway}")
+                    else:
+                        self.log(f"[IPv6] [!] Gateway UNREACHABLE: {new_gateway}")
+                        self.log(f"[IPv6] [!] Ping output: {(ping_gw.stdout or '').strip()[:200]}")
+                except Exception:
+                    pass
 
                 # Bước 5: v1.0.375 - Set DNS IPv6 (Google Public DNS)
                 # Chạy RIÊNG với timeout dài hơn, fail thì chỉ warn (không fail IPv6)
