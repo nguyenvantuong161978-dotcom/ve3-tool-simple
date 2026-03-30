@@ -6,19 +6,16 @@ IPv6 Pool Manager GUI - Giao dien quan ly IPv6 pool.
 Chay:
     python -m ipv6.ipv6_gui
 
-Chuc nang:
-    - Ket noi MikroTik router
-    - Xem trang thai pool (available/in_use/burned)
-    - Doi IPv6 thu cong (1 hoac tat ca)
-    - Test IPv6 connectivity
-    - Quan ly pool (get/release/burn/rotate)
+Tu dong:
+    - Ket noi MikroTik khi mo
+    - Start API server khi ket noi thanh cong
+    - Refresh trang thai moi 5 giay
 """
 
 import sys
 import json
 import time
 import threading
-import subprocess
 from pathlib import Path
 
 import tkinter as tk
@@ -34,150 +31,142 @@ from ipv6 import create_pool
 
 CONFIG_FILE = Path(__file__).parent / "config_test.json"
 
+# === DARK THEME ===
+BG = "#1e1e2e"
+BG2 = "#2a2a3a"
+BG_CARD = "#313144"
+FG = "#e0e0e0"
+FG_DIM = "#888"
+GREEN = "#4caf50"
+RED = "#e53935"
+BLUE = "#42a5f5"
+ORANGE = "#ff9800"
+YELLOW = "#fdd835"
+
 
 class IPv6PoolGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("IPv6 Pool Manager")
-        self.root.geometry("820x760")
+        self.root.geometry("900x780")
         self.root.resizable(True, True)
+        self.root.configure(bg=BG)
 
         self.pool = None
         self.config = {}
         self.connected = False
+        self._api_started = False
 
         self._build_ui()
-        self._load_and_connect()
+        # Auto: load config → connect → start API
+        self.root.after(300, self._auto_start)
 
     # =========================================================================
-    # UI BUILDING
+    # UI
     # =========================================================================
 
     def _build_ui(self):
-        # Style
-        style = ttk.Style()
-        style.configure("Green.TLabel", foreground="green")
-        style.configure("Red.TLabel", foreground="red")
-        style.configure("Header.TLabel", font=("Segoe UI", 11, "bold"))
+        # === HEADER: Status bar ===
+        header = tk.Frame(self.root, bg=BG2, pady=8)
+        header.pack(fill="x")
 
-        # ---- TOP: Connection Info ----
-        top = ttk.LabelFrame(self.root, text="Router", padding=8)
-        top.pack(fill="x", padx=8, pady=(8, 4))
+        self.lbl_title = tk.Label(header, text="IPv6 POOL", font=("Segoe UI", 14, "bold"),
+                                  bg=BG2, fg=FG)
+        self.lbl_title.pack(side="left", padx=12)
 
-        row0 = ttk.Frame(top)
-        row0.pack(fill="x")
+        # Connection + API status indicators
+        self.lbl_conn = tk.Label(header, text=" ROUTER: ... ", font=("Consolas", 10, "bold"),
+                                 bg="#555", fg="white", padx=8)
+        self.lbl_conn.pack(side="left", padx=4)
 
-        ttk.Label(row0, text="Host:").pack(side="left")
-        self.var_host = tk.StringVar(value="192.168.88.1")
-        ttk.Entry(row0, textvariable=self.var_host, width=16).pack(side="left", padx=(2, 10))
+        self.lbl_api = tk.Label(header, text=" API: ... ", font=("Consolas", 10, "bold"),
+                                bg="#555", fg="white", padx=8)
+        self.lbl_api.pack(side="left", padx=4)
 
-        ttk.Label(row0, text="User:").pack(side="left")
-        self.var_user = tk.StringVar(value="admin")
-        ttk.Entry(row0, textvariable=self.var_user, width=10).pack(side="left", padx=(2, 10))
+        # Config button (nhỏ, góc phải)
+        tk.Button(header, text="Config", font=("Consolas", 9),
+                  bg=BG_CARD, fg=FG, relief="flat", padx=8,
+                  command=self._show_config).pack(side="right", padx=8)
 
-        ttk.Label(row0, text="Pass:").pack(side="left")
-        self.var_pass = tk.StringVar(value="")
-        ttk.Entry(row0, textvariable=self.var_pass, width=12, show="*").pack(side="left", padx=(2, 10))
+        # === BIG STATS (4 ô lớn) ===
+        stats = tk.Frame(self.root, bg=BG)
+        stats.pack(fill="x", padx=8, pady=6)
 
-        self.btn_connect = ttk.Button(row0, text="Ket noi", command=self._on_connect)
-        self.btn_connect.pack(side="left", padx=4)
+        self.stat_widgets = {}
+        stat_defs = [
+            ("available", "SAN SANG", GREEN),
+            ("in_use", "DANG DUNG", BLUE),
+            ("burned", "DA BURN", RED),
+            ("total_pool", "TONG POOL", FG_DIM),
+        ]
+        for key, label, color in stat_defs:
+            f = tk.Frame(stats, bg=BG_CARD, padx=16, pady=8)
+            f.pack(side="left", fill="x", expand=True, padx=4)
+            tk.Label(f, text=label, font=("Consolas", 9), bg=BG_CARD, fg=FG_DIM).pack()
+            num_lbl = tk.Label(f, text="0", font=("Segoe UI", 24, "bold"), bg=BG_CARD, fg=color)
+            num_lbl.pack()
+            self.stat_widgets[key] = num_lbl
 
-        self.lbl_status = ttk.Label(row0, text="Chua ket noi", style="Red.TLabel")
-        self.lbl_status.pack(side="left", padx=8)
+        # === API STATS (1 dòng) ===
+        api_stats_frame = tk.Frame(self.root, bg=BG2, pady=4)
+        api_stats_frame.pack(fill="x", padx=8, pady=(0, 4))
 
-        # ---- STATS ----
-        stats_frame = ttk.LabelFrame(self.root, text="Trang thai Pool", padding=8)
-        stats_frame.pack(fill="x", padx=8, pady=4)
+        tk.Label(api_stats_frame, text="API:", font=("Consolas", 9, "bold"),
+                 bg=BG2, fg=FG_DIM).pack(side="left", padx=(8, 4))
 
-        self.var_available = tk.StringVar(value="0")
-        self.var_in_use = tk.StringVar(value="0")
-        self.var_burned = tk.StringVar(value="0")
-        self.var_remaining = tk.StringVar(value="0/0")
-
-        stats_row = ttk.Frame(stats_frame)
-        stats_row.pack(fill="x")
-
-        for label, var, color in [
-            ("San sang:", self.var_available, "green"),
-            ("Dang dung:", self.var_in_use, "blue"),
-            ("Da chay (burned):", self.var_burned, "red"),
-            ("Con lai:", self.var_remaining, "black"),
+        self.api_stat_labels = {}
+        for key, label, color in [
+            ("get", "Lay", GREEN), ("rotate", "Doi", ORANGE),
+            ("burn", "Burn", RED), ("release", "Tra", BLUE),
         ]:
-            f = ttk.Frame(stats_row)
-            f.pack(side="left", padx=12)
-            ttk.Label(f, text=label).pack(side="left")
-            l = ttk.Label(f, textvariable=var, font=("Segoe UI", 11, "bold"))
-            l.pack(side="left", padx=4)
-            l.configure(foreground=color)
+            tk.Label(api_stats_frame, text=f"{label}:", font=("Consolas", 9),
+                     bg=BG2, fg=FG_DIM).pack(side="left", padx=(8, 0))
+            lbl = tk.Label(api_stats_frame, text="0", font=("Consolas", 10, "bold"),
+                           bg=BG2, fg=color)
+            lbl.pack(side="left", padx=(2, 0))
+            self.api_stat_labels[key] = lbl
 
-        # ---- API SERVER ----
-        api_frame = ttk.LabelFrame(self.root, text="API Server (cho VM/Server)", padding=8)
-        api_frame.pack(fill="x", padx=8, pady=4)
+        # === WORKERS PANEL (may nao dang dung IP nao) ===
+        workers_frame = tk.Frame(self.root, bg=BG_CARD, pady=4, padx=8)
+        workers_frame.pack(fill="x", padx=8, pady=(0, 4))
 
-        api_row = ttk.Frame(api_frame)
-        api_row.pack(fill="x")
+        tk.Label(workers_frame, text="WORKERS:", font=("Consolas", 9, "bold"),
+                 bg=BG_CARD, fg=FG_DIM).pack(side="left", padx=(0, 8))
+        self.workers_container = tk.Frame(workers_frame, bg=BG_CARD)
+        self.workers_container.pack(side="left", fill="x", expand=True)
+        self.lbl_no_worker = tk.Label(self.workers_container, text="Chua co worker nao ket noi",
+                                       font=("Consolas", 9), bg=BG_CARD, fg=FG_DIM)
+        self.lbl_no_worker.pack(side="left")
 
-        ttk.Label(api_row, text="Port:").pack(side="left")
-        self.var_port = tk.StringVar(value="8765")
-        ttk.Entry(api_row, textvariable=self.var_port, width=6).pack(side="left", padx=(2, 10))
-
-        self.btn_api = ttk.Button(api_row, text="Start API", command=self._on_toggle_api)
-        self.btn_api.pack(side="left", padx=4)
-
-        self.lbl_api_status = ttk.Label(api_row, text="API: Chua chay", style="Red.TLabel")
-        self.lbl_api_status.pack(side="left", padx=8)
-
-        self.lbl_api_url = ttk.Label(api_row, text="", foreground="gray")
-        self.lbl_api_url.pack(side="left", padx=4)
-
-        # ---- API STATS (v1.0.562) ----
-        api_stats_frame = ttk.LabelFrame(self.root, text="Thong ke API", padding=8)
-        api_stats_frame.pack(fill="x", padx=8, pady=4)
-
-        self.var_stat_get = tk.StringVar(value="0")
-        self.var_stat_rotate = tk.StringVar(value="0")
-        self.var_stat_burn = tk.StringVar(value="0")
-        self.var_stat_release = tk.StringVar(value="0")
-
-        stats2_row = ttk.Frame(api_stats_frame)
-        stats2_row.pack(fill="x")
-
-        for label, var, color in [
-            ("Lay IP:", self.var_stat_get, "green"),
-            ("Doi IP:", self.var_stat_rotate, "#cc6600"),
-            ("Burn:", self.var_stat_burn, "red"),
-            ("Tra lai:", self.var_stat_release, "blue"),
-        ]:
-            f = ttk.Frame(stats2_row)
-            f.pack(side="left", padx=12)
-            ttk.Label(f, text=label).pack(side="left")
-            l = ttk.Label(f, textvariable=var, font=("Segoe UI", 11, "bold"))
-            l.pack(side="left", padx=4)
-            l.configure(foreground=color)
-
-        # Worker details
-        self.var_workers_text = tk.StringVar(value="Chua co du lieu")
-        ttk.Label(api_stats_frame, textvariable=self.var_workers_text,
-                  foreground="gray", font=("Consolas", 8)).pack(anchor="w", pady=(4, 0))
-
-        # ---- IP LIST ----
-        list_frame = ttk.LabelFrame(self.root, text="Danh sach IP trong Pool", padding=4)
+        # === IP LIST (Treeview) ===
+        list_frame = tk.Frame(self.root, bg=BG)
         list_frame.pack(fill="both", expand=True, padx=8, pady=4)
 
-        # Treeview
-        cols = ("address", "subnet", "status", "uses", "last_used")
-        self.tree = ttk.Treeview(list_frame, columns=cols, show="headings", height=12)
+        # Treeview with dark style
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure("Dark.Treeview", background=BG_CARD, foreground=FG,
+                         fieldbackground=BG_CARD, font=("Consolas", 9))
+        style.configure("Dark.Treeview.Heading", background=BG2, foreground=FG,
+                         font=("Segoe UI", 9, "bold"))
+        style.map("Dark.Treeview", background=[("selected", BLUE)])
+
+        cols = ("address", "subnet", "gateway", "status", "uses", "last_used")
+        self.tree = ttk.Treeview(list_frame, columns=cols, show="headings",
+                                 height=14, style="Dark.Treeview")
         self.tree.heading("address", text="IPv6 Address")
         self.tree.heading("subnet", text="Subnet")
+        self.tree.heading("gateway", text="Gateway")
         self.tree.heading("status", text="Trang thai")
-        self.tree.heading("uses", text="So lan dung")
+        self.tree.heading("uses", text="Dung")
         self.tree.heading("last_used", text="Lan cuoi")
 
         self.tree.column("address", width=300)
-        self.tree.column("subnet", width=70, anchor="center")
-        self.tree.column("status", width=100, anchor="center")
-        self.tree.column("uses", width=80, anchor="center")
-        self.tree.column("last_used", width=140, anchor="center")
+        self.tree.column("subnet", width=60, anchor="center")
+        self.tree.column("gateway", width=180)
+        self.tree.column("status", width=90, anchor="center")
+        self.tree.column("uses", width=50, anchor="center")
+        self.tree.column("last_used", width=120, anchor="center")
 
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -186,213 +175,196 @@ class IPv6PoolGUI:
         scrollbar.pack(side="right", fill="y")
 
         # Tag colors
-        self.tree.tag_configure("available", background="#d4edda")
-        self.tree.tag_configure("in_use", background="#cce5ff")
-        self.tree.tag_configure("burned", background="#f8d7da")
+        self.tree.tag_configure("available", background="#1b3a1b")
+        self.tree.tag_configure("in_use", background="#1b2a3a")
+        self.tree.tag_configure("burned", background="#3a1b1b")
 
-        # ---- BUTTONS ----
-        btn_frame = ttk.LabelFrame(self.root, text="Thao tac", padding=8)
-        btn_frame.pack(fill="x", padx=8, pady=4)
+        # === BUTTONS (đơn giản, 1 dòng) ===
+        btn_frame = tk.Frame(self.root, bg=BG, pady=4)
+        btn_frame.pack(fill="x", padx=8)
 
-        row1 = ttk.Frame(btn_frame)
-        row1.pack(fill="x", pady=2)
+        btn_style = {"font": ("Segoe UI", 10, "bold"), "relief": "flat",
+                     "padx": 14, "pady": 6, "cursor": "hand2"}
 
-        self.btn_get = ttk.Button(row1, text="Lay 1 IP", command=self._on_get_ip, width=14)
-        self.btn_get.pack(side="left", padx=4)
+        tk.Button(btn_frame, text="DOI TAT CA IP", bg=ORANGE, fg="white",
+                  command=self._on_rotate_all, **btn_style).pack(side="left", padx=4)
+        tk.Button(btn_frame, text="RESET POOL", bg=RED, fg="white",
+                  command=self._on_reset, **btn_style).pack(side="left", padx=4)
+        tk.Button(btn_frame, text="Them IP", bg=BG_CARD, fg=FG,
+                  command=self._on_refill, **btn_style).pack(side="left", padx=4)
 
-        self.btn_release = ttk.Button(row1, text="Tra lai IP", command=self._on_release_ip, width=14)
-        self.btn_release.pack(side="left", padx=4)
+        # Right side: IP-specific actions
+        tk.Button(btn_frame, text="Test IP", bg=BG_CARD, fg=FG,
+                  command=self._on_test_ip, **btn_style).pack(side="right", padx=4)
+        tk.Button(btn_frame, text="Burn IP", bg=BG_CARD, fg=RED,
+                  command=self._on_burn_ip, **btn_style).pack(side="right", padx=4)
+        tk.Button(btn_frame, text="Doi IP", bg=BG_CARD, fg=ORANGE,
+                  command=self._on_rotate_ip, **btn_style).pack(side="right", padx=4)
 
-        self.btn_burn = ttk.Button(row1, text="Burn IP (403)", command=self._on_burn_ip, width=14)
-        self.btn_burn.pack(side="left", padx=4)
-
-        self.btn_rotate = ttk.Button(row1, text="Doi IP (Rotate)", command=self._on_rotate_ip, width=14)
-        self.btn_rotate.pack(side="left", padx=4)
-
-        self.btn_test = ttk.Button(row1, text="Test IP", command=self._on_test_ip, width=14)
-        self.btn_test.pack(side="left", padx=4)
-
-        row2 = ttk.Frame(btn_frame)
-        row2.pack(fill="x", pady=2)
-
-        self.btn_rotate_all = ttk.Button(row2, text="Doi TAT CA IP", command=self._on_rotate_all, width=14)
-        self.btn_rotate_all.pack(side="left", padx=4)
-
-        self.btn_refill = ttk.Button(row2, text="Them IP vao Pool", command=self._on_refill, width=14)
-        self.btn_refill.pack(side="left", padx=4)
-
-        self.btn_refresh = ttk.Button(row2, text="Lam moi", command=self._on_refresh, width=14)
-        self.btn_refresh.pack(side="left", padx=4)
-
-        self.btn_reset = ttk.Button(row2, text="Reset Pool", command=self._on_reset, width=14)
-        self.btn_reset.pack(side="left", padx=4)
-
-        # ---- LOG ----
-        log_frame = ttk.LabelFrame(self.root, text="Log", padding=4)
+        # === LOG ===
+        log_frame = tk.Frame(self.root, bg=BG)
         log_frame.pack(fill="x", padx=8, pady=(4, 8))
 
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=6, font=("Consolas", 9))
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=5,
+                                                   font=("Consolas", 9),
+                                                   bg=BG_CARD, fg=FG,
+                                                   insertbackground=FG,
+                                                   selectbackground=BLUE)
         self.log_text.pack(fill="x")
         self.log_text.configure(state="disabled")
 
     # =========================================================================
-    # CONNECTION
+    # AUTO START
     # =========================================================================
 
-    def _load_and_connect(self):
-        """Load config va tu dong ket noi."""
-        if CONFIG_FILE.exists():
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    self.config = json.load(f)
-                mk = self.config.get("mikrotik", {})
-                self.var_host.set(mk.get("host", "192.168.88.1"))
-                self.var_user.set(mk.get("username", "admin"))
-                self.var_pass.set(mk.get("password", ""))
-                self._log(f"Config loaded: {CONFIG_FILE.name}")
-                # Auto connect
-                self.root.after(500, self._on_connect)
-            except Exception as e:
-                self._log(f"Config error: {e}")
-        else:
-            self._log("Chua co config. Nhap thong tin router roi nhan 'Ket noi'")
-            self._log(f"Hoac chay: python -m ipv6.test_pool --detect")
+    def _auto_start(self):
+        """Auto: load config → connect → start API."""
+        if not CONFIG_FILE.exists():
+            self._log("Chua co config! An 'Config' de nhap thong tin router.")
+            self._update_conn_status(False, "Chua config")
+            return
 
-    def _on_connect(self):
-        """Ket noi MikroTik va khoi tao pool."""
-        self.btn_connect.configure(state="disabled")
-        self.lbl_status.configure(text="Dang ket noi...", style="")
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                self.config = json.load(f)
+            self._log("Config loaded")
+        except Exception as e:
+            self._log(f"Config error: {e}")
+            self._update_conn_status(False, "Config loi")
+            return
 
-        def do_connect():
-            host = self.var_host.get()
-            user = self.var_user.get()
-            passwd = self.var_pass.get()
+        # Auto connect
+        self._update_conn_status(None, "Dang ket noi...")
+        threading.Thread(target=self._do_auto_connect, daemon=True).start()
 
-            # Update config
-            self.config = {
-                "mikrotik": {
-                    "host": host,
-                    "username": user,
-                    "password": passwd,
-                    "interface": self.config.get("mikrotik", {}).get("interface", "bridge"),
-                    "prefix": self.config.get("mikrotik", {}).get("prefix", ""),
-                    "subnet_start": self.config.get("mikrotik", {}).get("subnet_start", 101),
-                    "subnet_end": self.config.get("mikrotik", {}).get("subnet_end", 255),
-                    "pool_min": self.config.get("mikrotik", {}).get("pool_min", 3),
-                    "pool_max": self.config.get("mikrotik", {}).get("pool_max", 20),
-                }
-            }
+    def _do_auto_connect(self):
+        """Connect + init pool + start API (background thread)."""
+        try:
+            self.pool = create_pool(self.config, log_func=self._log)
+            ok = self.pool.api.test_connection()
 
-            try:
-                self.pool = create_pool(self.config, log_func=self._log)
-                ok = self.pool.api.test_connection()
-
-                if ok:
-                    self.connected = True
-                    self.pool.init()
-                    self.root.after(0, lambda: self.lbl_status.configure(
-                        text=f"OK - {host}", style="Green.TLabel"))
-                    self.root.after(0, self._refresh_ui)
-                    self._log(f"Ket noi thanh cong: {host}")
-                else:
-                    self.connected = False
-                    self.root.after(0, lambda: self.lbl_status.configure(
-                        text="THAT BAI", style="Red.TLabel"))
-                    self._log(f"Khong ket noi duoc {host}")
-            except Exception as e:
-                self.connected = False
-                self.root.after(0, lambda: self.lbl_status.configure(
-                    text="LOI", style="Red.TLabel"))
-                self._log(f"Loi ket noi: {e}")
-            finally:
-                self.root.after(0, lambda: self.btn_connect.configure(state="normal"))
-
-        threading.Thread(target=do_connect, daemon=True).start()
-
-    # =========================================================================
-    # API SERVER
-    # =========================================================================
-
-    def _on_toggle_api(self):
-        """Start/Stop API server."""
-        if api_is_running():
-            stop_api_server()
-            self.btn_api.configure(text="Start API")
-            self.lbl_api_status.configure(text="API: Dung", style="Red.TLabel")
-            self.lbl_api_url.configure(text="")
-            self._log("API Server dung")
-        else:
-            if not self._check_connected():
-                return
-            try:
-                port = int(self.var_port.get())
-            except ValueError:
-                port = 8765
-
-            ok = start_api_server(self.pool, host="0.0.0.0", port=port, log_func=self._log)
             if ok:
-                # Tim IP cua may nay de hien thi URL
-                import socket
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.connect(("192.168.88.1", 80))
-                    local_ip = s.getsockname()[0]
-                    s.close()
-                except Exception:
-                    local_ip = "localhost"
+                self.connected = True
+                host = self.config.get("mikrotik", {}).get("host", "?")
+                self.pool.init()
+                self.root.after(0, lambda: self._update_conn_status(True, host))
+                self.root.after(0, self._refresh_ui)
+                self._log(f"Ket noi OK: {host}")
 
-                self.btn_api.configure(text="Stop API")
-                self.lbl_api_status.configure(text="API: Dang chay", style="Green.TLabel")
-                self.lbl_api_url.configure(text=f"http://{local_ip}:{port}")
-                self._log(f"API Server: http://{local_ip}:{port}")
-                # v1.0.562: Start auto-refresh stats
-                self._start_auto_refresh()
+                # Auto start API
+                self.root.after(500, self._auto_start_api)
             else:
-                self._log("API Server start that bai!")
+                self.connected = False
+                self.root.after(0, lambda: self._update_conn_status(False, "That bai"))
+                self._log("Ket noi router that bai!")
+        except Exception as e:
+            self.connected = False
+            self.root.after(0, lambda: self._update_conn_status(False, "Loi"))
+            self._log(f"Loi ket noi: {e}")
+
+    def _auto_start_api(self):
+        """Auto start API server."""
+        if not self.connected or not self.pool:
+            return
+        if api_is_running():
+            self._update_api_status(True)
+            return
+
+        port = self.config.get("mikrotik", {}).get("api_port", 8765)
+        ok = start_api_server(self.pool, host="0.0.0.0", port=port, log_func=self._log)
+        if ok:
+            self._update_api_status(True, port)
+            self._log(f"API Server started: port {port}")
+            self._start_auto_refresh()
+        else:
+            self._update_api_status(False)
+            self._log("API Server start that bai!")
 
     def _start_auto_refresh(self):
-        """v1.0.562: Tu dong cap nhat stats moi 10 giay."""
+        """Refresh stats moi 5 giay."""
         def _tick():
-            if api_is_running() and self.pool:
+            if self.pool:
                 try:
                     self._refresh_ui()
                 except Exception:
                     pass
-                self.root.after(10000, _tick)  # 10s
-        self.root.after(10000, _tick)
+                self.root.after(5000, _tick)
+        self.root.after(5000, _tick)
+
+    # =========================================================================
+    # STATUS INDICATORS
+    # =========================================================================
+
+    def _update_conn_status(self, ok, text=""):
+        if ok is None:
+            self.lbl_conn.config(text=f" ROUTER: {text} ", bg="#666")
+        elif ok:
+            self.lbl_conn.config(text=f" ROUTER: {text} ", bg=GREEN)
+        else:
+            self.lbl_conn.config(text=f" ROUTER: {text} ", bg=RED)
+
+    def _update_api_status(self, ok, port=None):
+        if ok:
+            import socket
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("192.168.88.1", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                local_ip = "localhost"
+            port = port or 8765
+            self.lbl_api.config(text=f" API: {local_ip}:{port} ", bg=GREEN)
+            self._api_started = True
+        else:
+            self.lbl_api.config(text=" API: OFF ", bg=RED)
+            self._api_started = False
 
     # =========================================================================
     # ACTIONS
     # =========================================================================
 
-    def _on_get_ip(self):
+    def _on_rotate_all(self):
         if not self._check_connected():
+            return
+        total = self.pool.api.subnet_end - self.pool.api.subnet_start + 1
+        ok = messagebox.askyesno("Xac nhan",
+            f"Doi TAT CA {total} IP?\n"
+            "Xoa IP cu + tao IP moi (subnet random).\n"
+            "Mat khoang 1-2 phut.")
+        if not ok:
             return
 
         def do():
-            ip = self.pool.get_ip()
-            if ip:
-                self._log(f"Lay IP: {ip}")
-            else:
-                self._log("Het IP!")
+            self._log(f"Dang doi tat ca IP...")
+            added = self.pool.rotate_all()
+            self._log(f"Da doi xong: {added} IP moi")
             self.root.after(0, self._refresh_ui)
 
         threading.Thread(target=do, daemon=True).start()
 
-    def _on_release_ip(self):
+    def _on_reset(self):
         if not self._check_connected():
             return
-        entry = self._get_selected_entry()
-        if not entry:
-            return
-        if entry["status"] != "in_use":
-            messagebox.showinfo("Thong bao", "Chi tra lai duoc IP dang 'in_use'")
+        ok = messagebox.askyesno("Xac nhan",
+            "Reset pool tracking?\n"
+            "IP giu tren router, chi xoa burned/in_use tracking.\n"
+            "Pool bat dau lai tu dau.")
+        if not ok:
             return
 
+        self.pool.reset_pool()
+        self.pool._load_all_from_router()
+        self._refresh_ui()
+        self._log("Da reset pool")
+
+    def _on_refill(self):
+        if not self._check_connected():
+            return
         def do():
-            self.pool.release_ip(entry["address"])
+            added = self.pool._refill(count=5)
+            self._log(f"Da them {added} IP vao pool")
             self.root.after(0, self._refresh_ui)
-
         threading.Thread(target=do, daemon=True).start()
 
     def _on_burn_ip(self):
@@ -401,11 +373,9 @@ class IPv6PoolGUI:
         entry = self._get_selected_entry()
         if not entry:
             return
-
         def do():
             self.pool.burn_ip(entry["address"], reason="manual_burn")
             self.root.after(0, self._refresh_ui)
-
         threading.Thread(target=do, daemon=True).start()
 
     def _on_rotate_ip(self):
@@ -415,51 +385,15 @@ class IPv6PoolGUI:
         if not entry:
             return
         if entry["status"] not in ("in_use", "available"):
-            messagebox.showinfo("Thong bao", "Chon IP dang 'available' hoac 'in_use' de doi")
+            messagebox.showinfo("Thong bao", "Chon IP 'San sang' hoac 'Dang dung' de doi")
             return
-
         def do():
             new_ip = self.pool.rotate_ip(entry["address"], reason="manual_rotate")
             if new_ip:
-                self._log(f"Doi thanh cong: {entry['address']} → {new_ip}")
+                self._log(f"Doi: → {new_ip[0]}")
             else:
-                self._log(f"Doi that bai - het IP!")
+                self._log("Doi that bai - het IP!")
             self.root.after(0, self._refresh_ui)
-
-        threading.Thread(target=do, daemon=True).start()
-
-    def _on_rotate_all(self):
-        if not self._check_connected():
-            return
-
-        # Dem IP trong pool + tren router
-        total_range = self.pool.api.subnet_end - self.pool.api.subnet_start + 1
-
-        ok = messagebox.askyesno("Xac nhan",
-            f"Doi TAT CA IP trong range ({total_range} subnets)?\n\n"
-            f"Se xoa IP cu tren router va tao IP moi\n"
-            f"(cung subnet, khac host ID → Google thay IP khac).\n\n"
-            f"Qua trinh mat khoang 1-2 phut.")
-        if not ok:
-            return
-
-        def do():
-            self._log(f"Dang doi tat ca IP (xoa cu, tao moi)...")
-            added = self.pool.rotate_all()
-            self._log(f"Da doi xong: {added} IP moi da them")
-            self.root.after(0, self._refresh_ui)
-
-        threading.Thread(target=do, daemon=True).start()
-
-    def _on_refill(self):
-        if not self._check_connected():
-            return
-
-        def do():
-            added = self.pool._refill(count=5)
-            self._log(f"Da them {added} IP vao pool")
-            self.root.after(0, self._refresh_ui)
-
         threading.Thread(target=do, daemon=True).start()
 
     def _on_test_ip(self):
@@ -468,45 +402,67 @@ class IPv6PoolGUI:
         entry = self._get_selected_entry()
         if not entry:
             return
-
         addr = entry["address"]
-        self._log(f"Dang test {addr}...")
-
+        self._log(f"Test {addr}...")
         def do():
             ok = self.pool.api.test_ipv6_connectivity(addr)
             if ok:
-                self._log(f"TEST OK: {addr} - IPv6 hoat dong!")
+                self._log(f"TEST OK: {addr}")
             else:
-                self._log(f"TEST FAIL: {addr} - Khong ket noi duoc")
-
+                self._log(f"TEST FAIL: {addr}")
         threading.Thread(target=do, daemon=True).start()
 
-    def _on_refresh(self):
-        if not self._check_connected():
-            return
+    def _show_config(self):
+        """Dialog chinh config router."""
+        win = tk.Toplevel(self.root)
+        win.title("Config Router")
+        win.geometry("400x300")
+        win.configure(bg=BG)
+        win.transient(self.root)
 
-        def do():
-            self.pool._sync_with_router()
-            self.pool._refill_if_needed()
-            self._log("Da lam moi pool")
-            self.root.after(0, self._refresh_ui)
+        mk = self.config.get("mikrotik", {})
+        fields = [
+            ("Host:", "host", mk.get("host", "192.168.88.1")),
+            ("User:", "username", mk.get("username", "admin")),
+            ("Password:", "password", mk.get("password", "")),
+            ("Interface:", "interface", mk.get("interface", "bridge")),
+            ("Prefix:", "prefix", mk.get("prefix", "")),
+            ("Subnet start:", "subnet_start", str(mk.get("subnet_start", 101))),
+            ("Subnet end:", "subnet_end", str(mk.get("subnet_end", 255))),
+            ("API port:", "api_port", str(mk.get("api_port", 8765))),
+        ]
 
-        threading.Thread(target=do, daemon=True).start()
+        vars_ = {}
+        for i, (label, key, val) in enumerate(fields):
+            tk.Label(win, text=label, font=("Consolas", 10), bg=BG, fg=FG,
+                     anchor="w", width=14).grid(row=i, column=0, padx=8, pady=2, sticky="w")
+            v = tk.StringVar(value=val)
+            show = "*" if key == "password" else ""
+            tk.Entry(win, textvariable=v, width=28, bg=BG2, fg=FG,
+                     insertbackground=FG, font=("Consolas", 10),
+                     show=show).grid(row=i, column=1, padx=8, pady=2)
+            vars_[key] = v
 
-    def _on_reset(self):
-        if not self._check_connected():
-            return
-        ok = messagebox.askyesno("Xac nhan",
-            "Reset pool?\n"
-            "Xoa toan bo tracking data (IP van giu tren router).\n"
-            "Pool se bat dau lai tu dau.")
-        if not ok:
-            return
+        def save():
+            cfg = {"mikrotik": {}}
+            for key, v in vars_.items():
+                val = v.get()
+                if key in ("subnet_start", "subnet_end", "api_port"):
+                    val = int(val)
+                cfg["mikrotik"][key] = val
+            try:
+                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=2)
+                self.config = cfg
+                self._log("Config saved! Restart de ap dung.")
+                win.destroy()
+            except Exception as e:
+                self._log(f"Save error: {e}")
 
-        self.pool.reset_pool()
-        self.pool._load_all_from_router()
-        self._refresh_ui()
-        self._log("Da reset pool")
+        tk.Button(win, text="LUU + DONG", bg=GREEN, fg="white",
+                  font=("Segoe UI", 10, "bold"), relief="flat",
+                  padx=20, command=save).grid(row=len(fields), column=0,
+                  columnspan=2, pady=12)
 
     # =========================================================================
     # HELPERS
@@ -514,7 +470,7 @@ class IPv6PoolGUI:
 
     def _check_connected(self) -> bool:
         if not self.connected or not self.pool:
-            messagebox.showwarning("Chua ket noi", "Hay ket noi MikroTik truoc!")
+            messagebox.showwarning("Chua ket noi", "Hay ket noi MikroTik truoc!\nAn 'Config' de nhap thong tin.")
             return False
         return True
 
@@ -537,41 +493,62 @@ class IPv6PoolGUI:
 
         # Stats
         status = self.pool.get_status()
-        self.var_available.set(str(status["available"]))
-        self.var_in_use.set(str(status["in_use"]))
-        self.var_burned.set(str(status.get("burned_total", 0)))
-        remaining = status.get("range_remaining", 0)
-        total = status.get("range_total", 0)
-        self.var_remaining.set(f"{remaining}/{total}")
+        self.stat_widgets["available"].config(text=str(status["available"]))
+        self.stat_widgets["in_use"].config(text=str(status["in_use"]))
+        self.stat_widgets["burned"].config(text=str(status.get("burned_total", 0)))
+        self.stat_widgets["total_pool"].config(text=str(status.get("range_total", 0)))
 
-        # v1.0.562: API Stats
+        # API Stats
         try:
             from ipv6.ipv6_server import get_api_stats
             api_stats = get_api_stats()
-            self.var_stat_get.set(str(api_stats.get("total_get", 0)))
-            self.var_stat_rotate.set(str(api_stats.get("total_rotate", 0)))
-            self.var_stat_burn.set(str(api_stats.get("total_burn", 0)))
-            self.var_stat_release.set(str(api_stats.get("total_release", 0)))
+            self.api_stat_labels["get"].config(text=str(api_stats.get("total_get", 0)))
+            self.api_stat_labels["rotate"].config(text=str(api_stats.get("total_rotate", 0)))
+            self.api_stat_labels["burn"].config(text=str(api_stats.get("total_burn", 0)))
+            self.api_stat_labels["release"].config(text=str(api_stats.get("total_release", 0)))
 
-            # Worker details
+            # Workers panel - hien thi may nao dung IP nao
             workers = api_stats.get("workers", {})
+            # Xoa widget cu
+            for w in self.workers_container.winfo_children():
+                w.destroy()
+
             if workers:
-                parts = []
                 for wname, wdata in workers.items():
                     ip = wdata.get("current_ip", "")
-                    ip_short = ip[-15:] if len(ip) > 15 else ip
-                    parts.append(f"{wname}: IP={ip_short} get={wdata.get('get',0)} rot={wdata.get('rotate',0)} burn={wdata.get('burn',0)}")
-                self.var_workers_text.set(" | ".join(parts))
+                    ip_short = ip[-22:] if len(ip) > 22 else ip
+                    gets = wdata.get("get", 0)
+                    rots = wdata.get("rotate", 0)
+                    burns = wdata.get("burn", 0)
+
+                    wf = tk.Frame(self.workers_container, bg=BG2, padx=6, pady=2)
+                    wf.pack(side="left", padx=3)
+                    tk.Label(wf, text=wname, font=("Consolas", 9, "bold"),
+                             bg=BG2, fg=YELLOW).pack(side="left")
+                    tk.Label(wf, text=f" {ip_short}", font=("Consolas", 8),
+                             bg=BG2, fg=GREEN).pack(side="left")
+                    tk.Label(wf, text=f" G:{gets} R:{rots} B:{burns}",
+                             font=("Consolas", 8), bg=BG2, fg=FG_DIM).pack(side="left")
             else:
-                self.var_workers_text.set("Chua co worker nao ket noi")
+                tk.Label(self.workers_container, text="Chua co worker nao ket noi",
+                         font=("Consolas", 9), bg=BG_CARD, fg=FG_DIM).pack(side="left")
         except Exception:
             pass
+
+        # API status indicator
+        if api_is_running():
+            if not self._api_started:
+                self._update_api_status(True)
+        else:
+            if self._api_started:
+                self._update_api_status(False)
 
         # Tree
         self.tree.delete(*self.tree.get_children())
         for entry in self.pool.pool:
             addr = entry.get("address", "?")
             subnet = entry.get("subnet_hex", "?")
+            gateway = entry.get("gateway", "")
             st = entry.get("status", "?")
             uses = entry.get("use_count", 0)
             last = ""
@@ -580,22 +557,18 @@ class IPv6PoolGUI:
             elif entry.get("created_at"):
                 last = time.strftime("%H:%M:%S %d/%m", time.localtime(entry["created_at"]))
 
-            # Status display
-            st_display = {"available": "San sang", "in_use": "Dang dung", "burned": "Da chay"}.get(st, st)
-
+            st_display = {"available": "San sang", "in_use": "Dang dung", "burned": "Da burn"}.get(st, st)
             tag = st if st in ("available", "in_use", "burned") else ""
-            self.tree.insert("", "end", values=(addr, subnet, st_display, uses, last), tags=(tag,))
+            self.tree.insert("", "end", values=(addr, subnet, gateway, st_display, uses, last), tags=(tag,))
 
     def _log(self, msg):
         """Ghi log (thread-safe)."""
         def do():
             self.log_text.configure(state="normal")
             timestamp = time.strftime("%H:%M:%S")
-            # Clean log prefix
             clean_msg = msg.replace("[POOL] ", "").replace("[MikroTik] ", "")
             self.log_text.insert("end", f"[{timestamp}] {clean_msg}\n")
             self.log_text.see("end")
-            # Giu 200 dong
             lines = int(self.log_text.index("end-1c").split(".")[0])
             if lines > 200:
                 self.log_text.delete("1.0", f"{lines - 200}.0")

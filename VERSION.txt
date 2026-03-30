@@ -1,3 +1,18 @@
+1.0.600
+2026-03-30 (VN)
+Change: Redesign IPv6 Pool GUI - auto start + dark theme + workers panel
+
+- AUTO: Mo tool = tu dong ket noi router + start API server (khong can bam gi)
+- DARK THEME: Giao dien toi, de nhin, nhat quan voi cac GUI khac
+- 4 O LON: San sang / Dang dung / Da burn / Tong pool - so lieu lon de doc
+- WORKERS PANEL: Hien thi may nao dang dung IP nao (ten + IP + so lan get/rotate/burn)
+- API STATS: Lay / Doi / Burn / Tra - 1 dong gon
+- Them cot Gateway trong danh sach IP
+- Don gian nut: chi giu DOI TAT CA / RESET / Them IP / Test IP / Burn / Doi
+- Config dialog rieng (khong chiem cho tren giao dien chinh)
+- Auto refresh 5 giay
+- File: ipv6/ipv6_gui.py
+
 1.0.599
 2026-03-30 (VN)
 Change: Burn IP 403 = xoa gateway cu + tao gateway moi (giong rotate_all cho 1 IP)
