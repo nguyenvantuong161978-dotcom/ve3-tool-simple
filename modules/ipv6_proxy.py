@@ -248,6 +248,11 @@ class IPv6SocksProxy:
                     # Vẫn thử connect dù bind fail
 
             sock.connect(sockaddr)
+            # TCP_NODELAY cho outbound: giam delay khi gui du lieu
+            try:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except Exception:
+                pass
             return sock
 
         except Exception as e:
@@ -260,30 +265,38 @@ class IPv6SocksProxy:
             client.setblocking(False)
             remote.setblocking(False)
 
+            # TCP_NODELAY: tat Nagle's algorithm → giam delay ~40ms/packet
+            for s in (client, remote):
+                try:
+                    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                except Exception:
+                    pass
+
             while True:
-                ready, _, _ = select.select([client, remote], [], [], 60)
+                # 300s timeout: Google Flow co the mat 2-3 phut xu ly anh/video
+                ready, _, _ = select.select([client, remote], [], [], 300)
 
                 if not ready:
                     break
 
                 for sock in ready:
                     try:
-                        data = sock.recv(8192)
+                        # 65536 bytes: giam so round-trip khi tai anh lon
+                        data = sock.recv(65536)
                         if not data:
                             return
 
-                        if sock is client:
-                            remote.send(data)
-                        else:
-                            client.send(data)
-                    except:
+                        # sendall: dam bao GUI TOAN BO data (send co the chi gui 1 phan)
+                        target = remote if sock is client else client
+                        target.sendall(data)
+                    except Exception:
                         return
-        except:
+        except Exception:
             pass
         finally:
             try:
                 remote.close()
-            except:
+            except Exception:
                 pass
 
 

@@ -1,3 +1,20 @@
+1.0.596
+2026-03-30 (VN)
+Change: FIX proxy load cham/dut giua chung - tang buffer + timeout + TCP_NODELAY
+
+- BUG: Trang load cham hoac bi dut giua chung khi dung IPv6 pool
+- NGUYEN NHAN:
+  * Buffer 8KB qua nho → nhieu round-trip khi tai anh lon
+  * send() chi gui 1 phan data → mat du lieu giua chung
+  * select timeout 60s → Google Flow xu ly 2-3 phut → proxy ngat ket noi
+  * Khong co TCP_NODELAY → Nagle's algorithm them ~40ms delay/packet
+- FIX:
+  * Buffer 8KB → 64KB (giam 8x so round-trip)
+  * send() → sendall() (dam bao gui TOAN BO data)
+  * select timeout 60s → 300s (du cho Google Flow xu ly)
+  * Them TCP_NODELAY cho ca client + remote socket
+- Files: modules/ipv6_proxy.py, modules/proxy_providers/webshare_provider.py
+
 1.0.595
 2026-03-30 (VN)
 Change: Bo sung day du settings trong Dialog - giong VM settings.yaml

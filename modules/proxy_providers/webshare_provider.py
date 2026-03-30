@@ -225,22 +225,28 @@ class WebshareProxyBridge:
             client.setblocking(False)
             remote.setblocking(False)
 
+            # TCP_NODELAY: giam delay
+            for s in (client, remote):
+                try:
+                    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                except Exception:
+                    pass
+
             while True:
-                ready, _, _ = select.select([client, remote], [], [], 60)
+                # 300s: Google Flow co the mat vai phut xu ly
+                ready, _, _ = select.select([client, remote], [], [], 300)
                 if not ready:
                     break
                 for sock in ready:
                     try:
-                        data = sock.recv(8192)
+                        data = sock.recv(65536)
                         if not data:
                             return
-                        if sock is client:
-                            remote.send(data)
-                        else:
-                            client.send(data)
-                    except:
+                        target = remote if sock is client else client
+                        target.sendall(data)
+                    except Exception:
                         return
-        except:
+        except Exception:
             pass
         finally:
             try:
