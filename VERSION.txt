@@ -1,3 +1,19 @@
+1.0.608
+2026-03-30 (VN)
+Change: IPv6 Pool FIFO queue - tranh trung IP khi cap phat
+
+- TRUOC: get_ip() lay IP available DAU TIEN trong list (vi tri co dinh)
+  * Release IP → quay lai vi tri cu → duoc cap lai NGAY cho VM tiep theo
+  * Pool restart → IP thu tu giong nhau → de trung voi VM dang dung
+- SAU: FIFO queue - IP duoc cap xong → chuyen ve CUOI list
+  * get_ip(): Lay tu DAU list, chuyen entry ve CUOI
+  * release_ip(): Tra IP → chuyen ve CUOI (cap lai sau cung)
+  * IP lau nhat khong dung → o DAU → duoc cap truoc
+  * IP vua dung xong → o CUOI → cap lai cuoi cung
+  * Du pool restart, thu tu van dung (luu trong pool.json)
+- HIEU QUA: Giam trung IP giua cac VM, dac biet khi pool restart/reset
+- File: ipv6/ipv6_pool.py - get_ip(), release_ip()
+
 1.0.607
 2026-03-30 (VN)
 Change: Server GUI - Gop IPv6 toggle + Proxy Provider thanh 1 selector ro rang

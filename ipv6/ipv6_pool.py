@@ -153,18 +153,23 @@ class IPv6Pool:
         """
         Lay 1 IPv6 address tu pool.
 
+        v1.0.608: FIFO queue - lay tu dau, chuyen ve cuoi.
+        IP vua dung xong luon o cuoi → duoc cap lai sau cung → tranh trung.
+
         Returns:
             Tuple (ip, gateway) hoac None neu het.
             ip: IPv6 address (khong co /prefix)
             gateway: Gateway ::1 cua subnet
         """
         with self._lock:
-            # Tim IP available
-            for entry in self.pool:
+            # Tim IP available (tu dau list - FIFO)
+            for i, entry in enumerate(self.pool):
                 if entry["status"] == "available":
                     entry["status"] = "in_use"
                     entry["used_at"] = time.time()
                     entry["use_count"] = entry.get("use_count", 0) + 1
+                    # v1.0.608: FIFO - chuyen entry ve cuoi list
+                    self.pool.append(self.pool.pop(i))
                     self._save_pool()
                     ip = entry["address"]
                     gateway = self._get_gateway_for_ip(ip)
@@ -175,12 +180,12 @@ class IPv6Pool:
             self.log("[POOL] No available IPs, refilling...")
             added = self._refill(count=self.min_pool_size)
             if added:
-                # Lay IP dau tien moi them
-                for entry in self.pool:
+                for i, entry in enumerate(self.pool):
                     if entry["status"] == "available":
                         entry["status"] = "in_use"
                         entry["used_at"] = time.time()
                         entry["use_count"] = entry.get("use_count", 0) + 1
+                        self.pool.append(self.pool.pop(i))
                         self._save_pool()
                         ip = entry["address"]
                         gateway = self._get_gateway_for_ip(ip)
@@ -253,17 +258,20 @@ class IPv6Pool:
     def release_ip(self, address: str):
         """
         Tra IP lai pool (van dung duoc, khong bi 403).
+        v1.0.608: FIFO - chuyen ve cuoi list de IP khac duoc cap truoc.
 
         Args:
             address: IPv6 address
         """
         with self._lock:
-            for entry in self.pool:
+            for i, entry in enumerate(self.pool):
                 if entry["address"] == address and entry["status"] == "in_use":
                     entry["status"] = "available"
                     entry["released_at"] = time.time()
+                    # v1.0.608: FIFO - chuyen ve cuoi
+                    self.pool.append(self.pool.pop(i))
                     self._save_pool()
-                    self.log(f"[POOL] RELEASE: {address} → available")
+                    self.log(f"[POOL] RELEASE: {address} → available (cuoi queue)")
                     return
             self.log(f"[POOL] Release: {address} not found in pool")
 
