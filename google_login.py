@@ -124,7 +124,8 @@ def _ensure_socks5_proxy(cfg: dict, pp_type: str, port: int) -> bool:
     """
     try:
         from modules.ipv6_rotator import get_ipv6_rotator
-        rotator = get_ipv6_rotator()
+        # v1.0.575: Truyen settings de rotator biet pool_api_url
+        rotator = get_ipv6_rotator(settings=cfg)
 
         if not rotator or not rotator.enabled:
             log("[PROXY] IPv6 rotator not enabled", "WARN")

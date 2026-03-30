@@ -1,6 +1,6 @@
-1.0.574
+1.0.575
 2026-03-30 (VN)
-Change: Fix Pool API - add IPv6 vao VM interface (netsh) truoc khi bind SOCKS5
+Change: Fix rotator singleton tu doc settings.yaml (khong can truyen settings)
 
 - BUG: Pool chi load 3-6 IP (min_pool_size) thay vi tat ca 155 IP trong range
   * _refill_if_needed() chi them khi available < min_pool_size (3)

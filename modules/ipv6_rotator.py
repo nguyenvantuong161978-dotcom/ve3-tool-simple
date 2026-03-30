@@ -800,7 +800,8 @@ def get_ipv6_rotator(settings: Dict[str, Any] = None) -> Optional[IPv6Rotator]:
     Lấy IPv6Rotator instance (singleton).
 
     Args:
-        settings: Dict cấu hình (chỉ cần lần đầu)
+        settings: Dict cấu hình (chỉ cần lần đầu).
+                  v1.0.575: Nếu None, tự đọc settings.yaml
 
     Returns:
         IPv6Rotator instance hoặc None nếu disabled
@@ -808,6 +809,16 @@ def get_ipv6_rotator(settings: Dict[str, Any] = None) -> Optional[IPv6Rotator]:
     global _rotator_instance
 
     if _rotator_instance is None:
+        # v1.0.575: Tu dong doc settings.yaml neu khong truyen settings
+        if not settings:
+            try:
+                import yaml
+                settings_path = Path(__file__).parent.parent / "config" / "settings.yaml"
+                if settings_path.exists():
+                    with open(settings_path, 'r', encoding='utf-8') as f:
+                        settings = yaml.safe_load(f) or {}
+            except Exception:
+                settings = {}
         _rotator_instance = IPv6Rotator(settings)
 
     return _rotator_instance
