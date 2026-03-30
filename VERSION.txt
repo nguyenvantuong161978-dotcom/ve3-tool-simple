@@ -1,6 +1,6 @@
-1.0.555
+1.0.556
 2026-03-30 (VN)
-Change: IPv6 Pool existing mode - dung IP da co tren router, giu 100 IP dau, dung 155 IP con lai (subnet 65-ff)
+Change: IPv6 Pool Manager GUI - giao dien quan ly IPv6 pool, doi IP thu cong, test connectivity
 
 - MikroTik www-ssl can certificate → nhieu router chua cau hinh
 - FIX: Thu HTTPS truoc, neu fail tu dong thu HTTP

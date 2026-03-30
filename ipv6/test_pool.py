@@ -439,7 +439,7 @@ def auto_detect(config: dict):
     # Hoi luu
     print(f"\nLuu config nay vao {CONFIG_FILE}?")
     confirm = input("(yes/no): ").strip().lower()
-    if confirm == "yes":
+    if confirm in ("yes", "y"):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(suggested_config, f, indent=2, ensure_ascii=False)
         print(f"[v] Da luu! Gio co the chay:")
