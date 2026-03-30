@@ -256,11 +256,12 @@ class IPv6Pool:
 
     def _load_all_from_router(self):
         """
-        v1.0.563: Load TAT CA IP trong allowed range tu router vao pool.
-        Khong gioi han max_pool_size - pool la kho IPv6, can thay het.
+        v1.0.583: Load subnets tu gateway addresses tren router.
+        Moi gateway ::1/64 = 1 subnet kha dung.
+        Worker IP duoc generate random LOCAL, KHONG nam tren router (tranh DAD conflict).
         """
         router_addrs = self.api.list_ipv6_addresses()
-        pool_addresses = {e["address"] for e in self.pool}
+        pool_subnets = {e.get("subnet_hex", "") for e in self.pool}
         added = 0
 
         for entry in router_addrs:
@@ -277,22 +278,24 @@ class IPv6Pool:
             if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
                 continue
 
-            # v1.0.579: Skip gateway addresses (::1/64) - khong phai worker IP
-            if addr_clean.endswith("::1") or addr_clean.endswith(":0001"):
+            # v1.0.583: Chi load GATEWAY addresses (::1/64) - moi gateway = 1 subnet
+            if not (addr_clean.endswith("::1") or addr_clean.endswith(":0001")):
                 continue
 
-            # Skip neu da co trong pool hoac da burned
-            if addr_clean in pool_addresses:
+            subnet_hex = f"{subnet:02x}"
+            if subnet_hex in pool_subnets:
                 continue
-            if addr_clean in self._burned_addresses:
-                continue
+
+            # Generate random worker IP LOCAL (chi VM dung, router KHONG co)
+            worker_ip_full = self.api.build_ipv6_address(subnet, full_random=True)
+            worker_ip = worker_ip_full.split("/")[0]  # Bo /128
 
             new_entry = {
-                "address": addr_clean,
-                "full_address": addr_full,
+                "address": worker_ip,
+                "full_address": worker_ip_full,
                 "subnet": subnet,
-                "subnet_hex": f"{subnet:02x}",
-                "router_id": entry.get(".id", ""),
+                "subnet_hex": subnet_hex,
+                "router_id": "",
                 "interface": interface,
                 "status": "available",
                 "use_count": 0,
@@ -300,7 +303,7 @@ class IPv6Pool:
                 "used_at": None,
             }
             self.pool.append(new_entry)
-            pool_addresses.add(addr_clean)
+            pool_subnets.add(subnet_hex)
             added += 1
 
         if added > 0:
@@ -317,17 +320,14 @@ class IPv6Pool:
 
     def _refill(self, count: int = 1) -> int:
         """
-        Them IP tu router vao pool (IP DA CO SAN, khong add moi).
-        Chon ngau nhien tu cac IP trong allowed range chua co trong pool.
+        v1.0.583: Tim subnets co gateway tren router ma chua co trong pool.
+        Generate random worker IP cho moi subnet (LOCAL, khong tren router).
 
         Returns:
             So IP da them
         """
-        # Lay tat ca IP tren router
         router_addrs = self.api.list_ipv6_addresses()
-
-        # Tim IP trong allowed range chua co trong pool va chua burned
-        pool_addresses = {e["address"] for e in self.pool}
+        pool_subnets = {e.get("subnet_hex", "") for e in self.pool}
         candidates = []
 
         for entry in router_addrs:
@@ -335,41 +335,40 @@ class IPv6Pool:
             addr_clean = addr_full.split("/")[0]
             interface = entry.get("interface", "")
 
-            # Chi lay IP cua interface dung
             if interface != self.api.interface:
                 continue
 
-            # Kiem tra subnet co trong allowed range
             subnet = self.api._extract_subnet(addr_full)
             if subnet is None:
                 continue
             if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
                 continue
 
-            # v1.0.579: Skip gateway addresses (::1/64)
-            if addr_clean.endswith("::1") or addr_clean.endswith(":0001"):
+            # v1.0.583: Chi gateways (::1)
+            if not (addr_clean.endswith("::1") or addr_clean.endswith(":0001")):
                 continue
 
-            # Skip neu da co trong pool hoac da burned
-            if addr_clean in pool_addresses:
+            subnet_hex = f"{subnet:02x}"
+            if subnet_hex in pool_subnets:
                 continue
-            if addr_clean in self._burned_addresses:
-                continue
+
+            # Generate random worker IP LOCAL
+            worker_ip_full = self.api.build_ipv6_address(subnet, full_random=True)
+            worker_ip = worker_ip_full.split("/")[0]
 
             candidates.append({
-                "address": addr_clean,
-                "full_address": addr_full,
+                "address": worker_ip,
+                "full_address": worker_ip_full,
                 "subnet": subnet,
-                "subnet_hex": f"{subnet:02x}",
-                "router_id": entry.get(".id", ""),
+                "subnet_hex": subnet_hex,
+                "router_id": "",
                 "interface": interface,
             })
 
         if not candidates:
-            self.log("[POOL] No more IPs available in allowed range!")
+            self.log("[POOL] No more subnets available!")
             return 0
 
-        # Chon ngau nhien de tranh dung cung IP moi lan
         random.shuffle(candidates)
 
         added = 0
@@ -377,7 +376,6 @@ class IPv6Pool:
             if added >= count:
                 break
 
-            # Check max pool size (chi dem active entries)
             active_count = len([p for p in self.pool if p["status"] in ("available", "in_use")])
             if active_count >= self.max_pool_size:
                 self.log(f"[POOL] Max pool size reached ({self.max_pool_size})")
@@ -388,14 +386,14 @@ class IPv6Pool:
                 "full_address": cand["full_address"],
                 "subnet": cand["subnet"],
                 "subnet_hex": cand["subnet_hex"],
-                "router_id": cand["router_id"],
+                "router_id": "",
                 "status": "available",
                 "created_at": time.time(),
                 "use_count": 0,
             }
             self.pool.append(entry)
             added += 1
-            self.log(f"[POOL] Added from router: {cand['address']} (subnet {cand['subnet_hex']})")
+            self.log(f"[POOL] Added subnet: {cand['subnet_hex']} → {cand['address']}")
 
         if added:
             self._save_pool()
@@ -466,28 +464,20 @@ class IPv6Pool:
             self.log(f"[POOL] Tao moi {len(selected)} IP cho toan bo range "
                      f"({self.api.subnet_start:02x}-{self.api.subnet_end:02x})")
 
-            # 5. Add IP moi voi random subnet + 64-bit random host (giong Privacy Extension)
-            # v1.0.578: Tao gateway ::1/128 rieng cho moi subnet
+            # 5. Add GATEWAY cho moi subnet (chi gateway, KHONG add worker IP)
+            # v1.0.583: Worker IP chi dung tren VM, KHONG add vao MikroTik
+            # Neu add worker IP vao router → VM cung add → DAD conflict → "Duplicate" → fail
             added = 0
             for subnet in selected:
-                # Tao gateway ::1/64 cho subnet nay (de VM dung lam default route)
-                # PHAI la /64 de router biet route ca subnet (khong phai /128)
                 subnet_str = f"{subnet:02x}"
                 gw_addr = f"{self.api.prefix}{subnet_str}::1/64"
                 gw_result = self.api.add_ipv6_address(gw_addr)
-                if not gw_result:
-                    self.log(f"[POOL] [!] Cannot create gateway for subnet {subnet:02x}, skip")
-                    continue
-
-                # Tao IP random cho worker dung
-                new_addr = self.api.build_ipv6_address(subnet, full_random=True)
-                result = self.api.add_ipv6_address(new_addr)
-                if result:
+                if gw_result:
                     added += 1
                 else:
-                    self.log(f"[POOL] [!] Cannot create IP for subnet {subnet:02x}")
+                    self.log(f"[POOL] [!] Cannot create gateway for subnet {subnet:02x}, skip")
 
-            self.log(f"[POOL] Da them {added}/{len(selected)} IP moi tren router")
+            self.log(f"[POOL] Da them {added}/{len(selected)} gateway tren router")
 
             # 6. Load tat ca IP moi vao pool
             self._load_all_from_router()
@@ -498,26 +488,35 @@ class IPv6Pool:
 
     def _sync_with_router(self):
         """
-        Dong bo pool voi trang thai thuc tren router.
-        - IP con tren router → giu
-        - IP mat khoi router → mark burned
-        - Cleanup entries burned cu
+        v1.0.583: Dong bo pool voi trang thai thuc tren router.
+        Check GATEWAY (khong phai worker IP) vi worker IP chi tren VM.
+        - Subnet con gateway tren router → giu
+        - Subnet mat gateway → mark burned
         """
         router_addrs = self.api.list_ipv6_addresses()
-        router_set = set()
+
+        # Build set of subnets that have gateways on router
+        router_subnets = set()
         for entry in router_addrs:
             addr = entry.get("address", "").split("/")[0]
-            router_set.add(addr)
+            interface = entry.get("interface", "")
+            if interface != self.api.interface:
+                continue
+            if addr.endswith("::1") or addr.endswith(":0001"):
+                subnet = self.api._extract_subnet(entry.get("address", ""))
+                if subnet is not None:
+                    router_subnets.add(f"{subnet:02x}")
 
         for entry in self.pool:
             if entry["status"] in ("available", "in_use"):
-                if entry["address"] not in router_set:
-                    self.log(f"[POOL] Sync: {entry['address']} not on router → burned")
+                subnet_hex = entry.get("subnet_hex", "")
+                if subnet_hex and subnet_hex not in router_subnets:
+                    self.log(f"[POOL] Sync: subnet {subnet_hex} gateway missing → burned")
                     entry["status"] = "burned"
                     entry["burn_reason"] = "sync_missing"
                     self._burned_addresses.add(entry["address"])
 
-        # Cleanup: xoa entries burned khoi pool list (giu burned_addresses set)
+        # Cleanup
         before = len(self.pool)
         self.pool = [p for p in self.pool if p["status"] != "burned"]
         if before != len(self.pool):

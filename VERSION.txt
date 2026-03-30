@@ -1,3 +1,22 @@
+1.0.583
+2026-03-30 (VN)
+Change: FIX DAD conflict - Worker IP chi tren VM, KHONG tren MikroTik
+
+- ROOT CAUSE: rotate_all() tao worker IP tren MikroTik + VM cung add cung IP
+  * Windows DAD (Duplicate Address Detection) phat hien trung → "DAD State: Duplicate"
+  * IP bi danh dau Duplicate → KHONG dung duoc → no connectivity
+  * Day la ly do CHINH khien IPv6 pool khong hoat dong!
+- FIX: MikroTik CHI co gateway ::1/64 (de routing). Worker IP CHI tren VM.
+  * rotate_all(): Chi tao gateway, KHONG tao worker IP tren router
+  * _load_all_from_router(): Load gateway → generate random worker IP LOCAL
+  * _refill(): Tim gateway subnets, generate worker IP LOCAL
+  * _sync_with_router(): Check gateway ton tai (khong check worker IP)
+- Flow moi:
+  * MikroTik: 155 gateway ::1/64 tren bridge (connected route cho moi /64)
+  * VM request IP → Pool generate random IP → VM add vao interface
+  * Chi VM co IP → DAD pass → "Preferred" → connectivity OK
+- File: ipv6/ipv6_pool.py
+
 1.0.582
 2026-03-30 (VN)
 Change: DEBUG IPv6 - fix verify command + show addresses + route table
