@@ -570,7 +570,7 @@ class SettingsDialog:
         tk.Label(top, text="Ap dung cho:", font=("Segoe UI", 10, "bold"),
                  bg=BG2, fg=FG).pack(side=tk.LEFT, padx=10)
 
-        self.target_var = tk.StringVar(value="_global")
+        self.target_var = tk.StringVar(value="_global (TAT CA VM)")
         targets = ["_global (TAT CA VM)"] + self.vm_list
         self.target_combo = ttk.Combobox(top, textvariable=self.target_var,
                                           values=targets, width=25, state="readonly")
