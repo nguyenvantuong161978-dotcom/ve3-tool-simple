@@ -368,24 +368,28 @@ class IPv6Pool:
 
     def rotate_all(self) -> int:
         """
-        v1.0.564: Doi TAT CA IP - xoa IP cu tren router, tao IP moi voi host ID random.
+        v1.0.566: Doi TAT CA IP - xoa IP cu, tao IP moi voi SUBNET + host RANDOM.
+
+        /56 prefix = 256 subnet /64 (00-ff). Google block theo /64 nen
+        phai doi SUBNET (3065 → 30a3) chu khong chi doi host (::1 → ::abc).
 
         Flow:
             1. Xoa tat ca IP trong allowed range tren router
             2. Clear pool + burned_addresses
-            3. Add IP moi: cung subnet, host ID random (Google thay IP khac)
-            4. Load vao pool
+            3. Chon NGAU NHIEN subnet moi tu full range (00-ff), tranh trung subnet cu
+            4. Add IP moi: subnet random + host random
+            5. Load vao pool
 
         Returns:
             So IP moi da them
         """
         with self._lock:
-            self.log("[POOL] === ROTATE ALL: Doi tat ca IP ===")
+            self.log("[POOL] === ROTATE ALL: Doi tat ca IP (subnet + host) ===")
 
             # 1. Lay tat ca IP trong allowed range tren router
             router_addrs = self.api.list_ipv6_addresses()
             old_ids = []  # router .id de xoa
-            subnets_to_recreate = []  # subnet hex de tao lai
+            old_subnets = set()  # subnet cu de tranh chon lai
 
             for entry in router_addrs:
                 addr_full = entry.get("address", "")
@@ -402,16 +406,17 @@ class IPv6Pool:
                     continue
 
                 old_ids.append(addr_id)
-                subnets_to_recreate.append(subnet)
+                old_subnets.add(subnet)
 
-            self.log(f"[POOL] Tim thay {len(old_ids)} IP cu tren router")
+            count_needed = len(old_ids)
+            self.log(f"[POOL] Tim thay {count_needed} IP cu tren router (subnets: {len(old_subnets)})")
 
             # 2. Xoa tat ca IP cu tren router
             removed = 0
             for addr_id in old_ids:
                 if self.api.remove_ipv6_address(addr_id):
                     removed += 1
-            self.log(f"[POOL] Da xoa {removed}/{len(old_ids)} IP cu tren router")
+            self.log(f"[POOL] Da xoa {removed}/{count_needed} IP cu tren router")
 
             # 3. Clear pool va burned list
             self.pool = []
@@ -419,19 +424,35 @@ class IPv6Pool:
             self._save_pool()
             self.log("[POOL] Da clear pool va burned list")
 
-            # 4. Add IP moi voi random host ID
+            # 4. Chon subnet NGAU NHIEN tu full range, uu tien subnet CHUA DUNG
+            full_range = list(range(self.api.subnet_start, self.api.subnet_end + 1))
+
+            # Chia thanh 2 nhom: chua dung (uu tien) va da dung
+            new_subnets = [s for s in full_range if s not in old_subnets]
+            reuse_subnets = [s for s in full_range if s in old_subnets]
+
+            random.shuffle(new_subnets)
+            random.shuffle(reuse_subnets)
+
+            # Lay du so luong: uu tien subnet moi, bo sung bang subnet cu neu can
+            selected = (new_subnets + reuse_subnets)[:count_needed]
+            random.shuffle(selected)
+
+            self.log(f"[POOL] Chon {len(selected)} subnets ({len(new_subnets)} moi, "
+                     f"{max(0, count_needed - len(new_subnets))} tai su dung)")
+
+            # 5. Add IP moi voi random subnet + random host
             added = 0
-            for subnet in subnets_to_recreate:
-                # Random host ID (2-65535) de Google thay IP khac
+            for subnet in selected:
                 host_id = random.randint(2, 0xFFFF)
                 new_addr = self.api.build_ipv6_address(subnet, host_id=host_id)
                 result = self.api.add_ipv6_address(new_addr)
                 if result:
                     added += 1
 
-            self.log(f"[POOL] Da them {added}/{len(subnets_to_recreate)} IP moi tren router")
+            self.log(f"[POOL] Da them {added}/{len(selected)} IP moi tren router")
 
-            # 5. Load tat ca IP moi vao pool
+            # 6. Load tat ca IP moi vao pool
             self._load_all_from_router()
 
             available = [p for p in self.pool if p["status"] == "available"]
