@@ -1,3 +1,17 @@
+1.0.551
+2026-03-30 (VN)
+Change: THUMB cho server - Chrome 2 doi server san sang thay vi bo qua
+
+- BUG: Chrome 2 tao thumbnail → 3 server chua san sang → bo qua luon!
+  * pool.refresh_all() → 0 available → return False ngay
+  * Thumbnail khong duoc tao, phai doi cycle sau
+- FIX: Server mode → CHO VO HAN den khi co server (giong Chrome 1)
+  * Khi khoi dong: Cho server san sang (retry moi 30s + refresh)
+  * Khi tao tung thumb: Cho server san sang (retry moi 60s + refresh)
+  * Log: "[THUMB] Chua co server san sang - cho den khi co server..."
+  * Non-server mode: Giu nguyen logic cu (return False ngay)
+- File: modules/smart_engine.py - _generate_thumbnails_via_server()
+
 1.0.550
 2026-03-30 (VN)
 Change: FIX VM mat anh - Nhan biet task FAILED tren server ngay + retry cung server

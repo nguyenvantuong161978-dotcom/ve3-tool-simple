@@ -6365,9 +6365,22 @@ class SmartEngine:
         pool.refresh_all()
         num_servers = pool.available_count()
 
+        # v1.0.551: Server mode → cho vo han (giong Chrome 1)
+        _is_server_mode = cfg.get('generation_mode', '') in ('server', 'api+server')
         if num_servers == 0:
-            self.log("[THUMB] Khong co server nao kha dung!", "ERROR")
-            return False
+            if _is_server_mode:
+                self.log("[THUMB] Chua co server san sang - cho den khi co server...")
+                _wait_round = 0
+                while num_servers == 0:
+                    _wait_round += 1
+                    time.sleep(30)
+                    pool.refresh_all()
+                    num_servers = pool.available_count()
+                    if _wait_round % 4 == 0:
+                        self.log(f"[THUMB] Van cho server... ({_wait_round * 30}s)")
+            else:
+                self.log("[THUMB] Khong co server nao kha dung!", "ERROR")
+                return False
 
         self.log(f"[THUMB] ServerPool: {num_servers} server kha dung")
 
@@ -6395,10 +6408,20 @@ class SmartEngine:
             image_inputs = _build_refs(thumb)
             self.log(f"[THUMB] Tao {fname}{' (portrait)' if is_portrait else ''}: {thumb.img_prompt[:60]}...")
 
-            # Pick best server
+            # Pick best server - v1.0.551: server mode cho vo han
             server = pool.pick_best_server()
             if not server:
-                server = pool.wait_for_server(max_wait=60)
+                _wait_max = 300 if _is_server_mode else 60
+                server = pool.wait_for_server(max_wait=_wait_max)
+            if not server and _is_server_mode:
+                self.log(f"[THUMB] {fname}: Cho server san sang (server mode)...")
+                _wait_round = 0
+                while not server:
+                    _wait_round += 1
+                    server = pool.wait_for_server(max_wait=60)
+                    if not server and _wait_round % 5 == 0:
+                        pool.refresh_all()
+                        self.log(f"[THUMB] {fname}: Van cho server... ({_wait_round * 60}s)")
             if not server:
                 self.log(f"[THUMB] [x] {fname} FAIL: khong co server kha dung", "WARN")
                 return False
