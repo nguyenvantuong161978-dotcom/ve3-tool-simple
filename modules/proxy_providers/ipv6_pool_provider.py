@@ -66,11 +66,13 @@ class IPv6PoolProvider(ProxyProvider):
 
             if worker_id == 0:
                 # Chrome 1: Lay IP tu pool + start SOCKS5 proxy
-                ip = self._client.get_ip(worker=self._worker_name)
-                if not ip:
+                result = self._client.get_ip(worker=self._worker_name)
+                if not result:
                     self.log("[PROXY-Pool] Khong lay duoc IP tu pool!")
                     return False
 
+                # v1.0.578: Pool API tra ve dict {"ip": "...", "gateway": "..."}
+                ip = result["ip"] if isinstance(result, dict) else result
                 self._current_ip = ip
                 self.log(f"[PROXY-Pool] Got IP: {ip}")
 
@@ -129,12 +131,14 @@ class IPv6PoolProvider(ProxyProvider):
         old_ip = self._current_ip
         if not old_ip:
             # Chua co IP → lay moi
-            new_ip = self._client.get_ip(worker=self._worker_name)
+            result = self._client.get_ip(worker=self._worker_name)
         else:
             # Rotate: burn cu + lay moi
-            new_ip = self._client.rotate_ip(old_ip, reason=reason, worker=self._worker_name)
+            result = self._client.rotate_ip(old_ip, reason=reason, worker=self._worker_name)
 
-        if new_ip:
+        # v1.0.578: Pool API tra ve dict {"ip": "...", "gateway": "..."}
+        if result:
+            new_ip = result["ip"] if isinstance(result, dict) else result
             self._current_ip = new_ip
             # Cap nhat SOCKS5 proxy
             if self._proxy and hasattr(self._proxy, 'set_ipv6'):

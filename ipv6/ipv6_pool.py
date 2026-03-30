@@ -124,12 +124,35 @@ class IPv6Pool:
     # POOL OPERATIONS
     # =========================================================================
 
-    def get_ip(self) -> Optional[str]:
+    def _get_gateway_for_ip(self, ip: str) -> str:
+        """
+        v1.0.578: Tinh gateway ::1 cho 1 IPv6 address.
+        Gateway = /64 prefix cua IP + ::1
+
+        Args:
+            ip: IPv6 address (khong co /prefix)
+
+        Returns:
+            Gateway address (vd: "2001:ee0:b004:3065::1")
+        """
+        import ipaddress
+        try:
+            addr = ipaddress.IPv6Address(ip)
+            full = addr.exploded  # "2001:0ee0:b004:3065:8f2e:41bc:d7a0:3e15"
+            groups = full.split(':')
+            prefix = ':'.join(groups[:4])  # /64 prefix
+            return f"{prefix}::1"
+        except Exception:
+            return ""
+
+    def get_ip(self) -> Optional[Tuple[str, str]]:
         """
         Lay 1 IPv6 address tu pool.
 
         Returns:
-            IPv6 address (khong co /prefix) hoac None neu het
+            Tuple (ip, gateway) hoac None neu het.
+            ip: IPv6 address (khong co /prefix)
+            gateway: Gateway ::1 cua subnet
         """
         with self._lock:
             # Tim IP available
@@ -140,8 +163,9 @@ class IPv6Pool:
                     entry["use_count"] = entry.get("use_count", 0) + 1
                     self._save_pool()
                     ip = entry["address"]
-                    self.log(f"[POOL] GET: {ip} (#{entry['use_count']})")
-                    return ip
+                    gateway = self._get_gateway_for_ip(ip)
+                    self.log(f"[POOL] GET: {ip} gw={gateway} (#{entry['use_count']})")
+                    return ip, gateway
 
             # Het IP available → thu refill
             self.log("[POOL] No available IPs, refilling...")
@@ -155,8 +179,9 @@ class IPv6Pool:
                         entry["use_count"] = entry.get("use_count", 0) + 1
                         self._save_pool()
                         ip = entry["address"]
-                        self.log(f"[POOL] GET: {ip} (#{entry['use_count']})")
-                        return ip
+                        gateway = self._get_gateway_for_ip(ip)
+                        self.log(f"[POOL] GET: {ip} gw={gateway} (#{entry['use_count']})")
+                        return ip, gateway
 
             self.log("[POOL] [!] POOL EMPTY - No more IPs!")
             return None
@@ -203,7 +228,7 @@ class IPv6Pool:
 
             self.log(f"[POOL] Burn: {address} not found")
 
-    def rotate_ip(self, current_address: str, reason: str = "403") -> Optional[str]:
+    def rotate_ip(self, current_address: str, reason: str = "403") -> Optional[Tuple[str, str]]:
         """
         Doi IP: burn IP cu → lay IP moi.
 
@@ -212,16 +237,18 @@ class IPv6Pool:
             reason: Ly do doi
 
         Returns:
-            IP moi hoac None
+            Tuple (new_ip, gateway) hoac None
         """
         self.log(f"[POOL] ROTATE: {current_address} ({reason})")
         self.burn_ip(current_address, reason)
-        new_ip = self.get_ip()
-        if new_ip:
-            self.log(f"[POOL] ROTATE: {current_address} → {new_ip}")
+        result = self.get_ip()
+        if result:
+            new_ip, gateway = result
+            self.log(f"[POOL] ROTATE: {current_address} → {new_ip} gw={gateway}")
+            return new_ip, gateway
         else:
             self.log(f"[POOL] ROTATE FAILED: No new IP available!")
-        return new_ip
+            return None
 
     # =========================================================================
     # POOL MANAGEMENT
@@ -432,12 +459,23 @@ class IPv6Pool:
                      f"({self.api.subnet_start:02x}-{self.api.subnet_end:02x})")
 
             # 5. Add IP moi voi random subnet + 64-bit random host (giong Privacy Extension)
+            # v1.0.578: Tao gateway ::1/128 rieng cho moi subnet
             added = 0
             for subnet in selected:
+                # Tao gateway ::1/128 cho subnet nay (de VM dung lam default route)
+                gw_addr = self.api.build_ipv6_address(subnet, host_id=1, full_random=False)
+                gw_result = self.api.add_ipv6_address(gw_addr)
+                if not gw_result:
+                    self.log(f"[POOL] [!] Cannot create gateway for subnet {subnet:02x}, skip")
+                    continue
+
+                # Tao IP random cho worker dung
                 new_addr = self.api.build_ipv6_address(subnet, full_random=True)
                 result = self.api.add_ipv6_address(new_addr)
                 if result:
                     added += 1
+                else:
+                    self.log(f"[POOL] [!] Cannot create IP for subnet {subnet:02x}")
 
             self.log(f"[POOL] Da them {added}/{len(selected)} IP moi tren router")
 

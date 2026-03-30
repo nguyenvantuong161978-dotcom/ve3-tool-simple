@@ -1,3 +1,26 @@
+1.0.578
+2026-03-30 (VN)
+Change: Pool tao gateway rieng cho moi subnet - Google thay IP hoan toan khac nhau
+
+- Pool server (ipv6_pool.py):
+  * rotate_all(): Tao gateway ::1/128 rieng cho moi subnet TRUOC khi tao IP worker
+  * get_ip() tra ve tuple (ip, gateway) thay vi chi ip
+  * rotate_ip() tra ve tuple (new_ip, gateway)
+  * Them _get_gateway_for_ip(): Tinh gateway ::1 tu /64 prefix cua IP
+- API server (ipv6_server.py):
+  * /api/get_ip response them truong "gateway"
+  * /api/rotate_ip response them truong "gateway"
+- VM client (ipv6_pool_client.py):
+  * get_ip() tra ve dict {"ip": "...", "gateway": "..."} thay vi string
+  * rotate_ip() tra ve dict {"ip": "...", "gateway": "..."} thay vi string
+- VM rotator (ipv6_rotator.py):
+  * set_ipv6() them gateway_override parameter
+  * Gateway priority: 1) pool API gateway, 2) per-IP, 3) config, 4) auto-compute
+  * _init_via_pool(): Parse dict response, truyen gateway_override cho set_ipv6()
+  * _rotate_via_pool(): Parse dict response, truyen gateway_override cho set_ipv6()
+- ipv6_pool_provider.py: Cap nhat parse dict response (backward compat)
+- Ket qua: Moi IPv6 co subnet rieng + gateway rieng → Google thay la IP hoan toan doc lap
+
 1.0.577
 2026-03-30 (VN)
 Change: Dung gateway co dinh tu settings.yaml cho Pool mode (khong auto-compute)

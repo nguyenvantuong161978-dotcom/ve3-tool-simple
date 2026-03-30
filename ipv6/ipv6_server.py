@@ -112,15 +112,16 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Not found"}, 404)
 
     def _handle_get_ip(self, params: dict):
-        """GET /api/get_ip?worker=xxx → Lay 1 IP tu pool."""
+        """GET /api/get_ip?worker=xxx → Lay 1 IP + gateway tu pool."""
         if not _pool:
             self._send_json({"error": "Pool not initialized"}, 503)
             return
 
         worker = params.get("worker", ["unknown"])[0]
-        ip = _pool.get_ip()
+        result = _pool.get_ip()
 
-        if ip:
+        if result:
+            ip, gateway = result
             # Tim entry de lay them thong tin
             entry = None
             for e in _pool.pool:
@@ -128,11 +129,12 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
                     entry = e
                     break
 
-            _log_func(f"[API] GET_IP: {ip} → {worker}")
+            _log_func(f"[API] GET_IP: {ip} gw={gateway} → {worker}")
             _track_stat("get", worker, ip)
             self._send_json({
                 "success": True,
                 "ip": ip,
+                "gateway": gateway,
                 "subnet": entry.get("subnet_hex", "") if entry else "",
                 "worker": worker,
             })
@@ -222,14 +224,16 @@ class IPv6APIHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Missing 'ip' field"}, 400)
             return
 
-        new_ip = _pool.rotate_ip(ip, reason=reason)
-        if new_ip:
-            _log_func(f"[API] ROTATE: {ip} → {new_ip} ({worker}, {reason})")
+        result = _pool.rotate_ip(ip, reason=reason)
+        if result:
+            new_ip, gateway = result
+            _log_func(f"[API] ROTATE: {ip} → {new_ip} gw={gateway} ({worker}, {reason})")
             _track_stat("rotate", worker, new_ip)
             self._send_json({
                 "success": True,
                 "old_ip": ip,
                 "new_ip": new_ip,
+                "gateway": gateway,
                 "worker": worker,
             })
         else:

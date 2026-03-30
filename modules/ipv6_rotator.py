@@ -352,13 +352,17 @@ class IPv6Rotator:
         """Lay IPv6 tu Pool API va set len may."""
         self.log("[IPv6] Pool: finding working IP...")
         for attempt in range(max_retries):
-            ip = self._pool_client.get_ip(worker=self._worker_name)
-            if not ip:
+            result = self._pool_client.get_ip(worker=self._worker_name)
+            if not result:
                 self.log("[IPv6] Pool: no IPs available!")
                 break
 
-            self.log(f"[IPv6] Pool trying {attempt + 1}/{max_retries}: {ip}")
-            if self.set_ipv6(ip):
+            # v1.0.578: Pool API tra ve dict {"ip": "...", "gateway": "..."}
+            ip = result["ip"] if isinstance(result, dict) else result
+            pool_gw = result.get("gateway", "") if isinstance(result, dict) else ""
+
+            self.log(f"[IPv6] Pool trying {attempt + 1}/{max_retries}: {ip} gw={pool_gw}")
+            if self.set_ipv6(ip, gateway_override=pool_gw):
                 if self.test_ipv6_connectivity():
                     self.log(f"[IPv6] [v] Pool found working IP: {ip}")
                     if self.use_local_proxy:
@@ -463,7 +467,7 @@ class IPv6Rotator:
         except:
             return False
 
-    def set_ipv6(self, new_ipv6: str) -> bool:
+    def set_ipv6(self, new_ipv6: str, gateway_override: str = "") -> bool:
         """
         Đặt IPv6 mới cho interface (Windows).
 
@@ -513,12 +517,16 @@ class IPv6Rotator:
             commands.append(f'netsh interface ipv6 add address "{self.interface_name}" {new_ipv6}')
 
             # Bước 3: Set gateway
-            # v1.0.576: Uu tien: 1) per-IP gateway, 2) config gateway, 3) auto-compute
-            if new_ipv6 in self.ipv6_gateways:
+            # v1.0.578: Uu tien: 1) pool API gateway, 2) per-IP gateway, 3) config gateway, 4) auto-compute
+            if gateway_override:
+                # Gateway tu Pool API - rieng cho moi subnet
+                new_gateway = gateway_override
+                self.log(f"[IPv6] Using pool gateway: {new_gateway}")
+            elif new_ipv6 in self.ipv6_gateways:
                 new_gateway = self.ipv6_gateways[new_ipv6]
                 self.log(f"[IPv6] Using custom gateway: {new_gateway}")
             elif self.gateway:
-                # Gateway co dinh tu settings.yaml (dung cho Pool mode)
+                # Gateway co dinh tu settings.yaml
                 new_gateway = self.gateway
                 self.log(f"[IPv6] Using config gateway: {new_gateway}")
             else:
@@ -722,21 +730,25 @@ class IPv6Rotator:
                 # Lay IP moi tu pool
                 if current and attempt == 0:
                     # Lan dau: rotate (burn cu + lay moi)
-                    new_ipv6 = self._pool_client.rotate_ip(
+                    result = self._pool_client.rotate_ip(
                         current, reason="403", worker=self._worker_name
                     )
                 else:
                     # Lan sau: chi lay moi (IP cu da burn roi)
-                    new_ipv6 = self._pool_client.get_ip(worker=self._worker_name)
+                    result = self._pool_client.get_ip(worker=self._worker_name)
 
-                if not new_ipv6:
+                if not result:
                     self.log("[IPv6] Pool: No more IPs available!")
                     break
 
-                self.log(f"[IPv6] Pool rotate: {current} → {new_ipv6} (attempt {attempt + 1})")
+                # v1.0.578: Pool API tra ve dict {"ip": "...", "gateway": "..."}
+                new_ipv6 = result["ip"] if isinstance(result, dict) else result
+                pool_gw = result.get("gateway", "") if isinstance(result, dict) else ""
+
+                self.log(f"[IPv6] Pool rotate: {current} → {new_ipv6} gw={pool_gw} (attempt {attempt + 1})")
 
                 # Set IPv6 len may
-                if self.set_ipv6(new_ipv6):
+                if self.set_ipv6(new_ipv6, gateway_override=pool_gw):
                     if self.test_ipv6_connectivity():
                         self.log(f"[IPv6] [v] Pool OK: {new_ipv6}")
 

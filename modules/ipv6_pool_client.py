@@ -48,28 +48,30 @@ class IPv6PoolClient:
     # MAIN API METHODS
     # =====================================================================
 
-    def get_ip(self, worker: str = "unknown") -> Optional[str]:
+    def get_ip(self, worker: str = "unknown") -> Optional[Dict]:
         """
-        Lay 1 IPv6 address tu pool.
+        Lay 1 IPv6 address + gateway tu pool.
 
         Args:
             worker: Ten worker (vd: "vm1_chrome1", "server_chrome3")
 
         Returns:
-            IPv6 address hoac None neu het/loi
+            Dict {"ip": "...", "gateway": "..."} hoac None neu het/loi
+            Backward compat: str(result) tra ve IP
         """
         resp = self._get(f"/api/get_ip?worker={worker}")
         if resp and resp.get("success"):
             ip = resp["ip"]
-            self.log(f"[IPv6Client] GET: {ip} (worker={worker})")
-            return ip
+            gateway = resp.get("gateway", "")
+            self.log(f"[IPv6Client] GET: {ip} gw={gateway} (worker={worker})")
+            return {"ip": ip, "gateway": gateway}
         elif resp:
             self.log(f"[IPv6Client] GET failed: {resp.get('error', 'unknown')}")
         return None
 
-    def rotate_ip(self, ip: str, reason: str = "403", worker: str = "unknown") -> Optional[str]:
+    def rotate_ip(self, ip: str, reason: str = "403", worker: str = "unknown") -> Optional[Dict]:
         """
-        Burn IP cu, lay IP moi.
+        Burn IP cu, lay IP moi + gateway.
 
         Args:
             ip: IPv6 address hien tai
@@ -77,7 +79,7 @@ class IPv6PoolClient:
             worker: Ten worker
 
         Returns:
-            IPv6 moi hoac None
+            Dict {"ip": "...", "gateway": "..."} hoac None
         """
         resp = self._post("/api/rotate_ip", {
             "ip": ip,
@@ -86,8 +88,9 @@ class IPv6PoolClient:
         })
         if resp and resp.get("success"):
             new_ip = resp["new_ip"]
-            self.log(f"[IPv6Client] ROTATE: {ip} → {new_ip} (worker={worker})")
-            return new_ip
+            gateway = resp.get("gateway", "")
+            self.log(f"[IPv6Client] ROTATE: {ip} → {new_ip} gw={gateway} (worker={worker})")
+            return {"ip": new_ip, "gateway": gateway}
         elif resp:
             self.log(f"[IPv6Client] ROTATE failed: {resp.get('error', 'unknown')}")
         return None
