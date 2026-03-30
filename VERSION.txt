@@ -1,3 +1,14 @@
+1.0.593
+2026-03-30 (VN)
+Change: Them control/ vao danh sach cap nhat GitHub ZIP
+
+- BUG: control/master_control.py KHONG duoc copy khi update tu GitHub
+- FIX: Them copy control/*.py trong ca 3 updater:
+  * vm_manager.py (watchdog update)
+  * vm_manager_gui.py (GUI update button)
+  * server/server_gui.py (server GUI update)
+- Files: vm_manager.py, vm_manager_gui.py, server/server_gui.py
+
 1.0.592
 2026-03-30 (VN)
 Change: Master Settings Control - dieu khien settings VM tu xa

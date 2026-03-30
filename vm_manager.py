@@ -3721,6 +3721,14 @@ class VMManager:
                     for py in src_mod.glob("*.py"):
                         shutil.copy2(str(py), str(dst_mod / py.name))
 
+                # v1.0.593: Copy control/ (master_control.py)
+                src_ctrl = src / "control"
+                dst_ctrl = TOOL_DIR / "control"
+                if src_ctrl.exists():
+                    dst_ctrl.mkdir(parents=True, exist_ok=True)
+                    for py in src_ctrl.glob("*.py"):
+                        shutil.copy2(str(py), str(dst_ctrl / py.name))
+
                 # Cleanup
                 if zip_path.exists():
                     zip_path.unlink()

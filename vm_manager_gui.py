@@ -3027,6 +3027,14 @@ class SimpleGUI(tk.Tk):
                                     shutil.rmtree(str(dst_sub))
                                 shutil.copytree(str(sub_dir), str(dst_sub))
 
+                    # v1.0.593: Copy control/ (master_control.py)
+                    src_ctrl = extracted_folder / "control"
+                    dst_ctrl = TOOL_DIR / "control"
+                    if src_ctrl.exists():
+                        dst_ctrl.mkdir(parents=True, exist_ok=True)
+                        for py_file in src_ctrl.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_ctrl / py_file.name))
+
                     # Copy server folder (local proxy server)
                     src_server = extracted_folder / "server"
                     dst_server = TOOL_DIR / "server"

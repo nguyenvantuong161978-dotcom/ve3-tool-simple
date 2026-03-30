@@ -684,6 +684,14 @@ class ServerGUI(tk.Tk):
                         for py_file in src_server.glob("*.py"):
                             shutil.copy2(str(py_file), str(dst_server / py_file.name))
 
+                    # v1.0.593: Copy control/ (master_control.py)
+                    src_ctrl = extracted_folder / "control"
+                    dst_ctrl = TOOL_DIR / "control"
+                    if src_ctrl.exists():
+                        dst_ctrl.mkdir(exist_ok=True)
+                        for py_file in src_ctrl.glob("*.py"):
+                            shutil.copy2(str(py_file), str(dst_ctrl / py_file.name))
+
                     # Copy ipv6/ (IPv6 Dynamic Pool)
                     src_ipv6 = extracted_folder / "ipv6"
                     dst_ipv6 = TOOL_DIR / "ipv6"
