@@ -119,12 +119,13 @@ class ChromeWorker:
     """1 Chrome instance voi session, account, IPv6 rieng."""
 
     def __init__(self, index: int, chrome_path: str, port: int,
-                 account: dict = None, ipv6: str = ""):
+                 account: dict = None, ipv6: str = "", gateway: str = ""):
         self.index = index
         self.chrome_path = chrome_path
         self.port = port
         self.account = account  # {"id": "email", "password": "...", "totp_secret": "..."}
         self.ipv6 = ipv6
+        self.gateway = gateway  # v1.0.609: Gateway tu Pool API
         self.session = None  # ChromeSession
         self.ready = False
         self.busy = False
@@ -274,6 +275,7 @@ class ChromePool:
             ipv6 = cfg.get("ipv6", "")
 
             # v1.0.561: Pool mode - lay IPv6 tu pool API thay vi config/sheet
+            gateway = ""
             if self._pool_mode and not ipv6:
                 worker_name = f"server_chrome{i}"
                 pool_result = self.get_pool_ip(worker_name)
@@ -281,9 +283,10 @@ class ChromePool:
                     # v1.0.606: Pool API tra ve dict {"ip": "...", "gateway": "..."}
                     if isinstance(pool_result, dict):
                         ipv6 = pool_result.get("ip", "")
+                        gateway = pool_result.get("gateway", "")
                     else:
                         ipv6 = pool_result
-                    self._log(f"  [IPv6 Pool] Worker {i}: {ipv6}")
+                    self._log(f"  [IPv6 Pool] Worker {i}: {ipv6} (gw: {gateway[:30]})")
 
             worker = ChromeWorker(
                 index=chrome_info["index"],
@@ -291,6 +294,7 @@ class ChromePool:
                 port=chrome_info["port"],
                 account=account,
                 ipv6=ipv6,
+                gateway=gateway,
             )
             self.workers.append(worker)
 
@@ -338,10 +342,12 @@ class ChromePool:
                 elif pp_type == 'ipv6':
                     # IPv6: setup dedicated voi IPv6 cua worker
                     if worker.ipv6:
+                        # v1.0.609: Pass gateway de add IPv6 to Windows interface
                         provider.setup_dedicated(
                             worker_id=worker.index,
                             port=proxy_port,
                             ipv6_address=worker.ipv6,
+                            gateway=getattr(worker, 'gateway', ''),
                         )
                         worker.proxy_provider = provider
                         self._log(f"[Chrome-{worker.index}] Proxy (ipv6): {worker.ipv6} on port {proxy_port}")
@@ -721,20 +727,36 @@ class ChromePool:
 
                             worker.ready = False
                             try:
-                                # v1.0.545: Dung ProxyProvider neu co, nguoc lai dung IPv6 truc tiep
-                                if worker.session._proxy_provider:
+                                # v1.0.609: Pool mode + ProxyProvider → rotate_to() voi IP moi tu pool
+                                if self._pool_mode and self._pool_client and worker.proxy_provider:
+                                    pool_worker = f"server_chrome{worker.index}"
+                                    pool_result = self.rotate_pool_ip(
+                                        worker.ipv6, worker_name=pool_worker, reason="403"
+                                    )
+                                    new_ip = pool_result.get("ip", "") if isinstance(pool_result, dict) else pool_result
+                                    new_gw = pool_result.get("gateway", "") if isinstance(pool_result, dict) else ""
+                                    if new_ip and new_ip != worker.ipv6:
+                                        self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} → {new_ip}", "WARN")
+                                        # Dung rotate_to() de add IP to interface + restart SOCKS5
+                                        worker.proxy_provider.rotate_to(new_ip, gateway=new_gw)
+                                        worker.ipv6 = new_ip
+                                        worker.gateway = new_gw
+                                    else:
+                                        self._log(f"[{worker_name}] [403] Pool: khong co IPv6 khac", "WARN")
+
+                                elif worker.session._proxy_provider and not self._pool_mode:
+                                    # Non-pool mode voi ProxyProvider (webshare, ipv6 static)
                                     ok_rotate = worker.session.rotate_proxy("403")
                                     if ok_rotate:
                                         self._log(f"[{worker_name}] [403] Proxy rotated: → {worker.session._proxy_provider.get_current_ip()}", "WARN")
                                     else:
                                         self._log(f"[{worker_name}] [403] Proxy rotate failed", "WARN")
                                 elif self._pool_mode and self._pool_client:
-                                    # v1.0.561: Pool mode - lay IPv6 tu pool API
+                                    # v1.0.561: Pool mode without ProxyProvider
                                     pool_worker = f"server_chrome{worker.index}"
                                     pool_result = self.rotate_pool_ip(
                                         worker.ipv6, worker_name=pool_worker, reason="403"
                                     )
-                                    # v1.0.606: Pool API tra ve dict {"ip": "...", "gateway": "..."}
                                     new_ip = pool_result.get("ip", "") if isinstance(pool_result, dict) else pool_result
                                     if new_ip and new_ip != worker.ipv6:
                                         self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} → {new_ip}", "WARN")

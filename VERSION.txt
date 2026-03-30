@@ -1,3 +1,23 @@
+1.0.609
+2026-03-30 (VN)
+Fix: Server Chrome workers khong co mang khi dung IPv6 Pool
+
+- TRUOC: setup_dedicated() chi tao SOCKS5 proxy binding den Pool IP
+  * Pool IP chi co tren MikroTik router, KHONG co tren Windows interface
+  * SOCKS5 proxy khong the route traffic → WinError 10060 (connection timeout)
+  * 403 rotation: rotate_proxy() goi provider.rotate() can _rotator (khong co trong dedicated mode) → fail
+- SAU: setup_dedicated() them buoc ADD IPv6 to Windows interface TRUOC khi tao proxy
+  * netsh interface ipv6 add address "Ethernet" {ipv6}
+  * netsh interface ipv6 add route {/64_prefix} "Ethernet" (on-link)
+  * netsh interface ipv6 add route ::/0 "Ethernet" {gateway} (default route)
+  * ICMPv6 NDP firewall rules + DNS IPv6
+  * Ping gateway de trigger NDP neighbor discovery
+  * GIONG nhu VM mode dung ipv6_rotator.set_ipv6()
+- 403 rotation: Pool mode + ProxyProvider → rotate_to(new_ip, gateway) thay vi rotate()
+  * Lay IP moi tu Pool API → remove old IP tu interface → add new IP → restart SOCKS5
+- ChromeWorker them field gateway tu Pool API dict
+- File: modules/proxy_providers/ipv6_provider.py, server/chrome_pool.py
+
 1.0.608
 2026-03-30 (VN)
 Change: IPv6 Pool FIFO queue - tranh trung IP khi cap phat

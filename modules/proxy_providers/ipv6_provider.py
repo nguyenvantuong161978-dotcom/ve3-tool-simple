@@ -11,6 +11,8 @@ Server Mode: Moi worker co proxy rieng.
 """
 
 import time
+import subprocess
+import ipaddress
 from typing import Optional, Callable
 from modules.proxy_providers.base_provider import ProxyProvider
 
@@ -23,6 +25,9 @@ class IPv6Provider(ProxyProvider):
         self._rotator = None  # IPv6Rotator instance
         self._proxy = None    # IPv6SocksProxy instance
         self._activated = False
+        self._current_ipv6 = None      # v1.0.609: IPv6 hien tai (dedicated mode)
+        self._current_gateway = None   # v1.0.609: Gateway hien tai (dedicated mode)
+        self._interface_name = None    # v1.0.609: Interface name tu settings
 
     def setup(self, worker_id: int = 0, port: int = 1088) -> bool:
         """
@@ -93,15 +98,147 @@ class IPv6Provider(ProxyProvider):
             self.log(f"[PROXY-IPv6] Setup error: {e}")
             return False
 
-    def setup_dedicated(self, worker_id: int, port: int, ipv6_address: str) -> bool:
+    def _get_interface_name(self) -> str:
+        """Lay interface name tu settings.yaml."""
+        if self._interface_name:
+            return self._interface_name
+        try:
+            import yaml
+            from pathlib import Path
+            settings_path = Path(__file__).parent.parent.parent / "config" / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    cfg = yaml.safe_load(f) or {}
+                self._interface_name = cfg.get('ipv6_rotation', {}).get('interface_name', 'Ethernet')
+            else:
+                self._interface_name = 'Ethernet'
+        except Exception:
+            self._interface_name = 'Ethernet'
+        return self._interface_name
+
+    def _get_gateway_for_ipv6(self, ipv6: str) -> str:
+        """Auto-compute gateway = network_address + 1 (giong ipv6_rotator)."""
+        try:
+            net = ipaddress.IPv6Network(f"{ipv6}/64", strict=False)
+            gw = net.network_address + 1
+            return str(gw)
+        except Exception:
+            return ""
+
+    def _get_onlink_prefix(self, gateway: str) -> str:
+        """Lay /64 prefix tu gateway (cho on-link route)."""
+        try:
+            net = ipaddress.IPv6Network(f"{gateway}/64", strict=False)
+            return str(net)
+        except Exception:
+            return ""
+
+    def _add_to_interface(self, ipv6_address: str, gateway: str = "") -> bool:
+        """
+        v1.0.609: Add IPv6 address to Windows interface via netsh.
+        Server mode can: Pool IP phai duoc add vao interface truoc khi SOCKS5 proxy co the dung.
+
+        Args:
+            ipv6_address: IPv6 address can add
+            gateway: Gateway address. Neu rong → auto-compute tu IPv6.
+        """
+        iface = self._get_interface_name()
+
+        # Auto-compute gateway neu khong co
+        if not gateway:
+            gateway = self._get_gateway_for_ipv6(ipv6_address)
+        if not gateway:
+            self.log(f"[PROXY-IPv6] Khong the tinh gateway cho {ipv6_address}")
+            return False
+
+        onlink_prefix = self._get_onlink_prefix(gateway)
+
+        commands = []
+
+        # 1. Add IPv6 address to interface
+        commands.append(f'netsh interface ipv6 add address "{iface}" {ipv6_address}')
+
+        # 2. Firewall: Allow ICMPv6 NDP (idempotent - add lai khong sao)
+        commands.append(f'netsh advfirewall firewall add rule name="ICMPv6-NDP-In" dir=in action=allow protocol=icmpv6')
+        commands.append(f'netsh advfirewall firewall add rule name="ICMPv6-NDP-Out" dir=out action=allow protocol=icmpv6')
+
+        # 3. On-link route (gateway phai reachable)
+        if onlink_prefix:
+            commands.append(f'netsh interface ipv6 add route {onlink_prefix} "{iface}"')
+
+        # 4. Default route qua gateway
+        commands.append(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+
+        # 5. DNS IPv6
+        commands.append(f'netsh interface ipv6 set dnsservers "{iface}" static 2001:4860:4860::8888 primary')
+        commands.append(f'netsh interface ipv6 add dnsservers "{iface}" 2001:4860:4860::8844 index=2')
+
+        self.log(f"[PROXY-IPv6] Adding {ipv6_address} to interface '{iface}' (gw: {gateway})")
+
+        try:
+            for cmd in commands:
+                result = subprocess.run(
+                    cmd, shell=True, capture_output=True, text=True, timeout=10
+                )
+                # Ignore errors (address/route may already exist)
+                if result.returncode != 0 and 'already' not in result.stderr.lower() and 'object already exists' not in result.stderr.lower():
+                    # Log but don't fail - some commands may fail if already set
+                    pass
+
+            # Wait for NDP neighbor discovery
+            import time
+            time.sleep(3)
+
+            # Ping gateway to trigger NDP
+            try:
+                subprocess.run(
+                    f'ping -6 -n 2 -w 2000 {gateway}',
+                    shell=True, capture_output=True, timeout=10
+                )
+            except Exception:
+                pass
+
+            self._current_ipv6 = ipv6_address
+            self._current_gateway = gateway
+            self.log(f"[PROXY-IPv6] [v] IPv6 {ipv6_address} added to interface OK")
+            return True
+
+        except Exception as e:
+            self.log(f"[PROXY-IPv6] [x] Add to interface failed: {e}")
+            return False
+
+    def _remove_from_interface(self, ipv6_address: str):
+        """v1.0.609: Remove IPv6 address tu Windows interface."""
+        if not ipv6_address:
+            return
+        iface = self._get_interface_name()
+        try:
+            subprocess.run(
+                f'netsh interface ipv6 delete address "{iface}" {ipv6_address}',
+                shell=True, capture_output=True, timeout=10
+            )
+            self.log(f"[PROXY-IPv6] Removed {ipv6_address} from interface")
+        except Exception:
+            pass
+
+    def setup_dedicated(self, worker_id: int, port: int, ipv6_address: str,
+                        gateway: str = "") -> bool:
         """
         Setup proxy rieng cho 1 worker (Server mode).
         Moi worker co SOCKS5 proxy rieng, IPv6 rieng.
+
+        v1.0.609: Them gateway param + add IPv6 to Windows interface truoc khi tao SOCKS5 proxy.
+        Pool IP phai co tren interface de SOCKS5 proxy co the bind va route traffic.
         """
         self.worker_id = worker_id
         self.port = port
 
         try:
+            # v1.0.609: Add IPv6 to Windows interface (giong VM mode dung ipv6_rotator.set_ipv6)
+            if gateway or ipv6_address:
+                if not self._add_to_interface(ipv6_address, gateway):
+                    self.log(f"[PROXY-IPv6] Warning: Could not add {ipv6_address} to interface, proxy may not work")
+
             from modules.ipv6_proxy import IPv6SocksProxy
             self._proxy = IPv6SocksProxy(
                 listen_port=port,
@@ -140,12 +277,24 @@ class IPv6Provider(ProxyProvider):
         self.log(f"[PROXY-IPv6] [x] Rotate failed ({reason})")
         return False
 
-    def rotate_to(self, new_ipv6: str) -> bool:
-        """Doi sang 1 IPv6 cu the (Server mode dung)."""
+    def rotate_to(self, new_ipv6: str, gateway: str = "") -> bool:
+        """
+        Doi sang 1 IPv6 cu the (Server mode dung).
+
+        v1.0.609: Them gateway param. Remove old IP, add new IP to interface.
+        """
+        # Remove old IP from interface
+        if self._current_ipv6 and self._current_ipv6 != new_ipv6:
+            self._remove_from_interface(self._current_ipv6)
+
         if self._proxy:
             self._proxy.stop()
 
         try:
+            # v1.0.609: Add new IP to interface
+            if not self._add_to_interface(new_ipv6, gateway):
+                self.log(f"[PROXY-IPv6] Warning: Could not add {new_ipv6} to interface")
+
             from modules.ipv6_proxy import IPv6SocksProxy
             self._proxy = IPv6SocksProxy(
                 listen_port=self.port,
@@ -176,6 +325,10 @@ class IPv6Provider(ProxyProvider):
         if self._proxy:
             self._proxy.stop()
             self._proxy = None
+        # v1.0.609: Remove IP from interface khi stop (dedicated mode)
+        if self._current_ipv6:
+            self._remove_from_interface(self._current_ipv6)
+            self._current_ipv6 = None
         self._ready = False
         self.log("[PROXY-IPv6] Stopped")
 
