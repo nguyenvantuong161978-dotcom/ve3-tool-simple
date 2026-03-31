@@ -492,6 +492,14 @@ class ChromePool:
 
         for attempt in range(max_retries):
             try:
+                # v1.0.633: Close session cu truoc khi tao moi (tranh chiem port)
+                if attempt > 0 and worker.session:
+                    try:
+                        worker.session.close()
+                    except Exception:
+                        pass
+                    worker.session = None
+
                 if attempt == 0:
                     self._log(f"[{worker_name}] Bat dau setup...")
                     if worker.account:
@@ -584,13 +592,20 @@ class ChromePool:
         if not worker.ready:
             self._log(f"[{worker_name}] Chua ready, retry setup...", "WARN")
             for retry in range(3):
-                time.sleep(10)
-                ok = self._setup_single_worker(worker)
-                if ok:
-                    break
-                # v1.0.628: Rotate IPv6 khi setup fail (co the mat mang)
+                # v1.0.633: Kill Chrome cu truoc khi retry (tranh chiem port + IPv6 cu)
+                if worker.session:
+                    try:
+                        self._log(f"[{worker_name}] Kill Chrome cu truoc khi retry...")
+                        worker.session.close()
+                    except Exception:
+                        pass
+                    worker.session = None
+
+                time.sleep(5)
+
+                # v1.0.633: Rotate IPv6 TRUOC khi retry setup (khong phai sau)
                 if worker.ipv6 and self._pool_client:
-                    self._log(f"[{worker_name}] Setup fail → rotate IPv6...", "WARN")
+                    self._log(f"[{worker_name}] Rotate IPv6 truoc khi retry setup...", "WARN")
                     result = self._pool_client.rotate_ip(
                         worker.ipv6, reason="setup_fail",
                         worker=f"server_chrome{worker.index}"
@@ -613,8 +628,14 @@ class ChromePool:
                                     )
                                     if new_provider.setup_dedicated(worker.index, proxy_port, new_ip, new_gw):
                                         worker.proxy_provider = new_provider
+                                        self._log(f"[{worker_name}] Proxy re-setup OK voi IPv6 moi")
                                 except Exception as e:
                                     self._log(f"[{worker_name}] Re-setup proxy error: {e}", "ERROR")
+
+                ok = self._setup_single_worker(worker)
+                if ok:
+                    break
+
             if not worker.ready:
                 self._log(f"[{worker_name}] Setup THAT BAI sau retry + rotate! Worker dung.", "ERROR")
                 return

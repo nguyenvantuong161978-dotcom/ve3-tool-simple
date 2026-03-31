@@ -1,4 +1,14 @@
-1.0.632
+1.0.633
+2026-03-31 (VN)
+Fix: Server worker - IPv6 mat mang sau setup → rotate TRUOC khi retry
+- VAN DE: Chrome-1 IPv6 pass test luc setup nhung mat ket noi ngay sau
+  → Chrome load Flow page 20 lan fail, worker khong bao gio ready
+  → Retry setup nhung IPv6 van chet → worker dung hoan toan
+- FIX 1: Rotate IPv6 TRUOC khi retry setup (truoc: rotate SAU khi fail)
+- FIX 2: Kill Chrome cu truoc khi retry (tranh chiem port + dung IPv6 cu)
+- FIX 3: Close session cu trong _setup_single_worker khi retry
+
+v1.0.632
 2026-03-31 (VN)
 Fix: Server Chrome video - THUC SU chuyen sang Video mode (khong con FORCE MODE)
 - Truoc: Server Chrome o Image mode, interceptor doi URL sang video → Google reject (recaptcha sai mode)
