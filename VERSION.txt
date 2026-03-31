@@ -1,3 +1,21 @@
+1.0.653
+2026-04-01 (VN)
+Fix: Server login dung SAI port + SAI IPv6 → Chrome conflict + pha mang
+- VAN DE 1: Login dung port rieng (self.port + 100 = 19322)
+  → Mo Chrome RIENG tren port 19322, worker chay port 19222
+  → Sau login, worker khong connect duoc Chrome (sai port) → "browser connection fails"
+  → Chrome zombie chay port 19322 chiem profile folder
+- FIX 1: Login dung CUNG port voi worker (self.port - 9222 = worker_id)
+  → Chrome da quit truoc khi login → port trong
+  → Login mo Chrome tren cung port → setup() connect ngay
+- VAN DE 2: Login dung get_proxy_arg_from_settings() → doc ipv6.txt (he thong cu)
+  → Server Chrome dung Pool IPv6 (ProxyProvider) → login dung IPv6 KHAC
+  → Login setup IPv6 moi + tao 49 default routes → pha mang server
+- FIX 2: Login dung CUNG proxy voi worker (tu ProxyProvider)
+  → Uu tien self._proxy_provider.get_chrome_arg()
+  → Fallback: get_proxy_arg_from_settings() chi khi khong co ProxyProvider
+- File: server/chrome_session.py
+
 1.0.652
 2026-04-01 (VN)
 Fix: IPv6 Pool tu phuc hoi - burned subnets quay lai available sau cooldown

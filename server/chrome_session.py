@@ -1951,17 +1951,30 @@ class ChromeSession:
                     pass
                 self.page = None
 
-            # Dung port rieng cho login (tranh trung voi port chinh)
-            login_port = self.port + 100  # 19222 → 19322, etc.
+            # v1.0.653: Dung CUNG port voi worker (Chrome da quit, port trong)
+            # Bug cu: login_port = self.port + 100 → port 19322 (sai!)
+            # → Login mo Chrome rieng, worker khong connect duoc
+            login_worker_id = self.port - 9222  # 19222 → 10000, etc.
 
-            # v1.0.571: Proxy arg de login cung dung proxy
-            _proxy_arg = get_proxy_arg_from_settings()
+            # v1.0.653: Dung CUNG proxy voi worker (khong phai settings.yaml)
+            # Bug cu: get_proxy_arg_from_settings() → doc ipv6.txt → SAI IPv6, pha mang
+            _proxy_arg = ""
+            if self._proxy_provider and self._proxy_provider.is_ready():
+                _chrome_arg = self._proxy_provider.get_chrome_arg()
+                if _chrome_arg:
+                    _proxy_arg = _chrome_arg
+                    self.log(f"Login proxy: {_proxy_arg}")
+            if not _proxy_arg:
+                try:
+                    _proxy_arg = get_proxy_arg_from_settings()
+                except Exception:
+                    pass
 
             success = login_google_chrome(
                 account_info=account,
                 chrome_portable=str(self.chrome_path),
                 profile_dir=str(self.chrome_data),
-                worker_id=login_port - 9222,  # worker_id de tinh port
+                worker_id=login_worker_id,  # v1.0.653: CUNG port voi worker
                 proxy_arg=_proxy_arg,
             )
 
