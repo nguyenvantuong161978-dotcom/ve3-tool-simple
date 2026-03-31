@@ -79,7 +79,7 @@ class SettingsWindow(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("CAU HINH - Settings")
-        self.geometry("800x850")  # v1.0.109: Tăng kích thước
+        self.geometry("800x950")  # v1.0.637: Tang kich thuoc (gop Setup VM vao)
         self.configure(bg='#1a1a2e')
         self.resizable(True, True)
         self.minsize(750, 750)
@@ -365,6 +365,206 @@ class SettingsWindow(tk.Toplevel):
 
         # Load account info on init
         self.after(500, self._load_account_info)
+
+        # === KET NOI O MANG (SMB SHARE) - v1.0.637 ===
+        smb_frame = tk.LabelFrame(main_frame, text=" KET NOI O MANG (SMB SHARE) ", bg='#16213e', fg='#00ff88',
+                                   font=("Arial", 10, "bold"), padx=10, pady=10)
+        smb_frame.pack(fill="x", pady=5)
+
+        tk.Label(smb_frame, text="Map o mang Z: de dong bo project voi may chu (Master).",
+                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
+
+        smb_form = tk.Frame(smb_frame, bg='#16213e')
+        smb_form.pack(fill="x", pady=5)
+
+        tk.Label(smb_form, text="IP May chu:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        self.smb_ip_var = tk.StringVar(value="192.168.88.254")
+        tk.Entry(smb_form, textvariable=self.smb_ip_var, width=22, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
+
+        tk.Label(smb_form, text="Ten Share:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=1, column=0, sticky="e", pady=3)
+        self.smb_share_var = tk.StringVar(value="D")
+        tk.Entry(smb_form, textvariable=self.smb_share_var, width=22, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=1, column=1, pady=3, padx=5)
+
+        tk.Label(smb_form, text="Username:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=2, column=0, sticky="e", pady=3)
+        self.smb_user_var = tk.StringVar(value="smbuser")
+        tk.Entry(smb_form, textvariable=self.smb_user_var, width=22, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=2, column=1, pady=3, padx=5)
+
+        tk.Label(smb_form, text="Password:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=3, column=0, sticky="e", pady=3)
+        self.smb_pass_var = tk.StringVar(value="159753")
+        tk.Entry(smb_form, textvariable=self.smb_pass_var, width=22, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white', show="*").grid(row=3, column=1, pady=3, padx=5)
+
+        self.smb_status_var = tk.StringVar(value="")
+        self.smb_status_lbl = tk.Label(smb_frame, textvariable=self.smb_status_var, bg='#16213e', fg='#ffd93d',
+                                        font=("Arial", 9))
+        self.smb_status_lbl.pack(pady=3)
+
+        tk.Button(smb_frame, text="KET NOI SMB", command=self._do_smb_setup,
+                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
+                  relief="flat", padx=15, pady=3).pack(anchor="w", pady=5)
+
+        # === PROXY / IP ROTATION - v1.0.637 ===
+        proxy_lf = tk.LabelFrame(main_frame, text=" PROXY / IP ROTATION ", bg='#16213e', fg='#ffd93d',
+                                  font=("Arial", 10, "bold"), padx=10, pady=10)
+        proxy_lf.pack(fill="x", pady=5)
+
+        # Proxy type selector
+        proxy_type_frame = tk.Frame(proxy_lf, bg='#16213e')
+        proxy_type_frame.pack(fill="x", pady=4)
+
+        tk.Label(proxy_type_frame, text="Loai Proxy:", bg='#16213e', fg='white',
+                 font=("Arial", 10)).pack(side="left", padx=(0, 10))
+
+        # Read current proxy config
+        self._current_proxy_cfg = {}
+        try:
+            import yaml
+            _cfg_path = TOOL_DIR / "config" / "settings.yaml"
+            if _cfg_path.exists():
+                with open(_cfg_path, "r", encoding="utf-8") as f:
+                    _cfg = yaml.safe_load(f) or {}
+                self._current_proxy_cfg = _cfg
+        except:
+            _cfg = {}
+
+        _pp_cfg = _cfg.get('proxy_provider', {})
+        _current_ptype = _pp_cfg.get('type', 'ipv6') if _pp_cfg else 'ipv6'
+        _ws_cfg = _pp_cfg.get('webshare', {}) if _pp_cfg else {}
+        _mikrotik_cfg = _cfg.get('mikrotik', {})
+        _pool_url = _mikrotik_cfg.get('pool_api_url', '')
+        if _pool_url and _current_ptype == 'ipv6':
+            _current_ptype = 'ipv6_pool'
+
+        self.proxy_type_var = tk.StringVar(value=_current_ptype)
+
+        for text, val in [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare")]:
+            tk.Radiobutton(proxy_type_frame, text=text, variable=self.proxy_type_var, value=val,
+                           bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 9),
+                           activebackground='#16213e', activeforeground='white',
+                           command=self._on_proxy_type_changed).pack(side="left", padx=8)
+
+        # --- Webshare settings ---
+        self._ws_frame = tk.LabelFrame(proxy_lf, text=" Webshare.io Settings ", bg='#16213e', fg='#ffd93d',
+                                        font=("Arial", 9, "bold"), padx=10, pady=8)
+
+        ws_form = tk.Frame(self._ws_frame, bg='#16213e')
+        ws_form.pack(fill="x", pady=5)
+
+        tk.Label(ws_form, text="Username:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        self.ws_username_var = tk.StringVar(value=_ws_cfg.get('rotating_username', ''))
+        tk.Entry(ws_form, textvariable=self.ws_username_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
+
+        tk.Label(ws_form, text="Password:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=1, column=0, sticky="e", pady=3)
+        self.ws_password_var = tk.StringVar(value=_ws_cfg.get('rotating_password', ''))
+        tk.Entry(ws_form, textvariable=self.ws_password_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=1, column=1, pady=3, padx=5)
+
+        tk.Label(ws_form, text="Machine ID:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=2, column=0, sticky="e", pady=3)
+        self.ws_machine_var = tk.StringVar(value=str(_ws_cfg.get('machine_id', 1)))
+        tk.Entry(ws_form, textvariable=self.ws_machine_var, width=5, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=2, column=1, pady=3, padx=5, sticky="w")
+
+        self.ws_status_var = tk.StringVar(value="")
+        self.ws_status_lbl = tk.Label(self._ws_frame, textvariable=self.ws_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        self.ws_status_lbl.pack(anchor="w", pady=3)
+
+        tk.Button(self._ws_frame, text="TEST KET NOI", command=self._test_webshare,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
+                  relief="flat", padx=10, pady=2).pack(anchor="w", pady=3)
+
+        # --- IPv6 Pool (MikroTik) ---
+        self._pool_frame = tk.LabelFrame(proxy_lf, text=" IPv6 Pool (MikroTik) ", bg='#16213e', fg='#ffd93d',
+                                          font=("Arial", 9, "bold"), padx=10, pady=8)
+
+        pool_form = tk.Frame(self._pool_frame, bg='#16213e')
+        pool_form.pack(fill="x", pady=5)
+
+        tk.Label(pool_form, text="Pool API URL:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        self.pool_api_var = tk.StringVar(value=_pool_url)
+        tk.Entry(pool_form, textvariable=self.pool_api_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
+
+        tk.Label(self._pool_frame, text="VD: http://192.168.88.1:8765 - Lay IPv6 tu MikroTik Pool API",
+                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
+
+        self.pool_status_var = tk.StringVar(value="")
+        self.pool_status_lbl = tk.Label(self._pool_frame, textvariable=self.pool_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        self.pool_status_lbl.pack(anchor="w", pady=3)
+
+        self.pool_stats_var = tk.StringVar(value="")
+        tk.Label(self._pool_frame, textvariable=self.pool_stats_var, bg='#16213e', fg='#888',
+                 font=("Consolas", 8), justify="left").pack(anchor="w", pady=2)
+
+        pool_btn_frame = tk.Frame(self._pool_frame, bg='#16213e')
+        pool_btn_frame.pack(anchor="w", pady=5)
+
+        tk.Button(pool_btn_frame, text="TEST KET NOI", command=self._test_pool,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
+                  relief="flat", padx=10, pady=2).pack(side="left", padx=(0, 8))
+
+        tk.Button(pool_btn_frame, text="DOI IPv6 THU CONG", command=self._rotate_pool_manual,
+                  bg='#e17055', fg='white', font=("Arial", 8, "bold"),
+                  relief="flat", padx=10, pady=2).pack(side="left", padx=(0, 8))
+
+        # --- IPv6 File section ---
+        self._ipv6_frame = tk.Frame(proxy_lf, bg='#16213e')
+
+        _ipv6_rotation_cfg = _cfg.get('ipv6_rotation', {})
+        _ipv6_enabled = _ipv6_rotation_cfg.get('enabled', True)
+        self.ipv6_mode_var = tk.IntVar(value=1 if _ipv6_enabled else 0)
+
+        ipv6_mode_frame = tk.Frame(self._ipv6_frame, bg='#16213e')
+        ipv6_mode_frame.pack(fill="x", pady=4)
+
+        tk.Radiobutton(ipv6_mode_frame, text="Khong dung IPv6 (Direct)", variable=self.ipv6_mode_var, value=0,
+                        bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 9),
+                        activebackground='#16213e', activeforeground='white').pack(side="left", padx=10)
+        tk.Radiobutton(ipv6_mode_frame, text="Dung IPv6 Rotation", variable=self.ipv6_mode_var, value=1,
+                        bg='#16213e', fg='#00ff88', selectcolor='#16213e', font=("Arial", 9, "bold"),
+                        activebackground='#16213e', activeforeground='#00ff88').pack(side="left", padx=10)
+
+        tk.Label(self._ipv6_frame, text="Danh sach IPv6 (config/ipv6.txt):",
+                 bg='#16213e', fg='#aaa', font=("Arial", 9)).pack(anchor="w", pady=(4, 0))
+
+        self.ipv6_text = tk.Text(self._ipv6_frame, height=6, width=50, bg='#0f3460', fg='white',
+                                  font=("Consolas", 9), insertbackground='white')
+        self.ipv6_text.pack(fill="x", pady=5)
+
+        _ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
+        if _ipv6_file.exists():
+            with open(_ipv6_file, "r", encoding="utf-8") as f:
+                self.ipv6_text.insert("1.0", f.read())
+
+        self.ipv6_status_var = tk.StringVar(value="")
+        self.ipv6_status_lbl = tk.Label(self._ipv6_frame, textvariable=self.ipv6_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        self.ipv6_status_lbl.pack(pady=3)
+
+        ipv6_btn_frame = tk.Frame(self._ipv6_frame, bg='#16213e')
+        ipv6_btn_frame.pack(pady=5)
+
+        tk.Button(ipv6_btn_frame, text="LAY TU TRANG TINH", command=self._fetch_ipv6_from_sheet,
+                  bg='#e17055', fg='white', font=("Arial", 9, "bold"),
+                  relief="flat", padx=12, pady=3).pack(side="left", padx=5)
+
+        tk.Button(ipv6_btn_frame, text="TEST IPv6", command=self._test_ipv6,
+                  bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"),
+                  relief="flat", padx=15, pady=3).pack(side="left", padx=5)
+
+        # Proxy save status
+        self.proxy_save_status_var = tk.StringVar(value="")
+        self.proxy_save_status_lbl = tk.Label(proxy_lf, textvariable=self.proxy_save_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        self.proxy_save_status_lbl.pack(pady=3)
+
+        tk.Button(proxy_lf, text="LUU PROXY", command=self._save_proxy_config,
+                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
+                  relief="flat", padx=15, pady=3).pack(anchor="w", pady=5)
+
+        # Trigger initial show/hide
+        self._on_proxy_type_changed()
 
         # === BUTTONS ===
         btn_frame = tk.Frame(self, bg='#1a1a2e')
@@ -737,6 +937,354 @@ class SettingsWindow(tk.Toplevel):
                 self.chrome2_var.set(path)
             self._check_resources()
 
+    # --- v1.0.637: SMB + Proxy methods (chuyen tu Setup VM popup) ---
+
+    def _do_smb_setup(self):
+        """Ket noi SMB share."""
+        import subprocess
+        ip = self.smb_ip_var.get().strip()
+        share = self.smb_share_var.get().strip()
+        user = self.smb_user_var.get().strip()
+        passwd = self.smb_pass_var.get().strip()
+
+        if not all([ip, share, user, passwd]):
+            self.smb_status_var.set("Vui long nhap day du thong tin!")
+            self.smb_status_lbl.config(fg='#e94560')
+            return
+
+        self.smb_status_var.set("Dang ket noi...")
+        self.smb_status_lbl.config(fg='#ffd93d')
+        self.update()
+
+        try:
+            subprocess.run(['net', 'use', 'Z:', '/delete', '/y'], capture_output=True, text=True)
+            cmd = ['net', 'use', 'Z:', f'\\\\{ip}\\{share}', f'/user:{user}', passwd, '/persistent:yes']
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode == 0:
+                from pathlib import Path as _P
+                auto_path = _P("Z:\\AUTO")
+                if auto_path.exists():
+                    self.smb_status_var.set("THANH CONG! Z:\\AUTO da san sang")
+                    self.smb_status_lbl.config(fg='#00ff88')
+                else:
+                    self.smb_status_var.set("Da ket noi nhung khong tim thay AUTO")
+                    self.smb_status_lbl.config(fg='#ffd93d')
+            else:
+                self.smb_status_var.set(f"LOI: {(result.stderr or result.stdout or 'Unknown')[:40]}")
+                self.smb_status_lbl.config(fg='#e94560')
+        except Exception as e:
+            self.smb_status_var.set(f"LOI: {str(e)[:40]}")
+            self.smb_status_lbl.config(fg='#e94560')
+
+    def _on_proxy_type_changed(self):
+        """Show/hide proxy sub-sections based on selected type."""
+        ptype = self.proxy_type_var.get()
+        if ptype == "webshare":
+            self._ws_frame.pack(fill="x", pady=5)
+            self._pool_frame.pack_forget()
+            self._ipv6_frame.pack_forget()
+        elif ptype == "ipv6_pool":
+            self._ws_frame.pack_forget()
+            self._pool_frame.pack(fill="x", pady=5)
+            self._ipv6_frame.pack_forget()
+        elif ptype == "ipv6":
+            self._ws_frame.pack_forget()
+            self._pool_frame.pack_forget()
+            self._ipv6_frame.pack(fill="x", pady=5)
+        else:
+            self._ws_frame.pack_forget()
+            self._pool_frame.pack_forget()
+            self._ipv6_frame.pack_forget()
+
+    def _test_webshare(self):
+        """Test Webshare proxy connectivity."""
+        import threading
+        username = self.ws_username_var.get().strip()
+        password = self.ws_password_var.get().strip()
+        if not username or not password:
+            self.ws_status_var.set("Nhap username va password!")
+            self.ws_status_lbl.config(fg='#e94560')
+            return
+        self.ws_status_var.set("Dang test...")
+        self.ws_status_lbl.config(fg='#ffd93d')
+
+        def _do_test():
+            try:
+                from modules.proxy_providers.webshare_provider import WebshareProvider
+                provider = WebshareProvider(config={'webshare': {
+                    'rotating_username': username,
+                    'rotating_password': password,
+                    'machine_id': int(self.ws_machine_var.get() or 1),
+                }})
+                ok = provider.test_connectivity()
+                def _show():
+                    if ok:
+                        self.ws_status_var.set("OK! Ket noi thanh cong")
+                        self.ws_status_lbl.config(fg='#00ff88')
+                    else:
+                        self.ws_status_var.set("THAT BAI! Kiem tra lai thong tin")
+                        self.ws_status_lbl.config(fg='#e94560')
+                self.after(0, _show)
+            except Exception as e:
+                self.after(0, lambda: (self.ws_status_var.set(f"LOI: {str(e)[:40]}"), self.ws_status_lbl.config(fg='#e94560')))
+
+        threading.Thread(target=_do_test, daemon=True).start()
+
+    def _test_pool(self):
+        """Test IPv6 Pool API connectivity."""
+        import threading
+        url = self.pool_api_var.get().strip()
+        if not url:
+            self.pool_status_var.set("Nhap Pool API URL!")
+            self.pool_status_lbl.config(fg='#e94560')
+            return
+        self.pool_status_var.set("Dang ket noi...")
+        self.pool_status_lbl.config(fg='#ffd93d')
+        self.update()
+
+        def _do_test():
+            try:
+                import requests
+                test_url = f"{url.rstrip('/')}/api/ping"
+                try:
+                    resp = requests.get(test_url, timeout=5)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("ok"):
+                            from modules.ipv6_pool_client import IPv6PoolClient
+                            client = IPv6PoolClient(api_url=url, timeout=5)
+                            status = client.get_status()
+                            def _show():
+                                self.pool_status_var.set("OK! Ket noi Pool thanh cong")
+                                self.pool_status_lbl.config(fg='#00ff88')
+                                if status:
+                                    avail = status.get('available', 0)
+                                    in_use = status.get('in_use', 0)
+                                    burned = status.get('burned', 0)
+                                    total = avail + in_use + burned
+                                    self.pool_stats_var.set(
+                                        f"Tong: {total} IP | San sang: {avail} | Dang dung: {in_use} | Da burn: {burned}"
+                                    )
+                            self.after(0, _show)
+                            return
+                        else:
+                            err_msg = f"API tra ve: {data}"
+                    else:
+                        err_msg = f"HTTP {resp.status_code}"
+                except requests.exceptions.ConnectionError:
+                    err_msg = f"Khong ket noi duoc {url}"
+                except requests.exceptions.Timeout:
+                    err_msg = "Timeout sau 5s"
+                except Exception as e:
+                    err_msg = str(e)[:80]
+
+                self.after(0, lambda: (
+                    self.pool_status_var.set(f"THAT BAI! {err_msg[:60]}"),
+                    self.pool_status_lbl.config(fg='#e94560'),
+                    self.pool_stats_var.set("")
+                ))
+            except Exception as e:
+                self.after(0, lambda: (
+                    self.pool_status_var.set(f"LOI: {str(e)[:50]}"),
+                    self.pool_status_lbl.config(fg='#e94560')
+                ))
+
+        threading.Thread(target=_do_test, daemon=True).start()
+
+    def _rotate_pool_manual(self):
+        """Doi IPv6 thu cong qua Pool API."""
+        import threading
+        url = self.pool_api_var.get().strip()
+        if not url:
+            self.pool_status_var.set("Nhap Pool API URL!")
+            self.pool_status_lbl.config(fg='#e94560')
+            return
+        self.pool_status_var.set("Dang doi IPv6...")
+        self.pool_status_lbl.config(fg='#ffd93d')
+        self.update()
+
+        def _do_rotate():
+            try:
+                from modules.ipv6_pool_client import IPv6PoolClient
+                client = IPv6PoolClient(api_url=url, timeout=5)
+
+                current_ip = None
+                try:
+                    from modules.ipv6_rotator import get_ipv6_rotator
+                    rotator = get_ipv6_rotator()
+                    if rotator:
+                        current_ip = rotator.get_current_ipv6()
+                except:
+                    pass
+
+                if current_ip:
+                    new_ip = client.rotate_ip(current_ip, reason="manual", worker="settings_gui")
+                else:
+                    new_ip = client.get_ip(worker="settings_gui")
+
+                if new_ip:
+                    try:
+                        from modules.ipv6_rotator import get_ipv6_rotator
+                        rotator = get_ipv6_rotator()
+                        if rotator:
+                            ok = rotator.set_ipv6(new_ip)
+                            if ok:
+                                rotator.current_ipv6 = new_ip
+                                self.after(0, lambda: (
+                                    self.pool_status_var.set(f"DA DOI: {new_ip}"),
+                                    self.pool_status_lbl.config(fg='#00ff88')
+                                ))
+                                return
+                    except:
+                        pass
+                    self.after(0, lambda: (
+                        self.pool_status_var.set(f"LAY DUOC: {new_ip} (chua set len may)"),
+                        self.pool_status_lbl.config(fg='#ffd93d')
+                    ))
+                else:
+                    self.after(0, lambda: (
+                        self.pool_status_var.set("THAT BAI! Pool het IP hoac loi"),
+                        self.pool_status_lbl.config(fg='#e94560')
+                    ))
+            except Exception as e:
+                self.after(0, lambda: (
+                    self.pool_status_var.set(f"LOI: {str(e)[:50]}"),
+                    self.pool_status_lbl.config(fg='#e94560')
+                ))
+
+        threading.Thread(target=_do_rotate, daemon=True).start()
+
+    def _test_ipv6(self):
+        """Test IPv6 connectivity."""
+        import subprocess
+        import threading
+        ipv6_list = [line.strip() for line in self.ipv6_text.get("1.0", "end").split("\n")
+                     if line.strip() and not line.strip().startswith("#")]
+        if not ipv6_list:
+            self.ipv6_status_var.set("Khong co IPv6 de test!")
+            self.ipv6_status_lbl.config(fg='#e94560')
+            return
+
+        self.ipv6_status_var.set(f"Dang test {len(ipv6_list)} IPv6...")
+        self.ipv6_status_lbl.config(fg='#ffd93d')
+        self.update()
+
+        def run_test():
+            working = []
+            failed = []
+            for i, ipv6 in enumerate(ipv6_list):
+                try:
+                    cmd = f'ping -n 1 -w 2000 2001:4860:4860::8888'
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and 'Reply from' in result.stdout:
+                        working.append(ipv6)
+                    else:
+                        failed.append(ipv6)
+                except:
+                    failed.append(ipv6)
+                self.after(0, lambda i=i: self.ipv6_status_var.set(f"Testing... {i+1}/{len(ipv6_list)}"))
+
+            def show_results():
+                if working:
+                    self.ipv6_status_var.set(f"XONG: {len(working)} OK, {len(failed)} FAIL")
+                    self.ipv6_status_lbl.config(fg='#00ff88')
+                else:
+                    self.ipv6_status_var.set("KHONG CO IPv6 NAO HOAT DONG!")
+                    self.ipv6_status_lbl.config(fg='#e94560')
+            self.after(0, show_results)
+
+        threading.Thread(target=run_test, daemon=True).start()
+
+    def _fetch_ipv6_from_sheet(self):
+        """Lay IPv6 tu trang tinh THONG TIN."""
+        try:
+            self.ipv6_status_var.set("Dang lay IPv6 tu trang tinh...")
+            self.ipv6_status_lbl.config(fg='#ffd93d')
+            self.update()
+
+            from google_login import detect_machine_code, get_channel_ipv6
+
+            machine_code = detect_machine_code()
+            if not machine_code:
+                self.ipv6_status_var.set("LOI: Khong detect duoc ma may!")
+                self.ipv6_status_lbl.config(fg='#e94560')
+                return
+
+            ipv6_list = get_channel_ipv6(machine_code)
+            if not ipv6_list:
+                self.ipv6_status_var.set(f"Khong tim thay IPv6 cho {machine_code}")
+                self.ipv6_status_lbl.config(fg='#e94560')
+                return
+
+            self.ipv6_text.delete("1.0", "end")
+            self.ipv6_text.insert("1.0", '\n'.join(ipv6_list))
+
+            self.ipv6_status_var.set(f"Da lay {len(ipv6_list)} IPv6 - BAM LUU PROXY DE AP DUNG")
+            self.ipv6_status_lbl.config(fg='#00ff88')
+        except Exception as e:
+            self.ipv6_status_var.set(f"LOI: {str(e)[:50]}")
+            self.ipv6_status_lbl.config(fg='#e94560')
+
+    def _save_proxy_config(self):
+        """Save proxy provider + IPv6 settings to config."""
+        try:
+            import yaml
+
+            # Save IPv6 list to file
+            ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
+            ipv6_content = self.ipv6_text.get("1.0", "end").strip()
+            with open(ipv6_file, "w", encoding="utf-8") as f:
+                f.write(ipv6_content)
+
+            # Read existing config
+            config_path = TOOL_DIR / "config" / "settings.yaml"
+            config = {}
+            if config_path.exists():
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f) or {}
+
+            # Save proxy_provider section
+            ptype = self.proxy_type_var.get()
+            pp_type = 'ipv6' if ptype == 'ipv6_pool' else ptype
+            if 'proxy_provider' not in config:
+                config['proxy_provider'] = {}
+            config['proxy_provider']['type'] = pp_type
+
+            config['proxy_provider']['webshare'] = {
+                'rotating_host': 'p.webshare.io',
+                'rotating_port': 80,
+                'rotating_username': self.ws_username_var.get().strip(),
+                'rotating_password': self.ws_password_var.get().strip(),
+                'machine_id': int(self.ws_machine_var.get() or 1),
+            }
+
+            if 'mikrotik' not in config:
+                config['mikrotik'] = {}
+            if ptype == 'ipv6_pool':
+                config['mikrotik']['pool_api_url'] = self.pool_api_var.get().strip()
+            else:
+                config['mikrotik']['pool_api_url'] = ''
+
+            if 'ipv6_rotation' not in config:
+                config['ipv6_rotation'] = {}
+            config['ipv6_rotation']['enabled'] = (ptype in ('ipv6', 'ipv6_pool') and
+                                                   (ptype == 'ipv6_pool' or self.ipv6_mode_var.get() == 1))
+
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+            # Update manager settings in-memory
+            if hasattr(self.master, 'manager') and self.master.manager:
+                if hasattr(self.master.manager, 'settings') and hasattr(self.master.manager.settings, 'config'):
+                    self.master.manager.settings.config = config.copy()
+
+            type_labels = {'none': 'KHONG DUNG', 'ipv6': 'IPv6 FILE', 'ipv6_pool': 'IPv6 POOL', 'webshare': 'WEBSHARE'}
+            self.proxy_save_status_var.set(f"DA LUU! Proxy: {type_labels.get(ptype, ptype)}")
+            self.proxy_save_status_lbl.config(fg='#00ff88')
+        except Exception as e:
+            self.proxy_save_status_var.set(f"LOI: {str(e)[:40]}")
+            self.proxy_save_status_lbl.config(fg='#e94560')
 
 
 # ================================================================================
@@ -1433,7 +1981,7 @@ class SimpleGUI(tk.Tk):
         tk.Label(btns1, textvariable=self.status_var, bg='#0f3460', fg='#00d9ff',
                  font=("Consolas", 9, "bold")).pack(side="right", padx=10)
 
-        # -- Dong 2: SETTINGS | UPDATE | SETUP VM | SAP LAI --
+        # -- Dong 2: SETTINGS | UPDATE | SAP LAI -- (v1.0.637: SETUP VM da gop vao SETTINGS)
         btns2 = tk.Frame(btns_outer, bg='#0d2a4a', height=32)
         btns2.pack(fill="x")
         btns2.pack_propagate(False)
@@ -1447,11 +1995,6 @@ class SimpleGUI(tk.Tk):
                                     bg='#0984e3', fg='white', font=("Arial", 8, "bold"),
                                     relief="flat", padx=8)
         self.update_btn.pack(side="left", padx=4, pady=4)
-
-        self.setup_vm_btn = tk.Button(btns2, text="SETUP VM", command=self._setup_vm,
-                                      bg='#a29bfe', fg='white', font=("Arial", 8, "bold"),
-                                      relief="flat", padx=8)
-        self.setup_vm_btn.pack(side="left", padx=4, pady=4)
 
         tk.Button(btns2, text="SAP LAI", command=self._arrange_windows,
                   bg='#00cec9', fg='white', font=("Arial", 8, "bold"),
@@ -3182,7 +3725,10 @@ class SimpleGUI(tk.Tk):
             self.after(3000, self._monitor_server)
 
     def _setup_vm(self):
-        """Setup SMB share + IPv6/Proxy cho may ao."""
+        """v1.0.637: Da gop vao Settings. Mo Settings thay the."""
+        self._open_settings()
+        return
+        # --- OLD CODE BELOW (kept for reference, never reached) ---
         import tkinter.messagebox as msgbox
         import yaml
         import subprocess

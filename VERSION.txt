@@ -1,4 +1,12 @@
-1.0.636
+1.0.637
+2026-03-31 (VN)
+GUI: Gop Setup VM vao Settings - tat ca cau hinh trong 1 cua so duy nhat
+- Chuyen SMB Share (ket noi o mang) vao Settings
+- Chuyen Proxy/IP Rotation (IPv6 File, IPv6 Pool, Webshare) vao Settings
+- Bo nut SETUP VM tren thanh cong cu (giao dien gon hon)
+- Tat ca cau hinh: Topic, Mode, Generation, Server, API Keys, Chrome, Accounts, SMB, Proxy
+
+v1.0.636
 2026-03-31 (VN)
 Fix: Server video 400 - doi URL T2V→I2V + doi model t2v→r2v (giong API mode) + timeout 300s
 - VAN DE: Server interceptor inject referenceImages nhung KHONG doi URL endpoint
