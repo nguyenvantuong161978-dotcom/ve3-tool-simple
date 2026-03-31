@@ -576,7 +576,17 @@ class IPv6Rotator:
                 # Xóa route cũ trước
                 if self.current_gateway:
                     self.log(f"[IPv6] Xoa route cu: gateway {self.current_gateway}")
-                    commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {self.current_gateway}')
+                    # v1.0.641: Chi xoa ::/0 neu worker nay so huu hoac chua co owner
+                    _should_manage_default = True
+                    try:
+                        from modules.proxy_providers.ipv6_provider import IPv6Provider
+                        if IPv6Provider._default_route_owner >= 0:
+                            # Co owner → chi xoa neu minh la owner
+                            _should_manage_default = False
+                    except ImportError:
+                        pass
+                    if _should_manage_default:
+                        commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {self.current_gateway}')
                     # v1.0.585: Xoa on-link route cu (subnet cu)
                     old_onlink = _get_onlink_prefix(self.current_gateway)
                     if old_onlink:
@@ -597,8 +607,17 @@ class IPv6Rotator:
                 except Exception:
                     pass
 
-                # Them default route qua gateway
-                commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {new_gateway}')
+                # v1.0.641: Chi them ::/0 neu khong co owner (server mode dung IPv6Provider quan ly)
+                _add_default = True
+                try:
+                    from modules.proxy_providers.ipv6_provider import IPv6Provider
+                    if IPv6Provider._default_route_owner >= 0:
+                        _add_default = False
+                        self.log(f"[IPv6] [SKIP] ::/0 da co owner (worker {IPv6Provider._default_route_owner})")
+                except ImportError:
+                    pass
+                if _add_default:
+                    commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {new_gateway}')
 
             # Bước 4: Set Windows prefer IPv6 over IPv4 (quan trọng!)
             # Đây là cách ép Windows dùng IPv6 cho outgoing connections

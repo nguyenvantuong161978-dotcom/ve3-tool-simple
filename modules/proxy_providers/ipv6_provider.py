@@ -23,6 +23,9 @@ class IPv6Provider(ProxyProvider):
     # v1.0.640: Class-level tracking - tat ca gateway dang active cua cac worker
     # Key: worker_id, Value: gateway string
     _active_gateways: dict = {}
+    # v1.0.641: Chi 1 route ::/0 duy nhat - tranh 2 default routes xung dot
+    _default_route_owner: int = -1       # worker_id so huu ::/0 (-1 = chua co)
+    _default_route_gateway: str = ""     # gateway dang la ::/0
 
     def __init__(self, config: dict = None, log_func: Callable = print):
         super().__init__(config, log_func)
@@ -294,10 +297,13 @@ class IPv6Provider(ProxyProvider):
             if route_check.returncode != 0:
                 return
 
-            # Collect tất cả gateway cần giữ: gateway mới + tất cả worker đang active
+            # Collect tất cả gateway cần giữ
             keep_set = set(IPv6Provider._active_gateways.values())
             if keep_gateway:
                 keep_set.add(keep_gateway)
+            # v1.0.641: Luon giu default route gateway
+            if IPv6Provider._default_route_gateway:
+                keep_set.add(IPv6Provider._default_route_gateway)
 
             for line in (route_check.stdout or "").split('\n'):
                 if '::/0' in line and iface.lower() in line.lower():
@@ -360,7 +366,28 @@ class IPv6Provider(ProxyProvider):
         # Step 4: On-link route + default route
         if onlink_prefix:
             self._run_cmd(f'netsh interface ipv6 add route {onlink_prefix} "{iface}"')
-        self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+
+        # v1.0.641: CHI 1 route ::/0 duy nhat cho tat ca workers
+        # 2 route ::/0 → Windows chon 1 → worker con lai mat mang
+        # MikroTik forward traffic tu bat ky subnet nao (da xac nhan Winbox)
+        wid = self.worker_id if hasattr(self, 'worker_id') else -1
+        if IPv6Provider._default_route_owner < 0:
+            # Chua co ai so huu → them ::/0
+            self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+            IPv6Provider._default_route_owner = wid
+            IPv6Provider._default_route_gateway = gateway
+            self.log(f"[PROXY-IPv6] [v] Default route ::/0 via {gateway} (owner: worker {wid})")
+        elif IPv6Provider._default_route_owner == wid:
+            # Worker nay da so huu → cap nhat gateway (rotate case)
+            old_gw = IPv6Provider._default_route_gateway
+            if old_gw and old_gw != gateway:
+                self._run_cmd(f'netsh interface ipv6 delete route ::/0 "{iface}" {old_gw}')
+            self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+            IPv6Provider._default_route_gateway = gateway
+            self.log(f"[PROXY-IPv6] [v] Updated default route ::/0 via {gateway} (owner: worker {wid})")
+        else:
+            # Worker KHAC da so huu → KHONG them ::/0, dung chung gateway
+            self.log(f"[PROXY-IPv6] [SKIP] ::/0 da co (owner: worker {IPv6Provider._default_route_owner}, gw: {IPv6Provider._default_route_gateway})")
 
         # Step 5: IPv6 prefix policy - uu tien IPv6 (giong ipv6_rotator)
         self._run_cmd('netsh interface ipv6 set prefixpolicy ::1/128 50 0')
@@ -586,15 +613,19 @@ class IPv6Provider(ProxyProvider):
             self._proxy.stop()
             self._proxy = None
         # v1.0.640: Unregister gateway truoc khi remove IP
-        if hasattr(self, 'worker_id') and self.worker_id in IPv6Provider._active_gateways:
-            del IPv6Provider._active_gateways[self.worker_id]
+        wid = self.worker_id if hasattr(self, 'worker_id') else -1
+        if wid >= 0 and wid in IPv6Provider._active_gateways:
+            del IPv6Provider._active_gateways[wid]
+        # v1.0.641: Reset default route owner neu worker nay so huu ::/0
+        if wid >= 0 and IPv6Provider._default_route_owner == wid:
+            IPv6Provider._default_route_owner = -1
+            IPv6Provider._default_route_gateway = ""
+            self.log(f"[PROXY-IPv6] Default route owner reset (worker {wid} stopped)")
         # v1.0.609: Remove IP from interface khi stop (dedicated/server mode)
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
             self._current_ipv6 = None
         self._current_gateway = None
-        # v1.0.620: Firewall da chuyen sang drission_flow_api.py
-        # Khong can unblock o day nua
         self._ready = False
         self.log("[PROXY-IPv6] Stopped")
 

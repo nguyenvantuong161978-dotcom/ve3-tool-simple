@@ -1,4 +1,16 @@
-1.0.640
+1.0.641
+2026-03-31 (VN)
+Fix: Server 2 Chrome mat mang - chi dung 1 route ::/0 duy nhat
+- VAN DE: 2 route ::/0 tren cung interface → Windows chon 1 → worker con lai mat mang
+- v1.0.640 khong du: giu 2 route van xung dot (co luc bi luc khong tuy metric)
+- FIX: Chi worker DAU TIEN them ::/0, worker sau KHONG them (dung chung gateway)
+  → IPv6Provider._default_route_owner track ai so huu ::/0
+  → Worker rotate: chi cap nhat ::/0 neu la owner
+  → Worker stop: reset owner → worker tiep theo tu them
+- DA XAC NHAN: MikroTik forward traffic tu bat ky subnet (cung bridge, khong filter src)
+- Google van thay 2 IP khac nhau (SOCKS proxy bind source IP rieng)
+
+v1.0.640
 2026-03-31 (VN)
 Fix: Server 2 Chrome - Chrome-0 mat mang khi Chrome-1 setup/rotate IPv6
 - VAN DE: _cleanup_old_routes() XOA default route ::/0 cua worker KHAC
