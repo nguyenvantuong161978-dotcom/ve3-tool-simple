@@ -351,14 +351,20 @@ class ChromePool:
                     # IPv6: setup dedicated voi IPv6 cua worker
                     if worker.ipv6:
                         # v1.0.609: Pass gateway de add IPv6 to Windows interface
-                        provider.setup_dedicated(
+                        # v1.0.627: Check return value - neu fail (khong co internet) → rotate IPv6
+                        setup_ok = provider.setup_dedicated(
                             worker_id=worker.index,
                             port=proxy_port,
                             ipv6_address=worker.ipv6,
                             gateway=getattr(worker, 'gateway', ''),
                         )
-                        worker.proxy_provider = provider
-                        self._log(f"[Chrome-{worker.index}] Proxy (ipv6): {worker.ipv6} on port {proxy_port}")
+                        if setup_ok:
+                            worker.proxy_provider = provider
+                            self._log(f"[Chrome-{worker.index}] Proxy (ipv6): {worker.ipv6} on port {proxy_port}")
+                        else:
+                            self._log(f"[Chrome-{worker.index}] Proxy (ipv6): FAILED - {worker.ipv6} khong co internet!", "ERROR")
+                            # Rotate sang IPv6 moi tu pool
+                            self._try_rotate_worker_ipv6(worker, provider, proxy_port, proxy_config)
                     else:
                         self._log(f"[Chrome-{worker.index}] Proxy (ipv6): skip (no IPv6 assigned)")
 
@@ -366,6 +372,55 @@ class ChromePool:
             self._log(f"[PROXY] Import error: {e}", "ERROR")
         except Exception as e:
             self._log(f"[PROXY] Setup error: {e}", "ERROR")
+
+    def _try_rotate_worker_ipv6(self, worker, provider, proxy_port: int, proxy_config: dict,
+                                max_retries: int = 3):
+        """
+        v1.0.627: Khi IPv6 khong co internet, rotate sang IPv6 moi tu pool.
+        """
+        if not self._pool_client:
+            self._log(f"[Chrome-{worker.index}] Khong co pool client de rotate IPv6!", "ERROR")
+            return
+
+        for attempt in range(max_retries):
+            worker_name = f"server_chrome{worker.index}"
+            self._log(f"[Chrome-{worker.index}] Rotate IPv6 (lan {attempt + 1}/{max_retries})...")
+
+            result = self._pool_client.rotate_ip(
+                worker.ipv6, reason="no_internet", worker=worker_name
+            )
+            if not result:
+                self._log(f"[Chrome-{worker.index}] Pool rotate failed!", "ERROR")
+                break
+
+            new_ip = result.get('ip') or result.get('new_ip', '')
+            new_gw = result.get('gateway', '')
+            if not new_ip:
+                self._log(f"[Chrome-{worker.index}] Pool tra ve IP rong!", "ERROR")
+                break
+
+            self._log(f"[Chrome-{worker.index}] Thu IPv6 moi: {new_ip} gw={new_gw}")
+            worker.ipv6 = new_ip
+            worker.gateway = new_gw
+
+            # Tao provider moi
+            from modules.proxy_providers import create_provider
+            new_provider = create_provider(
+                config=proxy_config,
+                log_func=lambda msg, lvl="INFO", wn=f"Chrome-{worker.index}": self._log(f"[{wn}] {msg}", lvl),
+            )
+            ok = new_provider.setup_dedicated(
+                worker_id=worker.index,
+                port=proxy_port,
+                ipv6_address=new_ip,
+                gateway=new_gw,
+            )
+            if ok:
+                worker.proxy_provider = new_provider
+                self._log(f"[Chrome-{worker.index}] [v] IPv6 moi OK: {new_ip}")
+                return
+
+        self._log(f"[Chrome-{worker.index}] KHONG tim duoc IPv6 co internet sau {max_retries} lan!", "ERROR")
 
     def get_next_account(self, current_email: str = "") -> Optional[Dict]:
         """

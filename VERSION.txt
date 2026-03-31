@@ -1,5 +1,10 @@
-1.0.626
+1.0.627
 2026-03-31 (VN)
+Fix: Server IPv6 - test internet thuc te (curl Google) thay vi chi ping gateway
+- Neu IPv6 khong co internet → auto rotate sang IPv6 moi tu pool
+- Truoc: chi ping gateway (local) → "OK" nhung Chrome khong ket noi duoc
+
+v1.0.626
 Fix: Token refresh 401 - dung DrissionPage thay PyAutoGUI (F12+JS khong hoat dong)
 
 v1.0.625

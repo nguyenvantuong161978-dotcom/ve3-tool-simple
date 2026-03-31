@@ -440,6 +440,12 @@ class IPv6Provider(ProxyProvider):
                 log_func=self.log
             )
             if self._proxy.start():
+                # v1.0.627: Test internet connectivity thuc te (khong chi ping gateway)
+                if not self._test_internet_via_proxy(port, ipv6_address):
+                    self.log(f"[PROXY-IPv6] [!] IPv6 {ipv6_address} KHONG co internet! Worker {worker_id} se KHONG hoat dong.", "ERROR")
+                    self._activated = True
+                    self._ready = False  # Mark NOT ready
+                    return False
                 self._activated = True
                 self._ready = True
                 self.log(f"[PROXY-IPv6] [v] Dedicated worker {worker_id}: IPv6={ipv6_address}, port={port}")
@@ -448,6 +454,37 @@ class IPv6Provider(ProxyProvider):
         except Exception as e:
             self.log(f"[PROXY-IPv6] Dedicated setup error: {e}")
             return False
+
+    def _test_internet_via_proxy(self, proxy_port: int, ipv6_address: str, timeout: int = 10) -> bool:
+        """
+        v1.0.627: Test ket noi internet THUC TE qua SOCKS5 proxy.
+        Gateway ping OK khong co nghia internet hoat dong.
+        """
+        import subprocess
+        try:
+            # Test 1: curl qua SOCKS5 proxy
+            cmd = (f'curl -x socks5h://127.0.0.1:{proxy_port} '
+                   f'--connect-timeout {timeout} -s -o nul -w "%{{http_code}}" '
+                   f'https://www.google.com')
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout + 5)
+            if result.returncode == 0 and result.stdout.strip().startswith(('2', '3')):
+                self.log(f"[PROXY-IPv6] [v] Internet OK qua {ipv6_address} (proxy port {proxy_port})")
+                return True
+        except Exception as e:
+            self.log(f"[PROXY-IPv6] [!] curl test error: {e}")
+
+        try:
+            # Test 2: Fallback - ping Google DNS IPv6
+            cmd = f'ping -6 -n 1 -w {timeout * 1000} 2001:4860:4860::8888'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout + 3)
+            if result.returncode == 0 and 'Reply from' in (result.stdout or ''):
+                self.log(f"[PROXY-IPv6] [v] Google DNS reachable qua IPv6")
+                return True
+        except Exception:
+            pass
+
+        self.log(f"[PROXY-IPv6] [!] KHONG co internet qua {ipv6_address}!")
+        return False
 
     def rotate(self, reason: str = "403") -> bool:
         """Doi sang IPv6 tiep theo trong danh sach."""
