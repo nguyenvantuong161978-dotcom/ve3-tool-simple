@@ -1031,10 +1031,23 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log(f"Email step error: {e}", "WARN")
 
         # === BƯỚC 2: ĐIỀN PASSWORD (Ctrl+V) ===
-        log("Entering password with Ctrl+V...")
+        # v1.0.621: Doi password input xuat hien thay vi sleep co dinh
+        log("Waiting for password input...")
         try:
-            # Đợi trang password load
-            time.sleep(3)
+            pw_input = None
+            for pw_wait in range(15):  # Max 15s cho mang cham
+                try:
+                    pw_input = driver.ele('input[type="password"]', timeout=1)
+                    if pw_input:
+                        log(f"Password input ready (after {pw_wait+1}s)")
+                        break
+                except Exception:
+                    pass
+
+            if not pw_input:
+                log("Password input NOT FOUND after 15s!", "WARN")
+                # Fallback: thu sleep roi paste
+                time.sleep(2)
 
             # Copy password vào clipboard
             try:
@@ -1042,10 +1055,17 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pyperclip.copy(password)
                 log("Password copied to clipboard")
             except ImportError:
-                # Fallback nếu không có pyperclip - dùng Windows clipboard
                 import subprocess
                 subprocess.run(['clip'], input=password.encode(), check=True)
                 log("Password copied to clipboard (via clip)")
+
+            # Click vao password input neu tim thay
+            if pw_input:
+                try:
+                    pw_input.click()
+                    time.sleep(0.3)
+                except Exception:
+                    pass
 
             # Gửi Ctrl+V để paste
             from DrissionPage.common import Actions
@@ -1061,12 +1081,16 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log(f"Password step error: {e}", "WARN")
 
         # === BƯỚC 2.5: XỬ LÝ TRANG "PHÊ DUYỆT THIẾT BỊ" (nếu có) ===
-        # v1.0.312: Sau nhập password, có 2 trường hợp:
-        #   A) Trang hiện 2FA option (Google Authenticator) → click thẳng vào đó
-        #   B) Trang hiện "Try another way" (phê duyệt thiết bị) → click để sang trang chọn 2FA
-        # Ưu tiên: Kiểm tra 2FA option TRƯỚC. Chỉ click "Try another way" khi KHÔNG có 2FA.
-        log("Checking for 2FA option or device approval page...")
-        time.sleep(3)
+        # v1.0.621: Doi trang 2FA load xong thay vi sleep co dinh
+        log("Waiting for 2FA/device approval page...")
+        # Doi trang chuyen (password → 2FA), max 10s
+        for _2fa_wait in range(10):
+            current = driver.url.lower()
+            if 'challenge' in current or 'signin/rejected' in current or 'myaccount' in current:
+                log(f"Page transitioned (after {_2fa_wait+1}s)")
+                break
+            time.sleep(1)
+        time.sleep(1)  # Them 1s cho page render
         try:
             # A) Kiểm tra 2FA option trước (Google Authenticator)
             auth_selectors_25 = [
@@ -1112,18 +1136,53 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log(f"Device approval check error: {e}", "WARN")
 
         # === BƯỚC 3: XỬ LÝ 2FA (nếu có) ===
+        # v1.0.621: Doi OTP input xuat hien thay vi sleep co dinh
         totp_secret = account_info.get("totp_secret", "")
         if totp_secret:
-            log(f"2FA secret found ({len(totp_secret)} chars), checking for 2FA prompt...")
-            time.sleep(3)
+            log(f"2FA secret found ({len(totp_secret)} chars)")
 
             try:
-                # v1.0.125: Cải thiện 2FA handling
-                # Một số nick: sau pass → OTP input xuất hiện luôn (không cần click option)
-                # Một số nick: sau pass → cần click "Google Authenticator" → rồi mới nhập OTP
-
-                # 1. Tạo OTP và copy vào clipboard trước
                 import pyotp
+                from DrissionPage.common import Actions
+                actions = Actions(driver)
+
+                # B1: Tim va click "Google Authenticator" option (neu can)
+                auth_selectors = [
+                    'text:Google Authenticator',
+                    'text:Ứng dụng xác thực',
+                    'text:Authenticator app',
+                    'text:Use your authenticator app',
+                    'text:Dùng ứng dụng xác thực',
+                ]
+                for selector in auth_selectors:
+                    try:
+                        auth_option = driver.ele(selector, timeout=1)
+                        if auth_option:
+                            log(f"Found 2FA option: {selector} - clicking...")
+                            auth_option.click()
+                            time.sleep(1)
+                            break
+                    except:
+                        continue
+
+                # B2: Doi OTP input xuat hien (max 15s cho mang cham)
+                otp_input = None
+                for otp_wait in range(15):
+                    try:
+                        # OTP input thuong la input[type="tel"] hoac input[type="text"]
+                        otp_input = driver.ele('input[type="tel"]', timeout=1)
+                        if not otp_input:
+                            otp_input = driver.ele('#totpPin', timeout=1)
+                        if otp_input:
+                            log(f"OTP input ready (after {otp_wait+1}s)")
+                            break
+                    except Exception:
+                        pass
+
+                if not otp_input:
+                    log("OTP input NOT FOUND after 15s, trying blind paste...", "WARN")
+
+                # B3: Generate OTP NGAY TRUOC KHI paste (tranh het han)
                 clean_secret = totp_secret.replace(" ", "").replace("-", "").upper()
                 totp = pyotp.TOTP(clean_secret)
                 otp_code = totp.now()
@@ -1138,46 +1197,19 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                     subprocess.run(['clip'], input=otp_code.encode(), check=True)
                     log("OTP copied to clipboard (via clip)")
 
-                from DrissionPage.common import Actions
-                actions = Actions(driver)
+                # B4: Click input, paste, enter
+                if otp_input:
+                    try:
+                        otp_input.click()
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
 
-                # 2. Thử Ctrl+V + Enter trực tiếp (cho nick không cần click option)
-                log("Trying direct Ctrl+V for OTP...")
                 actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
+                log("Sent Ctrl+V")
                 time.sleep(0.5)
                 actions.key_down('enter').key_up('enter')
-                log("Sent Ctrl+V + Enter")
-                time.sleep(2)
-
-                # 3. Kiểm tra xem có cần click option không (nếu vẫn còn trên trang 2FA)
-                # Nếu có option "Google Authenticator" → click và nhập lại OTP
-                auth_selectors = [
-                    'text:Google Authenticator',
-                    'text:Ứng dụng xác thực',
-                    'text:Authenticator app',
-                    'text:Use your authenticator app',
-                    'text:Dùng ứng dụng xác thực',
-                    'text=Google Authenticator',
-                    'text=Authenticator',
-                ]
-
-                for selector in auth_selectors:
-                    try:
-                        auth_option = driver.ele(selector, timeout=1)
-                        if auth_option:
-                            log(f"Found 2FA option: {selector} - clicking...")
-                            auth_option.click()
-                            time.sleep(2)
-
-                            # Ctrl+V + Enter lại sau khi click option
-                            log("Sending Ctrl+V + Enter after clicking option...")
-                            actions.key_down('ctrl').key_down('v').key_up('v').key_up('ctrl')
-                            time.sleep(0.5)
-                            actions.key_down('enter').key_up('enter')
-                            log("Sent Ctrl+V + Enter")
-                            break
-                    except:
-                        continue
+                log("Sent Enter")
 
             except ImportError:
                 log("pyotp not installed! Run: pip install pyotp", "ERROR")
@@ -1185,11 +1217,12 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 log(f"2FA step error: {e}", "WARN")
 
         # === KIỂM TRA LOGIN THỰC SỰ THÀNH CÔNG ===
+        # v1.0.621: Tang thoi gian cho mang cham
         log("Waiting for login to complete...")
-        time.sleep(5)
+        time.sleep(3)
 
         # Kiểm tra URL sau khi login
-        max_check = 5
+        max_check = 10  # Tang tu 5 len 10 (20s thay vi 10s)
         login_success = False
         for check in range(max_check):
             current_url = driver.url.lower()

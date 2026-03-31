@@ -1,4 +1,20 @@
-1.0.620
+1.0.621
+2026-03-31 (VN)
+Fix: Login fail khi mang cham - doi element thay vi sleep co dinh
+
+- VAN DE: Code dung time.sleep(3) co dinh → mang cham thi trang chua load xong
+  * Password input chua xuat hien → Ctrl+V paste vao void
+  * OTP input chua xuat hien → OTP khong duoc nhap
+  * Chi check 5 lan (10s) → timeout qua ngan
+- FIX: Doi element xuat hien thay vi sleep:
+  * Password: doi input[type="password"] xuat hien (max 15s)
+  * 2FA page: doi URL chuyen sang "challenge" (max 10s)
+  * OTP: doi input[type="tel"] hoac #totpPin xuat hien (max 15s)
+  * Click vao input truoc khi paste (dam bao focus)
+  * Tang login check 5→10 lan (20s thay vi 10s)
+- File: google_login.py
+
+v1.0.620
 2026-03-31 (VN)
 Fix: Firewall bi treo 80s - bo duplicate + check exists truoc khi tao
 
