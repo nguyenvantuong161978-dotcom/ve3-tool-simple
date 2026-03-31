@@ -1830,6 +1830,19 @@ class SmartEngine:
                     profile.token = ""  # Force re-login
                     return False, True  # Return token_expired=True to trigger account switch
 
+                # v1.0.651: Server da retry 1 lan → VM skip ngay (khong retry them)
+                if 'policy_violation' in error_str:
+                    self.log(f"  -> POLICY VIOLATION (server confirmed): SKIP {pid}", "WARN")
+                    # Tao .SKIP file de vm_manager tinh vao images_done
+                    if not is_reference_image and pid.isdigit():
+                        try:
+                            skip_file = Path(output).parent / f"{pid}.SKIP"
+                            skip_file.touch()
+                            self.log(f"  -> Created {skip_file.name} (policy violation)")
+                        except Exception:
+                            pass
+                    return True, False  # Return success=True de khong re-queue
+
                 # Check for policy violation or invalid argument - retry with fixes
                 is_policy_error = '400' in error_str or 'policy' in error_str or 'blocked' in error_str or 'safety' in error_str or 'invalid' in error_str
                 if is_policy_error and retry_count < 3:

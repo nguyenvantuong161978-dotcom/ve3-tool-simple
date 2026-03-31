@@ -799,13 +799,22 @@ class ChromePool:
                             worker.total_failed += 1
                             self._log(f"[{worker_name}] FAIL (401): {task_id[:8]}... | TOKEN HET HAN - VM can refresh", "ERROR")
 
-                        # === 400: Bo qua luon, khong retry ===
+                        # === 400: Retry 1 lan, roi POLICY_VIOLATION cho VM skip ===
                         elif err_code == 400 and not _proxy_dead:
-                            tasks[task_id]['status'] = 'failed'
-                            tasks[task_id]['error'] = err_str
-                            stats['total_failed'] += 1
-                            worker.total_failed += 1
-                            self._log(f"[{worker_name}] SKIP (400): {task_id[:8]}... | {err_str[:80]}", "WARN")
+                            _400_retries = tasks[task_id].get('_400_retries', 0)
+                            if _400_retries < 1:
+                                # Retry 1 lan (co the do ref loi, khong phai prompt)
+                                tasks[task_id]['_400_retries'] = _400_retries + 1
+                                tasks[task_id]['status'] = 'queued'
+                                tasks[task_id]['error'] = ''
+                                self._log(f"[{worker_name}] 400 RETRY {_400_retries+1}/1: {task_id[:8]}...", "WARN")
+                            else:
+                                # Da retry roi → POLICY_VIOLATION cho VM skip
+                                tasks[task_id]['status'] = 'failed'
+                                tasks[task_id]['error'] = f"POLICY_VIOLATION: {err_str}"
+                                stats['total_failed'] += 1
+                                worker.total_failed += 1
+                                self._log(f"[{worker_name}] POLICY_VIOLATION (400x2): {task_id[:8]}... | {err_str[:80]}", "WARN")
                             if worker.session:
                                 worker.session._consecutive_403 = 0
 

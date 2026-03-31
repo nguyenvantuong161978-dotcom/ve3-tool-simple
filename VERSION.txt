@@ -1,3 +1,17 @@
+1.0.651
+2026-04-01 (VN)
+Fix: Login cho page render + Server 400 retry 1 lan + VM skip POLICY_VIOLATION
+- LOGIN: Them 5s wait sau khi detect password page va 2FA page
+  → Du da tim thay input, van cho page render day du truoc khi tuong tac
+  → Giam loi do JS/DOM chua on dinh khi paste password/OTP
+- SERVER: Error 400 (vi pham noi dung) → retry 1 lan roi bao VM POLICY_VIOLATION
+  → Truoc: skip ngay (0 retry) → co the mat prompt do ref loi (khong phai prompt)
+  → Sau: retry 1 lan (co the fix do ref) → neu van 400 → POLICY_VIOLATION cho VM
+- VM: Detect "POLICY_VIOLATION" tu server → skip prompt + tao .SKIP file
+  → Truoc: retry 3 lan (sanitize/simplify) → lang phi thoi gian vi server da retry
+  → Sau: skip ngay (server da xac nhan la vi pham) → .SKIP file de vm_manager tinh done
+- Files: google_login.py, server/chrome_pool.py, modules/smart_engine.py
+
 1.0.650
 2026-04-01 (VN)
 Fix: Dong bo fingerprint giua login va tao anh - Google thay CUNG 1 fingerprint

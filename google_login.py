@@ -1068,6 +1068,11 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 else:
                     log("Password page NOT detected after 20s, continuing anyway...", "WARN")
                     time.sleep(2)
+
+                # v1.0.651: Cho page render day du truoc khi tuong tac
+                # Du da detect password page, can cho JS/DOM on dinh
+                log("Waiting 5s for page to fully render...")
+                time.sleep(5)
             else:
                 log("Email input not found!", "WARN")
         except Exception as e:
@@ -1293,6 +1298,10 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
 
                 if not otp_input:
                     log("OTP input NOT FOUND after 15s, trying blind paste...", "WARN")
+                else:
+                    # v1.0.651: Cho page render day du truoc khi nhap OTP
+                    log("Waiting 5s for 2FA page to fully render...")
+                    time.sleep(5)
 
                 # B3: Generate OTP NGAY TRUOC KHI paste (tranh het han)
                 clean_secret = totp_secret.replace(" ", "").replace("-", "").upper()
