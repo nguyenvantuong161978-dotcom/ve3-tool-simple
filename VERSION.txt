@@ -1,4 +1,21 @@
-1.0.622
+1.0.623
+2026-03-31 (VN)
+Fix: Login - doi URL chuyen sang password page + nhieu selector
+
+- VAN DE: input[type="password"] khong tim thay sau 15s
+  * Sau khi nhap email, code chi sleep(3) roi tim password input
+  * Mang cham → trang chua chuyen sang /challenge/pwd → khong co input
+  * Chi tim 1 selector: input[type="password"] → Google doi thi fail
+- FIX 1: Doi URL chuyen sang /challenge/pwd truoc (max 20s)
+  * Thay sleep(3) bang loop check URL
+  * Detect "challenge/pwd" hoac "challenge/password"
+- FIX 2: Thu nhieu selector thay vi chi 1
+  * input[type="password"], input[name="Passwd"], input[name="password"]
+  * input[autocomplete="current-password"], #password input, div[id="password"] input
+  * Max 20s (tang tu 15s)
+- File: google_login.py
+
+v1.0.622
 2026-03-31 (VN)
 Fix: Pool lay qua nhieu IP - register sai format + khong release IP cu
 

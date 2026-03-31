@@ -1024,28 +1024,55 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                     email_input.input('\n')
                     log("Pressed Enter (fallback)")
 
-                time.sleep(3)
+                # v1.0.623: Doi URL chuyen sang trang password thay vi sleep co dinh
+                log("Waiting for password page...")
+                for _url_wait in range(20):  # Max 20s cho mang cham
+                    current_url = driver.url.lower()
+                    if 'challenge/pwd' in current_url or 'challenge/password' in current_url:
+                        log(f"Password page loaded (after {_url_wait+1}s)")
+                        break
+                    # Kiem tra neu bi reject hoac chuyen trang khac
+                    if 'signin/rejected' in current_url or 'myaccount' in current_url:
+                        log(f"Page redirected: {current_url}")
+                        break
+                    time.sleep(1)
+                else:
+                    log("Password page NOT detected after 20s, continuing anyway...", "WARN")
+                    time.sleep(2)
             else:
                 log("Email input not found!", "WARN")
         except Exception as e:
             log(f"Email step error: {e}", "WARN")
 
         # === BƯỚC 2: ĐIỀN PASSWORD (Ctrl+V) ===
-        # v1.0.621: Doi password input xuat hien thay vi sleep co dinh
+        # v1.0.623: Doi password input voi nhieu selector + doi URL truoc
         log("Waiting for password input...")
         try:
             pw_input = None
-            for pw_wait in range(15):  # Max 15s cho mang cham
-                try:
-                    pw_input = driver.ele('input[type="password"]', timeout=1)
-                    if pw_input:
-                        log(f"Password input ready (after {pw_wait+1}s)")
-                        break
-                except Exception:
-                    pass
+            # Thu nhieu selector vi Google co the dung type khac nhau
+            pw_selectors = [
+                'input[type="password"]',
+                'input[name="Passwd"]',
+                'input[name="password"]',
+                'input[autocomplete="current-password"]',
+                '#password input',
+                'div[id="password"] input',
+            ]
+            for pw_wait in range(20):  # Max 20s cho mang cham
+                for sel in pw_selectors:
+                    try:
+                        pw_input = driver.ele(sel, timeout=0.5)
+                        if pw_input:
+                            log(f"Password input found: {sel} (after {pw_wait+1}s)")
+                            break
+                    except Exception:
+                        pass
+                if pw_input:
+                    break
+                time.sleep(0.5)
 
             if not pw_input:
-                log("Password input NOT FOUND after 15s!", "WARN")
+                log("Password input NOT FOUND after 20s!", "WARN")
                 # Fallback: thu sleep roi paste
                 time.sleep(2)
 
@@ -1063,7 +1090,7 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             if pw_input:
                 try:
                     pw_input.click()
-                    time.sleep(0.3)
+                    time.sleep(0.5)
                 except Exception:
                     pass
 
