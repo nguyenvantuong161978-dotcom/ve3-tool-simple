@@ -1,4 +1,19 @@
-1.0.615
+1.0.616
+2026-03-31 (VN)
+Fix: VM IPv6 quay lai SOCKS5 proxy - v1.0.613 direct mode lam Chrome dung IPv4
+
+- ROOT CAUSE: v1.0.613 chuyen sang "direct mode" (khong proxy, dung firewall block IPv4)
+  * Firewall approach KHONG hoat dong (netsh syntax errors, import errors, pyc cache)
+  * Pool mode (ipv6_pool) cung bi anh huong vi create_provider() redirect sang IPv6Provider
+  * get_chrome_arg() tra "" → Chrome khong co proxy → dung IPv4
+- FIX: Quay lai dung SOCKS5 proxy (giong server mode, DA DUOC CHUNG MINH LA HOAT DONG)
+  * SOCKS5 chi ket noi IPv6, khong fallback IPv4 (v1.0.587)
+  * Da toi uu: 256KB buffer, TCP_NODELAY, sendall (v1.0.596-597)
+  * Chrome → socks5://localhost:1088 → chi thay IPv6
+- Bo firewall approach (khong can thiet khi co SOCKS5)
+- File: modules/proxy_providers/ipv6_provider.py
+
+v1.0.615
 2026-03-31 (VN)
 Fix: Firewall block IPv4 - them import Path (v1.0.614 crash NameError)
 
