@@ -1,4 +1,16 @@
-1.0.614
+1.0.615
+2026-03-31 (VN)
+Fix: Firewall block IPv4 - them import Path (v1.0.614 crash NameError)
+
+- BUG: _block_ipv4_for_chrome() dung Path() nhung KHONG import Path
+  * NameError: name 'Path' is not defined → method crash
+  * setup() catch exception → firewall rules KHONG duoc tao
+  * Chrome van dung IPv4
+- FIX: Them `from pathlib import Path` trong _block_ipv4_for_chrome()
+- THEM: Log so luong Chrome exe tim thay (de debug)
+- File: modules/proxy_providers/ipv6_provider.py
+
+v1.0.614
 2026-03-31 (VN)
 Fix: Firewall block IPv4 cho Chrome - tach TCP+UDP (netsh khong cho protocol=any+remoteip)
 

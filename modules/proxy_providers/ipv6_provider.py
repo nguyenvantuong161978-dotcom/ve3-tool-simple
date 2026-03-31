@@ -33,7 +33,7 @@ class IPv6Provider(ProxyProvider):
         """
         Khoi tao IPv6 cho VM mode (API).
 
-        v1.0.613: DIRECT mode - khong SOCKS5 proxy.
+        v1.0.614: DIRECT mode - khong SOCKS5 proxy.
         - IPv6 da add vao interface boi ipv6_rotator.set_ipv6()
         - Firewall block IPv4 outbound cho Chrome → bat buoc dung IPv6
         - Khong proxy → Chrome ket noi truc tiep → nhanh hon
@@ -68,7 +68,7 @@ class IPv6Provider(ProxyProvider):
                     self.log("[PROXY-IPv6] Khong tim duoc IPv6 hoat dong!")
                     return False
 
-                # v1.0.613: Block IPv4 cho Chrome → buoc dung IPv6
+                # v1.0.614: Block IPv4 cho Chrome → buoc dung IPv6
                 self._block_ipv4_for_chrome()
 
                 self._activated = True
@@ -168,13 +168,15 @@ class IPv6Provider(ProxyProvider):
 
     def _block_ipv4_for_chrome(self):
         """
-        v1.0.614: Block outbound IPv4 cho Chrome executables.
+        v1.0.615: Block outbound IPv4 cho Chrome executables.
         Chrome khong the dung IPv4 → bat buoc IPv6 truc tiep.
         RDP/system van dung IPv4 binh thuong.
 
         NOTE: netsh khong cho protocol=any + remoteip cung luc
         → tach thanh 2 rules: TCP va UDP rieng.
         """
+        from pathlib import Path
+
         # Xoa rules cu truoc (tranh duplicate)
         self._unblock_ipv4_for_chrome()
 
@@ -182,6 +184,8 @@ class IPv6Provider(ProxyProvider):
         if not chrome_paths:
             self.log("[PROXY-IPv6] [WARN] Khong tim thay Chrome Portable, skip firewall")
             return
+
+        self.log(f"[PROXY-IPv6] Firewall: Tim thay {len(chrome_paths)} Chrome exe(s)")
 
         rule_idx = 0
         for exe_path in chrome_paths:
