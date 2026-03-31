@@ -1431,21 +1431,30 @@ class DrissionFlowAPI:
 
     def _block_ipv4_for_chrome(self):
         """
-        v1.0.618: Block outbound IPv4 cho Chrome executables.
-        Chrome khong the dung IPv4 → bat buoc IPv6 truc tiep.
-        RDP/system van dung IPv4 binh thuong.
-        netsh khong cho protocol=any + remoteip → tach TCP va UDP rieng.
+        v1.0.620: Block outbound IPv4 cho Chrome executables.
+        Check rules da ton tai → skip (tranh delete/add lai mat 80s).
         """
+        import subprocess
         from pathlib import Path
 
-        self._unblock_ipv4_for_chrome()
+        # Check xem rules da co chua (nhanh, 1 lenh)
+        try:
+            r = subprocess.run(
+                f'netsh advfirewall firewall show rule name="{self._FW_RULE_PREFIX}_0"',
+                shell=True, capture_output=True, text=True, timeout=5
+            )
+            if r.returncode == 0 and 'Block' in (r.stdout or ''):
+                self.log("[FW] Rules da ton tai, skip")
+                return
+        except Exception:
+            pass
 
         chrome_paths = self._get_chrome_paths()
         if not chrome_paths:
-            self.log("[FW] WARN: Khong tim thay Chrome Portable, skip firewall")
+            self.log("[FW] WARN: Khong tim thay Chrome Portable")
             return
 
-        self.log(f"[FW] Firewall: Tim thay {len(chrome_paths)} Chrome exe(s)")
+        self.log(f"[FW] {len(chrome_paths)} Chrome exe(s)")
 
         rule_idx = 0
         for exe_path in chrome_paths:
@@ -1464,39 +1473,42 @@ class DrissionFlowAPI:
                 rule_idx += 1
 
             if ok:
-                self.log(f"[FW] [v] Block IPv4 (TCP+UDP) cho {folder_name}")
-            else:
-                self.log(f"[FW] [WARN] Khong block duoc IPv4 cho {exe_path}")
+                self.log(f"[FW] [v] Block IPv4 cho {folder_name}")
 
     def _unblock_ipv4_for_chrome(self):
-        """v1.0.618: Go tat ca firewall rules block IPv4 cho Chrome."""
-        for i in range(20):
-            rule_name = f"{self._FW_RULE_PREFIX}_{i}"
-            self._fw_run_cmd(
-                f'netsh advfirewall firewall delete rule name="{rule_name}"',
-                timeout=5
-            )
+        """v1.0.620: Go firewall rules - chi 8 rules (4 exe × 2 proto), timeout 3s."""
+        import subprocess
+        for i in range(8):
+            try:
+                subprocess.run(
+                    f'netsh advfirewall firewall delete rule name="{self._FW_RULE_PREFIX}_{i}"',
+                    shell=True, capture_output=True, timeout=3
+                )
+            except Exception:
+                pass
 
     @staticmethod
     def _block_ipv4_for_chrome_static(log_func=print):
         """
-        v1.0.618: Static version - goi tu google_login.py TRUOC khi mo Chrome.
-        Block IPv4 cho Chrome Portable TRUOC KHI Chrome khoi dong.
+        v1.0.620: Static version - goi tu google_login.py TRUOC khi mo Chrome.
+        Check rules ton tai → skip. Khong delete/recreate (tranh timeout).
         """
         import subprocess
         from pathlib import Path
 
         FW_PREFIX = "VE3_Block_IPv4_Chrome"
 
-        # Xoa rules cu
-        for i in range(20):
-            try:
-                subprocess.run(
-                    f'netsh advfirewall firewall delete rule name="{FW_PREFIX}_{i}"',
-                    shell=True, capture_output=True, timeout=5
-                )
-            except Exception:
-                pass
+        # Check rules da co chua
+        try:
+            r = subprocess.run(
+                f'netsh advfirewall firewall show rule name="{FW_PREFIX}_0"',
+                shell=True, capture_output=True, text=True, timeout=5
+            )
+            if r.returncode == 0 and 'Block' in (r.stdout or ''):
+                log_func("[FW] Rules da ton tai, skip")
+                return
+        except Exception:
+            pass
 
         # Tim Chrome Portable
         tool_dir = Path(__file__).parent.parent

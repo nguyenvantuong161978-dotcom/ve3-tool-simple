@@ -68,8 +68,8 @@ class IPv6Provider(ProxyProvider):
                     self.log("[PROXY-IPv6] Khong tim duoc IPv6 hoat dong!")
                     return False
 
-                # v1.0.617: Block IPv4 cho Chrome → buoc dung IPv6
-                self._block_ipv4_for_chrome()
+                # v1.0.620: Firewall da chuyen sang drission_flow_api.py + google_login.py
+                # Khong can block o day nua (tranh duplicate + timeout)
 
                 self._activated = True
                 self._ready = True
@@ -530,9 +530,8 @@ class IPv6Provider(ProxyProvider):
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
             self._current_ipv6 = None
-        # v1.0.617: Go firewall rules (VM direct mode)
-        if getattr(self, '_direct_mode', False):
-            self._unblock_ipv4_for_chrome()
+        # v1.0.620: Firewall da chuyen sang drission_flow_api.py
+        # Khong can unblock o day nua
         self._ready = False
         self.log("[PROXY-IPv6] Stopped")
 

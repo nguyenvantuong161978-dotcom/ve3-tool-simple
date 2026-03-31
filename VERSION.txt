@@ -1,4 +1,18 @@
-1.0.619
+1.0.620
+2026-03-31 (VN)
+Fix: Firewall bi treo 80s - bo duplicate + check exists truoc khi tao
+
+- VAN DE: Firewall chay 2 LAN (ipv6_provider + drission_flow_api)
+  * Delete 20 rules × 5s timeout = 100s cho
+  * Tao lai 8 rules = them 20s
+  * Tong: 80-120s bi "dong" moi lan mo Chrome
+- FIX 1: Bo firewall trong ipv6_provider.py (da chuyen sang drission_flow_api.py)
+- FIX 2: Check rules da ton tai → skip (khong delete/recreate)
+- FIX 3: Giam range 20→8, timeout 5s→3s
+- Ket qua: Tu 80s → <1s (neu rules da co)
+- Files: modules/drission_flow_api.py, modules/proxy_providers/ipv6_provider.py
+
+v1.0.619
 2026-03-31 (VN)
 Fix: Block IPv4 TRUOC khi mo Chrome (google_login.py)
 
