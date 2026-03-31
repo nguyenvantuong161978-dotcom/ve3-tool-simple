@@ -1,3 +1,20 @@
+1.0.650
+2026-04-01 (VN)
+Fix: Dong bo fingerprint giua login va tao anh - Google thay CUNG 1 fingerprint
+- VAN DE: Login Chrome KHONG co fingerprint spoof
+  → DrissionFlowAPI inject fingerprint spoof SAU khi connect
+  → Google detect fingerprint THAY DOI giua cung session → nghi ngo → 403
+- FIX: Inject fingerprint NGAY SAU khi mo Chrome trong login (TRUOC khi navigate)
+  → google_login.py: build_fingerprint_js() + Page.addScriptToEvaluateOnNewDocument
+  → Save seed vao config/.fingerprint_seed_{worker_id}
+  → DrissionFlowAPI doc seed tu file → dung CUNG fingerprint
+  → Google thay 1 fingerprint nhat quan tu dau den cuoi
+- FLOW:
+  → Login: generate seed → save file → CDP inject → navigate Google
+  → DrissionFlowAPI: read seed file → inject CUNG seed → tao anh
+  → 403 recovery: new seed → save file → login lai dung seed moi
+- Files: google_login.py, modules/drission_flow_api.py
+
 1.0.649
 2026-04-01 (VN)
 Fix: Login - 2FA wait false positive + login success check qua strict

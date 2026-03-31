@@ -1385,9 +1385,25 @@ class DrissionFlowAPI:
         self._t2v_mode_selected = False  # True = đã chọn T2V mode + Lower Priority model
         self._image_mode_selected = False  # True = đã chọn Image mode
 
-        # v1.0.512: LUON tao fingerprint tu dau, khong doi 403
-        from modules.fingerprint_data import get_unique_seed
-        self._fingerprint_seed = get_unique_seed()
+        # v1.0.650: Doc fingerprint seed tu file (login da tao)
+        # Dam bao login va tao anh dung CUNG fingerprint
+        self._fingerprint_seed = 0
+        _tool_dir = Path(__file__).parent.parent
+        try:
+            from modules.fingerprint_data import get_unique_seed
+            _fp_seed_file = _tool_dir / "config" / f".fingerprint_seed_{self.worker_id}"
+            if _fp_seed_file.exists():
+                _saved = _fp_seed_file.read_text().strip()
+                if _saved.isdigit():
+                    self._fingerprint_seed = int(_saved)
+                    self.log(f"[SPOOF] Loaded login seed={self._fingerprint_seed} from file")
+            if self._fingerprint_seed <= 0:
+                self._fingerprint_seed = get_unique_seed()
+                self.log(f"[SPOOF] No saved seed, generated new seed={self._fingerprint_seed}")
+        except Exception as _e:
+            from modules.fingerprint_data import get_unique_seed
+            self._fingerprint_seed = get_unique_seed()
+            self.log(f"[SPOOF] Fallback seed={self._fingerprint_seed} ({_e})")
 
     # ================================================================
     # v1.0.618: Firewall block IPv4 cho Chrome (VM direct mode)
@@ -1573,6 +1589,12 @@ class DrissionFlowAPI:
         from modules.fingerprint_data import get_unique_seed
         self._fingerprint_seed = get_unique_seed()
         self.log(f"[SPOOF] Activated fingerprint spoof (seed={self._fingerprint_seed})")
+        # v1.0.650: Save seed moi → file de login tiep theo dung cung seed
+        try:
+            _fp_file = Path(__file__).parent.parent / "config" / f".fingerprint_seed_{self.worker_id}"
+            _fp_file.write_text(str(self._fingerprint_seed))
+        except Exception:
+            pass
         self._inject_fingerprint()
 
     def _inject_fingerprint(self):
