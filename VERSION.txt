@@ -1,4 +1,21 @@
-1.0.621
+1.0.622
+2026-03-31 (VN)
+Fix: Pool lay qua nhieu IP - register sai format + khong release IP cu
+
+- BUG 1: register_ip so sanh "3065" vs "65" → LUON fail → luon get_ip moi
+  * Pool luu subnet_hex = "65" (2 ky tu)
+  * register extract = "3065" (4 ky tu) → khong match
+  * FIX: Luon lay 2 ky tu cuoi: parts[3][-2:]
+- BUG 2: VM khong release IP cu truoc khi lay IP moi
+  * Register fail → get_ip → IP cu van "in_use" mai
+  * 2 VM × nhieu lan restart = chiem 10+ IP
+  * FIX: Release IP cu truoc get_ip
+- BUG 3: release_ip chi match exact address
+  * Sau RESET, pool co IP moi cho cung subnet → exact match fail
+  * FIX: Fallback match theo subnet_hex
+- Files: ipv6/ipv6_pool.py, modules/ipv6_rotator.py
+
+v1.0.621
 2026-03-31 (VN)
 Fix: Login fail khi mang cham - doi element thay vi sleep co dinh
 

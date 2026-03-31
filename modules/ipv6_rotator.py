@@ -378,6 +378,11 @@ class IPv6Rotator:
                         return pool_ip
                 self.log(f"[IPv6] Pool: register IP khong connectivity, lay IP moi...")
 
+        # v1.0.621: Release IP cu truoc khi lay IP moi (tranh chiem slot pool)
+        if current_ip and hasattr(self._pool_client, 'release_ip'):
+            self.log(f"[IPv6] Pool: release IP cu: {current_ip}")
+            self._pool_client.release_ip(current_ip, worker=self._worker_name)
+
         for attempt in range(max_retries):
             result = self._pool_client.get_ip(worker=self._worker_name)
             if not result:

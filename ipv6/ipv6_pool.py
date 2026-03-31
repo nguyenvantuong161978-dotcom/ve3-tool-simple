@@ -218,16 +218,14 @@ class IPv6Pool:
         import ipaddress
         with self._lock:
             # Extract subnet tu address VM dang dung
+            # v1.0.621: Fix format mismatch - pool luu "65" nhung extract ra "3065"
             try:
                 addr = ipaddress.IPv6Address(address)
-                # Lay 4 octets cua /64 prefix → subnet la octet thu 4
                 parts = addr.exploded.split(":")
-                subnet_hex = parts[3]  # vd: "3065" → lay "65"
-                # Subnet hex trong pool la 2 ky tu cuoi (vd: "65", "af")
-                if subnet_hex.startswith(self.api.prefix.split(":")[-2][:2] if ":" in self.api.prefix else "30"):
-                    subnet_hex_short = subnet_hex[2:]  # "3065" → "65"
-                else:
-                    subnet_hex_short = subnet_hex
+                subnet_full = parts[3]  # "3065" (4 chars, co leading zeros)
+                # Pool luu subnet 2 ky tu cuoi: "3065" → "65", "30bc" → "bc"
+                subnet_hex_short = subnet_full[-2:]  # LUON lay 2 ky tu cuoi
+                self.log(f"[POOL] REGISTER: extract subnet={subnet_full} → short={subnet_hex_short}")
             except Exception:
                 self.log(f"[POOL] REGISTER: Invalid address: {address}")
                 return None
@@ -264,15 +262,32 @@ class IPv6Pool:
             address: IPv6 address
         """
         with self._lock:
+            # v1.0.621: Match exact address hoac subnet (sau RESET address co the khac)
+            import ipaddress as _ipa
             for i, entry in enumerate(self.pool):
                 if entry["address"] == address and entry["status"] == "in_use":
                     entry["status"] = "available"
                     entry["released_at"] = time.time()
-                    # v1.0.608: FIFO - chuyen ve cuoi
                     self.pool.append(self.pool.pop(i))
                     self._save_pool()
                     self.log(f"[POOL] RELEASE: {address} → available (cuoi queue)")
                     return
+
+            # Fallback: match theo subnet (VM co IP cu, pool co IP moi cho cung subnet)
+            try:
+                parts = _ipa.IPv6Address(address).exploded.split(":")
+                vm_subnet = parts[3][-2:]  # "3065" → "65"
+                for i, entry in enumerate(self.pool):
+                    if entry.get("subnet_hex") == vm_subnet and entry["status"] == "in_use":
+                        entry["status"] = "available"
+                        entry["released_at"] = time.time()
+                        self.pool.append(self.pool.pop(i))
+                        self._save_pool()
+                        self.log(f"[POOL] RELEASE: subnet {vm_subnet} ({address}) → available")
+                        return
+            except Exception:
+                pass
+
             self.log(f"[POOL] Release: {address} not found in pool")
 
     def burn_ip(self, address: str, reason: str = "403"):
