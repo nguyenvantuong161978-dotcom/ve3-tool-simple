@@ -281,14 +281,22 @@ class IPv6PoolGUI:
             self._log("API Server start that bai!")
 
     def _start_auto_refresh(self):
-        """Refresh stats moi 5 giay."""
+        """Refresh stats moi 5 giay - v1.0.630: thread-safe, khong block GUI."""
         def _tick():
             if self.pool:
-                try:
-                    self._refresh_ui()
-                except Exception:
-                    pass
-                self.root.after(5000, _tick)
+                # v1.0.630: Lay data trong thread rieng de tranh block GUI khi pool._lock bi giu
+                def _fetch_and_update():
+                    try:
+                        status = self.pool.get_status()
+                        pool_entries = list(self.pool.pool)  # Copy nhanh
+                        from ipv6.ipv6_server import get_api_stats
+                        api_stats = get_api_stats()
+                        # Update UI tren main thread
+                        self.root.after(0, lambda: self._update_ui_with_data(status, pool_entries, api_stats))
+                    except Exception:
+                        pass
+                threading.Thread(target=_fetch_and_update, daemon=True).start()
+            self.root.after(5000, _tick)
         self.root.after(5000, _tick)
 
     # =========================================================================
@@ -486,80 +494,88 @@ class IPv6PoolGUI:
                 return entry
         return None
 
-    def _refresh_ui(self):
-        """Cap nhat giao dien."""
-        if not self.pool:
-            return
-
-        # Stats
-        status = self.pool.get_status()
-        self.stat_widgets["available"].config(text=str(status["available"]))
-        self.stat_widgets["in_use"].config(text=str(status["in_use"]))
-        self.stat_widgets["burned"].config(text=str(status.get("burned_total", 0)))
-        self.stat_widgets["total_pool"].config(text=str(status.get("range_total", 0)))
-
-        # API Stats
+    def _update_ui_with_data(self, status, pool_entries, api_stats):
+        """v1.0.630: Cap nhat UI voi data da fetch san (thread-safe, chi chay tren main thread)."""
         try:
-            from ipv6.ipv6_server import get_api_stats
-            api_stats = get_api_stats()
-            self.api_stat_labels["get"].config(text=str(api_stats.get("total_get", 0)))
-            self.api_stat_labels["rotate"].config(text=str(api_stats.get("total_rotate", 0)))
-            self.api_stat_labels["burn"].config(text=str(api_stats.get("total_burn", 0)))
-            self.api_stat_labels["release"].config(text=str(api_stats.get("total_release", 0)))
+            # Stats
+            self.stat_widgets["available"].config(text=str(status["available"]))
+            self.stat_widgets["in_use"].config(text=str(status["in_use"]))
+            self.stat_widgets["burned"].config(text=str(status.get("burned_total", 0)))
+            self.stat_widgets["total_pool"].config(text=str(status.get("range_total", 0)))
 
-            # Workers panel - hien thi may nao dung IP nao
-            workers = api_stats.get("workers", {})
-            # Xoa widget cu
-            for w in self.workers_container.winfo_children():
-                w.destroy()
+            # API Stats
+            if api_stats:
+                self.api_stat_labels["get"].config(text=str(api_stats.get("total_get", 0)))
+                self.api_stat_labels["rotate"].config(text=str(api_stats.get("total_rotate", 0)))
+                self.api_stat_labels["burn"].config(text=str(api_stats.get("total_burn", 0)))
+                self.api_stat_labels["release"].config(text=str(api_stats.get("total_release", 0)))
 
-            if workers:
-                for wname, wdata in workers.items():
-                    ip = wdata.get("current_ip", "")
-                    ip_short = ip[-22:] if len(ip) > 22 else ip
-                    gets = wdata.get("get", 0)
-                    rots = wdata.get("rotate", 0)
-                    burns = wdata.get("burn", 0)
+                # Workers panel
+                workers = api_stats.get("workers", {})
+                for w in self.workers_container.winfo_children():
+                    w.destroy()
 
-                    wf = tk.Frame(self.workers_container, bg=BG2, padx=6, pady=2)
-                    wf.pack(side="left", padx=3)
-                    tk.Label(wf, text=wname, font=("Consolas", 9, "bold"),
-                             bg=BG2, fg=YELLOW).pack(side="left")
-                    tk.Label(wf, text=f" {ip_short}", font=("Consolas", 8),
-                             bg=BG2, fg=GREEN).pack(side="left")
-                    tk.Label(wf, text=f" G:{gets} R:{rots} B:{burns}",
-                             font=("Consolas", 8), bg=BG2, fg=FG_DIM).pack(side="left")
+                if workers:
+                    for wname, wdata in workers.items():
+                        ip = wdata.get("current_ip", "")
+                        ip_short = ip[-22:] if len(ip) > 22 else ip
+                        gets = wdata.get("get", 0)
+                        rots = wdata.get("rotate", 0)
+                        burns = wdata.get("burn", 0)
+
+                        wf = tk.Frame(self.workers_container, bg=BG2, padx=6, pady=2)
+                        wf.pack(side="left", padx=3)
+                        tk.Label(wf, text=wname, font=("Consolas", 9, "bold"),
+                                 bg=BG2, fg=YELLOW).pack(side="left")
+                        tk.Label(wf, text=f" {ip_short}", font=("Consolas", 8),
+                                 bg=BG2, fg=GREEN).pack(side="left")
+                        tk.Label(wf, text=f" G:{gets} R:{rots} B:{burns}",
+                                 font=("Consolas", 8), bg=BG2, fg=FG_DIM).pack(side="left")
+                else:
+                    tk.Label(self.workers_container, text="Chua co worker nao ket noi",
+                             font=("Consolas", 9), bg=BG_CARD, fg=FG_DIM).pack(side="left")
+
+            # API status indicator
+            if api_is_running():
+                if not self._api_started:
+                    self._update_api_status(True)
             else:
-                tk.Label(self.workers_container, text="Chua co worker nao ket noi",
-                         font=("Consolas", 9), bg=BG_CARD, fg=FG_DIM).pack(side="left")
+                if self._api_started:
+                    self._update_api_status(False)
+
+            # Tree
+            self.tree.delete(*self.tree.get_children())
+            for entry in pool_entries:
+                addr = entry.get("address", "?")
+                subnet = entry.get("subnet_hex", "?")
+                gateway = entry.get("gateway", "")
+                st = entry.get("status", "?")
+                uses = entry.get("use_count", 0)
+                last = ""
+                if entry.get("used_at"):
+                    last = time.strftime("%H:%M:%S %d/%m", time.localtime(entry["used_at"]))
+                elif entry.get("created_at"):
+                    last = time.strftime("%H:%M:%S %d/%m", time.localtime(entry["created_at"]))
+
+                st_display = {"available": "San sang", "in_use": "Dang dung", "burned": "Da burn"}.get(st, st)
+                tag = st if st in ("available", "in_use", "burned") else ""
+                self.tree.insert("", "end", values=(addr, subnet, gateway, st_display, uses, last), tags=(tag,))
         except Exception:
             pass
 
-        # API status indicator
-        if api_is_running():
-            if not self._api_started:
-                self._update_api_status(True)
-        else:
-            if self._api_started:
-                self._update_api_status(False)
+    def _refresh_ui(self):
+        """Cap nhat giao dien (goi truc tiep - dung cho action callbacks)."""
+        if not self.pool:
+            return
 
-        # Tree
-        self.tree.delete(*self.tree.get_children())
-        for entry in self.pool.pool:
-            addr = entry.get("address", "?")
-            subnet = entry.get("subnet_hex", "?")
-            gateway = entry.get("gateway", "")
-            st = entry.get("status", "?")
-            uses = entry.get("use_count", 0)
-            last = ""
-            if entry.get("used_at"):
-                last = time.strftime("%H:%M:%S %d/%m", time.localtime(entry["used_at"]))
-            elif entry.get("created_at"):
-                last = time.strftime("%H:%M:%S %d/%m", time.localtime(entry["created_at"]))
-
-            st_display = {"available": "San sang", "in_use": "Dang dung", "burned": "Da burn"}.get(st, st)
-            tag = st if st in ("available", "in_use", "burned") else ""
-            self.tree.insert("", "end", values=(addr, subnet, gateway, st_display, uses, last), tags=(tag,))
+        try:
+            status = self.pool.get_status()
+            pool_entries = list(self.pool.pool)
+            from ipv6.ipv6_server import get_api_stats
+            api_stats = get_api_stats()
+            self._update_ui_with_data(status, pool_entries, api_stats)
+        except Exception:
+            pass
 
     def _log(self, msg):
         """Ghi log (thread-safe)."""

@@ -1,4 +1,11 @@
-1.0.629
+1.0.630
+2026-03-31 (VN)
+Fix: IPv6 Pool GUI bi dong/treo khi rotate_ip dang chay
+- Root cause: _refresh_ui() chay tren main thread, goi pool.get_status() can _lock
+- Khi rotate_ip() giu _lock (MikroTik API 2-5s+) → main thread block → GUI dong
+- Fix: Fetch pool data trong background thread, chi update widget tren main thread
+
+v1.0.629
 2026-03-31 (VN)
 Feature: Server Chrome tao video tu anh (I2V - Image to Video)
 - Endpoint moi: POST /api/fix/create-video-veo3
