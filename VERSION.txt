@@ -1,4 +1,17 @@
-1.0.613
+1.0.614
+2026-03-31 (VN)
+Fix: Firewall block IPv4 cho Chrome - tach TCP+UDP (netsh khong cho protocol=any+remoteip)
+
+- BUG: netsh tra loi "A specified IP address or address keyword is not valid"
+  * protocol=any KHONG dung duoc voi remoteip=0.0.0.0/0
+  * Firewall rules KHONG duoc tao → Chrome van dung IPv4
+- FIX: Tach thanh 2 rules rieng cho moi Chrome exe:
+  * Rule TCP: protocol=tcp remoteip=0.0.0.0-255.255.255.255
+  * Rule UDP: protocol=udp remoteip=0.0.0.0-255.255.255.255
+  * Moi Chrome = 2 rules → block ca TCP va UDP IPv4
+- File: modules/proxy_providers/ipv6_provider.py
+
+v1.0.613
 2026-03-30 (VN)
 Perf: VM IPv6 DIRECT + Firewall block IPv4 cho Chrome
 

@@ -168,9 +168,12 @@ class IPv6Provider(ProxyProvider):
 
     def _block_ipv4_for_chrome(self):
         """
-        v1.0.613: Block outbound IPv4 cho Chrome executables.
+        v1.0.614: Block outbound IPv4 cho Chrome executables.
         Chrome khong the dung IPv4 → bat buoc IPv6 truc tiep.
         RDP/system van dung IPv4 binh thuong.
+
+        NOTE: netsh khong cho protocol=any + remoteip cung luc
+        → tach thanh 2 rules: TCP va UDP rieng.
         """
         # Xoa rules cu truoc (tranh duplicate)
         self._unblock_ipv4_for_chrome()
@@ -180,22 +183,42 @@ class IPv6Provider(ProxyProvider):
             self.log("[PROXY-IPv6] [WARN] Khong tim thay Chrome Portable, skip firewall")
             return
 
-        for i, exe_path in enumerate(chrome_paths):
-            rule_name = f"{self._FW_RULE_PREFIX}_{i}"
-            cmd = (
+        rule_idx = 0
+        for exe_path in chrome_paths:
+            folder_name = Path(exe_path).parent.parent.name
+            ok = True
+            # TCP rule
+            rule_tcp = f"{self._FW_RULE_PREFIX}_{rule_idx}"
+            cmd_tcp = (
                 f'netsh advfirewall firewall add rule '
-                f'name="{rule_name}" dir=out action=block '
+                f'name="{rule_tcp}" dir=out action=block '
                 f'program="{exe_path}" '
-                f'protocol=any remoteip=0.0.0.0/0'
+                f'protocol=tcp remoteip=0.0.0.0-255.255.255.255'
             )
-            if self._run_cmd(cmd):
-                self.log(f"[PROXY-IPv6] [v] Firewall: Block IPv4 cho {Path(exe_path).parent.parent.name}")
+            if not self._run_cmd(cmd_tcp):
+                ok = False
+            rule_idx += 1
+
+            # UDP rule
+            rule_udp = f"{self._FW_RULE_PREFIX}_{rule_idx}"
+            cmd_udp = (
+                f'netsh advfirewall firewall add rule '
+                f'name="{rule_udp}" dir=out action=block '
+                f'program="{exe_path}" '
+                f'protocol=udp remoteip=0.0.0.0-255.255.255.255'
+            )
+            if not self._run_cmd(cmd_udp):
+                ok = False
+            rule_idx += 1
+
+            if ok:
+                self.log(f"[PROXY-IPv6] [v] Firewall: Block IPv4 (TCP+UDP) cho {folder_name}")
             else:
                 self.log(f"[PROXY-IPv6] [WARN] Firewall: Khong block duoc IPv4 cho {exe_path}")
 
     def _unblock_ipv4_for_chrome(self):
-        """v1.0.613: Go tat ca firewall rules block IPv4 cho Chrome."""
-        for i in range(10):  # Max 10 rules
+        """v1.0.614: Go tat ca firewall rules block IPv4 cho Chrome."""
+        for i in range(20):  # Max 20 rules (moi Chrome = 2 rules TCP+UDP)
             rule_name = f"{self._FW_RULE_PREFIX}_{i}"
             self._run_cmd(
                 f'netsh advfirewall firewall delete rule name="{rule_name}"',
