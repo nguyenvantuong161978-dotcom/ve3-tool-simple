@@ -1,4 +1,11 @@
-1.0.638
+1.0.639
+2026-03-31 (VN)
+GUI: Settings 1 trang cuon duy nhat - fix do (khong auto-load account info)
+- Bo Notebook Tabs, quay lai 1 trang cuon gon gang
+- Khong tu dong load tai khoan khi mo Settings (nguyen nhan do)
+- Tai nguyen hien thi inline: Chrome: OK | API Key: OK | ...
+
+v1.0.638
 2026-03-31 (VN)
 GUI: Settings dung Notebook Tabs - gon gang, de dung
 - 4 tabs: NOI DUNG | KET NOI | PROXY | TAI KHOAN

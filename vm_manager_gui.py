@@ -89,207 +89,172 @@ class SettingsWindow(tk.Toplevel):
         self._check_resources()
 
     def _build(self):
-        """v1.0.638: Dung Notebook tabs - giao dien gon gang, de dung."""
+        """v1.0.639: 1 trang cuon duy nhat, gon gang."""
 
-        # Style for Notebook tabs
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure('Settings.TNotebook', background='#1a1a2e', borderwidth=0)
-        style.configure('Settings.TNotebook.Tab', background='#16213e', foreground='white',
-                         padding=[15, 6], font=("Arial", 10, "bold"))
-        style.map('Settings.TNotebook.Tab',
-                  background=[('selected', '#e94560'), ('!selected', '#16213e')],
-                  foreground=[('selected', 'white'), ('!selected', '#aaa')])
-        style.configure('Settings.TFrame', background='#1a1a2e')
+        # Header
+        header = tk.Frame(self, bg='#e94560', height=40)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        tk.Label(header, text="CAU HINH HE THONG", bg='#e94560', fg='white',
+                 font=("Arial", 13, "bold")).pack(pady=8)
 
-        # Notebook
-        notebook = ttk.Notebook(self, style='Settings.TNotebook')
-        notebook.pack(fill="both", expand=True, padx=5, pady=5)
+        # Scrollable content
+        container = tk.Frame(self, bg='#1a1a2e')
+        container.pack(fill="both", expand=True)
 
-        # ================================================================
-        # TAB 1: NOI DUNG (Topic + Mode + Generation)
-        # ================================================================
-        tab1 = tk.Frame(notebook, bg='#1a1a2e')
-        notebook.add(tab1, text="  NOI DUNG  ")
+        canvas = tk.Canvas(container, bg='#1a1a2e', highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        main = tk.Frame(canvas, bg='#1a1a2e')
 
-        tab1_scroll = self._make_scrollable(tab1)
+        main.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas_win = canvas.create_window((0, 0), window=main, anchor="nw")
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_win, width=e.width))
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        # --- Topic ---
-        topic_lf = tk.LabelFrame(tab1_scroll, text=" CHU DE NOI DUNG ", bg='#16213e', fg='#ff9f43',
-                                 font=("Arial", 10, "bold"), padx=10, pady=8)
-        topic_lf.pack(fill="x", pady=5, padx=5)
+        # Mousewheel - chi cho canvas nay
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>") if e.widget == self else None)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        P = 8  # padding chung
+
+        # === TOPIC + MODE (gop 1 frame) ===
+        top_lf = tk.LabelFrame(main, text=" CHU DE / CHE DO ", bg='#16213e', fg='#ff9f43',
+                                font=("Arial", 10, "bold"), padx=10, pady=6)
+        top_lf.pack(fill="x", pady=4, padx=P)
 
         self.topic_var = tk.StringVar(value="story")
+        t_row = tk.Frame(top_lf, bg='#16213e')
+        t_row.pack(fill="x", pady=2)
+        tk.Label(t_row, text="Topic:", bg='#16213e', fg='#aaa', font=("Arial", 9)).pack(side="left", padx=(0, 8))
+        for txt, val, clr in [("Story", "story", "#ffcc00"), ("Psychology", "psychology", "#00ff88"),
+                               ("Finance", "finance_history", "#ffa502"), ("Finance VN", "finance_history_vn", "#ff6b6b")]:
+            tk.Radiobutton(t_row, text=txt, variable=self.topic_var, value=val,
+                           bg='#16213e', fg=clr, selectcolor='#0f3460', font=("Arial", 9)).pack(side="left", padx=6)
 
-        topic_row = tk.Frame(topic_lf, bg='#16213e')
-        topic_row.pack(fill="x", pady=4)
-        tk.Radiobutton(topic_row, text="Story (Phim truyen)", variable=self.topic_var, value="story",
-                       bg='#16213e', fg='#ffcc00', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(topic_row, text="Psychology (Tam ly)", variable=self.topic_var, value="psychology",
-                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(topic_row, text="Finance History", variable=self.topic_var, value="finance_history",
-                       bg='#16213e', fg='#ffa502', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        t_row2 = tk.Frame(top_lf, bg='#16213e')
+        t_row2.pack(fill="x", pady=2)
+        tk.Label(t_row2, text="Video Only:", bg='#16213e', fg='#ff9ff3', font=("Arial", 9)).pack(side="left", padx=(0, 8))
+        tk.Radiobutton(t_row2, text="Tam ly", variable=self.topic_var, value="psychology_video",
+                       bg='#16213e', fg='#ff9ff3', selectcolor='#0f3460', font=("Arial", 9)).pack(side="left", padx=6)
+        tk.Radiobutton(t_row2, text="Tai chinh", variable=self.topic_var, value="finance_video",
+                       bg='#16213e', fg='#ff9ff3', selectcolor='#0f3460', font=("Arial", 9)).pack(side="left", padx=6)
 
-        topic_row2 = tk.Frame(topic_lf, bg='#16213e')
-        topic_row2.pack(fill="x", pady=4)
-        tk.Radiobutton(topic_row2, text="Finance VN", variable=self.topic_var, value="finance_history_vn",
-                       bg='#16213e', fg='#ff6b6b', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-
-        topic_row3 = tk.Frame(topic_lf, bg='#16213e')
-        topic_row3.pack(fill="x", pady=4)
-        tk.Label(topic_row3, text="VIDEO ONLY:", bg='#16213e', fg='#ff9ff3', font=("Arial", 9, "bold")).pack(side="left", padx=5)
-        tk.Radiobutton(topic_row3, text="Tam ly Video", variable=self.topic_var, value="psychology_video",
-                       bg='#16213e', fg='#ff9ff3', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(topic_row3, text="Tai chinh Video", variable=self.topic_var, value="finance_video",
-                       bg='#16213e', fg='#ff9ff3', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-
-        # --- Mode ---
-        mode_lf = tk.LabelFrame(tab1_scroll, text=" CHE DO TAO ANH ", bg='#16213e', fg='#a29bfe',
-                                font=("Arial", 10, "bold"), padx=10, pady=8)
-        mode_lf.pack(fill="x", pady=5, padx=5)
-
+        # Mode
         self.mode_var = tk.StringVar(value="small")
-        mode_row = tk.Frame(mode_lf, bg='#16213e')
-        mode_row.pack(fill="x", pady=4)
-        tk.Radiobutton(mode_row, text="Basic (it anh)", variable=self.mode_var, value="basic",
-                       bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(mode_row, text="Small (mac dinh)", variable=self.mode_var, value="small",
-                       bg='#16213e', fg='#ffcc00', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
-        tk.Radiobutton(mode_row, text="Full (nhieu anh)", variable=self.mode_var, value="full",
-                       bg='#16213e', fg='#00ff88', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=15)
+        m_row = tk.Frame(top_lf, bg='#16213e')
+        m_row.pack(fill="x", pady=2)
+        tk.Label(m_row, text="Mode:", bg='#16213e', fg='#aaa', font=("Arial", 9)).pack(side="left", padx=(0, 8))
+        for txt, val, clr in [("Basic", "basic", "white"), ("Small", "small", "#ffcc00"), ("Full", "full", "#00ff88")]:
+            tk.Radiobutton(m_row, text=txt, variable=self.mode_var, value=val,
+                           bg='#16213e', fg=clr, selectcolor='#0f3460', font=("Arial", 9)).pack(side="left", padx=8)
 
-        # --- Generation Mode ---
-        gen_lf = tk.LabelFrame(tab1_scroll, text=" GENERATION MODE ", bg='#16213e', fg='#ff6b6b',
-                                font=("Arial", 10, "bold"), padx=10, pady=8)
-        gen_lf.pack(fill="x", pady=5, padx=5)
+        # === GENERATION MODE ===
+        gen_lf = tk.LabelFrame(main, text=" GENERATION ", bg='#16213e', fg='#ff6b6b',
+                                font=("Arial", 10, "bold"), padx=10, pady=6)
+        gen_lf.pack(fill="x", pady=4, padx=P)
 
-        gen_row = tk.Frame(gen_lf, bg='#16213e')
-        gen_row.pack(fill="x", pady=4)
+        g_row = tk.Frame(gen_lf, bg='#16213e')
+        g_row.pack(fill="x", pady=2)
         self.gen_mode_var = tk.StringVar(value="api")
-        for text, val in [("API", "api"), ("Browser", "browser"), ("Chrome UI", "chrome"), ("Server", "server"), ("API+Server", "api+server")]:
-            tk.Radiobutton(gen_row, text=text, variable=self.gen_mode_var, value=val,
-                           bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=8)
+        for txt, val in [("API", "api"), ("Browser", "browser"), ("Chrome UI", "chrome"), ("Server", "server"), ("API+Server", "api+server")]:
+            tk.Radiobutton(g_row, text=txt, variable=self.gen_mode_var, value=val,
+                           bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 9)).pack(side="left", padx=6)
 
-        chrome_model_row = tk.Frame(gen_lf, bg='#16213e')
-        chrome_model_row.pack(fill="x", pady=4)
-        tk.Label(chrome_model_row, text="Chrome Model:", bg='#16213e', fg='white', font=("Arial", 10)).pack(side="left", padx=(0, 10))
+        g_row2 = tk.Frame(gen_lf, bg='#16213e')
+        g_row2.pack(fill="x", pady=2)
+        tk.Label(g_row2, text="Chrome Model:", bg='#16213e', fg='#aaa', font=("Arial", 9)).pack(side="left", padx=(0, 8))
         self.chrome_model_var = tk.StringVar(value="0")
-        for text, val in [("Nano Banana Pro", "0"), ("Nano Banana 2", "1"), ("Imagen 4", "2")]:
-            tk.Radiobutton(chrome_model_row, text=text, variable=self.chrome_model_var, value=val,
-                           bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 10)).pack(side="left", padx=8)
+        for txt, val in [("Nano Banana Pro", "0"), ("Nano Banana 2", "1"), ("Imagen 4", "2")]:
+            tk.Radiobutton(g_row2, text=txt, variable=self.chrome_model_var, value=val,
+                           bg='#16213e', fg='white', selectcolor='#0f3460', font=("Arial", 9)).pack(side="left", padx=6)
 
-        tk.Label(gen_lf, text="Server: qua server. API+Server: API truoc, 403 chuyen Server. Chrome UI: truc tiep qua Chrome.",
-                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
-
-        # --- Resources check ---
-        check_lf = tk.LabelFrame(tab1_scroll, text=" KIEM TRA TAI NGUYEN ", bg='#16213e', fg='#00ff88',
-                                  font=("Arial", 10, "bold"), padx=10, pady=8)
-        check_lf.pack(fill="x", pady=5, padx=5)
-
-        self.resource_labels = {}
-        for res_id, name, desc in [("chrome", "Chrome Portable", "Trinh duyet tao anh"),
-                                    ("api_key", "API Key", "Tao Excel"),
-                                    ("proxy_token", "Proxy Token", "Tao video"),
-                                    ("projects", "PROJECTS", "Thu muc du an")]:
-            row = tk.Frame(check_lf, bg='#16213e')
-            row.pack(fill="x", pady=2)
-            status_lbl = tk.Label(row, text="?", width=3, bg='#16213e', fg='#ffd93d', font=("Arial", 11, "bold"))
-            status_lbl.pack(side="left", padx=5)
-            self.resource_labels[res_id] = status_lbl
-            tk.Label(row, text=name, width=18, bg='#16213e', fg='white', font=("Arial", 9), anchor="w").pack(side="left")
-            tk.Label(row, text=desc, bg='#16213e', fg='#888', font=("Arial", 8), anchor="w").pack(side="left", padx=5)
-
-        tk.Button(check_lf, text="Kiem tra lai", command=self._check_resources,
-                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=10).pack(pady=5)
-
-        # Save button tab 1
-        tk.Button(tab1_scroll, text="LUU CAU HINH", command=self._save_settings,
-                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 11, "bold"),
-                  relief="flat", padx=20, pady=5).pack(pady=10)
-
-        # ================================================================
-        # TAB 2: KET NOI (Server + SMB)
-        # ================================================================
-        tab2 = tk.Frame(notebook, bg='#1a1a2e')
-        notebook.add(tab2, text="  KET NOI  ")
-
-        tab2_scroll = self._make_scrollable(tab2)
-
-        # --- Server URLs ---
-        server_lf = tk.LabelFrame(tab2_scroll, text=" LOCAL PROXY SERVER ", bg='#16213e', fg='#ffd93d',
-                                   font=("Arial", 10, "bold"), padx=10, pady=10)
-        server_lf.pack(fill="x", pady=5, padx=5)
+        # === SERVER + SMB (gop) ===
+        conn_lf = tk.LabelFrame(main, text=" KET NOI ", bg='#16213e', fg='#ffd93d',
+                                 font=("Arial", 10, "bold"), padx=10, pady=6)
+        conn_lf.pack(fill="x", pady=4, padx=P)
 
         self.local_server_enabled_var = tk.BooleanVar(value=False)
 
-        tk.Label(server_lf, text="Server URLs (moi dong 1 server):", bg='#16213e', fg='white',
-                 font=("Arial", 10)).pack(anchor="w", pady=(4, 0))
-        self.server_urls_text = tk.Text(server_lf, height=4, width=60,
-                                         font=("Consolas", 10), bg='#0f3460', fg='white',
-                                         insertbackground='white')
+        tk.Label(conn_lf, text="Server URLs (moi dong 1 server):", bg='#16213e', fg='white', font=("Arial", 9)).pack(anchor="w")
+        self.server_urls_text = tk.Text(conn_lf, height=3, width=60,
+                                         font=("Consolas", 9), bg='#0f3460', fg='white', insertbackground='white')
         self.server_urls_text.pack(fill="x", pady=2)
-        tk.Label(server_lf, text="Vi du: http://192.168.1.100:5000 (chon mode Server hoac API+Server o tab Noi Dung)",
-                 bg='#16213e', fg='#666', font=("Arial", 8)).pack(anchor="w")
 
-        self.server_status_lbl = tk.Label(server_lf, text="", bg='#16213e', fg='#888', font=("Consolas", 9))
-        self.server_status_lbl.pack(anchor="w", pady=(5, 0))
+        srv_row = tk.Frame(conn_lf, bg='#16213e')
+        srv_row.pack(fill="x", pady=3)
+        tk.Button(srv_row, text="Kiem tra", command=self._check_server_connection,
+                  bg='#0984e3', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left")
+        self.server_status_lbl = tk.Label(srv_row, text="", bg='#16213e', fg='#888', font=("Consolas", 8))
+        self.server_status_lbl.pack(side="left", padx=8)
 
-        tk.Button(server_lf, text="Kiem tra ket noi", command=self._check_server_connection,
-                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(anchor="w", pady=5)
+        # SMB inline
+        tk.Frame(conn_lf, bg='#444', height=1).pack(fill="x", pady=5)
+        tk.Label(conn_lf, text="O MANG (SMB) - Map Z: dong bo voi Master", bg='#16213e', fg='#00ff88', font=("Arial", 9, "bold")).pack(anchor="w")
 
-        # --- SMB Share ---
-        smb_lf = tk.LabelFrame(tab2_scroll, text=" KET NOI O MANG (SMB SHARE) ", bg='#16213e', fg='#00ff88',
-                                font=("Arial", 10, "bold"), padx=10, pady=10)
-        smb_lf.pack(fill="x", pady=5, padx=5)
-
-        tk.Label(smb_lf, text="Map o mang Z: de dong bo project voi may chu (Master).",
-                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
-
-        smb_form = tk.Frame(smb_lf, bg='#16213e')
-        smb_form.pack(fill="x", pady=5)
-
-        tk.Label(smb_form, text="IP May chu:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        smb_row = tk.Frame(conn_lf, bg='#16213e')
+        smb_row.pack(fill="x", pady=3)
         self.smb_ip_var = tk.StringVar(value="192.168.88.254")
-        tk.Entry(smb_form, textvariable=self.smb_ip_var, width=25, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
-
-        tk.Label(smb_form, text="Ten Share:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=2, sticky="e", pady=3, padx=(15, 0))
         self.smb_share_var = tk.StringVar(value="D")
-        tk.Entry(smb_form, textvariable=self.smb_share_var, width=8, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=3, pady=3, padx=5)
-
-        tk.Label(smb_form, text="Username:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=1, column=0, sticky="e", pady=3)
         self.smb_user_var = tk.StringVar(value="smbuser")
-        tk.Entry(smb_form, textvariable=self.smb_user_var, width=25, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=1, column=1, pady=3, padx=5)
-
-        tk.Label(smb_form, text="Password:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=1, column=2, sticky="e", pady=3, padx=(15, 0))
         self.smb_pass_var = tk.StringVar(value="159753")
-        tk.Entry(smb_form, textvariable=self.smb_pass_var, width=12, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white', show="*").grid(row=1, column=3, pady=3, padx=5)
 
-        smb_btn_row = tk.Frame(smb_lf, bg='#16213e')
-        smb_btn_row.pack(fill="x", pady=5)
+        tk.Label(smb_row, text="IP:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left")
+        tk.Entry(smb_row, textvariable=self.smb_ip_var, width=16, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=3)
+        tk.Label(smb_row, text="Share:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left", padx=(6, 0))
+        tk.Entry(smb_row, textvariable=self.smb_share_var, width=4, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=3)
+        tk.Label(smb_row, text="User:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left", padx=(6, 0))
+        tk.Entry(smb_row, textvariable=self.smb_user_var, width=10, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=3)
+        tk.Label(smb_row, text="Pass:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left", padx=(6, 0))
+        tk.Entry(smb_row, textvariable=self.smb_pass_var, width=8, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white', show="*").pack(side="left", padx=3)
+
+        smb_btn_row = tk.Frame(conn_lf, bg='#16213e')
+        smb_btn_row.pack(fill="x", pady=3)
         tk.Button(smb_btn_row, text="KET NOI SMB", command=self._do_smb_setup,
-                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"),
-                  relief="flat", padx=15, pady=3).pack(side="left")
+                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 8, "bold"), relief="flat", padx=10).pack(side="left")
         self.smb_status_var = tk.StringVar(value="")
-        self.smb_status_lbl = tk.Label(smb_btn_row, textvariable=self.smb_status_var, bg='#16213e', fg='#ffd93d',
-                                        font=("Arial", 9))
-        self.smb_status_lbl.pack(side="left", padx=10)
+        self.smb_status_lbl = tk.Label(smb_btn_row, textvariable=self.smb_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
+        self.smb_status_lbl.pack(side="left", padx=8)
 
-        # Save button tab 2
-        tk.Button(tab2_scroll, text="LUU CAU HINH", command=self._save_settings,
-                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 11, "bold"),
-                  relief="flat", padx=20, pady=5).pack(pady=10)
+        # === API KEYS + CHROME (gop) ===
+        api_lf = tk.LabelFrame(main, text=" API KEYS / CHROME ", bg='#16213e', fg='#00d9ff',
+                                font=("Arial", 10, "bold"), padx=10, pady=6)
+        api_lf.pack(fill="x", pady=4, padx=P)
 
-        # ================================================================
-        # TAB 3: PROXY / IP
-        # ================================================================
-        tab3 = tk.Frame(notebook, bg='#1a1a2e')
-        notebook.add(tab3, text="  PROXY  ")
+        for label, var_name in [("DeepSeek:", "deepseek_var"), ("Gemini:", "gemini_var"), ("Proxy Token:", "proxy_token_var")]:
+            row = tk.Frame(api_lf, bg='#16213e')
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=label, width=12, bg='#16213e', fg='white', font=("Arial", 9), anchor="e").pack(side="left")
+            var = tk.StringVar()
+            setattr(self, var_name, var)
+            tk.Entry(row, textvariable=var, font=("Consolas", 9), bg='#0f3460', fg='white',
+                     insertbackground='white').pack(side="left", fill="x", expand=True, padx=4)
 
-        tab3_scroll = self._make_scrollable(tab3)
+        tk.Frame(api_lf, bg='#444', height=1).pack(fill="x", pady=4)
+
+        self.chrome1_var = tk.StringVar()
+        self.chrome2_var = tk.StringVar()
+        for num, var in [(1, self.chrome1_var), (2, self.chrome2_var)]:
+            row = tk.Frame(api_lf, bg='#16213e')
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=f"Chrome {num}:", width=12, bg='#16213e', fg='white', font=("Arial", 9), anchor="e").pack(side="left")
+            tk.Entry(row, textvariable=var, font=("Consolas", 9), bg='#0f3460', fg='white',
+                     insertbackground='white').pack(side="left", fill="x", expand=True, padx=4)
+            tk.Button(row, text="...", command=lambda n=num: self._browse_chrome(n),
+                      bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat", width=3).pack(side="left")
+
+        # === PROXY ===
+        proxy_lf = tk.LabelFrame(main, text=" PROXY / IP ", bg='#16213e', fg='#ffd93d',
+                                  font=("Arial", 10, "bold"), padx=10, pady=6)
+        proxy_lf.pack(fill="x", pady=4, padx=P)
 
         # Read current proxy config
         self._current_proxy_cfg = {}
@@ -312,243 +277,159 @@ class SettingsWindow(tk.Toplevel):
         if _pool_url and _current_ptype == 'ipv6':
             _current_ptype = 'ipv6_pool'
 
-        # --- Proxy Type ---
-        proxy_lf = tk.LabelFrame(tab3_scroll, text=" LOAI PROXY ", bg='#16213e', fg='#ffd93d',
-                                  font=("Arial", 10, "bold"), padx=10, pady=8)
-        proxy_lf.pack(fill="x", pady=5, padx=5)
-
         self.proxy_type_var = tk.StringVar(value=_current_ptype)
-        proxy_type_row = tk.Frame(proxy_lf, bg='#16213e')
-        proxy_type_row.pack(fill="x", pady=4)
-        for text, val in [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare")]:
-            tk.Radiobutton(proxy_type_row, text=text, variable=self.proxy_type_var, value=val,
-                           bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 10),
-                           activebackground='#16213e', activeforeground='white',
-                           command=self._on_proxy_type_changed).pack(side="left", padx=10)
+        pt_row = tk.Frame(proxy_lf, bg='#16213e')
+        pt_row.pack(fill="x", pady=3)
+        for txt, val in [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare")]:
+            tk.Radiobutton(pt_row, text=txt, variable=self.proxy_type_var, value=val,
+                           bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 9),
+                           command=self._on_proxy_type_changed).pack(side="left", padx=6)
 
-        # --- Webshare ---
-        self._ws_frame = tk.LabelFrame(tab3_scroll, text=" Webshare.io ", bg='#16213e', fg='#ffd93d',
-                                        font=("Arial", 10, "bold"), padx=10, pady=8)
-
-        ws_form = tk.Frame(self._ws_frame, bg='#16213e')
-        ws_form.pack(fill="x", pady=5)
-
-        tk.Label(ws_form, text="Username:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        # Webshare sub-frame
+        self._ws_frame = tk.Frame(proxy_lf, bg='#16213e')
+        ws_r = tk.Frame(self._ws_frame, bg='#16213e')
+        ws_r.pack(fill="x", pady=3)
         self.ws_username_var = tk.StringVar(value=_ws_cfg.get('rotating_username', ''))
-        tk.Entry(ws_form, textvariable=self.ws_username_var, width=35, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
-
-        tk.Label(ws_form, text="Password:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=1, column=0, sticky="e", pady=3)
         self.ws_password_var = tk.StringVar(value=_ws_cfg.get('rotating_password', ''))
-        tk.Entry(ws_form, textvariable=self.ws_password_var, width=35, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=1, column=1, pady=3, padx=5)
-
-        tk.Label(ws_form, text="Machine ID:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=2, column=0, sticky="e", pady=3)
         self.ws_machine_var = tk.StringVar(value=str(_ws_cfg.get('machine_id', 1)))
-        tk.Entry(ws_form, textvariable=self.ws_machine_var, width=5, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=2, column=1, pady=3, padx=5, sticky="w")
+        tk.Label(ws_r, text="User:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left")
+        tk.Entry(ws_r, textvariable=self.ws_username_var, width=20, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=3)
+        tk.Label(ws_r, text="Pass:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left", padx=(6, 0))
+        tk.Entry(ws_r, textvariable=self.ws_password_var, width=20, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=3)
+        tk.Label(ws_r, text="ID:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left", padx=(6, 0))
+        tk.Entry(ws_r, textvariable=self.ws_machine_var, width=3, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=3)
 
-        ws_btn_row = tk.Frame(self._ws_frame, bg='#16213e')
-        ws_btn_row.pack(fill="x", pady=5)
-        tk.Button(ws_btn_row, text="TEST KET NOI", command=self._test_webshare,
-                  bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10).pack(side="left")
+        ws_btn = tk.Frame(self._ws_frame, bg='#16213e')
+        ws_btn.pack(fill="x", pady=2)
+        tk.Button(ws_btn, text="TEST", command=self._test_webshare,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left")
         self.ws_status_var = tk.StringVar(value="")
-        self.ws_status_lbl = tk.Label(ws_btn_row, textvariable=self.ws_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
-        self.ws_status_lbl.pack(side="left", padx=10)
+        self.ws_status_lbl = tk.Label(ws_btn, textvariable=self.ws_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
+        self.ws_status_lbl.pack(side="left", padx=8)
 
-        # --- IPv6 Pool ---
-        self._pool_frame = tk.LabelFrame(tab3_scroll, text=" IPv6 Pool (MikroTik) ", bg='#16213e', fg='#ffd93d',
-                                          font=("Arial", 10, "bold"), padx=10, pady=8)
-
-        pool_form = tk.Frame(self._pool_frame, bg='#16213e')
-        pool_form.pack(fill="x", pady=5)
-
-        tk.Label(pool_form, text="Pool API URL:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        # Pool sub-frame
+        self._pool_frame = tk.Frame(proxy_lf, bg='#16213e')
+        pool_r = tk.Frame(self._pool_frame, bg='#16213e')
+        pool_r.pack(fill="x", pady=3)
+        tk.Label(pool_r, text="Pool API:", bg='#16213e', fg='white', font=("Arial", 9)).pack(side="left")
         self.pool_api_var = tk.StringVar(value=_pool_url)
-        tk.Entry(pool_form, textvariable=self.pool_api_var, width=40, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').grid(row=0, column=1, pady=3, padx=5)
+        tk.Entry(pool_r, textvariable=self.pool_api_var, width=35, font=("Consolas", 9),
+                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", padx=4, fill="x", expand=True)
 
-        tk.Label(self._pool_frame, text="VD: http://192.168.88.1:8765",
-                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
-
-        pool_btn_row = tk.Frame(self._pool_frame, bg='#16213e')
-        pool_btn_row.pack(fill="x", pady=5)
-        tk.Button(pool_btn_row, text="TEST KET NOI", command=self._test_pool,
-                  bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10).pack(side="left", padx=(0, 8))
-        tk.Button(pool_btn_row, text="DOI IPv6 THU CONG", command=self._rotate_pool_manual,
-                  bg='#e17055', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10).pack(side="left")
-
+        pool_btn = tk.Frame(self._pool_frame, bg='#16213e')
+        pool_btn.pack(fill="x", pady=2)
+        tk.Button(pool_btn, text="TEST", command=self._test_pool,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left")
+        tk.Button(pool_btn, text="DOI IPv6", command=self._rotate_pool_manual,
+                  bg='#e17055', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left", padx=6)
         self.pool_status_var = tk.StringVar(value="")
-        self.pool_status_lbl = tk.Label(self._pool_frame, textvariable=self.pool_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
-        self.pool_status_lbl.pack(anchor="w", pady=3)
+        self.pool_status_lbl = tk.Label(pool_btn, textvariable=self.pool_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
+        self.pool_status_lbl.pack(side="left", padx=8)
         self.pool_stats_var = tk.StringVar(value="")
-        tk.Label(self._pool_frame, textvariable=self.pool_stats_var, bg='#16213e', fg='#888',
-                 font=("Consolas", 8)).pack(anchor="w")
+        tk.Label(self._pool_frame, textvariable=self.pool_stats_var, bg='#16213e', fg='#888', font=("Consolas", 8)).pack(anchor="w")
 
-        # --- IPv6 File ---
-        self._ipv6_frame = tk.LabelFrame(tab3_scroll, text=" IPv6 File (config/ipv6.txt) ", bg='#16213e', fg='#00ff88',
-                                          font=("Arial", 10, "bold"), padx=10, pady=8)
-
+        # IPv6 File sub-frame
+        self._ipv6_frame = tk.Frame(proxy_lf, bg='#16213e')
         _ipv6_rotation_cfg = _cfg.get('ipv6_rotation', {})
-        _ipv6_enabled = _ipv6_rotation_cfg.get('enabled', True)
-        self.ipv6_mode_var = tk.IntVar(value=1 if _ipv6_enabled else 0)
+        self.ipv6_mode_var = tk.IntVar(value=1 if _ipv6_rotation_cfg.get('enabled', True) else 0)
 
-        ipv6_mode_row = tk.Frame(self._ipv6_frame, bg='#16213e')
-        ipv6_mode_row.pack(fill="x", pady=4)
-        tk.Radiobutton(ipv6_mode_row, text="Direct (khong dung)", variable=self.ipv6_mode_var, value=0,
-                        bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 9)).pack(side="left", padx=10)
-        tk.Radiobutton(ipv6_mode_row, text="IPv6 Rotation", variable=self.ipv6_mode_var, value=1,
-                        bg='#16213e', fg='#00ff88', selectcolor='#16213e', font=("Arial", 9, "bold")).pack(side="left", padx=10)
+        i6_mode = tk.Frame(self._ipv6_frame, bg='#16213e')
+        i6_mode.pack(fill="x", pady=2)
+        tk.Radiobutton(i6_mode, text="Direct", variable=self.ipv6_mode_var, value=0,
+                        bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 9)).pack(side="left", padx=6)
+        tk.Radiobutton(i6_mode, text="IPv6 Rotation", variable=self.ipv6_mode_var, value=1,
+                        bg='#16213e', fg='#00ff88', selectcolor='#16213e', font=("Arial", 9, "bold")).pack(side="left", padx=6)
 
-        self.ipv6_text = tk.Text(self._ipv6_frame, height=6, width=50, bg='#0f3460', fg='white',
+        self.ipv6_text = tk.Text(self._ipv6_frame, height=5, bg='#0f3460', fg='white',
                                   font=("Consolas", 9), insertbackground='white')
-        self.ipv6_text.pack(fill="x", pady=5)
+        self.ipv6_text.pack(fill="x", pady=3)
 
         _ipv6_file = TOOL_DIR / "config" / "ipv6.txt"
         if _ipv6_file.exists():
             with open(_ipv6_file, "r", encoding="utf-8") as f:
                 self.ipv6_text.insert("1.0", f.read())
 
-        ipv6_btn_row = tk.Frame(self._ipv6_frame, bg='#16213e')
-        ipv6_btn_row.pack(fill="x", pady=5)
-        tk.Button(ipv6_btn_row, text="LAY TU TRANG TINH", command=self._fetch_ipv6_from_sheet,
-                  bg='#e17055', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=12).pack(side="left", padx=(0, 8))
-        tk.Button(ipv6_btn_row, text="TEST IPv6", command=self._test_ipv6,
-                  bg='#6c5ce7', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=12).pack(side="left")
-
+        i6_btn = tk.Frame(self._ipv6_frame, bg='#16213e')
+        i6_btn.pack(fill="x", pady=2)
+        tk.Button(i6_btn, text="LAY TU TRANG TINH", command=self._fetch_ipv6_from_sheet,
+                  bg='#e17055', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left")
+        tk.Button(i6_btn, text="TEST", command=self._test_ipv6,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left", padx=6)
         self.ipv6_status_var = tk.StringVar(value="")
-        self.ipv6_status_lbl = tk.Label(self._ipv6_frame, textvariable=self.ipv6_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
-        self.ipv6_status_lbl.pack(anchor="w", pady=3)
+        self.ipv6_status_lbl = tk.Label(i6_btn, textvariable=self.ipv6_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
+        self.ipv6_status_lbl.pack(side="left", padx=8)
 
         # Proxy save
-        proxy_save_row = tk.Frame(tab3_scroll, bg='#1a1a2e')
-        proxy_save_row.pack(fill="x", pady=10, padx=5)
-        tk.Button(proxy_save_row, text="LUU PROXY", command=self._save_proxy_config,
-                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 11, "bold"),
-                  relief="flat", padx=20, pady=5).pack(side="left")
+        proxy_save = tk.Frame(proxy_lf, bg='#16213e')
+        proxy_save.pack(fill="x", pady=4)
+        tk.Button(proxy_save, text="LUU PROXY", command=self._save_proxy_config,
+                  bg='#00ff88', fg='#1a1a2e', font=("Arial", 9, "bold"), relief="flat", padx=12).pack(side="left")
         self.proxy_save_status_var = tk.StringVar(value="")
-        self.proxy_save_status_lbl = tk.Label(proxy_save_row, textvariable=self.proxy_save_status_var, bg='#1a1a2e', fg='#ffd93d', font=("Arial", 9))
-        self.proxy_save_status_lbl.pack(side="left", padx=10)
+        self.proxy_save_status_lbl = tk.Label(proxy_save, textvariable=self.proxy_save_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
+        self.proxy_save_status_lbl.pack(side="left", padx=8)
 
-        # Trigger initial show/hide
         self._on_proxy_type_changed()
 
-        # ================================================================
-        # TAB 4: TAI KHOAN (API Keys + Chrome + Veo3 Accounts)
-        # ================================================================
-        tab4 = tk.Frame(notebook, bg='#1a1a2e')
-        notebook.add(tab4, text="  TAI KHOAN  ")
+        # === TAI KHOAN VEO3 ===
+        acc_lf = tk.LabelFrame(main, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
+                                font=("Arial", 10, "bold"), padx=10, pady=6)
+        acc_lf.pack(fill="x", pady=4, padx=P)
 
-        tab4_scroll = self._make_scrollable(tab4)
-
-        # --- API Keys ---
-        api_lf = tk.LabelFrame(tab4_scroll, text=" API KEYS ", bg='#16213e', fg='#ffd93d',
-                                font=("Arial", 10, "bold"), padx=10, pady=10)
-        api_lf.pack(fill="x", pady=5, padx=5)
-
-        tk.Label(api_lf, text="DeepSeek API Key:", bg='#16213e', fg='white', font=("Arial", 10)).pack(anchor="w")
-        self.deepseek_var = tk.StringVar()
-        tk.Entry(api_lf, textvariable=self.deepseek_var, width=60,
-                 font=("Consolas", 10), bg='#0f3460', fg='white', insertbackground='white').pack(fill="x", pady=2)
-
-        tk.Label(api_lf, text="Gemini API Key:", bg='#16213e', fg='white', font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
-        self.gemini_var = tk.StringVar()
-        tk.Entry(api_lf, textvariable=self.gemini_var, width=60,
-                 font=("Consolas", 10), bg='#0f3460', fg='white', insertbackground='white').pack(fill="x", pady=2)
-
-        tk.Label(api_lf, text="Proxy API Token (Video):", bg='#16213e', fg='white', font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
-        self.proxy_token_var = tk.StringVar()
-        tk.Entry(api_lf, textvariable=self.proxy_token_var, width=60,
-                 font=("Consolas", 10), bg='#0f3460', fg='white', insertbackground='white').pack(fill="x", pady=2)
-
-        # --- Chrome ---
-        chrome_lf = tk.LabelFrame(tab4_scroll, text=" CHROME PORTABLE ", bg='#16213e', fg='#00d9ff',
-                                   font=("Arial", 10, "bold"), padx=10, pady=10)
-        chrome_lf.pack(fill="x", pady=5, padx=5)
-
-        tk.Label(chrome_lf, text="Chrome 1:", bg='#16213e', fg='white', font=("Arial", 10)).pack(anchor="w")
-        self.chrome1_var = tk.StringVar()
-        chrome1_row = tk.Frame(chrome_lf, bg='#16213e')
-        chrome1_row.pack(fill="x", pady=2)
-        tk.Entry(chrome1_row, textvariable=self.chrome1_var, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", fill="x", expand=True)
-        tk.Button(chrome1_row, text="Chon...", command=lambda: self._browse_chrome(1),
-                  bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
-
-        tk.Label(chrome_lf, text="Chrome 2:", bg='#16213e', fg='white', font=("Arial", 10)).pack(anchor="w", pady=(8, 0))
-        self.chrome2_var = tk.StringVar()
-        chrome2_row = tk.Frame(chrome_lf, bg='#16213e')
-        chrome2_row.pack(fill="x", pady=2)
-        tk.Entry(chrome2_row, textvariable=self.chrome2_var, font=("Consolas", 9),
-                 bg='#0f3460', fg='white', insertbackground='white').pack(side="left", fill="x", expand=True)
-        tk.Button(chrome2_row, text="Chon...", command=lambda: self._browse_chrome(2),
-                  bg='#6c5ce7', fg='white', font=("Arial", 8), relief="flat").pack(side="left", padx=5)
-
-        # --- Veo3 Accounts ---
-        account_lf = tk.LabelFrame(tab4_scroll, text=" TAI KHOAN VEO3 ", bg='#16213e', fg='#ff6b6b',
-                                    font=("Arial", 10, "bold"), padx=10, pady=10)
-        account_lf.pack(fill="x", pady=5, padx=5)
-
-        self.account_header = tk.Label(account_lf, text="", bg='#16213e', fg='#00ff88',
+        self.account_header = tk.Label(acc_lf, text="Bam 'Tai lai' de load...", bg='#16213e', fg='#888',
                                         font=("Consolas", 9), anchor="w")
         self.account_header.pack(fill="x")
 
-        list_frame = tk.Frame(account_lf, bg='#16213e')
-        list_frame.pack(fill="x", pady=5)
+        list_frame = tk.Frame(acc_lf, bg='#16213e')
+        list_frame.pack(fill="x", pady=3)
 
-        self.account_listbox = tk.Listbox(list_frame, height=5, width=50,
-                                           font=("Consolas", 10), bg='#0f3460', fg='#00ff88',
-                                           selectbackground='#e17055', selectforeground='white',
-                                           activestyle='none')
+        self.account_listbox = tk.Listbox(list_frame, height=4,
+                                           font=("Consolas", 9), bg='#0f3460', fg='#00ff88',
+                                           selectbackground='#e17055', selectforeground='white', activestyle='none')
         self.account_listbox.pack(side="left", fill="x", expand=True)
-
-        scrollbar_acc = tk.Scrollbar(list_frame, orient="vertical", command=self.account_listbox.yview)
-        scrollbar_acc.pack(side="right", fill="y")
-        self.account_listbox.config(yscrollcommand=scrollbar_acc.set)
-
+        sb = tk.Scrollbar(list_frame, orient="vertical", command=self.account_listbox.yview)
+        sb.pack(side="right", fill="y")
+        self.account_listbox.config(yscrollcommand=sb.set)
         self._accounts_data = []
 
-        account_btn_row = tk.Frame(account_lf, bg='#16213e')
-        account_btn_row.pack(fill="x", pady=5)
+        acc_btn = tk.Frame(acc_lf, bg='#16213e')
+        acc_btn.pack(fill="x", pady=3)
+        tk.Button(acc_btn, text="Tai lai", command=self._load_account_info,
+                  bg='#0984e3', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left", padx=2)
+        tk.Button(acc_btn, text="Xoay vong", command=self._rotate_account,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left", padx=2)
+        tk.Button(acc_btn, text="CHON", command=self._select_account,
+                  bg='#e17055', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left", padx=2)
 
-        tk.Button(account_btn_row, text="Tai lai", command=self._load_account_info,
-                  bg='#0984e3', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(side="left", padx=3)
-        tk.Button(account_btn_row, text="Xoay vong", command=self._rotate_account,
-                  bg='#6c5ce7', fg='white', font=("Arial", 9), relief="flat", padx=8).pack(side="left", padx=3)
-        tk.Button(account_btn_row, text="CHON TAI KHOAN NAY", command=self._select_account,
-                  bg='#e17055', fg='white', font=("Arial", 9, "bold"), relief="flat", padx=10).pack(side="left", padx=3)
+        # === KIEM TRA TAI NGUYEN ===
+        check_lf = tk.LabelFrame(main, text=" TAI NGUYEN ", bg='#16213e', fg='#00ff88',
+                                  font=("Arial", 10, "bold"), padx=10, pady=6)
+        check_lf.pack(fill="x", pady=4, padx=P)
 
-        self.after(500, self._load_account_info)
+        self.resource_labels = {}
+        res_row = tk.Frame(check_lf, bg='#16213e')
+        res_row.pack(fill="x", pady=2)
+        for res_id, name in [("chrome", "Chrome"), ("api_key", "API Key"), ("proxy_token", "Token"), ("projects", "PROJECTS")]:
+            lbl = tk.Label(res_row, text=f"{name}: ?", bg='#16213e', fg='#ffd93d', font=("Arial", 9, "bold"))
+            lbl.pack(side="left", padx=8)
+            self.resource_labels[res_id] = lbl
 
-        # Save button tab 4
-        tk.Button(tab4_scroll, text="LUU CAU HINH", command=self._save_settings,
+        tk.Button(check_lf, text="Kiem tra", command=self._check_resources,
+                  bg='#0984e3', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left", pady=3)
+
+        # === BOTTOM BUTTONS ===
+        btn_frame = tk.Frame(main, bg='#1a1a2e')
+        btn_frame.pack(fill="x", pady=10, padx=P)
+
+        tk.Button(btn_frame, text="LUU CAU HINH", command=self._save_settings,
                   bg='#00ff88', fg='#1a1a2e', font=("Arial", 11, "bold"),
-                  relief="flat", padx=20, pady=5).pack(pady=10)
+                  relief="flat", padx=20, pady=5).pack(side="left", padx=5)
 
-    def _make_scrollable(self, parent):
-        """Tao scrollable frame ben trong parent."""
-        canvas = tk.Canvas(parent, bg='#1a1a2e', highlightthickness=0)
-        scrollbar = tk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scroll_frame = tk.Frame(canvas, bg='#1a1a2e')
-
-        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas_window = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
-
-        # Fill width
-        def _on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-        canvas.bind("<Configure>", _on_canvas_configure)
-
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind("<MouseWheel>", _on_mousewheel)
-        scroll_frame.bind("<MouseWheel>", _on_mousewheel)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        return scroll_frame
+        tk.Button(btn_frame, text="DONG", command=self.destroy,
+                  bg='#e94560', fg='white', font=("Arial", 11, "bold"),
+                  relief="flat", padx=20, pady=5).pack(side="right", padx=5)
 
     def _load_settings(self):
         """Load settings tu file."""
@@ -890,10 +771,12 @@ class SettingsWindow(tk.Toplevel):
     def _set_status(self, res_id: str, ok: bool):
         """Set status icon."""
         if res_id in self.resource_labels:
+            names = {"chrome": "Chrome", "api_key": "API Key", "proxy_token": "Token", "projects": "PROJECTS"}
+            name = names.get(res_id, res_id)
             if ok:
-                self.resource_labels[res_id].config(text="OK", fg='#00ff88')
+                self.resource_labels[res_id].config(text=f"{name}: OK", fg='#00ff88')
             else:
-                self.resource_labels[res_id].config(text="X", fg='#e94560')
+                self.resource_labels[res_id].config(text=f"{name}: X", fg='#e94560')
 
     def _browse_chrome(self, num: int):
         """Chon file Chrome."""
