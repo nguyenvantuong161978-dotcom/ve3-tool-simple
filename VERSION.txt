@@ -1,4 +1,12 @@
-1.0.630
+1.0.631
+2026-03-31 (VN)
+Feature: Video generation (I2V) ho tro SERVER MODE
+- Truoc: _video_worker_loop LUON dung Chrome local (drission_api) → server mode khong tao video
+- Fix: Check generation_mode, neu 'server'/'api+server' → dung GoogleFlowAPI gui qua server
+- Server Chrome dung FORCE MODE (JS interceptor) tao video
+- Flow: VM gui media_id → server /api/fix/create-video-veo3 → operations → VM poll Google lay video
+
+v1.0.630
 2026-03-31 (VN)
 Fix: IPv6 Pool GUI bi dong/treo khi rotate_ip dang chay
 - Root cause: _refresh_ui() chay tren main thread, goi pool.get_status() can _lock

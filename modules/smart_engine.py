@@ -5436,8 +5436,6 @@ class SmartEngine:
 
     def _video_worker_loop(self, proj_dir: Path, existing_drission=None):
         """Video generation worker loop - dùng cached tokens hoặc Chrome."""
-        from modules.drission_flow_api import DrissionFlowAPI
-
         self.log("[VIDEO] Worker loop started")
 
         # Lấy token info từ cache
@@ -5457,6 +5455,28 @@ class SmartEngine:
             self.log("[VIDEO] [WARN] Không có project_id - Skip I2V!", "WARN")
             self._video_worker_running = False
             return
+
+        # === v1.0.631: Check generation_mode → dùng server thay vì Chrome local ===
+        generation_mode = ''
+        local_server_url = ''
+        try:
+            import yaml
+            settings_path = self.config_dir / "settings.yaml"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    cfg = yaml.safe_load(f) or {}
+                generation_mode = cfg.get('generation_mode', 'api')
+                local_server_url = cfg.get('local_server_url', '')
+        except:
+            pass
+
+        if generation_mode in ('server', 'api+server') and local_server_url:
+            self.log(f"[VIDEO] SERVER MODE → gửi video qua server: {local_server_url}")
+            self._video_worker_loop_server(proj_dir, bearer, project_id, local_server_url)
+            return
+
+        # === CHROME LOCAL MODE (default) ===
+        from modules.drission_flow_api import DrissionFlowAPI
 
         # Tạo project URL nếu chưa có
         if not project_url and project_id:
@@ -5669,6 +5689,152 @@ class SmartEngine:
                 pass
 
         self.log(f"[VIDEO] Worker stopped. Results: {self._video_results['success']} OK, {self._video_results['failed']} failed")
+
+    def _video_worker_loop_server(self, proj_dir: Path, bearer: str, project_id: str, local_server_url: str):
+        """
+        v1.0.631: Video worker loop cho SERVER MODE.
+        Dùng GoogleFlowAPI gửi video request qua server Chrome.
+        Server Chrome dùng FORCE MODE (JS interceptor) để tạo video.
+
+        Flow:
+        1. VM gửi POST /api/fix/create-video-veo3 (media_id + prompt)
+        2. Server Chrome: interceptor convert image request → video I2V request
+        3. Server trả operations → VM poll Google lấy video
+        """
+        from modules.google_flow_api import GoogleFlowAPI
+
+        self.log("[VIDEO-SERVER] Server mode video worker started")
+
+        # Tạo GoogleFlowAPI client với local_server_url
+        flow_api = GoogleFlowAPI(
+            bearer_token=bearer,
+            project_id=project_id,
+            local_server_url=local_server_url,
+            use_proxy=True,
+            verbose=True
+        )
+
+        img_dir = proj_dir / "img"
+
+        while self._video_worker_running and not self.stop_flag:
+            # Get next item from queue
+            item = None
+            with self._video_queue_lock:
+                if self._video_queue:
+                    item = self._video_queue.pop(0)
+                    self._video_results['pending'] = len(self._video_queue)
+
+            if not item:
+                time.sleep(1)
+                continue
+
+            image_path = item['image_path']
+            image_id = item['image_id']
+            video_prompt = item.get('video_prompt', '') or "Subtle motion, cinematic, slow movement"
+            media_name = item.get('media_name', '')
+
+            # Check .mp4 đã tồn tại → skip
+            mp4_check = img_dir / f"{image_id}.mp4"
+            if mp4_check.exists():
+                self.log(f"[VIDEO-SERVER] Skip {image_id}: .mp4 đã có")
+                self._video_results['success'] += 1
+                continue
+
+            if not media_name:
+                self.log(f"[VIDEO-SERVER] Skip {image_id}: Không có media_name", "WARN")
+                self._video_results['failed'] += 1
+                continue
+
+            self.log(f"[VIDEO-SERVER] Processing: {image_id} (media: {media_name[:30]}...)")
+
+            # === RETRY LOGIC ===
+            MAX_VIDEO_RETRIES = 3
+            success = False
+
+            for retry in range(MAX_VIDEO_RETRIES):
+                try:
+                    if retry > 0:
+                        self.log(f"[VIDEO-SERVER] Retry {retry}/{MAX_VIDEO_RETRIES}: {image_id}")
+                        time.sleep(5 * retry)
+
+                    # Gọi GoogleFlowAPI.generate_video() với reference_image_id (I2V mode)
+                    # Server Chrome sẽ dùng FORCE MODE interceptor
+                    ok, result, error = flow_api.generate_video(
+                        prompt=video_prompt,
+                        reference_image_id=media_name,
+                        scene_id=image_id
+                    )
+
+                    if ok and result:
+                        # Video qua server trả về operations → VM poll Google lấy video
+                        # GoogleFlowAPI._poll_proxy_video_task() + _poll_google_with_operations() xử lý
+                        # result chứa video data (media URLs)
+
+                        # Download video từ result
+                        video_saved = False
+                        video_path = img_dir / f"{image_id}.mp4"
+
+                        # result là VideoGenerationResult - check media
+                        if hasattr(result, 'media') and result.media:
+                            for media in result.media:
+                                video_url = getattr(media, 'video_uri', None) or getattr(media, 'uri', None)
+                                if video_url:
+                                    try:
+                                        import requests as req
+                                        resp = req.get(video_url, timeout=120)
+                                        if resp.status_code == 200:
+                                            with open(video_path, 'wb') as f:
+                                                f.write(resp.content)
+                                            video_saved = True
+                                            self.log(f"[VIDEO-SERVER] OK: {image_id} → {video_path.name} ({len(resp.content)//1024}KB)")
+                                            break
+                                    except Exception as dl_err:
+                                        self.log(f"[VIDEO-SERVER] Download error: {dl_err}", "WARN")
+
+                        if video_saved:
+                            self._video_results['success'] += 1
+
+                            # Ghi status_vid="done" vào Excel
+                            try:
+                                from modules.excel_manager import PromptWorkbook
+                                excel_files = list(proj_dir.glob("*_prompts.xlsx"))
+                                if not excel_files:
+                                    excel_files = list((proj_dir / "prompts").glob("*_prompts.xlsx"))
+                                if excel_files and image_id.isdigit():
+                                    wb = PromptWorkbook(excel_files[0])
+                                    wb.load_or_create()
+                                    wb.update_scene(int(image_id), status_vid="done")
+                                    wb.safe_save()
+                            except Exception as e:
+                                self.log(f"[VIDEO-SERVER] WARN: Không ghi Excel: {e}", "WARN")
+
+                            # Xóa ảnh gốc nếu cần
+                            if self._video_settings.get('replace_image', True):
+                                png_path = img_dir / f"{image_id}.png"
+                                if png_path.exists():
+                                    try:
+                                        png_path.unlink()
+                                    except:
+                                        pass
+
+                            success = True
+                            break
+                        else:
+                            self.log(f"[VIDEO-SERVER] No video URL in result for {image_id}", "WARN")
+                    else:
+                        self.log(f"[VIDEO-SERVER] Failed {image_id}: {error}", "WARN")
+
+                except Exception as e:
+                    self.log(f"[VIDEO-SERVER] Error {image_id} (retry {retry+1}): {e}", "ERROR")
+
+            if not success:
+                self._video_results['failed'] += 1
+                self._video_results['failed_items'].append(item)
+                self.log(f"[VIDEO-SERVER] FAILED: {image_id} sau {MAX_VIDEO_RETRIES} retries", "ERROR")
+
+            time.sleep(2)
+
+        self.log(f"[VIDEO-SERVER] Worker stopped. Results: {self._video_results['success']} OK, {self._video_results['failed']} failed")
 
     # =========================================================================
     # PARALLEL VIDEO CHROME - Mở Chrome 2 song song với Chrome 1 (tạo ảnh)
