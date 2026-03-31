@@ -1389,6 +1389,94 @@ class DrissionFlowAPI:
         from modules.fingerprint_data import get_unique_seed
         self._fingerprint_seed = get_unique_seed()
 
+    # ================================================================
+    # v1.0.618: Firewall block IPv4 cho Chrome (VM direct mode)
+    # Di chuyen tu ipv6_provider.py sang day vi file nay LUON duoc update
+    # ================================================================
+    _FW_RULE_PREFIX = "VE3_Block_IPv4_Chrome"
+
+    def _fw_run_cmd(self, cmd: str, timeout: int = 20) -> bool:
+        """Run netsh command, log failure. Return True if OK."""
+        import subprocess
+        try:
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+            if r.returncode != 0:
+                stderr = (r.stderr or "").strip()
+                if 'already' in stderr.lower() or 'object already exists' in stderr.lower():
+                    return True
+                if 'delete' in cmd and ('not found' in stderr.lower() or 'object' in stderr.lower()):
+                    return True
+                self.log(f"[FW] WARN: {cmd[:80]}")
+                if stderr:
+                    self.log(f"[FW] stderr: {stderr[:150]}")
+                return False
+            return True
+        except Exception as e:
+            self.log(f"[FW] Error: {e}")
+            return False
+
+    def _get_chrome_paths(self) -> list:
+        """Lay duong dan Chrome Portable executables."""
+        from pathlib import Path
+        tool_dir = Path(__file__).parent.parent
+        paths = []
+        for folder in ["GoogleChromePortable", "GoogleChromePortable - Copy"]:
+            exe = tool_dir / folder / "GoogleChromePortable.exe"
+            if exe.exists():
+                paths.append(str(exe))
+            app_exe = tool_dir / folder / "App" / "Chrome-bin" / "chrome.exe"
+            if app_exe.exists():
+                paths.append(str(app_exe))
+        return paths
+
+    def _block_ipv4_for_chrome(self):
+        """
+        v1.0.618: Block outbound IPv4 cho Chrome executables.
+        Chrome khong the dung IPv4 → bat buoc IPv6 truc tiep.
+        RDP/system van dung IPv4 binh thuong.
+        netsh khong cho protocol=any + remoteip → tach TCP va UDP rieng.
+        """
+        from pathlib import Path
+
+        self._unblock_ipv4_for_chrome()
+
+        chrome_paths = self._get_chrome_paths()
+        if not chrome_paths:
+            self.log("[FW] WARN: Khong tim thay Chrome Portable, skip firewall")
+            return
+
+        self.log(f"[FW] Firewall: Tim thay {len(chrome_paths)} Chrome exe(s)")
+
+        rule_idx = 0
+        for exe_path in chrome_paths:
+            folder_name = Path(exe_path).parent.parent.name
+            ok = True
+            for proto in ['tcp', 'udp']:
+                rule_name = f"{self._FW_RULE_PREFIX}_{rule_idx}"
+                cmd = (
+                    f'netsh advfirewall firewall add rule '
+                    f'name="{rule_name}" dir=out action=block '
+                    f'program="{exe_path}" '
+                    f'protocol={proto} remoteip=0.0.0.0-255.255.255.255'
+                )
+                if not self._fw_run_cmd(cmd):
+                    ok = False
+                rule_idx += 1
+
+            if ok:
+                self.log(f"[FW] [v] Block IPv4 (TCP+UDP) cho {folder_name}")
+            else:
+                self.log(f"[FW] [WARN] Khong block duoc IPv4 cho {exe_path}")
+
+    def _unblock_ipv4_for_chrome(self):
+        """v1.0.618: Go tat ca firewall rules block IPv4 cho Chrome."""
+        for i in range(20):
+            rule_name = f"{self._FW_RULE_PREFIX}_{i}"
+            self._fw_run_cmd(
+                f'netsh advfirewall firewall delete rule name="{rule_name}"',
+                timeout=5
+            )
+
     def log(self, msg: str, level: str = "INFO"):
         """Log message - chỉ dùng 1 trong 2: callback hoặc print."""
         if self.log_callback:
@@ -3018,8 +3106,10 @@ class DrissionFlowAPI:
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
                     self.log(f"[NET] Chrome → {chrome_arg} (WebRTC blocked)")
                 else:
-                    # v1.0.613: VM mode DIRECT - IPv6 tren interface + firewall block IPv4
+                    # v1.0.617: VM mode DIRECT - IPv6 tren interface + firewall block IPv4
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
+                    # Block IPv4 cho Chrome ngay tai day (dam bao code duoc chay)
+                    self._block_ipv4_for_chrome()
                     self.log(f"[NET] Chrome → IPv6 DIRECT (firewall block IPv4, khong proxy)")
                 _using_proxy_provider = True
 
@@ -8286,6 +8376,12 @@ class DrissionFlowAPI:
 
     def close(self):
         """Đóng Chrome và proxy bridge."""
+        # v1.0.618: Go firewall rules block IPv4
+        try:
+            self._unblock_ipv4_for_chrome()
+        except Exception:
+            pass
+
         if self.driver:
             try:
                 self.driver.quit()
