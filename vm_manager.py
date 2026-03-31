@@ -3714,12 +3714,19 @@ class VMManager:
                     if s.exists():
                         shutil.copy2(str(s), str(TOOL_DIR / fn))
 
-                # Copy modules/
+                # Copy modules/ (bao gom subfolders nhu proxy_providers/)
                 src_mod = src / "modules"
                 dst_mod = TOOL_DIR / "modules"
                 if src_mod.exists():
                     for py in src_mod.glob("*.py"):
                         shutil.copy2(str(py), str(dst_mod / py.name))
+                    # v1.0.615: Copy subfolders (proxy_providers/, ...)
+                    for sub in src_mod.iterdir():
+                        if sub.is_dir() and not sub.name.startswith('__'):
+                            dst_sub = dst_mod / sub.name
+                            dst_sub.mkdir(parents=True, exist_ok=True)
+                            for py in sub.glob("*.py"):
+                                shutil.copy2(str(py), str(dst_sub / py.name))
 
                 # v1.0.593: Copy control/ (master_control.py)
                 src_ctrl = src / "control"
