@@ -1151,15 +1151,28 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log(f"Password step error: {e}", "WARN")
 
         # === BƯỚC 2.5: XỬ LÝ TRANG "PHÊ DUYỆT THIẾT BỊ" (nếu có) ===
-        # v1.0.621: Doi trang 2FA load xong thay vi sleep co dinh
-        log("Waiting for 2FA/device approval page...")
-        # Doi trang chuyen (password → 2FA), max 10s
-        for _2fa_wait in range(10):
+        # v1.0.649: Doi URL THAY DOI (khong chi check 'challenge')
+        # Bug cu: URL `challenge/pwd` cung chua 'challenge' → break ngay (false positive)
+        # Fix: Ghi nhan URL truoc khi Enter, doi URL KHAC hoac chua 'totp'/'az'/'ipp'/'myaccount'
+        log("Waiting for password to be accepted...")
+        _url_before_enter = driver.url.lower()
+        _pwd_accepted = False
+        for _2fa_wait in range(15):  # Tang tu 10 len 15s
             current = driver.url.lower()
-            if 'challenge' in current or 'signin/rejected' in current or 'myaccount' in current:
+            # URL da thay doi (khong con trang password)
+            if current != _url_before_enter:
                 log(f"Page transitioned (after {_2fa_wait+1}s)")
+                _pwd_accepted = True
+                break
+            # URL chua doi nhung co the da chuyen sang challenge khac
+            if 'myaccount' in current or 'signin/rejected' in current:
+                log(f"Page transitioned (after {_2fa_wait+1}s)")
+                _pwd_accepted = True
                 break
             time.sleep(1)
+        if not _pwd_accepted:
+            log(f"Password may not have been accepted (URL unchanged after 15s)", "WARN")
+            log(f"Current URL: {driver.url[:80]}...", "WARN")
         time.sleep(1)  # Them 1s cho page render
         try:
             # A) Kiểm tra 2FA option trước (Google Authenticator)
@@ -1287,26 +1300,32 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 log(f"2FA step error: {e}", "WARN")
 
         # === KIỂM TRA LOGIN THỰC SỰ THÀNH CÔNG ===
-        # v1.0.621: Tang thoi gian cho mang cham
+        # v1.0.649: Tang thoi gian + fix logic check URL
         log("Waiting for login to complete...")
         time.sleep(3)
 
         # Kiểm tra URL sau khi login
-        max_check = 10  # Tang tu 5 len 10 (20s thay vi 10s)
+        max_check = 15  # v1.0.649: Tang tu 10 len 15 (30s cho mang cham)
         login_success = False
         for check in range(max_check):
             current_url = driver.url.lower()
             log(f"Check {check+1}/{max_check}: URL = {current_url[:60]}...")
 
-            # Login thành công nếu URL không còn ở trang accounts.google.com/signin
-            if "accounts.google.com/signin" not in current_url and \
-               "accounts.google.com/v3/signin" not in current_url:
-                # Kiểm tra thêm: không phải trang error/challenge
-                if "accounts.google.com" not in current_url or \
-                   "myaccount.google.com" in current_url:
-                    login_success = True
-                    log("Login SUCCESS - URL changed!", "OK")
-                    break
+            # Login thành công nếu URL đã rời khỏi accounts.google.com
+            if "myaccount.google.com" in current_url or \
+               "google.com/search" in current_url or \
+               "labs.google" in current_url:
+                login_success = True
+                log("Login SUCCESS - URL changed!", "OK")
+                break
+
+            # Vẫn ở accounts.google.com nhưng KHÔNG còn ở signin/challenge
+            if "accounts.google.com" in current_url and \
+               "/signin" not in current_url and \
+               "/challenge" not in current_url:
+                login_success = True
+                log("Login SUCCESS - URL changed!", "OK")
+                break
 
             time.sleep(2)
 

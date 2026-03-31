@@ -1,3 +1,19 @@
+1.0.649
+2026-04-01 (VN)
+Fix: Login - 2FA wait false positive + login success check qua strict
+- VAN DE 1: Sau khi nhap password, code check 'challenge' trong URL
+  → 'challenge/pwd' (trang password) CHUA CHUYEN MA DA chua 'challenge'
+  → Code tuong da qua 2FA → bo qua OTP → login fail
+- FIX 1: Track URL truoc khi Enter, doi URL THAY DOI (khong chi check keyword)
+  → Chi tiep tuc khi URL thuc su chuyen sang trang moi
+- VAN DE 2: Login success check 'accounts.google.com/v3/signin not in url'
+  → URL 2FA 'challenge/totp' van chua 'v3/signin' → khong detect progress
+  → Timeout 10s qua ngan cho mang cham
+- FIX 2: Check specific success URLs (myaccount, labs.google, google.com/search)
+  → Exclude ca '/signin' VA '/challenge' paths (ko nham 2FA la fail)
+  → Tang timeout 20s → 30s (15 checks × 2s)
+- File: google_login.py
+
 1.0.648
 2026-04-01 (VN)
 Fix: Sync cache → Excel cho SCENES truoc khi tao video (giong refs)
