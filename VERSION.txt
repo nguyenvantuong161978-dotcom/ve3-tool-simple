@@ -1,3 +1,21 @@
+1.0.652
+2026-04-01 (VN)
+Fix: IPv6 Pool tu phuc hoi - burned subnets quay lai available sau cooldown
+- VAN DE: Server Chrome bi 403 lien tuc → burn_ip() xoa subnet → tao subnet moi
+  → Subnet moi cung bi 403 → burn tiep → het subnet → reuse subnet vua burn → loop
+  → Pool can kiet IPv6, server khong tao duoc anh
+- FIX: Auto-recover burned subnets sau cooldown (max 10 phut)
+  → _burned_subnets: Dict[subnet, burned_at] - track subnet + timestamp
+  → _auto_recover_subnets(): Khi subnet da qua cooldown → tao gateway moi + IP moi → available
+  → Goi tu get_ip() va burn_ip() (truoc khi chon subnet moi)
+  → Pool LUON co du IPv6 vi subnet tu phuc hoi sau 10 phut
+- FLOW:
+  → Subnet bi 403 → burn → tracked voi timestamp → doi 10 phut
+  → Sau 10 phut → auto-recover: tao gateway moi + random IP → available
+  → Pool tu can bang: burn rate ≤ recover rate → luon co IPv6
+- Persist: burned_subnets luu vao pool.json, survived restart
+- File: ipv6/ipv6_pool.py
+
 1.0.651
 2026-04-01 (VN)
 Fix: Login cho page render + Server 400 retry 1 lan + VM skip POLICY_VIOLATION

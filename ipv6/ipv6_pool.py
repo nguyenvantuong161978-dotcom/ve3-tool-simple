@@ -60,6 +60,10 @@ class IPv6Pool:
         self.pool: List[Dict] = []
         # Tracking: addresses da tung dung (ke ca burned) - de khong dung lai
         self._burned_addresses: set = set()
+        # v1.0.652: Track burned subnets voi timestamp de tu phuc hoi
+        # {subnet_int: burned_at_timestamp}
+        self._burned_subnets: Dict[int, float] = {}
+        self._recover_cooldown = min(cooldown_seconds, 600)  # Max 10 phut
 
     # =========================================================================
     # INIT / LOAD / SAVE
@@ -103,11 +107,15 @@ class IPv6Pool:
                     data = json.load(f)
                 self.pool = data.get("pool", [])
                 self._burned_addresses = set(data.get("burned_addresses", []))
-                self.log(f"[POOL] Loaded {len(self.pool)} entries, {len(self._burned_addresses)} burned")
+                # v1.0.652: Load burned subnets timestamps
+                _bs = data.get("burned_subnets", {})
+                self._burned_subnets = {int(k): float(v) for k, v in _bs.items()}
+                self.log(f"[POOL] Loaded {len(self.pool)} entries, {len(self._burned_addresses)} burned, {len(self._burned_subnets)} burned subnets")
             except Exception as e:
                 self.log(f"[POOL] Load error: {e}")
                 self.pool = []
                 self._burned_addresses = set()
+                self._burned_subnets = {}
         else:
             self.log("[POOL] No saved pool, starting fresh")
 
@@ -117,6 +125,7 @@ class IPv6Pool:
             data = {
                 "pool": self.pool,
                 "burned_addresses": list(self._burned_addresses),
+                "burned_subnets": {str(k): v for k, v in self._burned_subnets.items()},
                 "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
             with open(self.pool_file, "w", encoding="utf-8") as f:
@@ -162,6 +171,9 @@ class IPv6Pool:
             gateway: Gateway ::1 cua subnet
         """
         with self._lock:
+            # v1.0.652: Tu phuc hoi burned subnets truoc khi tim IP
+            self._auto_recover_subnets()
+
             # Tim IP available (tu dau list - FIFO)
             for i, entry in enumerate(self.pool):
                 if entry["status"] == "available":
@@ -347,6 +359,9 @@ class IPv6Pool:
             self.pool.pop(burned_idx)
             self._burned_addresses.add(address)
 
+            # v1.0.652: Tu phuc hoi burned subnets truoc khi tim subnet moi
+            self._auto_recover_subnets()
+
             # 3. Chon subnet MOI (random, chua co trong pool va chua burned)
             pool_subnets = {e.get("subnet") for e in self.pool if e.get("subnet") is not None}
             # Uu tien tranh subnet cu (vi bi 403)
@@ -399,8 +414,70 @@ class IPv6Pool:
             self.pool.append(new_entry)
             self._save_pool()
 
+            # v1.0.652: Track burned subnet + timestamp de tu phuc hoi
+            if old_subnet is not None:
+                self._burned_subnets[old_subnet] = time.time()
+
             self.log(f"[POOL] BURN: {address} ({reason}) → xoa subnet {old_subnet_hex}, "
                      f"tao moi subnet {new_subnet_hex} ({worker_ip})")
+
+    def _auto_recover_subnets(self):
+        """
+        v1.0.652: Tu phuc hoi burned subnets sau cooldown.
+        Subnet bi 403 → doi _recover_cooldown → tao gateway moi + IP moi → available.
+        Goi TU TRONG _lock (caller da acquire lock).
+        """
+        if not self._burned_subnets:
+            return
+
+        now = time.time()
+        pool_subnets = {e.get("subnet") for e in self.pool if e.get("subnet") is not None}
+        recovered = []
+
+        for subnet, burned_at in list(self._burned_subnets.items()):
+            elapsed = now - burned_at
+            if elapsed < self._recover_cooldown:
+                continue
+            # Subnet da qua cooldown → phuc hoi
+            if subnet in pool_subnets:
+                # Subnet da co trong pool (co the da duoc reuse) → chi xoa tracking
+                recovered.append(subnet)
+                continue
+
+            # Tao gateway moi tren router + them IP vao pool
+            subnet_hex = f"{subnet:02x}"
+            gw_addr = f"{self.api.prefix}{subnet_hex}::1/64"
+            try:
+                gw_ok = self.api.add_ipv6_address(gw_addr)
+                if not gw_ok:
+                    # Co the da ton tai → van OK
+                    pass
+
+                worker_ip_full = self.api.build_ipv6_address(subnet, full_random=True)
+                worker_ip = worker_ip_full.split("/")[0]
+                gateway = self._get_gateway_for_ip(worker_ip)
+
+                new_entry = {
+                    "address": worker_ip,
+                    "full_address": worker_ip_full,
+                    "subnet": subnet,
+                    "subnet_hex": subnet_hex,
+                    "gateway": gateway,
+                    "status": "available",
+                    "added_at": now,
+                }
+                self.pool.append(new_entry)
+                recovered.append(subnet)
+                self.log(f"[POOL] RECOVER: subnet {subnet_hex} phuc hoi sau {int(elapsed)}s ({worker_ip})")
+            except Exception as e:
+                self.log(f"[POOL] RECOVER: subnet {subnet_hex} FAIL: {e}")
+
+        if recovered:
+            for s in recovered:
+                self._burned_subnets.pop(s, None)
+            self._save_pool()
+            self.log(f"[POOL] RECOVER: {len(recovered)} subnets phuc hoi, "
+                     f"con {len(self._burned_subnets)} dang cooldown")
 
     def rotate_ip(self, current_address: str, reason: str = "403") -> Optional[Tuple[str, str]]:
         """
@@ -746,6 +823,9 @@ class IPv6Pool:
             stats["burned_total"] = len(self._burned_addresses)
             stats["range_total"] = total_range
             stats["range_remaining"] = total_range - len(self._burned_addresses)
+            # v1.0.652: Burned subnets dang cooldown
+            stats["subnets_cooling"] = len(self._burned_subnets)
+            stats["recover_cooldown"] = self._recover_cooldown
             return stats
 
     def get_pool_entries(self) -> List[Dict]:
@@ -772,5 +852,6 @@ class IPv6Pool:
             self.log("[POOL] RESET: Clearing pool tracking data...")
             self.pool = []
             self._burned_addresses = set()
+            self._burned_subnets = {}
             self._save_pool()
             self.log("[POOL] RESET complete (IPs unchanged on router)")
