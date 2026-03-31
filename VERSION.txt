@@ -1,4 +1,17 @@
-1.0.618
+1.0.619
+2026-03-31 (VN)
+Fix: Block IPv4 TRUOC khi mo Chrome (google_login.py)
+
+- VAN DE: Firewall code chi chay trong DrissionFlowAPI.setup_and_open_chrome()
+  * google_login.py mo Chrome RIENG (khong qua DrissionFlowAPI)
+  * Chrome login mo TRUOC → da ket noi IPv4 → firewall sau vo nghia
+- FIX: Goi _block_ipv4_for_chrome_static() trong google_login.py
+  * Block IPv4 TRUOC KHI mo Chrome
+  * Chrome mo ra da khong the dung IPv4
+  * Static method: goi duoc tu bat ky dau (khong can instance)
+- Files: google_login.py, modules/drission_flow_api.py
+
+v1.0.618
 2026-03-31 (VN)
 Fix: Di chuyen firewall block IPv4 vao drission_flow_api.py (file LUON duoc update)
 
@@ -20,67 +33,4 @@ Fix: VM IPv6 DIRECT mode + firewall block IPv4 (da test logic OK)
 - Quay lai direct mode (khong SOCKS5 vì cham)
 - Logic firewall da verify: tim 4 Chrome exe, tao 8 rules (TCP+UDP)
 - Commands dung format: protocol=tcp/udp remoteip=0.0.0.0-255.255.255.255
-- File: modules/proxy_providers/ipv6_provider.py
-
-v1.0.615
-2026-03-31 (VN)
-Fix: Firewall block IPv4 - them import Path (v1.0.614 crash NameError)
-
-- BUG: _block_ipv4_for_chrome() dung Path() nhung KHONG import Path
-  * NameError: name 'Path' is not defined → method crash
-  * setup() catch exception → firewall rules KHONG duoc tao
-  * Chrome van dung IPv4
-- FIX: Them `from pathlib import Path` trong _block_ipv4_for_chrome()
-- THEM: Log so luong Chrome exe tim thay (de debug)
-- File: modules/proxy_providers/ipv6_provider.py
-
-v1.0.614
-2026-03-31 (VN)
-Fix: Firewall block IPv4 cho Chrome - tach TCP+UDP (netsh khong cho protocol=any+remoteip)
-
-- BUG: netsh tra loi "A specified IP address or address keyword is not valid"
-  * protocol=any KHONG dung duoc voi remoteip=0.0.0.0/0
-  * Firewall rules KHONG duoc tao → Chrome van dung IPv4
-- FIX: Tach thanh 2 rules rieng cho moi Chrome exe:
-  * Rule TCP: protocol=tcp remoteip=0.0.0.0-255.255.255.255
-  * Rule UDP: protocol=udp remoteip=0.0.0.0-255.255.255.255
-  * Moi Chrome = 2 rules → block ca TCP va UDP IPv4
-- File: modules/proxy_providers/ipv6_provider.py
-
-v1.0.613
-2026-03-30 (VN)
-Perf: VM IPv6 DIRECT + Firewall block IPv4 cho Chrome
-
-- VM mode: Bo SOCKS5 proxy → Chrome dung IPv6 truc tiep tren interface
-- Firewall block IPv4 outbound cho ChromePortable → Chrome bat buoc dung IPv6
-- RDP/system van dung IPv4 binh thuong (chi block Chrome process)
-- Server mode: Van dung SOCKS5 proxy (nhieu workers can bind IPv6 khac nhau)
-- _block_ipv4_for_chrome(): Add firewall rule block IPv4 khi setup
-- _unblock_ipv4_for_chrome(): Go rule khi stop
-- google_login.py: VM mode tra "" (khong proxy), dam bao IPv6 tren interface
-
-v1.0.611
-2026-03-30 (VN)
-Fix: Server IPv6 Pool - firewall TCP/UDP + cleanup static IPs
-
-- Firewall: Mo TCP/UDP outbound cho IPv6 (truoc chi mo ICMPv6 NDP)
-  * Ping gateway OK nhung TCP connect fail → thieu outbound TCP rule
-- Cleanup static IPs: Xoa 41+ IPv6 static (tu GUI list) TRUOC khi add Pool IPs
-  * Nhieu IP tren interface → nhieu route conflict → OS chon sai route
-  * Chi giu Pool IPs (keep_ips), xoa tat ca IP khac co cung prefix
-- Log target host:port khi connect fail (3 lan dau) de debug
-- File: modules/proxy_providers/ipv6_provider.py, modules/ipv6_proxy.py, server/chrome_pool.py
-
-1.0.610
-2026-03-30 (VN)
-Fix: Server IPv6 Pool - interface setup giong ipv6_rotator
-
-- _add_to_interface() viet lai giong logic ipv6_rotator.set_ipv6():
-  * CLEANUP old ::/0 routes truoc (nhieu default routes → routing loan)
-  * Firewall ICMPv6 NDP TRUOC khi add address
-  * IPv6 prefix policy (prefer IPv6 over IPv4)
-  * Wait 8s cho NDP (truoc chi 3s)
-  * DNS chay rieng (non-fatal)
-  * VERIFY IP tren interface sau setup
-  * Log chi tiet tung command, ping gateway check Reply
 - File: modules/proxy_providers/ipv6_provider.py

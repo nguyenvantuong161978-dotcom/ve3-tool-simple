@@ -962,6 +962,13 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             options.set_argument(f'--proxy-server={proxy_arg}')
             options.set_argument('--proxy-bypass-list=<-loopback>')
             log(f"[NET] Login qua proxy: {proxy_arg}")
+        else:
+            # v1.0.619: Direct mode - block IPv4 TRUOC khi mo Chrome
+            try:
+                from modules.drission_flow_api import DrissionFlowAPI
+                DrissionFlowAPI._block_ipv4_for_chrome_static(lambda msg: log(msg))
+            except Exception as fw_err:
+                log(f"[FW] Firewall error: {fw_err}")
 
         # Mở Chrome mới
         driver = ChromiumPage(options)

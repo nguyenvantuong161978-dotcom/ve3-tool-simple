@@ -1477,6 +1477,71 @@ class DrissionFlowAPI:
                 timeout=5
             )
 
+    @staticmethod
+    def _block_ipv4_for_chrome_static(log_func=print):
+        """
+        v1.0.618: Static version - goi tu google_login.py TRUOC khi mo Chrome.
+        Block IPv4 cho Chrome Portable TRUOC KHI Chrome khoi dong.
+        """
+        import subprocess
+        from pathlib import Path
+
+        FW_PREFIX = "VE3_Block_IPv4_Chrome"
+
+        # Xoa rules cu
+        for i in range(20):
+            try:
+                subprocess.run(
+                    f'netsh advfirewall firewall delete rule name="{FW_PREFIX}_{i}"',
+                    shell=True, capture_output=True, timeout=5
+                )
+            except Exception:
+                pass
+
+        # Tim Chrome Portable
+        tool_dir = Path(__file__).parent.parent
+        chrome_paths = []
+        for folder in ["GoogleChromePortable", "GoogleChromePortable - Copy"]:
+            exe = tool_dir / folder / "GoogleChromePortable.exe"
+            if exe.exists():
+                chrome_paths.append(str(exe))
+            app_exe = tool_dir / folder / "App" / "Chrome-bin" / "chrome.exe"
+            if app_exe.exists():
+                chrome_paths.append(str(app_exe))
+
+        if not chrome_paths:
+            log_func("[FW] WARN: Khong tim thay Chrome Portable")
+            return
+
+        log_func(f"[FW] Tim thay {len(chrome_paths)} Chrome exe(s)")
+
+        rule_idx = 0
+        for exe_path in chrome_paths:
+            folder_name = Path(exe_path).parent.parent.name
+            ok = True
+            for proto in ['tcp', 'udp']:
+                rule_name = f"{FW_PREFIX}_{rule_idx}"
+                cmd = (
+                    f'netsh advfirewall firewall add rule '
+                    f'name="{rule_name}" dir=out action=block '
+                    f'program="{exe_path}" '
+                    f'protocol={proto} remoteip=0.0.0.0-255.255.255.255'
+                )
+                try:
+                    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=20)
+                    if r.returncode != 0:
+                        ok = False
+                        log_func(f"[FW] WARN: {r.stderr.strip()[:100]}")
+                except Exception as e:
+                    ok = False
+                    log_func(f"[FW] Error: {e}")
+                rule_idx += 1
+
+            if ok:
+                log_func(f"[FW] [v] Block IPv4 (TCP+UDP) cho {folder_name}")
+            else:
+                log_func(f"[FW] [WARN] Khong block duoc {folder_name}")
+
     def log(self, msg: str, level: str = "INFO"):
         """Log message - chỉ dùng 1 trong 2: callback hoặc print."""
         if self.log_callback:
