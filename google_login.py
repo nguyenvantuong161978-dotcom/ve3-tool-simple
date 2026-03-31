@@ -1045,35 +1045,74 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             log(f"Email step error: {e}", "WARN")
 
         # === BƯỚC 2: ĐIỀN PASSWORD (Ctrl+V) ===
-        # v1.0.623: Doi password input voi nhieu selector + doi URL truoc
+        # v1.0.645: Fix password detection - Google đổi DOM, dùng JS detect + thêm selectors
         log("Waiting for password input...")
         try:
             pw_input = None
-            # Thu nhieu selector vi Google co the dung type khac nhau
-            pw_selectors = [
-                'input[type="password"]',
-                'input[name="Passwd"]',
-                'input[name="password"]',
-                'input[autocomplete="current-password"]',
-                '#password input',
-                'div[id="password"] input',
-            ]
-            for pw_wait in range(20):  # Max 20s cho mang cham
+
+            # v1.0.645: Dùng JavaScript detect trước (nhanh + reliable hơn DrissionPage selectors)
+            # Google có thể thay đổi attribute nhưng vẫn có input[type=password] trong DOM
+            JS_FIND_PW = '''
+                // Cách 1: type=password (chuẩn nhất)
+                var el = document.querySelector('input[type="password"]');
+                if (el) { el.focus(); el.click(); return true; }
+                // Cách 2: name=Passwd (Google classic)
+                el = document.querySelector('input[name="Passwd"]');
+                if (el) { el.focus(); el.click(); return true; }
+                // Cách 3: autocomplete=current-password
+                el = document.querySelector('input[autocomplete="current-password"]');
+                if (el) { el.focus(); el.click(); return true; }
+                // Cách 4: aria-label chứa "password" (Google v3 mới)
+                el = document.querySelector('input[aria-label*="assword"]');
+                if (el) { el.focus(); el.click(); return true; }
+                // Cách 5: div#password chứa input
+                var div = document.querySelector('#password');
+                if (div) { el = div.querySelector('input'); if (el) { el.focus(); el.click(); return true; } }
+                // Cách 6: Tìm tất cả input, check type password (shadow DOM fallback)
+                var inputs = document.querySelectorAll('input');
+                for (var i = 0; i < inputs.length; i++) {
+                    if (inputs[i].type === 'password') { inputs[i].focus(); inputs[i].click(); return true; }
+                }
+                return false;
+            '''
+
+            # v1.0.645: Loop 15s thực tế (không phải 70s như trước)
+            pw_found_js = False
+            for pw_wait in range(15):  # Max 15 giây
+                try:
+                    result = driver.run_js(JS_FIND_PW)
+                    if result:
+                        log(f"Password input found via JS (after {pw_wait+1}s)")
+                        pw_found_js = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(1)
+
+            # Nếu JS không tìm thấy, thử DrissionPage selectors (fallback)
+            if not pw_found_js:
+                pw_selectors = [
+                    'input[type="password"]',
+                    'input[name="Passwd"]',
+                    'input[autocomplete="current-password"]',
+                    'input[aria-label*="assword"]',
+                ]
                 for sel in pw_selectors:
                     try:
-                        pw_input = driver.ele(sel, timeout=0.5)
+                        pw_input = driver.ele(sel, timeout=1)
                         if pw_input:
-                            log(f"Password input found: {sel} (after {pw_wait+1}s)")
+                            log(f"Password input found: {sel} (DrissionPage fallback)")
                             break
                     except Exception:
                         pass
-                if pw_input:
-                    break
-                time.sleep(0.5)
 
-            if not pw_input:
-                log("Password input NOT FOUND after 20s!", "WARN")
-                # Fallback: thu sleep roi paste
+            if not pw_found_js and not pw_input:
+                log("Password input NOT FOUND after 15s!", "WARN")
+                # v1.0.645: Log URL hiện tại để debug
+                try:
+                    log(f"Current URL: {driver.url[:80]}...", "WARN")
+                except Exception:
+                    pass
                 time.sleep(2)
 
             # Copy password vào clipboard
@@ -1086,13 +1125,17 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 subprocess.run(['clip'], input=password.encode(), check=True)
                 log("Password copied to clipboard (via clip)")
 
-            # Click vao password input neu tim thay
-            if pw_input:
+            # Click vào password input nếu tìm thấy qua DrissionPage
+            if pw_input and not pw_found_js:
                 try:
                     pw_input.click()
                     time.sleep(0.5)
                 except Exception:
                     pass
+
+            # v1.0.645: Nếu JS đã focus, đợi thêm chút cho ổn định
+            if pw_found_js:
+                time.sleep(0.3)
 
             # Gửi Ctrl+V để paste
             from DrissionPage.common import Actions

@@ -71,12 +71,13 @@ class NDPKeepalive:
                     cmd, shell=True, capture_output=True, text=True, timeout=8
                 )
                 if result.returncode == 0 and 'Reply from' in (result.stdout or ''):
-                    if fail_count > 0:
+                    if fail_count >= 2:
                         self.log(f"[NDP-Keepalive] Gateway {self.gateway} recovered after {fail_count} fails")
                     fail_count = 0
                 else:
                     fail_count += 1
-                    if fail_count <= 3 or fail_count % 10 == 0:
+                    # v1.0.645: Chi log tu fail #2 tro len (fail #1 la binh thuong, giam spam)
+                    if (fail_count >= 2 and fail_count <= 5) or fail_count % 10 == 0:
                         self.log(f"[NDP-Keepalive] [!] Gateway {self.gateway} no reply (fail #{fail_count})")
             except Exception:
                 fail_count += 1

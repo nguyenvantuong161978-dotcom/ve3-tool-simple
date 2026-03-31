@@ -1,3 +1,21 @@
+1.0.645
+2026-04-01 (VN)
+Fix: Password detection dung JS + giam NDP log spam
+- VAN DE 1: Password input LUON "NOT FOUND after 20s" o moi lan login
+  → 6 DrissionPage selectors × 0.5s timeout × 20 vong = 72s lang phi
+  → Google da doi DOM, khong selector nao match
+  → Login chi thanh cong khi blind paste tinh co dung cho
+- FIX 1: Dung JavaScript detect password input (nhanh + reliable)
+  → JS chay truc tiep trong browser, tim input bang 6 cach (type, name, autocomplete, aria-label, #password div, querySelectorAll)
+  → Tim thay → auto focus + click → san sang cho Ctrl+V
+  → Loop 15s thuc te (thay vi 72s)
+  → Fallback: DrissionPage selectors neu JS khong tim thay
+  → Log URL hien tai khi fail de debug
+- VAN DE 2: NDP keepalive log spam "no reply (fail #1)" roi recovery ngay
+  → Fail #1 la binh thuong (1 packet drop), khong can log
+- FIX 2: Chi log tu fail #2 tro len, recovery chi log neu fail >= 2
+- Files: google_login.py, modules/proxy_providers/ipv6_provider.py
+
 1.0.644
 2026-04-01 (VN)
 Fix: NDP keepalive ping DEFAULT gateway thay vi gateway rieng cua worker
