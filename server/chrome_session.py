@@ -178,8 +178,9 @@ JS_SELECT_MODEL = """
 })(MODEL_INDEX);
 """
 
-# v1.0.632: JS chuyen sang Video mode (giong JS_SWITCH_TO_T2V_MODE tu drission_flow_api.py)
-# Flow: Open settings → Video tab → Thanh phan (VIDEO_REFERENCES) → LANDSCAPE → x1 → Model dropdown → Lower Priority
+# v1.0.634: JS chuyen sang Video mode
+# Flow: Open settings → Video tab → Thanh phan (VIDEO_REFERENCES) → LANDSCAPE → x1 → chon model bat ky
+# Khong bat buoc Lower Priority - server Chrome chi can o Video mode, interceptor se thay model tu VM
 JS_SELECT_VIDEO_MODE = """
 (function() {
     window._videoModeResult = 'PENDING';
@@ -269,28 +270,16 @@ JS_SELECT_VIDEO_MODE = """
                             }
                         }
 
-                        // 7. Chon Lower Priority
+                        // 7. Chon model bat ky (chi can o Video mode, interceptor se thay model tu VM)
                         setTimeout(function() {
                             var items = document.querySelectorAll('[role="menuitem"]');
-                            for (var i = 0; i < items.length; i++) {
-                                if (items[i].textContent.indexOf('Lower') >= 0) {
-                                    items[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                                    items[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                                    items[i].click();
-                                    console.log('[VIDEO-MODE] 7. Selected: ' + items[i].textContent.substring(0, 40));
-                                    window._videoModeResult = 'SUCCESS';
-                                    break;
-                                }
-                            }
-                            if (window._videoModeResult !== 'SUCCESS') {
-                                // Fallback: chon model dau tien
-                                if (items.length > 0) {
-                                    items[0].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                                    items[0].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                                    items[0].click();
-                                    console.log('[VIDEO-MODE] 7. Fallback first: ' + items[0].textContent.substring(0, 40));
-                                    window._videoModeResult = 'SUCCESS';
-                                }
+                            if (items.length > 0) {
+                                // Chon model dau tien co san
+                                items[0].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                items[0].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                items[0].click();
+                                console.log('[VIDEO-MODE] 7. Selected: ' + items[0].textContent.substring(0, 40));
+                                window._videoModeResult = 'SUCCESS';
                             }
                             // 8. Dong menu
                             setTimeout(function() {
@@ -309,19 +298,22 @@ JS_SELECT_VIDEO_MODE = """
 
 
 def build_video_interceptor_js(client_bearer_token: str, client_project_id: str,
-                                media_id: str) -> str:
+                                media_id: str, video_model: str = '') -> str:
     """
-    v1.0.632: Video interceptor - THAY bearer token + projectId + inject mediaId.
+    v1.0.634: Video interceptor - THAY bearer token + projectId + inject mediaId + videoModelKey.
 
-    Khac voi FORCE MODE (doi URL):
-    - Chrome DA O VIDEO MODE (da click chuyen sang video UI)
-    - Chrome tu gui VIDEO request (URL dung san)
-    - Interceptor CHI CAN: thay token + projectId + inject referenceImages mediaId
+    Chrome DA O VIDEO MODE (da click chuyen sang video UI).
+    Interceptor:
+    - Thay token → client's token (VM co quyen Lower Priority)
+    - Thay projectId → client's projectId
+    - Inject referenceImages voi mediaId (anh lam khung dau)
+    - Thay videoModelKey → model VM yeu cau (VD: lower priority)
     - GIU NGUYEN recaptchaToken tu Chrome (hop le cho video mode)
     """
     safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
     safe_project = client_project_id.replace("\\", "\\\\").replace("'", "\\'")
     safe_media = media_id.replace("\\", "\\\\").replace("'", "\\'")
+    safe_model = video_model.replace("\\", "\\\\").replace("'", "\\'") if video_model else ''
 
     return """
 window._response = null;
@@ -333,6 +325,7 @@ window._videoPending = false;
 window._clientBearerToken = '""" + safe_token + """';
 window._clientProjectId = '""" + safe_project + """';
 window._clientMediaId = '""" + safe_media + """';
+window._clientVideoModel = '""" + safe_model + """';
 
 return (function() {
     if (window.__proxyInterceptReady) return 'ALREADY';
@@ -372,14 +365,20 @@ return (function() {
                         console.log('[VIDEO-PROXY] 2a. ProjectId → ' + window._clientProjectId);
                     }
 
-                    // Inject referenceImages voi mediaId
-                    if (body.requests && window._clientMediaId) {
+                    // Inject referenceImages voi mediaId + thay videoModelKey
+                    if (body.requests) {
                         body.requests.forEach(function(req) {
-                            req.referenceImages = [{
-                                imageUsageType: 'IMAGE_USAGE_TYPE_ASSET',
-                                mediaId: window._clientMediaId
-                            }];
-                            console.log('[VIDEO-PROXY] 2b. Injected mediaId: ' + window._clientMediaId.substring(0, 50) + '...');
+                            if (window._clientMediaId) {
+                                req.referenceImages = [{
+                                    imageUsageType: 'IMAGE_USAGE_TYPE_ASSET',
+                                    mediaId: window._clientMediaId
+                                }];
+                                console.log('[VIDEO-PROXY] 2b. Injected mediaId: ' + window._clientMediaId.substring(0, 50) + '...');
+                            }
+                            if (window._clientVideoModel) {
+                                req.videoModelKey = window._clientVideoModel;
+                                console.log('[VIDEO-PROXY] 2c-model. videoModelKey → ' + window._clientVideoModel);
+                            }
                         });
                     }
 
@@ -1640,7 +1639,7 @@ class ChromeSession:
                 time.sleep(1)
 
                 js_video_interceptor = build_video_interceptor_js(
-                    client_bearer_token, client_project_id, media_id
+                    client_bearer_token, client_project_id, media_id, video_model
                 )
 
                 interceptor_ok = False

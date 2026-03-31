@@ -1,4 +1,12 @@
-1.0.633
+1.0.634
+2026-03-31 (VN)
+Fix: Server video - khong bat buoc Lower Priority model, interceptor thay model tu VM
+- Server Chrome chi can o Video mode (chon model bat ky co san)
+- Interceptor thay videoModelKey tu payload VM gui (VD: lower priority)
+- Tai khoan server khong can co Lower Priority, chi can VM co quyen la du
+- Vi interceptor thay bearer token → Google check quyen cua VM, khong phai server
+
+v1.0.633
 2026-03-31 (VN)
 Fix: Server worker - IPv6 mat mang sau setup → rotate TRUOC khi retry
 - VAN DE: Chrome-1 IPv6 pass test luc setup nhung mat ket noi ngay sau
