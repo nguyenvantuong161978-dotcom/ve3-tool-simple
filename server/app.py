@@ -533,6 +533,90 @@ def create_image():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/fix/create-video-veo3', methods=['POST'])
+def create_video():
+    """v1.0.629: Tao task video (I2V) - xep vao hang doi."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON body"}), 400
+
+        body_json = data.get('body_json')
+        flow_auth_token = data.get('flow_auth_token', '')
+        vm_id = data.get('vm_id', request.remote_addr or 'unknown')
+
+        if not body_json:
+            return jsonify({"success": False, "error": "Missing body_json"}), 400
+        if not flow_auth_token:
+            return jsonify({"success": False, "error": "Missing flow_auth_token"}), 400
+
+        # Extract video params
+        prompt = ""
+        media_id = ""
+        video_model = "veo_3_1_r2v_fast_landscape_ultra_relaxed"
+        aspect_ratio = "VIDEO_ASPECT_RATIO_LANDSCAPE"
+        seed = None
+
+        if 'requests' in body_json and body_json['requests']:
+            req = body_json['requests'][0]
+            prompt = req.get('textInput', {}).get('prompt', '') or req.get('prompt', '')
+            video_model = req.get('videoModelKey', video_model)
+            aspect_ratio = req.get('aspectRatio', aspect_ratio)
+            seed = req.get('seed', None)
+
+            ref_images = req.get('referenceImages', [])
+            if ref_images:
+                media_id = ref_images[0].get('mediaId', '')
+
+        if not prompt:
+            return jsonify({"success": False, "error": "No prompt found"}), 400
+        if not media_id:
+            return jsonify({"success": False, "error": "No mediaId in referenceImages"}), 400
+
+        project_id = ""
+        if body_json.get('clientContext', {}).get('projectId'):
+            project_id = body_json['clientContext']['projectId']
+        if not project_id:
+            return jsonify({"success": False, "error": "No projectId found"}), 400
+
+        task_id = str(uuid.uuid4())
+        with task_lock:
+            tasks[task_id] = {
+                'status': 'queued',
+                'type': 'video',
+                'result': None,
+                'error': None,
+                'created_at': time.time(),
+                'prompt': prompt,
+                'project_id': project_id,
+                'bearer_token': flow_auth_token,
+                'media_id': media_id,
+                'video_model': video_model,
+                'aspect_ratio': aspect_ratio,
+                'seed': seed,
+                'vm_id': vm_id,
+                'worker': None,
+            }
+            stats['total_received'] += 1
+
+        with queue_lock:
+            task_queue.append(task_id)
+            queue_position = len(task_queue)
+
+        ready = chrome_pool.total_ready() if chrome_pool else 0
+        avail = chrome_pool.available_count() if chrome_pool else 0
+        server_log(f"+Video {task_id[:8]}... | VM: {vm_id} | Pos: {queue_position} | Free: {avail}/{ready} | {prompt[:50]}...")
+
+        return jsonify({
+            "success": True,
+            "taskId": task_id,
+            "queue_position": queue_position,
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route('/api/fix/task-status', methods=['GET'])
 def task_status():
     task_id = request.args.get('taskId', '')

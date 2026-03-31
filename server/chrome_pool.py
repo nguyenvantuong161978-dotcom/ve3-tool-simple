@@ -659,19 +659,33 @@ class ChromePool:
                     if not ok:
                         raise RuntimeError("Chrome session setup failed")
 
-                # Tao anh
-                result = worker.session.generate_image(
-                    client_bearer_token=task['bearer_token'],
-                    client_project_id=task['project_id'],
-                    client_prompt=task['prompt'],
-                    model_name=task.get('model_name', 'GEM_PIX_2'),
-                    aspect_ratio=task.get('aspect_ratio', 'IMAGE_ASPECT_RATIO_LANDSCAPE'),
-                    seed=task.get('seed'),
-                    image_inputs=task.get('image_inputs', []),
-                )
+                # v1.0.629: Phan biet image vs video task
+                task_type = task.get('type', 'image')
+
+                if task_type == 'video':
+                    self._log(f"[{worker_name}] VIDEO task: mediaId={task.get('media_id', '')[:40]}...")
+                    result = worker.session.generate_video(
+                        client_bearer_token=task['bearer_token'],
+                        client_project_id=task['project_id'],
+                        client_prompt=task['prompt'],
+                        media_id=task.get('media_id', ''),
+                        video_model=task.get('video_model', 'veo_3_1_r2v_fast_landscape_ultra_relaxed'),
+                        aspect_ratio=task.get('aspect_ratio', 'VIDEO_ASPECT_RATIO_LANDSCAPE'),
+                        seed=task.get('seed'),
+                    )
+                else:
+                    result = worker.session.generate_image(
+                        client_bearer_token=task['bearer_token'],
+                        client_project_id=task['project_id'],
+                        client_prompt=task['prompt'],
+                        model_name=task.get('model_name', 'GEM_PIX_2'),
+                        aspect_ratio=task.get('aspect_ratio', 'IMAGE_ASPECT_RATIO_LANDSCAPE'),
+                        seed=task.get('seed'),
+                        image_inputs=task.get('image_inputs', []),
+                    )
 
                 with task_lock:
-                    if result and 'media' in result:
+                    if result and ('media' in result or 'operations' in result):
                         tasks[task_id]['status'] = 'completed'
                         tasks[task_id]['result'] = result
                         tasks[task_id]['completed_at'] = time.time()

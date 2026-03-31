@@ -1251,7 +1251,7 @@ class ChromeSession:
                 self.log("Enter sent!")
 
                 # 6. Chờ response (giống test step 7)
-                result = self._wait_for_response(timeout=120)
+                result = self._wait_for_response(timeout=180)
 
                 # 7. Cleanup browser data sau mỗi request (tránh bị Google track/flag)
                 try:
@@ -1294,6 +1294,344 @@ class ChromeSession:
 
         # Fallback (khong nen den day)
         return last_result or {"error": "Max retries exceeded"}
+
+    def generate_video(self, client_bearer_token: str, client_project_id: str,
+                       client_prompt: str, media_id: str,
+                       video_model: str = 'veo_3_1_r2v_fast_landscape_ultra_relaxed',
+                       aspect_ratio: str = 'VIDEO_ASPECT_RATIO_LANDSCAPE',
+                       seed: int = None) -> dict:
+        """
+        v1.0.629: Tạo video từ ảnh (I2V) - FORCE MODE.
+
+        Flow:
+        1. Vào project URL (giống generate_image)
+        2. Inject VIDEO interceptor (convert image request → video I2V request)
+        3. Setup Image mode + model (VẪN Ở IMAGE MODE)
+        4. Paste prompt → Enter → Chrome gửi "image" request
+        5. Interceptor đổi URL + body → video request với media_id
+        6. Chờ operations response → trả về cho VM
+        7. VM tự poll Google trực tiếp để lấy video URL
+
+        Args:
+            client_bearer_token: Bearer token của VM
+            client_project_id: Project ID của VM
+            client_prompt: Video prompt (mô tả chuyển động)
+            media_id: Media ID của ảnh (từ generate_image response)
+            video_model: Model video I2V
+            aspect_ratio: Tỷ lệ video
+            seed: Seed (optional)
+
+        Returns:
+            {"operations": [...]} hoặc {"error": "..."}
+        """
+        if not self.page:
+            return {"error": "Chrome not initialized"}
+
+        max_timeout_retries = 3
+
+        for attempt in range(max_timeout_retries):
+            if attempt > 0:
+                self.log(f"=== Generate Video [RETRY {attempt}/{max_timeout_retries-1}] ===")
+            else:
+                self.log(f"=== Generate Video (I2V) ===")
+            self.log(f"MediaId: {media_id[:50]}...")
+            self.log(f"Prompt: {client_prompt[:60]}...")
+
+            try:
+                # 1. Vào project
+                if self.project_url:
+                    self.page.get(self.project_url)
+                else:
+                    self.page.get(FLOW_URL)
+                time.sleep(5)
+                self.inject_fingerprint_spoof()
+
+                if not self._wait_for_textarea(timeout=20):
+                    self.log("Textarea not found, tao project moi...", "WARN")
+                    if not self._create_new_project():
+                        return {"error": "Cannot create project"}
+                    if not self._wait_for_textarea(timeout=20):
+                        return {"error": "Textarea not found after project creation"}
+                    self.project_url = self.page.url
+
+                # 2. Inject VIDEO interceptor (thay token + projectId + convert sang video)
+                self.log("Inject video interceptor...")
+                self.page.run_js("""
+                    window.__proxyInterceptReady = false;
+                    window._response = null; window._responseError = null; window._requestPending = false;
+                    window._videoResponse = null; window._videoError = null; window._videoPending = false;
+                """)
+                time.sleep(1)
+
+                # Build video payload
+                import uuid as _uuid
+                scene_id = str(_uuid.uuid4())
+                video_seed = seed if seed else int(time.time()) % 100000
+
+                video_payload = {
+                    "clientContext": {
+                        "projectId": client_project_id,
+                        "recaptchaToken": "",  # Will be injected from Chrome's fresh token
+                        "sessionId": f";{int(time.time() * 1000)}",
+                        "tool": "PINHOLE",
+                        "userPaygateTier": "PAYGATE_TIER_TWO"
+                    },
+                    "requests": [{
+                        "aspectRatio": aspect_ratio,
+                        "metadata": {"sceneId": scene_id},
+                        "referenceImages": [{
+                            "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
+                            "mediaId": media_id
+                        }],
+                        "seed": video_seed,
+                        "textInput": {"prompt": client_prompt},
+                        "videoModelKey": video_model
+                    }]
+                }
+
+                safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
+                safe_project = client_project_id.replace("\\", "\\\\").replace("'", "\\'")
+                video_payload_json = json.dumps(video_payload)
+
+                # Video interceptor JS: catch image batchGenerate → convert to video I2V
+                js_video_interceptor = """
+window._clientBearerToken = '""" + safe_token + """';
+window._clientProjectId = '""" + safe_project + """';
+window._videoPayload = """ + video_payload_json + """;
+
+return (function() {
+    if (window.__proxyInterceptReady) return 'ALREADY';
+    window.__proxyInterceptReady = true;
+
+    var origFetch = window.fetch;
+    window.fetch = async function(url, opts) {
+        var urlStr = typeof url === 'string' ? url : url.url;
+
+        // Catch IMAGE batchGenerate request → convert to VIDEO
+        if (urlStr.includes('aisandbox') && (urlStr.includes('batchGenerate') || urlStr.includes('flowMedia'))) {
+            console.log('[VIDEO-PROXY] Caught image request, converting to video...');
+
+            window._videoPending = true;
+            window._videoResponse = null;
+            window._videoError = null;
+
+            // Parse Chrome body to get fresh recaptchaToken
+            var chromeBody = null;
+            var freshRecaptcha = '';
+            if (opts && opts.body) {
+                try {
+                    chromeBody = JSON.parse(opts.body);
+                    if (chromeBody.clientContext) {
+                        freshRecaptcha = chromeBody.clientContext.recaptchaToken || '';
+                        console.log('[VIDEO-PROXY] Got fresh recaptcha: ' + (freshRecaptcha ? freshRecaptcha.substring(0, 20) + '...' : 'EMPTY'));
+                    }
+                } catch(e) {
+                    console.log('[VIDEO-PROXY] Parse error:', e);
+                }
+            }
+
+            // Build video request
+            var videoBody = window._videoPayload;
+            if (videoBody.clientContext) {
+                videoBody.clientContext.recaptchaToken = freshRecaptcha;
+            }
+
+            // Replace bearer token
+            if (!opts.headers) opts.headers = {};
+            if (opts.headers instanceof Headers) {
+                opts.headers.set('Authorization', 'Bearer ' + window._clientBearerToken);
+            } else {
+                opts.headers['Authorization'] = 'Bearer ' + window._clientBearerToken;
+            }
+
+            // Change URL: batchGenerateImages → batchAsyncGenerateVideoReferenceImages
+            var videoUrl = 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages';
+
+            // Replace projectId in URL if needed
+            if (window._clientProjectId) {
+                videoUrl = videoUrl.replace(/projects\\/[^/]+/, 'projects/' + window._clientProjectId);
+            }
+
+            opts.body = JSON.stringify(videoBody);
+            console.log('[VIDEO-PROXY] Sending I2V request to:', videoUrl);
+            console.log('[VIDEO-PROXY] Model:', videoBody.requests[0].videoModelKey);
+            console.log('[VIDEO-PROXY] MediaId:', videoBody.requests[0].referenceImages[0].mediaId.substring(0, 50) + '...');
+
+            try {
+                var response = await origFetch.apply(this, [videoUrl, opts]);
+                var cloned = response.clone();
+                try {
+                    var data = await cloned.json();
+                    console.log('[VIDEO-PROXY] Response status:', response.status);
+
+                    if (response.status === 403 || (data.error && data.error.code === 403)) {
+                        window._videoResponse = {error: data.error || {code: 403, message: 'Permission denied'}};
+                        window._videoError = 'Error 403';
+                    } else if (response.status === 429 || response.status === 253 ||
+                               (data.error && (data.error.code === 429 || data.error.code === 253))) {
+                        window._videoResponse = {error: data.error || {code: 429, message: 'Quota exceeded'}};
+                        window._videoError = 'Error 429';
+                    } else if (response.status === 400 || (data.error && data.error.code === 400)) {
+                        window._videoResponse = {error: data.error || {code: 400, message: 'Bad request'}};
+                        window._videoError = 'Error 400';
+                    } else if (data.operations) {
+                        console.log('[VIDEO-PROXY] Got ' + data.operations.length + ' operations!');
+                        window._videoResponse = data;
+                    } else if (data.error) {
+                        window._videoResponse = {error: data.error};
+                        window._videoError = 'Error: ' + (data.error.message || JSON.stringify(data.error));
+                    } else {
+                        window._videoResponse = data;
+                    }
+                } catch(e) {
+                    window._videoResponse = {status: response.status, error: 'parse_failed'};
+                }
+                window._videoPending = false;
+                return response;
+            } catch(e) {
+                window._videoError = 'Fetch error: ' + e.message;
+                window._videoPending = false;
+                return origFetch.apply(this, [url, opts]);
+            }
+        }
+
+        return origFetch.apply(this, [url, opts]);
+    };
+
+    return 'PROXY_INTERCEPTOR_READY';
+})();
+"""
+
+                interceptor_ok = False
+                for inject_attempt in range(3):
+                    try:
+                        r = self.page.run_js(js_video_interceptor)
+                        self.log(f"Video interceptor: {r}")
+                        if r and r in ('PROXY_INTERCEPTOR_READY', 'ALREADY'):
+                            interceptor_ok = True
+                            break
+                        self.log(f"[WARN] Video interceptor returned: {r}, retry {inject_attempt+1}/3")
+                        time.sleep(1)
+                    except Exception as ie:
+                        self.log(f"[WARN] Video interceptor error: {ie}, retry {inject_attempt+1}/3")
+                        time.sleep(1)
+
+                if not interceptor_ok:
+                    try:
+                        check = self.page.run_js("return window.__proxyInterceptReady === true ? 'OK' : 'FAIL';")
+                        if check == 'OK':
+                            interceptor_ok = True
+                        else:
+                            return {"error": "Video interceptor injection failed"}
+                    except:
+                        return {"error": "Video interceptor injection failed"}
+
+                # 3. Setup Image mode + model (VAN O IMAGE MODE - interceptor se convert)
+                model_index = self._current_model_index if self._current_model_index > 0 else 0
+                self.log(f"Setup Image mode (model index: {model_index})...")
+                js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
+                self.page.run_js("window._modelSelectResult = 'PENDING';")
+                self.page.run_js(js_model)
+                time.sleep(7)
+
+                model_result = self.page.run_js("return window._modelSelectResult;")
+                self.log(f"Model result: {model_result}")
+
+                # 4. Paste video prompt
+                self.log(f"Paste video prompt...")
+                ok = self._paste_prompt(client_prompt)
+                if not ok:
+                    return {"error": "Cannot paste prompt"}
+
+                # 5. Doi recaptcha → Enter (Chrome gui "image" request → interceptor convert → video)
+                self.log("Doi recaptcha (4s)...")
+                time.sleep(4)
+
+                from DrissionPage.common import Keys
+                self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
+                self.log("Enter sent! Interceptor converting to video request...")
+
+                # 6. Cho VIDEO response (operations)
+                result = self._wait_for_video_response(timeout=60)
+
+                # 7. Cleanup
+                try:
+                    self.page.run_js(JS_CLEANUP)
+                    self.log("Cleanup browser data OK")
+                except Exception as ce:
+                    self.log(f"Cleanup warning: {ce}", "WARN")
+
+                # Check timeout → retry
+                if 'error' in result:
+                    err_str = str(result['error']).lower() if isinstance(result['error'], str) else json.dumps(result['error']).lower()
+                    is_timeout = 'timeout' in err_str
+                    is_403 = '403' in err_str
+                    is_400 = '400' in err_str
+
+                    if is_timeout and not is_403 and not is_400:
+                        if attempt < max_timeout_retries - 1:
+                            self.log(f"[TIMEOUT RETRY] Video timeout → retry {attempt + 2}/{max_timeout_retries}...", "WARN")
+                            time.sleep(3)
+                            continue
+                        else:
+                            return result
+                    else:
+                        return result
+                else:
+                    if attempt > 0:
+                        self.log(f"[TIMEOUT RETRY] Video OK sau {attempt + 1} lan!", "OK")
+                    return result
+
+            except Exception as e:
+                self.log(f"Video error: {e}", "ERROR")
+                import traceback
+                traceback.print_exc()
+                return {"error": str(e)}
+
+        return {"error": "Max retries exceeded"}
+
+    def _wait_for_video_response(self, timeout: int = 60) -> dict:
+        """Chờ video response (operations) từ interceptor."""
+        self.log(f"Chờ video response ({timeout}s)...")
+        start = time.time()
+
+        while time.time() - start < timeout:
+            elapsed = time.time() - start
+
+            state = self.page.run_js("""
+                return {
+                    pending: window._videoPending,
+                    hasResponse: !!window._videoResponse,
+                    error: window._videoError
+                };
+            """)
+
+            if state and state.get('error'):
+                self.log(f"VIDEO ERROR: {state['error']}", "ERROR")
+                data = self.page.run_js("return window._videoResponse;")
+                if data and isinstance(data, dict) and 'error' in data:
+                    return {"error": data['error']}
+                return {"error": state['error']}
+
+            if state and state.get('hasResponse') and not state.get('error'):
+                self.log(f"Video response sau {elapsed:.1f}s!", "OK")
+                data = self.page.run_js("return window._videoResponse;")
+
+                if isinstance(data, dict) and 'operations' in data:
+                    ops = data['operations']
+                    self.log(f"Got {len(ops)} video operations", "OK")
+                    return data
+
+                return data or {"error": "Empty video response"}
+
+            elapsed_int = int(elapsed)
+            if elapsed_int > 0 and elapsed_int % 10 == 0 and elapsed_int != getattr(self, '_last_video_wait_log', 0):
+                self._last_video_wait_log = elapsed_int
+                self.log(f"... chờ video ({elapsed_int}s/{timeout}s)")
+
+            time.sleep(1)
+
+        return {"error": f"Video timeout {timeout}s"}
 
     def _paste_prompt(self, prompt: str) -> bool:
         """Paste prompt bằng Ctrl+V (giống tool)."""
@@ -1348,7 +1686,7 @@ class ChromeSession:
         self.log(f"Verified: '{actual}'")
         return bool(actual and actual.strip())
 
-    def _wait_for_response(self, timeout: int = 120) -> dict:
+    def _wait_for_response(self, timeout: int = 180) -> dict:
         """Chờ response từ interceptor."""
         self.log(f"Chờ response ({timeout}s)...")
         start = time.time()
