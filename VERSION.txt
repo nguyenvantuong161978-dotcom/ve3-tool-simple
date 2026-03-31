@@ -1,4 +1,14 @@
-1.0.635
+1.0.636
+2026-03-31 (VN)
+Fix: Server video 400 - doi URL T2V→I2V + doi model t2v→r2v (giong API mode) + timeout 300s
+- VAN DE: Server interceptor inject referenceImages nhung KHONG doi URL endpoint
+  → Chrome gui den batchAsyncGenerateVideoText (T2V) khong chap nhan referenceImages → 400
+  → API mode hoat dong vi DOI URL sang batchAsyncGenerateVideoReferenceImages (I2V)
+- FIX 1: Doi URL batchAsyncGenerateVideoText → batchAsyncGenerateVideoReferenceImages
+- FIX 2: Doi model _t2v_ → _r2v_ + them _landscape truoc _ultra (I2V format)
+- FIX 3: Video timeout 60s → 300s (video can nhieu thoi gian hon anh)
+
+v1.0.635
 2026-03-31 (VN)
 Fix: Server Chrome - detect IPv6 chet qua proxy connect failures, rotate NGAY thay vi doi 403
 - VAN DE: IPv6 chet sau setup nhung worker chi rotate khi gap 403

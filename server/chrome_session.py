@@ -354,6 +354,16 @@ return (function() {
                 console.log('[VIDEO-PROXY] 1. Replaced bearer token');
             }
 
+            // v1.0.636: DOI URL T2V → I2V (giong API mode)
+            // Chrome gui batchAsyncGenerateVideoText (T2V) nhung ta can batchAsyncGenerateVideoReferenceImages (I2V)
+            // Endpoint T2V KHONG chap nhan field referenceImages → 400 error
+            var actualUrl = url;
+            if (urlStr.includes('batchAsyncGenerateVideoText')) {
+                var newUrlStr = urlStr.replace('batchAsyncGenerateVideoText', 'batchAsyncGenerateVideoReferenceImages');
+                actualUrl = newUrlStr;
+                console.log('[VIDEO-PROXY] 1b. URL T2V → I2V:', newUrlStr.substring(newUrlStr.length - 60));
+            }
+
             // 2. THAY projectId + inject mediaId trong body
             if (opts && opts.body) {
                 try {
@@ -375,9 +385,22 @@ return (function() {
                                 }];
                                 console.log('[VIDEO-PROXY] 2b. Injected mediaId: ' + window._clientMediaId.substring(0, 50) + '...');
                             }
+                            // v1.0.636: Doi model T2V → I2V (giong API mode)
+                            // Chrome gui model t2v, can doi thanh r2v cho I2V endpoint
+                            var currentModel = req.videoModelKey || '';
+                            if (currentModel.includes('_t2v_')) {
+                                var newModel = currentModel.replace('_t2v_', '_r2v_');
+                                // I2V model can _landscape truoc _ultra
+                                if (newModel.includes('_ultra') && !newModel.includes('_landscape')) {
+                                    newModel = newModel.replace('_ultra', '_landscape_ultra');
+                                }
+                                req.videoModelKey = newModel;
+                                console.log('[VIDEO-PROXY] 2c-model. T2V→I2V model: ' + currentModel + ' → ' + newModel);
+                            }
+                            // Override neu VM chi dinh model cu the
                             if (window._clientVideoModel) {
                                 req.videoModelKey = window._clientVideoModel;
-                                console.log('[VIDEO-PROXY] 2c-model. videoModelKey → ' + window._clientVideoModel);
+                                console.log('[VIDEO-PROXY] 2c-override. videoModelKey → ' + window._clientVideoModel);
                             }
                         });
                     }
@@ -393,7 +416,7 @@ return (function() {
             }
 
             try {
-                var response = await origFetch.apply(this, [url, opts]);
+                var response = await origFetch.apply(this, [actualUrl, opts]);
                 var cloned = response.clone();
                 try {
                     var data = await cloned.json();
@@ -1681,7 +1704,7 @@ class ChromeSession:
                 self.log("Enter sent! Chrome sends VIDEO request (interceptor replaces token + injects mediaId)...")
 
                 # 6. Cho VIDEO response (operations)
-                result = self._wait_for_video_response(timeout=60)
+                result = self._wait_for_video_response(timeout=300)
 
                 # 7. Cleanup
                 try:
