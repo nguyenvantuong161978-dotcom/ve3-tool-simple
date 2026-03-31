@@ -1366,14 +1366,10 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         except Exception as e:
             log(f"Warm up error: {e}", "WARN")
 
-        log("Closing browser...")
-
-        # Đóng Chrome
-        try:
-            driver.quit()
-            log("Chrome closed")
-        except:
-            pass
+        # v1.0.646: KHÔNG đóng Chrome - để DrissionFlowAPI dùng luôn session đang mở
+        # Trước: driver.quit() → đóng Chrome → DrissionFlowAPI mở lại → intermittent mất session
+        # Sau: Chrome vẫn chạy trên port 9222+worker_id → DrissionFlowAPI connect vào luôn
+        log("Chrome kept open (DrissionFlowAPI will connect to existing session)")
 
         return True
 

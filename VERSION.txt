@@ -1,3 +1,20 @@
+1.0.646
+2026-04-01 (VN)
+Fix: Login KHONG dong Chrome - DrissionFlowAPI dung luon session dang mo
+- VAN DE: Login thanh cong → warm-up → driver.quit() dong Chrome
+  → DrissionFlowAPI mo Chrome lai tren cung port → co luc mat session (intermittent)
+  → Chrome chua flush cookies/session xuong disk truoc khi quit
+- FIX: Login xong KHONG dong Chrome, de DrissionFlowAPI connect vao luon
+  → Chrome van chay tren port 9222+worker_id voi session da login
+  → DrissionFlowAPI.setup() → ChromiumPage(options) → detect port da co → connect vao
+  → KHONG can mo Chrome moi → KHONG mat session
+- FLOW MOI:
+  → Pre-login: Chrome 1 (port 9222) login → giu mo | Chrome 2 (port 9223) login → giu mo
+  → DrissionFlowAPI worker 0 → connect Chrome 1 | worker 1 → connect Chrome 2
+  → 403 recovery: reset_chrome_profile() → self.driver=None → _auto_login_google() → Chrome mo moi
+    → _warmup_after_login() → setup() → ChromiumPage connect Chrome login vua mo
+- File: google_login.py
+
 1.0.645
 2026-04-01 (VN)
 Fix: Password detection dung JS + giam NDP log spam
