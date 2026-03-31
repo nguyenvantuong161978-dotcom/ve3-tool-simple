@@ -4708,6 +4708,30 @@ class BrowserFlowGenerator:
             cache_only = set(k.lower() for k in cached_media_names) - set(k.lower() for k in excel_media_ids)
             if cache_only:
                 self._log(f"[CACHE] Bổ sung {len(cache_only)} media_ids từ cache: {sorted(cache_only)}")
+                # v1.0.647: Sync cache → Excel - điền media_id từ cache vào Excel
+                # Để Excel luôn đầy đủ dữ liệu cho các bước sau (smart_engine STOP check)
+                if workbook:
+                    _synced = 0
+                    for _cid in sorted(cache_only):
+                        # Tìm key gốc (case-sensitive) trong cache
+                        _orig_key = next((k for k in cached_media_names if k.lower() == _cid), None)
+                        if not _orig_key:
+                            continue
+                        _media_info = cached_media_names[_orig_key]
+                        _media_name = _media_info.get('mediaName') if isinstance(_media_info, dict) else _media_info
+                        if _media_name:
+                            try:
+                                if workbook.update_character(_orig_key, media_id=str(_media_name)):
+                                    _synced += 1
+                                    excel_media_ids[_orig_key] = str(_media_name)
+                            except Exception:
+                                pass
+                    if _synced > 0:
+                        try:
+                            workbook.save()
+                            self._log(f"[CACHE→EXCEL] Synced {_synced} media_ids vào Excel")
+                        except Exception as _se:
+                            self._log(f"[CACHE→EXCEL] Save failed: {_se}", "warn")
             else:
                 self._log(f"[CACHE] Loaded {len(cached_media_names)} cached media refs (all in Excel already)")
 

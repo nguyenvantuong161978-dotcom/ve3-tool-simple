@@ -1,3 +1,16 @@
+1.0.647
+2026-04-01 (VN)
+Fix: Deadlock refs co anh nhung thieu media_id - sync cache → Excel
+- VAN DE: References (loc1-loc12) co file anh + cache co media_id
+  → browser_flow_generator skip vi "da co anh" (cache co media_id)
+  → smart_engine STOP vi Excel KHONG co media_id → deadlock vinh vien
+  → Mau thuan: skip dua tren cache, nhung STOP dua tren Excel
+- FIX: Khi cache co media_ids ma Excel khong co → SYNC vao Excel ngay
+  → workbook.update_character(id, media_id=mediaName) + save()
+  → Excel luon day du du lieu cho cac buoc sau
+  → smart_engine STOP check doc Excel → tim thay media_id → khong stop
+- File: modules/browser_flow_generator.py
+
 1.0.646
 2026-04-01 (VN)
 Fix: Login KHONG dong Chrome - DrissionFlowAPI dung luon session dang mo
