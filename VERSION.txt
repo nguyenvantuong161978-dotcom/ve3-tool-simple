@@ -1,4 +1,15 @@
-1.0.637
+1.0.638
+2026-03-31 (VN)
+GUI: Settings dung Notebook Tabs - gon gang, de dung
+- 4 tabs: NOI DUNG | KET NOI | PROXY | TAI KHOAN
+- NOI DUNG: Topic, Mode, Generation Mode, Kiem tra tai nguyen
+- KET NOI: Server URLs, SMB Share (ket noi o mang)
+- PROXY: Loai proxy (IPv6 File/Pool/Webshare), cau hinh + test
+- TAI KHOAN: API Keys, Chrome Portable, Veo3 Accounts
+- Moi tab co scroll rieng, khong can cuon dai nhu truoc
+- Bo nut SETUP VM - da gop vao Settings
+
+v1.0.637
 2026-03-31 (VN)
 GUI: Gop Setup VM vao Settings - tat ca cau hinh trong 1 cua so duy nhat
 - Chuyen SMB Share (ket noi o mang) vao Settings
