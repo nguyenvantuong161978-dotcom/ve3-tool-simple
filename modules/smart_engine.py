@@ -3400,6 +3400,28 @@ class SmartEngine:
                 except Exception as e:
                     self.log(f"[VIDEO] Resume: Cannot load Excel media_ids: {e}", "WARN")
 
+                # v1.0.648: Sync cache → Excel cho scenes (giống refs)
+                if media_cache and workbook:
+                    _cache_only_scenes = set(media_cache.keys()) - set(excel_scene_media_ids.keys())
+                    _cache_only_scenes = {s for s in _cache_only_scenes if not s.startswith('nv') and not s.startswith('loc') and not s.startswith('_')}
+                    if _cache_only_scenes:
+                        _synced = 0
+                        for _sid in _cache_only_scenes:
+                            _mname = media_cache.get(_sid, '')
+                            if _mname:
+                                try:
+                                    if workbook.update_scene(int(_sid), media_id=str(_mname)):
+                                        _synced += 1
+                                        excel_scene_media_ids[_sid] = str(_mname)
+                                except Exception:
+                                    pass
+                        if _synced > 0:
+                            try:
+                                workbook.save()
+                                self.log(f"[VIDEO] Resume: [CACHE→EXCEL] Synced {_synced} scene media_ids vào Excel")
+                            except Exception as _se:
+                                self.log(f"[VIDEO] Resume: [CACHE→EXCEL] Save failed: {_se}", "WARN")
+
                 img_dir = proj_dir / "img"
                 queued = 0
                 skipped_mp4 = 0
@@ -3540,6 +3562,29 @@ class SmartEngine:
                             self.log(f"[VIDEO] Loaded {len(excel_scene_media_ids)} media_ids từ Excel")
                 except Exception as e:
                     self.log(f"[VIDEO] Cannot load Excel media_ids: {e}", "WARN")
+
+                # v1.0.648: Sync cache → Excel cho scenes (giống refs)
+                if media_cache and workbook:
+                    _cache_only_scenes = set(media_cache.keys()) - set(excel_scene_media_ids.keys())
+                    # Chỉ sync scenes (không sync nv/loc)
+                    _cache_only_scenes = {s for s in _cache_only_scenes if not s.startswith('nv') and not s.startswith('loc') and not s.startswith('_')}
+                    if _cache_only_scenes:
+                        _synced = 0
+                        for _sid in _cache_only_scenes:
+                            _mname = media_cache.get(_sid, '')
+                            if _mname:
+                                try:
+                                    if workbook.update_scene(int(_sid), media_id=str(_mname)):
+                                        _synced += 1
+                                        excel_scene_media_ids[_sid] = str(_mname)
+                                except Exception:
+                                    pass
+                        if _synced > 0:
+                            try:
+                                workbook.save()
+                                self.log(f"[VIDEO] [CACHE→EXCEL] Synced {_synced} scene media_ids vào Excel")
+                            except Exception as _se:
+                                self.log(f"[VIDEO] [CACHE→EXCEL] Save failed: {_se}", "WARN")
 
                 img_dir = proj_dir / "img"
                 queued = 0

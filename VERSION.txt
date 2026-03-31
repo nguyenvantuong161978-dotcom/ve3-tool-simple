@@ -1,3 +1,14 @@
+1.0.648
+2026-04-01 (VN)
+Fix: Sync cache → Excel cho SCENES truoc khi tao video (giong refs)
+- VAN DE: Scene co media_id trong cache nhung khong co trong Excel
+  → Video queue lay media_id tu Excel → khong tim thay → video khong tao duoc
+- FIX: Truoc khi queue video, sync cache scene media_ids vao Excel
+  → workbook.update_scene(scene_id, media_id=mediaName) + save()
+  → 2 cho: resume mode + sau khi tao scenes
+  → Excel luon day du du lieu cho video generation
+- File: modules/smart_engine.py
+
 1.0.647
 2026-04-01 (VN)
 Fix: Deadlock refs co anh nhung thieu media_id - sync cache → Excel
