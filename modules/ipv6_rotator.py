@@ -573,16 +573,34 @@ class IPv6Rotator:
                 self.log(f"[IPv6] Auto gateway: {new_gateway}")
 
             if new_gateway:
-                # Xóa route cũ trước
-                if self.current_gateway:
-                    self.log(f"[IPv6] Xoa route cu: gateway {self.current_gateway}")
-                    commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {self.current_gateway}')
-                    # v1.0.585: Xoa on-link route cu (subnet cu)
-                    old_onlink = _get_onlink_prefix(self.current_gateway)
-                    if old_onlink:
-                        commands.append(f'netsh interface ipv6 delete route {old_onlink} "{self.interface_name}"')
+                # v1.0.643: Check neu IPv6Provider da quan ly route ::/0
+                # Neu da co default route (server mode, nhieu worker) → KHONG xoa/them ::/0
+                # Chi xoa/them on-link route cho subnet moi
+                _provider_has_route = False
+                try:
+                    from modules.proxy_providers.ipv6_provider import IPv6Provider
+                    _provider_has_route = bool(IPv6Provider._default_route_gateway)
+                except ImportError:
+                    pass
+
+                if _provider_has_route:
+                    # v1.0.643: Server mode - chi xoa on-link route cu, them on-link moi
+                    # KHONG dong den route ::/0 (IPv6Provider quan ly)
+                    self.log(f"[IPv6] [v1.0.643] Skip ::/0 route (IPv6Provider quan ly)")
+                    if self.current_gateway:
+                        old_onlink = _get_onlink_prefix(self.current_gateway)
+                        if old_onlink:
+                            commands.append(f'netsh interface ipv6 delete route {old_onlink} "{self.interface_name}"')
                 else:
-                    commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}"')
+                    # VM mode (1 worker) hoac khong co IPv6Provider → xu ly binh thuong
+                    if self.current_gateway:
+                        self.log(f"[IPv6] Xoa route cu: gateway {self.current_gateway}")
+                        commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {self.current_gateway}')
+                        old_onlink = _get_onlink_prefix(self.current_gateway)
+                        if old_onlink:
+                            commands.append(f'netsh interface ipv6 delete route {old_onlink} "{self.interface_name}"')
+                    else:
+                        commands.append(f'netsh interface ipv6 delete route ::/0 "{self.interface_name}"')
 
                 # v1.0.585: QUAN TRONG - Them on-link route cho /64 subnet
                 # Neu khong co route nay, Windows khong biet gateway nam cung mang
@@ -597,7 +615,8 @@ class IPv6Rotator:
                 except Exception:
                     pass
 
-                commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {new_gateway}')
+                if not _provider_has_route:
+                    commands.append(f'netsh interface ipv6 add route ::/0 "{self.interface_name}" {new_gateway}')
 
             # Bước 4: Set Windows prefer IPv6 over IPv4 (quan trọng!)
             # Đây là cách ép Windows dùng IPv6 cho outgoing connections
@@ -650,9 +669,7 @@ class IPv6Rotator:
                 except Exception as addr_cleanup_err:
                     self.log(f"[IPv6] [WARN] Address cleanup error: {addr_cleanup_err}")
 
-                # v1.0.640: CLEANUP - xoa routes ::/0 cu, NHUNG giu lai gateway cua worker khac
-                # Truoc (v1.0.598): Xoa TAT CA → worker khac mat mang!
-                # Sau: Check IPv6Provider._active_gateways de giu route cua worker dang active
+                # v1.0.643: CLEANUP - xoa routes ::/0 cu, giu _default_route_gateway + active gateways
                 try:
                     # Collect gateway can giu
                     keep_set = set()
@@ -661,6 +678,9 @@ class IPv6Rotator:
                     try:
                         from modules.proxy_providers.ipv6_provider import IPv6Provider
                         keep_set.update(IPv6Provider._active_gateways.values())
+                        # v1.0.643: Luon giu default route gateway
+                        if IPv6Provider._default_route_gateway:
+                            keep_set.add(IPv6Provider._default_route_gateway)
                     except ImportError:
                         pass
 
@@ -676,7 +696,7 @@ class IPv6Rotator:
                                 for p in parts:
                                     if ':' in p and '::' in p and p != '::/0':
                                         if p in keep_set:
-                                            continue  # v1.0.640: Giu route cua worker khac
+                                            continue  # v1.0.643: Giu route cua worker khac + default route
                                         del_cmd = f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {p}'
                                         try:
                                             subprocess.run(del_cmd, shell=True, capture_output=True, text=True, timeout=15)

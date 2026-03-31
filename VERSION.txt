@@ -1,4 +1,24 @@
-1.0.642
+1.0.643
+2026-04-01 (VN)
+Fix: Single-route architecture + NDP keepalive - on dinh cho 10+ Chrome instances
+- VAN DE: Nhieu route ::/0 (v1.0.640) → Windows chon 1 → worker khac mat mang bat thuong
+  → NDP cache expire sau 30-60s → MikroTik khong tim duoc MAC → mat ket noi
+- FIX 1: CHI 1 route ::/0 duy nhat (worker dau tien them, worker sau KHONG them)
+  → _default_route_gateway + _route_lock tranh race condition
+  → Worker chi add IP address + on-link route /64
+  → SOCKS5 proxy bind() source IP rieng → Google thay IP khac nhau
+  → MikroTik forward tu bat ky source subnet (cung bridge, da xac nhan)
+- FIX 2: NDP keepalive thread (NDPKeepalive class)
+  → Moi worker ping gateway tu source IP cua minh moi 20s
+  → Giu NDP cache alive → khong mat mang sau 30-60s
+  → Log canh bao khi gateway khong reply
+- FIX 3: ipv6_rotator.py tuong thich single-route
+  → Khi IPv6Provider._default_route_gateway da co → KHONG xoa/them ::/0
+  → Chi doi on-link route khi rotate
+- FIX 4: Stop cleanup - chi xoa ::/0 khi worker cuoi cung stop
+- Files: modules/proxy_providers/ipv6_provider.py, modules/ipv6_rotator.py
+
+v1.0.642
 2026-03-31 (VN)
 Revert: Quay lai v1.0.640 - moi worker them route ::/0 rieng
 - v1.0.641 (chi 1 route ::/0) lam Chrome-1 LUON mat mang (NDP cross-subnet fail)

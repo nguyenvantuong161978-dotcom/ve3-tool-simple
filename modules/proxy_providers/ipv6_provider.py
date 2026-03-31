@@ -8,13 +8,87 @@ Logic giu nguyen y het, chi thay doi cach goi.
 
 VM Mode: Chrome 1 (worker_id=0) quan ly proxy, Chrome 2+ reuse.
 Server Mode: Moi worker co proxy rieng.
+
+v1.0.643: Single-route architecture
+- CHI 1 route ::/0 duy nhat (worker dau tien them, worker sau KHONG them)
+- Moi worker chi add IP address + on-link route /64
+- SOCKS5 proxy bind() source IP rieng → Google thay IP khac nhau
+- MikroTik forward traffic tu bat ky source subnet (cung bridge)
+- NDP keepalive thread ping gateway moi 20s → giu NDP cache alive
+- Scale duoc 10+ Chrome instances on dinh
 """
 
 import time
 import subprocess
 import ipaddress
+import threading
 from typing import Optional, Callable
 from modules.proxy_providers.base_provider import ProxyProvider
+
+
+class NDPKeepalive:
+    """
+    v1.0.643: Ping gateway dinh ky de giu NDP cache alive.
+
+    Khi NDP cache expire (~30-60s), MikroTik khong tim duoc MAC cua Windows
+    → IPv6 mat mang. Thread nay ping gateway moi 20s de ngua van de nay.
+
+    Moi worker co 1 NDPKeepalive rieng (ping tu source IP cua worker).
+    """
+
+    def __init__(self, gateway: str, source_ip: str, interface: str,
+                 interval: int = 20, log_func: Callable = print):
+        self.gateway = gateway
+        self.source_ip = source_ip
+        self.interface = interface
+        self.interval = interval
+        self.log = log_func
+        self._stop_event = threading.Event()
+        self._thread = None
+
+    def start(self):
+        """Start keepalive thread."""
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._keepalive_loop,
+            name=f"NDP-Keepalive-{self.source_ip[:20]}",
+            daemon=True
+        )
+        self._thread.start()
+        self.log(f"[NDP-Keepalive] Started: ping {self.gateway} every {self.interval}s (src: {self.source_ip})")
+
+    def _keepalive_loop(self):
+        """Ping gateway dinh ky."""
+        fail_count = 0
+        while not self._stop_event.is_set():
+            try:
+                # ping -6 -S source_ip gateway
+                # -S: bind source IP cu the → NDP cho dung IP nay
+                cmd = f'ping -6 -n 1 -w 3000 -S {self.source_ip} {self.gateway}'
+                result = subprocess.run(
+                    cmd, shell=True, capture_output=True, text=True, timeout=8
+                )
+                if result.returncode == 0 and 'Reply from' in (result.stdout or ''):
+                    if fail_count > 0:
+                        self.log(f"[NDP-Keepalive] Gateway {self.gateway} recovered after {fail_count} fails")
+                    fail_count = 0
+                else:
+                    fail_count += 1
+                    if fail_count <= 3 or fail_count % 10 == 0:
+                        self.log(f"[NDP-Keepalive] [!] Gateway {self.gateway} no reply (fail #{fail_count})")
+            except Exception:
+                fail_count += 1
+            self._stop_event.wait(self.interval)
+
+    def stop(self):
+        """Stop keepalive thread."""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+            self._thread = None
+        self.log(f"[NDP-Keepalive] Stopped for {self.source_ip}")
 
 
 class IPv6Provider(ProxyProvider):
@@ -24,6 +98,12 @@ class IPv6Provider(ProxyProvider):
     # Key: worker_id, Value: gateway string
     _active_gateways: dict = {}
 
+    # v1.0.643: Single-route - chi 1 route ::/0 duy nhat
+    # Gateway cua route ::/0 hien tai (shared across all workers)
+    _default_route_gateway: str = ""
+    # Lock de tranh race condition khi nhieu worker setup cung luc
+    _route_lock: threading.Lock = threading.Lock()
+
     def __init__(self, config: dict = None, log_func: Callable = print):
         super().__init__(config, log_func)
         self._rotator = None  # IPv6Rotator instance
@@ -32,6 +112,7 @@ class IPv6Provider(ProxyProvider):
         self._current_ipv6 = None      # v1.0.609: IPv6 hien tai (dedicated mode)
         self._current_gateway = None   # v1.0.609: Gateway hien tai (dedicated mode)
         self._interface_name = None    # v1.0.609: Interface name tu settings
+        self._ndp_keepalive = None     # v1.0.643: NDP keepalive thread
 
     def setup(self, worker_id: int = 0, port: int = 1088) -> bool:
         """
@@ -280,11 +361,8 @@ class IPv6Provider(ProxyProvider):
 
     def _cleanup_old_routes(self, iface: str, keep_gateway: str = ""):
         """
-        v1.0.640: Chi xoa routes ::/0 KHONG thuoc worker nao dang active.
-        KHONG xoa route cua worker khac → tranh mat mang.
-
-        Truoc (v1.0.610): Xoa TAT CA routes tru keep_gateway → worker khac mat mang!
-        Sau (v1.0.640): Giu tat ca gateway trong _active_gateways + keep_gateway.
+        v1.0.643: Cleanup routes - giu route ::/0 cua _default_route_gateway.
+        Chi xoa routes ::/0 cua gateway KHONG ai dung.
         """
         try:
             route_check = subprocess.run(
@@ -294,10 +372,13 @@ class IPv6Provider(ProxyProvider):
             if route_check.returncode != 0:
                 return
 
-            # Collect tất cả gateway cần giữ
+            # Collect tat ca gateway can giu
             keep_set = set(IPv6Provider._active_gateways.values())
             if keep_gateway:
                 keep_set.add(keep_gateway)
+            # v1.0.643: Luon giu default route gateway
+            if IPv6Provider._default_route_gateway:
+                keep_set.add(IPv6Provider._default_route_gateway)
 
             for line in (route_check.stdout or "").split('\n'):
                 if '::/0' in line and iface.lower() in line.lower():
@@ -361,8 +442,17 @@ class IPv6Provider(ProxyProvider):
         if onlink_prefix:
             self._run_cmd(f'netsh interface ipv6 add route {onlink_prefix} "{iface}"')
 
-        # v1.0.640: Moi worker them route ::/0 rieng, _cleanup_old_routes() bao ve
-        self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+        # v1.0.643: SINGLE-ROUTE - chi worker DAU TIEN them ::/0
+        # Worker sau chi add IP + on-link route, dung chung 1 route ::/0
+        with IPv6Provider._route_lock:
+            if not IPv6Provider._default_route_gateway:
+                # Worker dau tien: them route ::/0
+                self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
+                IPv6Provider._default_route_gateway = gateway
+                self.log(f"[PROXY-IPv6] [v] Added DEFAULT route ::/0 via {gateway} (first worker)")
+            else:
+                # Worker sau: KHONG them ::/0, dung chung gateway cua worker dau
+                self.log(f"[PROXY-IPv6] [v] Reuse DEFAULT route ::/0 via {IPv6Provider._default_route_gateway} (skip add)")
 
         # Step 5: IPv6 prefix policy - uu tien IPv6 (giong ipv6_rotator)
         self._run_cmd('netsh interface ipv6 set prefixpolicy ::1/128 50 0')
@@ -375,15 +465,24 @@ class IPv6Provider(ProxyProvider):
         time.sleep(8)
 
         # Ping gateway to trigger NDP + verify reachable
+        # v1.0.643: Ping tu source IP cu the de NDP cache dung cho IP nay
         try:
+            ping_cmd = f'ping -6 -n 2 -w 3000 -S {ipv6_address} {gateway}'
             ping_result = subprocess.run(
-                f'ping -6 -n 2 -w 3000 {gateway}',
-                shell=True, capture_output=True, text=True, timeout=15
+                ping_cmd, shell=True, capture_output=True, text=True, timeout=15
             )
             if ping_result.returncode == 0 and 'Reply from' in (ping_result.stdout or ''):
-                self.log(f"[PROXY-IPv6] [v] Gateway {gateway} reachable!")
+                self.log(f"[PROXY-IPv6] [v] Gateway {gateway} reachable from {ipv6_address}!")
             else:
-                self.log(f"[PROXY-IPv6] [!] Gateway {gateway} KHONG reply (NDP chua xong?)")
+                # Fallback: ping khong chi dinh source
+                ping_result2 = subprocess.run(
+                    f'ping -6 -n 2 -w 3000 {gateway}',
+                    shell=True, capture_output=True, text=True, timeout=15
+                )
+                if ping_result2.returncode == 0 and 'Reply from' in (ping_result2.stdout or ''):
+                    self.log(f"[PROXY-IPv6] [v] Gateway {gateway} reachable (no source bind)")
+                else:
+                    self.log(f"[PROXY-IPv6] [!] Gateway {gateway} KHONG reply (NDP chua xong?)")
         except Exception:
             self.log(f"[PROXY-IPv6] [!] Gateway ping timeout")
 
@@ -416,6 +515,10 @@ class IPv6Provider(ProxyProvider):
         if hasattr(self, 'worker_id') and gateway:
             IPv6Provider._active_gateways[self.worker_id] = gateway
             self.log(f"[PROXY-IPv6] [v] Registered gateway {gateway} for worker {self.worker_id}")
+
+        # v1.0.643: Start NDP keepalive thread cho worker nay
+        self._start_ndp_keepalive(ipv6_address, gateway, iface)
+
         self.log(f"[PROXY-IPv6] [v] Setup complete for {ipv6_address}")
         return True
 
@@ -432,6 +535,20 @@ class IPv6Provider(ProxyProvider):
             self.log(f"[PROXY-IPv6] Removed {ipv6_address} from interface")
         except Exception:
             pass
+
+    def _start_ndp_keepalive(self, ipv6_address: str, gateway: str, iface: str):
+        """v1.0.643: Start NDP keepalive thread cho worker nay."""
+        # Stop thread cu neu co
+        if self._ndp_keepalive:
+            self._ndp_keepalive.stop()
+        self._ndp_keepalive = NDPKeepalive(
+            gateway=gateway,
+            source_ip=ipv6_address,
+            interface=iface,
+            interval=20,
+            log_func=self.log
+        )
+        self._ndp_keepalive.start()
 
     def setup_dedicated(self, worker_id: int, port: int, ipv6_address: str,
                         gateway: str = "") -> bool:
@@ -533,7 +650,13 @@ class IPv6Provider(ProxyProvider):
 
         v1.0.609: Them gateway param. Remove old IP, add new IP to interface.
         v1.0.640: Update _active_gateways khi rotate.
+        v1.0.643: Giu nguyen route ::/0, chi doi IP address + on-link route.
         """
+        # v1.0.643: Stop NDP keepalive cu truoc khi rotate
+        if self._ndp_keepalive:
+            self._ndp_keepalive.stop()
+            self._ndp_keepalive = None
+
         # v1.0.640: Xoa gateway cu khoi tracking TRUOC khi cleanup routes
         old_gw = self._current_gateway
         if hasattr(self, 'worker_id') and self.worker_id in IPv6Provider._active_gateways:
@@ -548,6 +671,7 @@ class IPv6Provider(ProxyProvider):
 
         try:
             # v1.0.609: Add new IP to interface
+            # v1.0.643: _add_to_interface se KHONG them ::/0 moi (da co _default_route_gateway)
             if not self._add_to_interface(new_ipv6, gateway):
                 self.log(f"[PROXY-IPv6] Warning: Could not add {new_ipv6} to interface")
 
@@ -584,13 +708,30 @@ class IPv6Provider(ProxyProvider):
 
     def stop(self):
         """Dung proxy/cleanup."""
+        # v1.0.643: Stop NDP keepalive thread truoc
+        if self._ndp_keepalive:
+            self._ndp_keepalive.stop()
+            self._ndp_keepalive = None
+
         if self._proxy:
             self._proxy.stop()
             self._proxy = None
+
         # v1.0.640: Unregister gateway truoc khi remove IP
         wid = self.worker_id if hasattr(self, 'worker_id') else -1
         if wid >= 0 and wid in IPv6Provider._active_gateways:
             del IPv6Provider._active_gateways[wid]
+
+        # v1.0.643: Xoa route ::/0 CHI khi day la worker cuoi cung (khong con ai active)
+        with IPv6Provider._route_lock:
+            if not IPv6Provider._active_gateways and IPv6Provider._default_route_gateway:
+                # Worker cuoi cung → xoa route ::/0
+                iface = self._get_interface_name()
+                gw = IPv6Provider._default_route_gateway
+                self._run_cmd(f'netsh interface ipv6 delete route ::/0 "{iface}" {gw}')
+                self.log(f"[PROXY-IPv6] [v] Removed DEFAULT route ::/0 via {gw} (last worker)")
+                IPv6Provider._default_route_gateway = ""
+
         # v1.0.609: Remove IP from interface khi stop (dedicated/server mode)
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
