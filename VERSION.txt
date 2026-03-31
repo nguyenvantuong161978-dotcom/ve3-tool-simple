@@ -1,5 +1,8 @@
-1.0.625
+1.0.626
 2026-03-31 (VN)
+Fix: Token refresh 401 - dung DrissionPage thay PyAutoGUI (F12+JS khong hoat dong)
+
+v1.0.625
 Fix: IPv6 API server bi dong/treo - doi HTTPServer thanh ThreadingHTTPServer
 
 v1.0.624

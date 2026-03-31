@@ -2869,8 +2869,8 @@ class BrowserFlowGenerator:
                     error_lower = str(error).lower()
                     is_token_expired = '401' in error_lower or 'expired' in error_lower or 'authentication' in error_lower or 'unauthenticated' in error_lower
                     if is_token_expired:
-                        self._log(f"Token het han (401)! Dang mo Chrome lay token moi...", "warn")
-                        new_token = self._auto_extract_token(force_refresh=True)  # FORCE lay token moi
+                        self._log(f"Token het han (401)! Dang lay token moi bang DrissionPage...", "warn")
+                        new_token = self._extract_token_via_drission(excel_path)  # v1.0.626: DrissionPage thay PyAutoGUI
                         if new_token:
                             # Update API instance with new token
                             api.bearer_token = new_token
@@ -3936,11 +3936,11 @@ class BrowserFlowGenerator:
                     _is_401 = '401' in _err_str or 'authentication' in _err_str or 'unauthenticated' in _err_str
 
                     if _is_401:
-                        # v1.0.549: Token het han → refresh token tu Chrome/Excel
+                        # v1.0.626: Token het han → refresh bang DrissionPage (khong dung PyAutoGUI)
                         pool.mark_task_failed(server, str(error))
-                        self._log(f"  [{idx+1}] {pid} [401] Token het han! Dang refresh...", "warn")
+                        self._log(f"  [{idx+1}] {pid} [401] Token het han! Dang lay token moi bang DrissionPage...", "warn")
                         try:
-                            new_token = self._auto_extract_token(force_refresh=True)
+                            new_token = self._extract_token_via_drission(excel_path)
                             if new_token:
                                 bearer_token = new_token
                                 self._log(f"  [{idx+1}] {pid} [401] Token moi OK - retry...")
