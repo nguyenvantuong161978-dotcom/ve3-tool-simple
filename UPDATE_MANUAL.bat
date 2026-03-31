@@ -45,6 +45,11 @@ copy /Y "update_temp\ve3-tool-simple-main\google_login.py" "google_login.py"
 REM Copy modules
 xcopy /Y /E "update_temp\ve3-tool-simple-main\modules\*.py" "modules\"
 
+REM Copy ve3 (VE3 Simple tool)
+if exist "update_temp\ve3-tool-simple-main\ve3" (
+    xcopy /Y /E /I "update_temp\ve3-tool-simple-main\ve3" "ve3\"
+)
+
 echo.
 echo Dang xoa temp files...
 del /F /Q update_temp.zip

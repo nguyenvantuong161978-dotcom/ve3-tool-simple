@@ -3736,6 +3736,14 @@ class VMManager:
                     for py in src_ctrl.glob("*.py"):
                         shutil.copy2(str(py), str(dst_ctrl / py.name))
 
+                # v1.0.624: Copy ve3/ (VE3 Simple tool)
+                src_ve3 = src / "ve3"
+                dst_ve3 = TOOL_DIR / "ve3"
+                if src_ve3.exists():
+                    if dst_ve3.exists():
+                        shutil.rmtree(str(dst_ve3))
+                    shutil.copytree(str(src_ve3), str(dst_ve3), ignore=shutil.ignore_patterns('__pycache__', 'PROJECTS', '*.pyc'))
+
                 # v1.0.617: Xoa __pycache__ de Python load code moi
                 for cache_dir in TOOL_DIR.rglob("__pycache__"):
                     try:

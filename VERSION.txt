@@ -1,5 +1,8 @@
-1.0.623
+1.0.624
 2026-03-31 (VN)
+Add: ve3/ folder vao danh sach update (ZIP/manual) de may khac cap nhat duoc
+
+v1.0.623
 Fix: Login - doi URL chuyen sang password page + nhieu selector
 
 - VAN DE: input[type="password"] khong tim thay sau 15s

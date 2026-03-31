@@ -1,0 +1,34 @@
+# VE3 Simple - Settings
+# Tool tạo ảnh đơn giản qua server mode
+
+# === SERVER ===
+generation_mode: server  # Chỉ dùng server mode
+local_server_enabled: true
+local_server_url: 'http://192.168.88.145:5000'  # URL server chính
+
+# Nhiều server (load balancing)
+local_server_list: []
+# Ví dụ:
+# local_server_list:
+#   - url: 'http://192.168.88.145:5000'
+#     name: 'Server-1'
+#     enabled: true
+#   - url: 'http://192.168.88.146:5000'
+#     name: 'Server-2'
+#     enabled: true
+
+# === FLOW API ===
+flow_bearer_token: ''     # Bearer token từ Google Flow (nhập trong GUI hoặc Excel)
+flow_project_id: ''       # Project ID từ Google Flow
+flow_timeout: 120         # Timeout tạo ảnh (giây)
+flow_aspect_ratio: landscape  # landscape / portrait / square
+
+# === GENERATION ===
+retry_count: 3            # Số lần retry khi fail
+log_level: INFO
+
+# === EXCEL API (Mode 1: Tạo Excel từ SRT) ===
+deepseek_api_key: ''
+deepseek_api_keys: []
+gemini_api_keys: []
+topic: story

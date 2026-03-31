@@ -3042,6 +3042,14 @@ class SimpleGUI(tk.Tk):
                         for py_file in src_ctrl.glob("*.py"):
                             shutil.copy2(str(py_file), str(dst_ctrl / py_file.name))
 
+                    # v1.0.624: Copy ve3/ (VE3 Simple tool)
+                    src_ve3 = extracted_folder / "ve3"
+                    dst_ve3 = TOOL_DIR / "ve3"
+                    if src_ve3.exists():
+                        if dst_ve3.exists():
+                            shutil.rmtree(str(dst_ve3))
+                        shutil.copytree(str(src_ve3), str(dst_ve3), ignore=shutil.ignore_patterns('__pycache__', 'PROJECTS', '*.pyc'))
+
                     # Copy server folder (local proxy server)
                     src_server = extracted_folder / "server"
                     dst_server = TOOL_DIR / "server"
