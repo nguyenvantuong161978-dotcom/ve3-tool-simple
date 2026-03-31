@@ -33,16 +33,17 @@ class IPv6Provider(ProxyProvider):
         """
         Khoi tao IPv6 cho VM mode (API).
 
-        v1.0.616: SOCKS5 proxy (dam bao Chrome chi dung IPv6).
+        v1.0.617: DIRECT mode - khong SOCKS5 proxy (tranh cham).
         - IPv6 da add vao interface boi ipv6_rotator.set_ipv6()
-        - SOCKS5 proxy bind vao IPv6 → Chrome qua proxy → chi IPv6
-        - SOCKS5 da toi uu: 256KB buffer, TCP_NODELAY, sendall (v1.0.596-597)
+        - Firewall block IPv4 outbound cho Chrome → bat buoc dung IPv6
+        - Khong proxy → Chrome ket noi truc tiep → nhanh hon
 
-        - worker_id=0: Tim IPv6 + start SOCKS5 proxy
-        - worker_id>0: Reuse proxy da start boi worker 0
+        - worker_id=0: Tim IPv6 hoat dong + block IPv4 cho Chrome
+        - worker_id>0: Reuse IPv6 da set boi worker 0
         """
         self.worker_id = worker_id
         self.port = port
+        self._direct_mode = True  # VM mode = direct, khong SOCKS5
 
         try:
             from modules.ipv6_rotator import get_ipv6_rotator
@@ -67,25 +68,17 @@ class IPv6Provider(ProxyProvider):
                     self.log("[PROXY-IPv6] Khong tim duoc IPv6 hoat dong!")
                     return False
 
-                # v1.0.616: SOCKS5 proxy bind vao IPv6 → Chrome chi thay IPv6
-                from modules.ipv6_proxy import IPv6SocksProxy
-                self._proxy = IPv6SocksProxy(
-                    listen_port=port,
-                    ipv6_address=working_ipv6,
-                    log_func=self.log
-                )
-                if not self._proxy.start():
-                    self.log("[PROXY-IPv6] [x] SOCKS5 proxy start FAIL!")
-                    return False
+                # v1.0.617: Block IPv4 cho Chrome → buoc dung IPv6
+                self._block_ipv4_for_chrome()
 
                 self._activated = True
                 self._ready = True
-                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: IPv6={working_ipv6} → SOCKS5 localhost:{port}")
+                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: IPv6={working_ipv6} (DIRECT + IPv4 blocked)")
                 return True
             else:
-                # Worker khac: Reuse SOCKS5 proxy da start boi worker 0
+                # Worker khac: IPv6 + firewall da san sang (worker 0 da set)
                 self._ready = True
-                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: Reuse SOCKS5 localhost:{port}")
+                self.log(f"[PROXY-IPv6] [v] Worker {worker_id}: Reuse IPv6 (DIRECT)")
                 return True
 
         except ImportError as e:
@@ -511,7 +504,13 @@ class IPv6Provider(ProxyProvider):
             return False
 
     def get_chrome_arg(self) -> str:
-        """Tra ve proxy arg cho Chrome → SOCKS5 proxy."""
+        """Tra ve proxy arg cho Chrome.
+
+        v1.0.617: VM direct mode → "" (firewall block IPv4)
+        Server dedicated mode → "socks5://..." (SOCKS5 proxy)
+        """
+        if getattr(self, '_direct_mode', False):
+            return ""
         return f"socks5://127.0.0.1:{self.port}"
 
     def get_current_ip(self) -> str:
@@ -531,6 +530,9 @@ class IPv6Provider(ProxyProvider):
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
             self._current_ipv6 = None
+        # v1.0.617: Go firewall rules (VM direct mode)
+        if getattr(self, '_direct_mode', False):
+            self._unblock_ipv4_for_chrome()
         self._ready = False
         self.log("[PROXY-IPv6] Stopped")
 
