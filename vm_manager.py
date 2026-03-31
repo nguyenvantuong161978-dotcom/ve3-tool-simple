@@ -3736,6 +3736,13 @@ class VMManager:
                     for py in src_ctrl.glob("*.py"):
                         shutil.copy2(str(py), str(dst_ctrl / py.name))
 
+                # v1.0.617: Xoa __pycache__ de Python load code moi
+                for cache_dir in TOOL_DIR.rglob("__pycache__"):
+                    try:
+                        shutil.rmtree(str(cache_dir))
+                    except Exception:
+                        pass
+
                 # Cleanup
                 if zip_path.exists():
                     zip_path.unlink()

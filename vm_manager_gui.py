@@ -3019,13 +3019,20 @@ class SimpleGUI(tk.Tk):
                     if src_modules.exists():
                         for py_file in src_modules.glob("*.py"):
                             shutil.copy2(str(py_file), str(dst_modules / py_file.name))
-                        # Copy subdirectories (e.g. modules/topic_prompts/)
+                        # Copy subdirectories (e.g. modules/proxy_providers/)
                         for sub_dir in src_modules.iterdir():
                             if sub_dir.is_dir():
                                 dst_sub = dst_modules / sub_dir.name
                                 if dst_sub.exists():
                                     shutil.rmtree(str(dst_sub))
                                 shutil.copytree(str(sub_dir), str(dst_sub))
+
+                    # v1.0.617: Xoa __pycache__ de Python load code moi
+                    for cache_dir in TOOL_DIR.rglob("__pycache__"):
+                        try:
+                            shutil.rmtree(str(cache_dir))
+                        except Exception:
+                            pass
 
                     # v1.0.593: Copy control/ (master_control.py)
                     src_ctrl = extracted_folder / "control"
