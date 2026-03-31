@@ -1,4 +1,14 @@
-1.0.639
+1.0.640
+2026-03-31 (VN)
+Fix: Server 2 Chrome - Chrome-0 mat mang khi Chrome-1 setup/rotate IPv6
+- VAN DE: _cleanup_old_routes() XOA default route ::/0 cua worker KHAC
+  → Chrome-1 setup → xoa route cua Chrome-0 → Chrome-0 mat mang vinh vien
+- FIX: Track gateway cua tat ca worker dang active (IPv6Provider._active_gateways)
+  → _cleanup_old_routes() CHI xoa route khong thuoc worker nao
+  → Moi worker giu route rieng, khong anh huong nhau
+- Files: modules/proxy_providers/ipv6_provider.py, modules/ipv6_rotator.py
+
+v1.0.639
 2026-03-31 (VN)
 GUI: Settings 1 trang cuon duy nhat - fix do (khong auto-load account info)
 - Bo Notebook Tabs, quay lai 1 trang cuon gon gang

@@ -20,6 +20,10 @@ from modules.proxy_providers.base_provider import ProxyProvider
 class IPv6Provider(ProxyProvider):
     """Proxy provider dung IPv6 SOCKS5 local binding."""
 
+    # v1.0.640: Class-level tracking - tat ca gateway dang active cua cac worker
+    # Key: worker_id, Value: gateway string
+    _active_gateways: dict = {}
+
     def __init__(self, config: dict = None, log_func: Callable = print):
         super().__init__(config, log_func)
         self._rotator = None  # IPv6Rotator instance
@@ -276,8 +280,11 @@ class IPv6Provider(ProxyProvider):
 
     def _cleanup_old_routes(self, iface: str, keep_gateway: str = ""):
         """
-        v1.0.610: Xoa TAT CA default routes ::/0 cu de tranh routing conflict.
-        Giong ipv6_rotator v1.0.598.
+        v1.0.640: Chi xoa routes ::/0 KHONG thuoc worker nao dang active.
+        KHONG xoa route cua worker khac → tranh mat mang.
+
+        Truoc (v1.0.610): Xoa TAT CA routes tru keep_gateway → worker khac mat mang!
+        Sau (v1.0.640): Giu tat ca gateway trong _active_gateways + keep_gateway.
         """
         try:
             route_check = subprocess.run(
@@ -287,12 +294,17 @@ class IPv6Provider(ProxyProvider):
             if route_check.returncode != 0:
                 return
 
+            # Collect tất cả gateway cần giữ: gateway mới + tất cả worker đang active
+            keep_set = set(IPv6Provider._active_gateways.values())
+            if keep_gateway:
+                keep_set.add(keep_gateway)
+
             for line in (route_check.stdout or "").split('\n'):
                 if '::/0' in line and iface.lower() in line.lower():
                     parts = line.strip().split()
                     for p in parts:
                         if ':' in p and '::' in p and p != '::/0':
-                            if keep_gateway and p == keep_gateway:
+                            if p in keep_set:
                                 continue
                             del_cmd = f'netsh interface ipv6 delete route ::/0 "{iface}" {p}'
                             try:
@@ -398,6 +410,10 @@ class IPv6Provider(ProxyProvider):
 
         self._current_ipv6 = ipv6_address
         self._current_gateway = gateway
+        # v1.0.640: Register gateway → worker khac se KHONG xoa route nay
+        if hasattr(self, 'worker_id') and gateway:
+            IPv6Provider._active_gateways[self.worker_id] = gateway
+            self.log(f"[PROXY-IPv6] [v] Registered gateway {gateway} for worker {self.worker_id}")
         self.log(f"[PROXY-IPv6] [v] Setup complete for {ipv6_address}")
         return True
 
@@ -514,7 +530,13 @@ class IPv6Provider(ProxyProvider):
         Doi sang 1 IPv6 cu the (Server mode dung).
 
         v1.0.609: Them gateway param. Remove old IP, add new IP to interface.
+        v1.0.640: Update _active_gateways khi rotate.
         """
+        # v1.0.640: Xoa gateway cu khoi tracking TRUOC khi cleanup routes
+        old_gw = self._current_gateway
+        if hasattr(self, 'worker_id') and self.worker_id in IPv6Provider._active_gateways:
+            del IPv6Provider._active_gateways[self.worker_id]
+
         # Remove old IP from interface
         if self._current_ipv6 and self._current_ipv6 != new_ipv6:
             self._remove_from_interface(self._current_ipv6)
@@ -563,10 +585,14 @@ class IPv6Provider(ProxyProvider):
         if self._proxy:
             self._proxy.stop()
             self._proxy = None
+        # v1.0.640: Unregister gateway truoc khi remove IP
+        if hasattr(self, 'worker_id') and self.worker_id in IPv6Provider._active_gateways:
+            del IPv6Provider._active_gateways[self.worker_id]
         # v1.0.609: Remove IP from interface khi stop (dedicated/server mode)
         if self._current_ipv6:
             self._remove_from_interface(self._current_ipv6)
             self._current_ipv6 = None
+        self._current_gateway = None
         # v1.0.620: Firewall da chuyen sang drission_flow_api.py
         # Khong can unblock o day nua
         self._ready = False

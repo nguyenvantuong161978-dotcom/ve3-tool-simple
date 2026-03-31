@@ -651,27 +651,33 @@ class IPv6Rotator:
                 except Exception as addr_cleanup_err:
                     self.log(f"[IPv6] [WARN] Address cleanup error: {addr_cleanup_err}")
 
-                # v1.0.598: CLEANUP - xoa TAT CA routes ::/0 cu truoc khi them moi
-                # Tranh tich tu nhieu default routes → routing loan
+                # v1.0.640: CLEANUP - xoa routes ::/0 cu, NHUNG giu lai gateway cua worker khac
+                # Truoc (v1.0.598): Xoa TAT CA → worker khac mat mang!
+                # Sau: Check IPv6Provider._active_gateways de giu route cua worker dang active
                 try:
+                    # Collect gateway can giu
+                    keep_set = set()
+                    if new_gateway:
+                        keep_set.add(new_gateway)
+                    try:
+                        from modules.proxy_providers.ipv6_provider import IPv6Provider
+                        keep_set.update(IPv6Provider._active_gateways.values())
+                    except ImportError:
+                        pass
+
                     route_check = subprocess.run(
                         'netsh interface ipv6 show route',
                         shell=True, capture_output=True, text=True, timeout=15
                     )
                     if route_check.returncode == 0:
                         route_lines = (route_check.stdout or "").split('\n')
-                        # Tim TAT CA dong co ::/0 va extract gateway
-                        import re as _re
                         for rl in route_lines:
                             if '::/0' in rl and self.interface_name.lower() in rl.lower():
-                                # Tim gateway trong dong (IPv6 address sau interface index)
-                                # Format: "No  Manual  256  ::/0   5  2001:ee0:b004:30d7::1"
                                 parts = rl.strip().split()
                                 for p in parts:
                                     if ':' in p and '::' in p and p != '::/0':
-                                        # Day la gateway - xoa route nay
-                                        if new_gateway and p == new_gateway:
-                                            continue  # Giu route moi (neu da ton tai)
+                                        if p in keep_set:
+                                            continue  # v1.0.640: Giu route cua worker khac
                                         del_cmd = f'netsh interface ipv6 delete route ::/0 "{self.interface_name}" {p}'
                                         try:
                                             subprocess.run(del_cmd, shell=True, capture_output=True, text=True, timeout=15)
