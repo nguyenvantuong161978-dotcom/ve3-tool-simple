@@ -178,6 +178,262 @@ JS_SELECT_MODEL = """
 })(MODEL_INDEX);
 """
 
+# v1.0.632: JS chuyen sang Video mode (giong JS_SWITCH_TO_T2V_MODE tu drission_flow_api.py)
+# Flow: Open settings → Video tab → Thanh phan (VIDEO_REFERENCES) → LANDSCAPE → x1 → Model dropdown → Lower Priority
+JS_SELECT_VIDEO_MODE = """
+(function() {
+    window._videoModeResult = 'PENDING';
+
+    // 1. Check panel da mo chua, neu chua thi mo settings
+    var vidTab = document.querySelector('[id*="trigger-IMAGE"]');
+    if (!vidTab) vidTab = document.querySelector('[id*="trigger-VIDEO"]:not([id*="FRAMES"]):not([id*="REFERENCES"])');
+    if (!vidTab || vidTab.getBoundingClientRect().width === 0) {
+        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+        var btns = document.querySelectorAll('button');
+        var halfH = window.innerHeight * 0.5;
+        var btn1 = null;
+        for (var i = 0; i < btns.length; i++) {
+            var t = btns[i].textContent.trim();
+            var rect = btns[i].getBoundingClientRect();
+            if (rect.width > 50 && rect.y > halfH) {
+                for (var k = 0; k < keywords.length; k++) {
+                    if (t.indexOf(keywords[k]) >= 0) { btn1 = btns[i]; break; }
+                }
+                if (btn1) break;
+            }
+        }
+        if (btn1) {
+            btn1.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+            btn1.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+            console.log('[VIDEO-MODE] 1. Opened settings: ' + btn1.textContent.trim().substring(0, 40));
+        } else {
+            console.log('[VIDEO-MODE] 1. WARN: No settings button found');
+        }
+    } else {
+        console.log('[VIDEO-MODE] 1. Panel already open');
+    }
+
+    setTimeout(function() {
+        // 2. Click tab Video (MouseEvent cho Radix)
+        var tabs = document.querySelectorAll('[role="tab"]');
+        for (var i = 0; i < tabs.length; i++) {
+            if ((tabs[i].id || '').indexOf('trigger-VIDEO') >= 0 && (tabs[i].id || '').indexOf('FRAMES') < 0 && (tabs[i].id || '').indexOf('REFERENCES') < 0) {
+                tabs[i].dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                tabs[i].dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                tabs[i].dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[VIDEO-MODE] 2. Video tab: ' + tabs[i].getAttribute('data-state'));
+                break;
+            }
+        }
+
+        // 3. Click Thanh phan (VIDEO_REFERENCES) = I2V mode
+        setTimeout(function() {
+            var tp = document.querySelector('[id*="trigger-VIDEO_REFERENCES"]');
+            if (tp) {
+                tp.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                tp.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                tp.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                console.log('[VIDEO-MODE] 3. Thanh phan: ' + tp.getAttribute('data-state'));
+            }
+
+            setTimeout(function() {
+                // 4. Click LANDSCAPE (16:9)
+                var t169 = document.querySelector('[id*="trigger-LANDSCAPE"]');
+                if (t169) {
+                    t169.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                    t169.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                    t169.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                    console.log('[VIDEO-MODE] 4. 16:9');
+                }
+
+                // 5. Click x1
+                setTimeout(function() {
+                    var x1 = document.querySelector('[id*="trigger-1"]');
+                    if (x1) {
+                        x1.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+                        x1.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                        x1.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                        console.log('[VIDEO-MODE] 5. x1');
+                    }
+
+                    // 6. Mo model dropdown
+                    setTimeout(function() {
+                        var btns = document.querySelectorAll('button');
+                        for (var i = 0; i < btns.length; i++) {
+                            var t = btns[i].textContent.trim();
+                            if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
+                                btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                console.log('[VIDEO-MODE] 6. Dropdown: ' + t.substring(0, 40));
+                                break;
+                            }
+                        }
+
+                        // 7. Chon Lower Priority
+                        setTimeout(function() {
+                            var items = document.querySelectorAll('[role="menuitem"]');
+                            for (var i = 0; i < items.length; i++) {
+                                if (items[i].textContent.indexOf('Lower') >= 0) {
+                                    items[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                    items[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                    items[i].click();
+                                    console.log('[VIDEO-MODE] 7. Selected: ' + items[i].textContent.substring(0, 40));
+                                    window._videoModeResult = 'SUCCESS';
+                                    break;
+                                }
+                            }
+                            if (window._videoModeResult !== 'SUCCESS') {
+                                // Fallback: chon model dau tien
+                                if (items.length > 0) {
+                                    items[0].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                    items[0].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                    items[0].click();
+                                    console.log('[VIDEO-MODE] 7. Fallback first: ' + items[0].textContent.substring(0, 40));
+                                    window._videoModeResult = 'SUCCESS';
+                                }
+                            }
+                            // 8. Dong menu
+                            setTimeout(function() {
+                                document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                                document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                                console.log('[VIDEO-MODE] 8. Done! ' + window._videoModeResult);
+                            }, 500);
+                        }, 800);
+                    }, 500);
+                }, 300);
+            }, 300);
+        }, 500);
+    }, 1500);
+})();
+"""
+
+
+def build_video_interceptor_js(client_bearer_token: str, client_project_id: str,
+                                media_id: str) -> str:
+    """
+    v1.0.632: Video interceptor - THAY bearer token + projectId + inject mediaId.
+
+    Khac voi FORCE MODE (doi URL):
+    - Chrome DA O VIDEO MODE (da click chuyen sang video UI)
+    - Chrome tu gui VIDEO request (URL dung san)
+    - Interceptor CHI CAN: thay token + projectId + inject referenceImages mediaId
+    - GIU NGUYEN recaptchaToken tu Chrome (hop le cho video mode)
+    """
+    safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
+    safe_project = client_project_id.replace("\\", "\\\\").replace("'", "\\'")
+    safe_media = media_id.replace("\\", "\\\\").replace("'", "\\'")
+
+    return """
+window._response = null;
+window._responseError = null;
+window._requestPending = false;
+window._videoResponse = null;
+window._videoError = null;
+window._videoPending = false;
+window._clientBearerToken = '""" + safe_token + """';
+window._clientProjectId = '""" + safe_project + """';
+window._clientMediaId = '""" + safe_media + """';
+
+return (function() {
+    if (window.__proxyInterceptReady) return 'ALREADY';
+    window.__proxyInterceptReady = true;
+
+    var origFetch = window.fetch;
+    window.fetch = async function(url, opts) {
+        var urlStr = typeof url === 'string' ? url : url.url;
+
+        // Catch VIDEO request (batchAsync... hoac batchGenerate)
+        if (urlStr.includes('aisandbox') && (urlStr.includes('batchAsync') || urlStr.includes('batchGenerate') || urlStr.includes('flowMedia') || urlStr.includes('video:'))) {
+            console.log('[VIDEO-PROXY] Caught request:', urlStr.substring(0, 100));
+
+            window._videoPending = true;
+            window._videoResponse = null;
+            window._videoError = null;
+
+            // 1. THAY BEARER TOKEN
+            if (window._clientBearerToken && opts) {
+                if (!opts.headers) opts.headers = {};
+                if (opts.headers instanceof Headers) {
+                    opts.headers.set('Authorization', 'Bearer ' + window._clientBearerToken);
+                } else {
+                    opts.headers['Authorization'] = 'Bearer ' + window._clientBearerToken;
+                }
+                console.log('[VIDEO-PROXY] 1. Replaced bearer token');
+            }
+
+            // 2. THAY projectId + inject mediaId trong body
+            if (opts && opts.body) {
+                try {
+                    var body = JSON.parse(opts.body);
+
+                    // Thay projectId
+                    if (body.clientContext && window._clientProjectId) {
+                        body.clientContext.projectId = window._clientProjectId;
+                        console.log('[VIDEO-PROXY] 2a. ProjectId → ' + window._clientProjectId);
+                    }
+
+                    // Inject referenceImages voi mediaId
+                    if (body.requests && window._clientMediaId) {
+                        body.requests.forEach(function(req) {
+                            req.referenceImages = [{
+                                imageUsageType: 'IMAGE_USAGE_TYPE_ASSET',
+                                mediaId: window._clientMediaId
+                            }];
+                            console.log('[VIDEO-PROXY] 2b. Injected mediaId: ' + window._clientMediaId.substring(0, 50) + '...');
+                        });
+                    }
+
+                    // GIU NGUYEN recaptchaToken tu Chrome!
+                    var recaptcha = body.clientContext ? body.clientContext.recaptchaToken : '';
+                    console.log('[VIDEO-PROXY] 2c. recaptchaToken kept: ' + (recaptcha ? recaptcha.substring(0, 20) + '...' : 'EMPTY'));
+
+                    opts.body = JSON.stringify(body);
+                } catch(e) {
+                    console.log('[VIDEO-PROXY] Parse body error:', e);
+                }
+            }
+
+            try {
+                var response = await origFetch.apply(this, [url, opts]);
+                var cloned = response.clone();
+                try {
+                    var data = await cloned.json();
+                    console.log('[VIDEO-PROXY] Response status:', response.status);
+
+                    if (response.status === 403 || (data.error && data.error.code === 403)) {
+                        window._videoResponse = {error: data.error || {code: 403, message: 'Permission denied'}};
+                        window._videoError = 'Error 403';
+                    } else if (response.status === 429 || (data.error && (data.error.code === 429 || data.error.code === 253))) {
+                        window._videoResponse = {error: data.error || {code: 429, message: 'Quota exceeded'}};
+                        window._videoError = 'Error 429';
+                    } else if (data.operations) {
+                        console.log('[VIDEO-PROXY] Got ' + data.operations.length + ' operations!');
+                        window._videoResponse = data;
+                    } else if (data.error) {
+                        window._videoResponse = {error: data.error};
+                        window._videoError = 'Error: ' + (data.error.message || JSON.stringify(data.error));
+                    } else {
+                        window._videoResponse = data;
+                    }
+                } catch(e) {
+                    window._videoResponse = {status: response.status, error: 'parse_failed'};
+                }
+                window._videoPending = false;
+                return response;
+            } catch(e) {
+                window._videoError = 'Fetch error: ' + e.message;
+                window._videoPending = false;
+                return origFetch.apply(this, [url, opts]);
+            }
+        }
+
+        return origFetch.apply(this, [url, opts]);
+    };
+
+    return 'PROXY_INTERCEPTOR_READY';
+})();
+"""
+
 
 def build_interceptor_js(client_bearer_token: str, client_project_id: str,
                          image_inputs: list = None) -> str:
@@ -1301,14 +1557,14 @@ class ChromeSession:
                        aspect_ratio: str = 'VIDEO_ASPECT_RATIO_LANDSCAPE',
                        seed: int = None) -> dict:
         """
-        v1.0.629: Tạo video từ ảnh (I2V) - FORCE MODE.
+        v1.0.632: Tạo video từ ảnh (I2V) - THỰC SỰ chuyển sang Video mode.
 
         Flow:
         1. Vào project URL (giống generate_image)
-        2. Inject VIDEO interceptor (convert image request → video I2V request)
-        3. Setup Image mode + model (VẪN Ở IMAGE MODE)
-        4. Paste prompt → Enter → Chrome gửi "image" request
-        5. Interceptor đổi URL + body → video request với media_id
+        2. Click chuyển sang Video mode (Video tab → Thành phần → 16:9 → x1 → Lower Priority)
+        3. Inject video interceptor (thay token + projectId + inject mediaId)
+        4. Paste prompt → Enter → Chrome gửi VIDEO request (đúng URL video)
+        5. Interceptor thay token/projectId + inject mediaId
         6. Chờ operations response → trả về cho VM
         7. VM tự poll Google trực tiếp để lấy video URL
 
@@ -1354,7 +1610,27 @@ class ChromeSession:
                         return {"error": "Textarea not found after project creation"}
                     self.project_url = self.page.url
 
-                # 2. Inject VIDEO interceptor (thay token + projectId + convert sang video)
+                # 2. CHUYỂN SANG VIDEO MODE (click UI thực sự)
+                self.log("Chuyen sang Video mode (Video tab → Thanh phan → 16:9 → x1 → Lower Priority)...")
+                self.page.run_js("window._videoModeResult = 'PENDING';")
+                self.page.run_js(JS_SELECT_VIDEO_MODE)
+                time.sleep(7)  # Doi JS async hoan thanh (~5.6s setTimeout chain)
+
+                video_mode_result = self.page.run_js("return window._videoModeResult;")
+                self.log(f"Video mode result: {video_mode_result}")
+
+                if video_mode_result != 'SUCCESS':
+                    self.log(f"[WARN] Video mode chua SUCCESS: {video_mode_result}, thu lai...", "WARN")
+                    # Dong menu va thu lai
+                    self.page.run_js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));")
+                    time.sleep(1)
+                    self.page.run_js("window._videoModeResult = 'PENDING';")
+                    self.page.run_js(JS_SELECT_VIDEO_MODE)
+                    time.sleep(7)
+                    video_mode_result = self.page.run_js("return window._videoModeResult;")
+                    self.log(f"Video mode retry result: {video_mode_result}")
+
+                # 3. Inject VIDEO interceptor (thay token + projectId + inject mediaId)
                 self.log("Inject video interceptor...")
                 self.page.run_js("""
                     window.__proxyInterceptReady = false;
@@ -1363,144 +1639,9 @@ class ChromeSession:
                 """)
                 time.sleep(1)
 
-                # Build video payload
-                import uuid as _uuid
-                scene_id = str(_uuid.uuid4())
-                video_seed = seed if seed else int(time.time()) % 100000
-
-                video_payload = {
-                    "clientContext": {
-                        "projectId": client_project_id,
-                        "recaptchaToken": "",  # Will be injected from Chrome's fresh token
-                        "sessionId": f";{int(time.time() * 1000)}",
-                        "tool": "PINHOLE",
-                        "userPaygateTier": "PAYGATE_TIER_TWO"
-                    },
-                    "requests": [{
-                        "aspectRatio": aspect_ratio,
-                        "metadata": {"sceneId": scene_id},
-                        "referenceImages": [{
-                            "imageUsageType": "IMAGE_USAGE_TYPE_ASSET",
-                            "mediaId": media_id
-                        }],
-                        "seed": video_seed,
-                        "textInput": {"prompt": client_prompt},
-                        "videoModelKey": video_model
-                    }]
-                }
-
-                safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
-                safe_project = client_project_id.replace("\\", "\\\\").replace("'", "\\'")
-                video_payload_json = json.dumps(video_payload)
-
-                # Video interceptor JS: catch image batchGenerate → convert to video I2V
-                js_video_interceptor = """
-window._clientBearerToken = '""" + safe_token + """';
-window._clientProjectId = '""" + safe_project + """';
-window._videoPayload = """ + video_payload_json + """;
-
-return (function() {
-    if (window.__proxyInterceptReady) return 'ALREADY';
-    window.__proxyInterceptReady = true;
-
-    var origFetch = window.fetch;
-    window.fetch = async function(url, opts) {
-        var urlStr = typeof url === 'string' ? url : url.url;
-
-        // Catch IMAGE batchGenerate request → convert to VIDEO
-        if (urlStr.includes('aisandbox') && (urlStr.includes('batchGenerate') || urlStr.includes('flowMedia'))) {
-            console.log('[VIDEO-PROXY] Caught image request, converting to video...');
-
-            window._videoPending = true;
-            window._videoResponse = null;
-            window._videoError = null;
-
-            // Parse Chrome body to get fresh recaptchaToken
-            var chromeBody = null;
-            var freshRecaptcha = '';
-            if (opts && opts.body) {
-                try {
-                    chromeBody = JSON.parse(opts.body);
-                    if (chromeBody.clientContext) {
-                        freshRecaptcha = chromeBody.clientContext.recaptchaToken || '';
-                        console.log('[VIDEO-PROXY] Got fresh recaptcha: ' + (freshRecaptcha ? freshRecaptcha.substring(0, 20) + '...' : 'EMPTY'));
-                    }
-                } catch(e) {
-                    console.log('[VIDEO-PROXY] Parse error:', e);
-                }
-            }
-
-            // Build video request
-            var videoBody = window._videoPayload;
-            if (videoBody.clientContext) {
-                videoBody.clientContext.recaptchaToken = freshRecaptcha;
-            }
-
-            // Replace bearer token
-            if (!opts.headers) opts.headers = {};
-            if (opts.headers instanceof Headers) {
-                opts.headers.set('Authorization', 'Bearer ' + window._clientBearerToken);
-            } else {
-                opts.headers['Authorization'] = 'Bearer ' + window._clientBearerToken;
-            }
-
-            // Change URL: batchGenerateImages → batchAsyncGenerateVideoReferenceImages
-            var videoUrl = 'https://aisandbox-pa.googleapis.com/v1/video:batchAsyncGenerateVideoReferenceImages';
-
-            // Replace projectId in URL if needed
-            if (window._clientProjectId) {
-                videoUrl = videoUrl.replace(/projects\\/[^/]+/, 'projects/' + window._clientProjectId);
-            }
-
-            opts.body = JSON.stringify(videoBody);
-            console.log('[VIDEO-PROXY] Sending I2V request to:', videoUrl);
-            console.log('[VIDEO-PROXY] Model:', videoBody.requests[0].videoModelKey);
-            console.log('[VIDEO-PROXY] MediaId:', videoBody.requests[0].referenceImages[0].mediaId.substring(0, 50) + '...');
-
-            try {
-                var response = await origFetch.apply(this, [videoUrl, opts]);
-                var cloned = response.clone();
-                try {
-                    var data = await cloned.json();
-                    console.log('[VIDEO-PROXY] Response status:', response.status);
-
-                    if (response.status === 403 || (data.error && data.error.code === 403)) {
-                        window._videoResponse = {error: data.error || {code: 403, message: 'Permission denied'}};
-                        window._videoError = 'Error 403';
-                    } else if (response.status === 429 || response.status === 253 ||
-                               (data.error && (data.error.code === 429 || data.error.code === 253))) {
-                        window._videoResponse = {error: data.error || {code: 429, message: 'Quota exceeded'}};
-                        window._videoError = 'Error 429';
-                    } else if (response.status === 400 || (data.error && data.error.code === 400)) {
-                        window._videoResponse = {error: data.error || {code: 400, message: 'Bad request'}};
-                        window._videoError = 'Error 400';
-                    } else if (data.operations) {
-                        console.log('[VIDEO-PROXY] Got ' + data.operations.length + ' operations!');
-                        window._videoResponse = data;
-                    } else if (data.error) {
-                        window._videoResponse = {error: data.error};
-                        window._videoError = 'Error: ' + (data.error.message || JSON.stringify(data.error));
-                    } else {
-                        window._videoResponse = data;
-                    }
-                } catch(e) {
-                    window._videoResponse = {status: response.status, error: 'parse_failed'};
-                }
-                window._videoPending = false;
-                return response;
-            } catch(e) {
-                window._videoError = 'Fetch error: ' + e.message;
-                window._videoPending = false;
-                return origFetch.apply(this, [url, opts]);
-            }
-        }
-
-        return origFetch.apply(this, [url, opts]);
-    };
-
-    return 'PROXY_INTERCEPTOR_READY';
-})();
-"""
+                js_video_interceptor = build_video_interceptor_js(
+                    client_bearer_token, client_project_id, media_id
+                )
 
                 interceptor_ok = False
                 for inject_attempt in range(3):
@@ -1526,30 +1667,19 @@ return (function() {
                     except:
                         return {"error": "Video interceptor injection failed"}
 
-                # 3. Setup Image mode + model (VAN O IMAGE MODE - interceptor se convert)
-                model_index = self._current_model_index if self._current_model_index > 0 else 0
-                self.log(f"Setup Image mode (model index: {model_index})...")
-                js_model = JS_SELECT_MODEL.replace('MODEL_INDEX', str(model_index))
-                self.page.run_js("window._modelSelectResult = 'PENDING';")
-                self.page.run_js(js_model)
-                time.sleep(7)
-
-                model_result = self.page.run_js("return window._modelSelectResult;")
-                self.log(f"Model result: {model_result}")
-
                 # 4. Paste video prompt
                 self.log(f"Paste video prompt...")
                 ok = self._paste_prompt(client_prompt)
                 if not ok:
                     return {"error": "Cannot paste prompt"}
 
-                # 5. Doi recaptcha → Enter (Chrome gui "image" request → interceptor convert → video)
+                # 5. Doi recaptcha → Enter (Chrome gui VIDEO request, interceptor thay token + inject mediaId)
                 self.log("Doi recaptcha (4s)...")
                 time.sleep(4)
 
                 from DrissionPage.common import Keys
                 self.page.actions.key_down(Keys.ENTER).key_up(Keys.ENTER)
-                self.log("Enter sent! Interceptor converting to video request...")
+                self.log("Enter sent! Chrome sends VIDEO request (interceptor replaces token + injects mediaId)...")
 
                 # 6. Cho VIDEO response (operations)
                 result = self._wait_for_video_response(timeout=60)

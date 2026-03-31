@@ -1,4 +1,13 @@
-1.0.631
+1.0.632
+2026-03-31 (VN)
+Fix: Server Chrome video - THUC SU chuyen sang Video mode (khong con FORCE MODE)
+- Truoc: Server Chrome o Image mode, interceptor doi URL sang video → Google reject (recaptcha sai mode)
+- Sau: Click chuyen sang Video mode thuc su (Video tab → Thanh phan → 16:9 → x1 → Lower Priority)
+- Interceptor chi thay token + projectId + inject mediaId (KHONG doi URL)
+- Chrome gui VIDEO request voi recaptchaToken hop le cho video mode
+- Giong cach VM Chrome lam (JS_SWITCH_TO_T2V_MODE trong drission_flow_api.py)
+
+v1.0.631
 2026-03-31 (VN)
 Feature: Video generation (I2V) ho tro SERVER MODE
 - Truoc: _video_worker_loop LUON dung Chrome local (drission_api) → server mode khong tao video
