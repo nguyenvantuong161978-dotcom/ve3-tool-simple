@@ -1,5 +1,10 @@
-1.0.627
+1.0.628
 2026-03-31 (VN)
+Fix: Server worker loop - auto rotate IPv6 khi setup fail (IPv6 mat mang sau test ban dau)
+- Khi worker setup fail → rotate IPv6 qua pool client → re-setup proxy → retry
+- Xu ly truong hop IPv6 pass test luc dau nhung mat ket noi sau do
+
+v1.0.627
 Fix: Server IPv6 - test internet thuc te (curl Google) thay vi chi ping gateway
 - Neu IPv6 khong co internet → auto rotate sang IPv6 moi tu pool
 - Truoc: chi ping gateway (local) → "OK" nhung Chrome khong ket noi duoc

@@ -580,17 +580,43 @@ class ChromePool:
         """
         worker_name = f"Chrome-{worker.index}"
 
-        # Neu chua ready → retry setup trong loop
+        # Neu chua ready → retry setup, rotate IPv6 neu can
         if not worker.ready:
             self._log(f"[{worker_name}] Chua ready, retry setup...", "WARN")
             for retry in range(3):
-                time.sleep(10)  # Doi 10s giua cac retry
+                time.sleep(10)
                 ok = self._setup_single_worker(worker)
                 if ok:
                     break
-                self._log(f"[{worker_name}] Retry {retry + 2}/3 setup...", "WARN")
+                # v1.0.628: Rotate IPv6 khi setup fail (co the mat mang)
+                if worker.ipv6 and self._pool_client:
+                    self._log(f"[{worker_name}] Setup fail → rotate IPv6...", "WARN")
+                    result = self._pool_client.rotate_ip(
+                        worker.ipv6, reason="setup_fail",
+                        worker=f"server_chrome{worker.index}"
+                    )
+                    if result:
+                        new_ip = result.get('ip') or result.get('new_ip', '')
+                        new_gw = result.get('gateway', '')
+                        if new_ip:
+                            self._log(f"[{worker_name}] IPv6 moi: {new_ip}")
+                            worker.ipv6 = new_ip
+                            worker.gateway = new_gw
+                            # Re-setup proxy voi IPv6 moi
+                            if worker.proxy_provider:
+                                try:
+                                    from modules.proxy_providers import create_provider
+                                    proxy_port = worker.port + 200
+                                    new_provider = create_provider(
+                                        config={'proxy_type': 'ipv6'},
+                                        log_func=lambda msg, lvl="INFO", wn=worker_name: self._log(f"[{wn}] {msg}", lvl),
+                                    )
+                                    if new_provider.setup_dedicated(worker.index, proxy_port, new_ip, new_gw):
+                                        worker.proxy_provider = new_provider
+                                except Exception as e:
+                                    self._log(f"[{worker_name}] Re-setup proxy error: {e}", "ERROR")
             if not worker.ready:
-                self._log(f"[{worker_name}] Setup THAT BAI vinh vien! Worker dung.", "ERROR")
+                self._log(f"[{worker_name}] Setup THAT BAI sau retry + rotate! Worker dung.", "ERROR")
                 return
 
         self._log(f"[{worker_name}] Worker loop started - doi task...")
