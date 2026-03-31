@@ -1,5 +1,8 @@
-1.0.624
+1.0.625
 2026-03-31 (VN)
+Fix: IPv6 API server bi dong/treo - doi HTTPServer thanh ThreadingHTTPServer
+
+v1.0.624
 Add: ve3/ folder vao danh sach update (ZIP/manual) de may khac cap nhat duoc
 
 v1.0.623

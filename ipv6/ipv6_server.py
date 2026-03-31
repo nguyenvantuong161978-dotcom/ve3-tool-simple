@@ -23,6 +23,7 @@ import json
 import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 from typing import Optional
 
@@ -64,6 +65,11 @@ def set_pool(pool, log_func=print):
     global _pool, _log_func
     _pool = pool
     _log_func = log_func
+
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """v1.0.625: Multi-threaded HTTP server - tranh bi dong khi rotate_ip goi router."""
+    daemon_threads = True
 
 
 class IPv6APIHandler(BaseHTTPRequestHandler):
@@ -381,7 +387,7 @@ def start_api_server(pool, host: str = "0.0.0.0", port: int = 8765, log_func=pri
     _ensure_firewall_rule(port, log_func)
 
     try:
-        _server = HTTPServer((host, port), IPv6APIHandler)
+        _server = ThreadingHTTPServer((host, port), IPv6APIHandler)
         _server_thread = threading.Thread(target=_server.serve_forever, daemon=True)
         _server_thread.start()
         log_func(f"[API] Server started: http://{host}:{port}")
