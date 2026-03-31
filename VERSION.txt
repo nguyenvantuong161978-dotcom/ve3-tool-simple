@@ -1,4 +1,12 @@
-1.0.641
+1.0.642
+2026-03-31 (VN)
+Revert: Quay lai v1.0.640 - moi worker them route ::/0 rieng
+- v1.0.641 (chi 1 route ::/0) lam Chrome-1 LUON mat mang (NDP cross-subnet fail)
+- v1.0.640: Moi worker them ::/0 rieng, _cleanup_old_routes() bao ve route cua nhau
+- Co luc bi luc khong (tuy Windows metric), nhung an toan hon 641
+- Se tiep tuc dieu tra root cause sau
+
+v1.0.641
 2026-03-31 (VN)
 Fix: Server 2 Chrome mat mang - chi dung 1 route ::/0 duy nhat
 - VAN DE: 2 route ::/0 tren cung interface → Windows chon 1 → worker con lai mat mang
