@@ -62,6 +62,9 @@ class IPv6SocksProxy:
         self._server_socket = None
         self._running = False
         self._thread = None
+        # v1.0.635: Track connect failures de detect IPv6 chet
+        self._connect_failures = 0
+        self._connect_successes = 0
 
     def start(self) -> bool:
         """Start the proxy server in background thread."""
@@ -101,6 +104,10 @@ class IPv6SocksProxy:
     def set_ipv6(self, ipv6_address: str):
         """Update IPv6 address for outgoing connections."""
         self.ipv6_address = ipv6_address
+        # v1.0.635: Reset counters khi doi IPv6
+        self._connect_failures = 0
+        self._connect_successes = 0
+        self._connect_fail_logged = 0
         self.log(f"[IPv6-Proxy] → Now using: {ipv6_address}")
 
     def _accept_loop(self):
@@ -253,9 +260,14 @@ class IPv6SocksProxy:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             except Exception:
                 pass
+            # v1.0.635: Track success
+            self._connect_successes += 1
+            self._connect_failures = 0  # Reset failures on success
             return sock
 
         except Exception as e:
+            # v1.0.635: Track failures
+            self._connect_failures += 1
             # v1.0.611: Log target de debug connectivity
             if not getattr(self, '_connect_fail_logged', 0) or getattr(self, '_connect_fail_logged', 0) < 3:
                 self.log(f"[IPv6-Proxy] IPv6 connect failed to {host}:{port}: {e}")

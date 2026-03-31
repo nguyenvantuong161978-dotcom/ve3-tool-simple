@@ -1,4 +1,16 @@
-1.0.634
+1.0.635
+2026-03-31 (VN)
+Fix: Server Chrome - detect IPv6 chet qua proxy connect failures, rotate NGAY thay vi doi 403
+- VAN DE: IPv6 chet sau setup nhung worker chi rotate khi gap 403
+  → 429/400 do IPv6 chet bi xu ly sai: switch model hoac skip task
+  → Chrome chay 5-10 phut voi IPv6 chet, skip nhieu task truoc khi rotate
+- FIX 1: ipv6_proxy.py track _connect_failures (tang khi fail, reset khi success)
+- FIX 2: chrome_pool.py check proxy connect failures khi gap 429/400
+  → Neu >= 5 connect failures → IPv6 chet → rotate IPv6 + restart (nhu 403)
+  → Task duoc re-queue thay vi skip/fail
+- Ket qua: Rotate trong <30s thay vi 5-10 phut, giam mat task
+
+v1.0.634
 2026-03-31 (VN)
 Fix: Server video - khong bat buoc Lower Priority model, interceptor thay model tu VM
 - Server Chrome chi can o Video mode (chon model bat ky co san)

@@ -738,8 +738,18 @@ class ChromePool:
                                 err_code = 0
                         worker.last_error = err_str[:100]
 
+                        # v1.0.635: Check proxy health - neu IPv6 chet thi rotate ngay
+                        # thay vi doi 403 (429/400 cung co the do IPv6 chet)
+                        _proxy_dead = False
+                        if err_code in (429, 400) and worker.proxy_provider:
+                            _proxy = getattr(worker.proxy_provider, '_proxy', None)
+                            _cf = getattr(_proxy, '_connect_failures', 0) if _proxy else 0
+                            if _cf >= 5:
+                                self._log(f"[{worker_name}] [IPv6-DEAD] Proxy co {_cf} connect failures → rotate IPv6 thay vi retry!", "WARN")
+                                _proxy_dead = True
+
                         # === 429/QUOTA: Switch model ngay (giong API mode) ===
-                        if err_code == 429:
+                        if err_code == 429 and not _proxy_dead:
                             tasks[task_id]['status'] = 'queued'
                             tasks[task_id]['error'] = ''
                             retry_count = tasks[task_id].get('_quota_retries', 0)
@@ -790,7 +800,7 @@ class ChromePool:
                             self._log(f"[{worker_name}] FAIL (401): {task_id[:8]}... | TOKEN HET HAN - VM can refresh", "ERROR")
 
                         # === 400: Bo qua luon, khong retry ===
-                        elif err_code == 400:
+                        elif err_code == 400 and not _proxy_dead:
                             tasks[task_id]['status'] = 'failed'
                             tasks[task_id]['error'] = err_str
                             stats['total_failed'] += 1
@@ -798,6 +808,28 @@ class ChromePool:
                             self._log(f"[{worker_name}] SKIP (400): {task_id[:8]}... | {err_str[:80]}", "WARN")
                             if worker.session:
                                 worker.session._consecutive_403 = 0
+
+                        # === v1.0.635: PROXY DEAD → xu ly nhu 403 (rotate IPv6) ===
+                        elif _proxy_dead:
+                            # Re-queue task
+                            retry_count = tasks[task_id].get('_403_retries', 0)
+                            if retry_count < 10:
+                                tasks[task_id]['_403_retries'] = retry_count + 1
+                                tasks[task_id]['status'] = 'queued'
+                                tasks[task_id]['error'] = ''
+                                self._log(f"[{worker_name}] RE-QUEUE (proxy-dead): {task_id[:8]}... | retry {retry_count + 1}/10", "WARN")
+                                with queue_lock:
+                                    task_queue.append(task_id)
+                            else:
+                                tasks[task_id]['status'] = 'failed'
+                                tasks[task_id]['error'] = f"Proxy dead + {err_code} x10"
+                                stats['total_failed'] += 1
+                                worker.total_failed += 1
+                                self._log(f"[{worker_name}] FAIL (proxy-dead): {task_id[:8]}...", "ERROR")
+                            # Force 403-like recovery (rotate IPv6 + restart)
+                            # Set err_code = 403 de trigger 403 RECOVERY block ben duoi
+                            err_code = 403
+
                         # === 403: Retry + recovery ===
                         elif err_code == 403:
                             # Track retry count cho task nay (toi da 10 lan = 2 vong x 5 lan)
