@@ -465,24 +465,26 @@ class IPv6Provider(ProxyProvider):
         time.sleep(8)
 
         # Ping gateway to trigger NDP + verify reachable
-        # v1.0.643: Ping tu source IP cu the de NDP cache dung cho IP nay
+        # v1.0.644: Ping DEFAULT gateway (khong phai gateway rieng cua worker)
+        # Worker o subnet khac khong the ping gateway rieng qua on-link
+        ping_gw = IPv6Provider._default_route_gateway or gateway
         try:
-            ping_cmd = f'ping -6 -n 2 -w 3000 -S {ipv6_address} {gateway}'
+            ping_cmd = f'ping -6 -n 2 -w 3000 -S {ipv6_address} {ping_gw}'
             ping_result = subprocess.run(
                 ping_cmd, shell=True, capture_output=True, text=True, timeout=15
             )
             if ping_result.returncode == 0 and 'Reply from' in (ping_result.stdout or ''):
-                self.log(f"[PROXY-IPv6] [v] Gateway {gateway} reachable from {ipv6_address}!")
+                self.log(f"[PROXY-IPv6] [v] Gateway {ping_gw} reachable from {ipv6_address}!")
             else:
                 # Fallback: ping khong chi dinh source
                 ping_result2 = subprocess.run(
-                    f'ping -6 -n 2 -w 3000 {gateway}',
+                    f'ping -6 -n 2 -w 3000 {ping_gw}',
                     shell=True, capture_output=True, text=True, timeout=15
                 )
                 if ping_result2.returncode == 0 and 'Reply from' in (ping_result2.stdout or ''):
-                    self.log(f"[PROXY-IPv6] [v] Gateway {gateway} reachable (no source bind)")
+                    self.log(f"[PROXY-IPv6] [v] Gateway {ping_gw} reachable (no source bind)")
                 else:
-                    self.log(f"[PROXY-IPv6] [!] Gateway {gateway} KHONG reply (NDP chua xong?)")
+                    self.log(f"[PROXY-IPv6] [!] Gateway {ping_gw} KHONG reply (NDP chua xong?)")
         except Exception:
             self.log(f"[PROXY-IPv6] [!] Gateway ping timeout")
 
@@ -537,12 +539,24 @@ class IPv6Provider(ProxyProvider):
             pass
 
     def _start_ndp_keepalive(self, ipv6_address: str, gateway: str, iface: str):
-        """v1.0.643: Start NDP keepalive thread cho worker nay."""
+        """
+        v1.0.643: Start NDP keepalive thread cho worker nay.
+        v1.0.644: Ping DEFAULT gateway (khong phai gateway rieng cua worker).
+        Worker o subnet khac (VD 3072::) khong the ping gateway cua subnet khac (VD 30e7::1)
+        qua on-link. Nhung traffic van chay tot vi SOCKS5 bind source IP
+        va MikroTik forward tu bat ky source subnet.
+        → Keepalive ping default gateway de giu NDP cache cho route ::/0.
+        """
         # Stop thread cu neu co
         if self._ndp_keepalive:
             self._ndp_keepalive.stop()
+
+        # v1.0.644: Dung default gateway (gateway cua route ::/0) thay vi gateway rieng
+        # Gateway rieng (VD 3072::1) co the unreachable vi on-link route fail
+        # Default gateway (VD 30e7::1) LUON reachable vi co route ::/0
+        keepalive_gw = IPv6Provider._default_route_gateway or gateway
         self._ndp_keepalive = NDPKeepalive(
-            gateway=gateway,
+            gateway=keepalive_gw,
             source_ip=ipv6_address,
             interface=iface,
             interval=20,

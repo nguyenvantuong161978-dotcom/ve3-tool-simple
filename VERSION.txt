@@ -1,4 +1,16 @@
-1.0.643
+1.0.644
+2026-04-01 (VN)
+Fix: NDP keepalive ping DEFAULT gateway thay vi gateway rieng cua worker
+- VAN DE (v1.0.643): Worker o subnet khac (VD 3072::) ping gateway rieng (3072::1)
+  → Gateway rieng KHONG reachable vi on-link route fail → NDP keepalive lien tuc fail
+  → Tuy Chrome van chay (SOCKS5 bind OK) nhung log spam "no reply"
+- FIX: Keepalive va setup ping deu dung DEFAULT gateway (gateway cua route ::/0)
+  → Default gateway LUON reachable (co route ::/0 tro den no)
+  → NDP cache cho default gateway duoc giu alive
+  → Reply packets: MikroTik NDP tim MAC cua destination IP → Windows respond (tu dong)
+- Files: modules/proxy_providers/ipv6_provider.py
+
+v1.0.643
 2026-04-01 (VN)
 Fix: Single-route architecture + NDP keepalive - on dinh cho 10+ Chrome instances
 - VAN DE: Nhieu route ::/0 (v1.0.640) → Windows chon 1 → worker khac mat mang bat thuong
