@@ -1343,7 +1343,7 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         log("Waiting for Google to redirect after login...")
 
         login_success = False
-        max_wait = 30  # Toi da 30s cho Google xu ly
+        max_wait = 60  # v1.0.659: Tang 30→60s cho mang IPv6 cham
         for wait_i in range(max_wait):
             current_url = driver.url.lower()
 

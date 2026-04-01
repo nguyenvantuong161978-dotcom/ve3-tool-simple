@@ -1,9 +1,11 @@
-1.0.658
+1.0.659
 2026-04-01 (VN)
-Fix: Login retry tang 2 → 5 lan, khong bo qua Chrome khi fail
-- Truoc: retry 2 lan roi bo qua Chrome do → di Chrome tiep theo
-- Sau: retry 5 lan, doi 5s giua cac lan → du thoi gian cho Google
-- File: _run_chrome1.py
+Fix: Login cho mang IPv6 cham - tang thoi gian cho + PHAI login thanh cong
+- google_login.py: Tang max wait 30s → 60s cho Google redirect (IPv6 cham)
+- _run_chrome1.py: Retry 10 lan moi Chrome, doi 10s giua cac lan
+  → Chrome 1 PHAI login OK moi tiep tuc (khong bo qua)
+  → Chrome 2 fail thi van tiep tuc voi Chrome 1
+- Files: google_login.py, _run_chrome1.py
 
 1.0.657
 2026-04-01 (VN)

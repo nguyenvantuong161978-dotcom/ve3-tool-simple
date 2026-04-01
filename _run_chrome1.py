@@ -1084,9 +1084,9 @@ def _do_pre_login_if_needed(project_code: str = None):
         if _proxy_arg:
             print(f"[PRE-LOGIN] Proxy: {_proxy_arg}")
 
-        # v1.0.658: Retry login cho den khi thanh cong (max 5 lan moi Chrome)
-        # Khong bo qua Chrome nao - phai login THANH CONG moi tiep tuc
-        max_login_retries = 5
+        # v1.0.659: PHAI login thanh cong moi tiep tuc - khong bo qua
+        # Mang IPv6 khong on dinh → co the fail nhieu lan → cu retry cho den khi duoc
+        max_login_retries = 10  # Toi da 10 lan moi Chrome
 
         print("[PRE-LOGIN] Logging into Chrome 1...")
         chrome1_ok = False
@@ -1097,11 +1097,12 @@ def _do_pre_login_if_needed(project_code: str = None):
                 print("[PRE-LOGIN] Chrome 1 login OK!")
                 break
             else:
-                if _login_try < max_login_retries - 1:
-                    print(f"[PRE-LOGIN] Chrome 1 login FAILED, retry {_login_try+2}/{max_login_retries}...")
-                    time.sleep(5)
-                else:
-                    print("[PRE-LOGIN] Chrome 1 login FAILED after 5 retries!")
+                print(f"[PRE-LOGIN] Chrome 1 login FAILED ({_login_try+1}/{max_login_retries}), doi 10s roi thu lai...")
+                time.sleep(10)
+
+        if not chrome1_ok:
+            print("[PRE-LOGIN] Chrome 1 login FAILED sau 10 lan! Kiem tra tai khoan/mang.")
+            return  # Dung - khong the tiep tuc khi chua login
 
         chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 2...")
@@ -1113,16 +1114,11 @@ def _do_pre_login_if_needed(project_code: str = None):
                 print("[PRE-LOGIN] Chrome 2 login OK!")
                 break
             else:
-                if _login_try < max_login_retries - 1:
-                    print(f"[PRE-LOGIN] Chrome 2 login FAILED, retry {_login_try+2}/{max_login_retries}...")
-                    time.sleep(5)
-                else:
-                    print("[PRE-LOGIN] Chrome 2 login FAILED after 5 retries!")
+                print(f"[PRE-LOGIN] Chrome 2 login FAILED ({_login_try+1}/{max_login_retries}), doi 10s roi thu lai...")
+                time.sleep(10)
 
-        if not chrome1_ok and not chrome2_ok:
-            print("[PRE-LOGIN] CA 2 Chrome login FAILED! Dung lai, khong tao anh.")
-            print("[PRE-LOGIN] Kiem tra tai khoan Google hoac mang.")
-            return  # Dung processing
+        if not chrome2_ok:
+            print("[PRE-LOGIN] Chrome 2 login FAILED sau 10 lan! Tiep tuc voi Chrome 1.")
 
     except Exception as e:
         print(f"[PRE-LOGIN] Error (non-critical): {e}")
