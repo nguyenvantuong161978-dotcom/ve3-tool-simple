@@ -1303,7 +1303,7 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                     log("Waiting 5s for 2FA page to fully render...")
                     time.sleep(5)
 
-                # B3: Generate OTP NGAY TRUOC KHI paste (tranh het han)
+                # B3: Generate OTP NGAY TRUOC KHI nhap (tranh het han)
                 clean_secret = totp_secret.replace(" ", "").replace("-", "").upper()
                 totp = pyotp.TOTP(clean_secret)
                 otp_code = totp.now()
@@ -1376,6 +1376,59 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 pass
             return False
 
+        # v1.0.655: VERIFY LOGIN - check dung tai khoan (giong server/chrome_session.py)
+        # Navigate myaccount.google.com → doc email → so sanh voi email dang login
+        log("Verifying login account via myaccount.google.com...")
+        try:
+            driver.get("https://myaccount.google.com")
+            time.sleep(3)
+            verify_url = (driver.url or '').lower()
+            if 'accounts.google.com' in verify_url:
+                log("VERIFY FAILED - redirect to login page! Chua dang nhap.", "ERROR")
+                try:
+                    driver.quit()
+                except:
+                    pass
+                return False
+
+            # Doc email tu page (giong server _check_current_account)
+            logged_email = driver.run_js("""
+                // Tim email trong page
+                var els = document.querySelectorAll('[data-email]');
+                if (els.length > 0) return els[0].getAttribute('data-email');
+
+                // Fallback: tim text co @ trong header area
+                var all = document.querySelectorAll('header *');
+                for (var i = 0; i < all.length; i++) {
+                    var t = all[i].textContent.trim();
+                    if (t.indexOf('@') > 0 && t.indexOf('.') > 0 && t.length < 60) {
+                        return t;
+                    }
+                }
+
+                // Fallback 2: tim trong aria-label
+                var btns = document.querySelectorAll('[aria-label*="@"]');
+                if (btns.length > 0) {
+                    var label = btns[0].getAttribute('aria-label');
+                    var match = label.match(/[\\w.-]+@[\\w.-]+/);
+                    if (match) return match[0];
+                }
+
+                return '';
+            """)
+            logged_email = str(logged_email or '').strip().lower()
+
+            if logged_email:
+                if logged_email == email.lower():
+                    log(f"VERIFY OK - dung tai khoan: {logged_email}", "OK")
+                else:
+                    log(f"VERIFY WARN - login SAI tai khoan! Expected: {email}, Got: {logged_email}", "WARN")
+                    log("Tiep tuc nhung co the gap loi sau...", "WARN")
+            else:
+                log("VERIFY OK - dang nhap roi nhung khong doc duoc email (non-critical)", "OK")
+        except Exception as ve:
+            log(f"Verify error (non-critical): {ve}", "WARN")
+
         # v1.0.158: Tối ưu tốc độ warm-up
         log("Warm-up Flow...")
         flow_url = "https://labs.google/fx/vi/tools/flow"
@@ -1423,10 +1476,13 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         except Exception as e:
             log(f"Warm up error: {e}", "WARN")
 
-        # v1.0.646: KHÔNG đóng Chrome - để DrissionFlowAPI dùng luôn session đang mở
-        # Trước: driver.quit() → đóng Chrome → DrissionFlowAPI mở lại → intermittent mất session
-        # Sau: Chrome vẫn chạy trên port 9222+worker_id → DrissionFlowAPI connect vào luôn
-        log("Chrome kept open (DrissionFlowAPI will connect to existing session)")
+        # v1.0.655: Dong Chrome sau login - DrissionFlowAPI se mo Chrome moi voi cung profile
+        # Session login da luu trong cookies/profile → Chrome moi van logged in
+        log("Closing Chrome after login (session saved in profile)")
+        try:
+            driver.quit()
+        except:
+            pass
 
         return True
 

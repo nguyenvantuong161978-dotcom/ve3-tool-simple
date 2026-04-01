@@ -1084,14 +1084,44 @@ def _do_pre_login_if_needed(project_code: str = None):
         if _proxy_arg:
             print(f"[PRE-LOGIN] Proxy: {_proxy_arg}")
 
+        # v1.0.655: Check return value - retry neu login fail
+        max_login_retries = 2
+
         print("[PRE-LOGIN] Logging into Chrome 1...")
-        login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0, proxy_arg=_proxy_arg)
-        print("[PRE-LOGIN] Chrome 1 login done!")
+        chrome1_ok = False
+        for _login_try in range(max_login_retries):
+            result = login_google_chrome(current_account, chrome_portable=chrome1_exe, worker_id=0, proxy_arg=_proxy_arg)
+            if result:
+                chrome1_ok = True
+                print("[PRE-LOGIN] Chrome 1 login OK!")
+                break
+            else:
+                if _login_try < max_login_retries - 1:
+                    print(f"[PRE-LOGIN] Chrome 1 login FAILED, retry {_login_try+2}/{max_login_retries}...")
+                    time.sleep(3)
+                else:
+                    print("[PRE-LOGIN] Chrome 1 login FAILED after all retries!", "ERROR")
 
         chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 2...")
-        login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1, proxy_arg=_proxy_arg)
-        print("[PRE-LOGIN] Chrome 2 login done!")
+        chrome2_ok = False
+        for _login_try in range(max_login_retries):
+            result = login_google_chrome(current_account, chrome_portable=chrome2_exe, worker_id=1, proxy_arg=_proxy_arg)
+            if result:
+                chrome2_ok = True
+                print("[PRE-LOGIN] Chrome 2 login OK!")
+                break
+            else:
+                if _login_try < max_login_retries - 1:
+                    print(f"[PRE-LOGIN] Chrome 2 login FAILED, retry {_login_try+2}/{max_login_retries}...")
+                    time.sleep(3)
+                else:
+                    print("[PRE-LOGIN] Chrome 2 login FAILED after all retries!")
+
+        if not chrome1_ok and not chrome2_ok:
+            print("[PRE-LOGIN] CA 2 Chrome login FAILED! Dung lai, khong tao anh.", "ERROR")
+            print("[PRE-LOGIN] Kiem tra tai khoan Google hoac mang.")
+            return  # Dung processing
 
     except Exception as e:
         print(f"[PRE-LOGIN] Error (non-critical): {e}")
