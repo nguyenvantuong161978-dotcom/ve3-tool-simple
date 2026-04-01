@@ -21,7 +21,10 @@ import random
 import threading
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from ipv6.mikrotik_api import MikroTikAPI
+try:
+    from ipv6.mikrotik_api import MikroTikAPI
+except ModuleNotFoundError:
+    from mikrotik_api import MikroTikAPI
 
 
 class IPv6Pool:
