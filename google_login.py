@@ -1338,12 +1338,13 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 log(f"2FA step error: {e}", "WARN")
 
         # === KIỂM TRA LOGIN THỰC SỰ THÀNH CÔNG ===
-        # v1.0.649: Tang thoi gian + fix logic check URL
-        log("Waiting for login to complete...")
-        time.sleep(3)
+        # v1.0.656: Cho Google xu ly OTP xong (10s) roi moi check URL
+        # Truoc: 3s qua ngan → Google chua redirect → check 15 lan deu fail
+        log("Waiting 10s for Google to process login...")
+        time.sleep(10)
 
         # Kiểm tra URL sau khi login
-        max_check = 15  # v1.0.649: Tang tu 10 len 15 (30s cho mang cham)
+        max_check = 15
         login_success = False
         for check in range(max_check):
             current_url = driver.url.lower()

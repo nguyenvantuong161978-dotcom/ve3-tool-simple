@@ -1,3 +1,10 @@
+1.0.656
+2026-04-01 (VN)
+Fix: Sau OTP cho 10s de Google xu ly xong roi moi check URL
+- Truoc: chi cho 3s → Google chua redirect → 15 check deu fail → "Login FAILED"
+- Sau: cho 10s → Google da xu ly OTP + redirect → check thanh cong
+- File: google_login.py
+
 1.0.655
 2026-04-01 (VN)
 Fix: Login retry + verify - khong tao anh khi chua login thanh cong
