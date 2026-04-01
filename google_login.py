@@ -1343,8 +1343,8 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
         log("Waiting 10s for Google to process login...")
         time.sleep(10)
 
-        # Kiểm tra URL sau khi login
-        max_check = 15
+        # Kiểm tra URL sau khi login (da cho 10s roi, 5 lan x 2s = 10s nua la du)
+        max_check = 5
         login_success = False
         for check in range(max_check):
             current_url = driver.url.lower()
