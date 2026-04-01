@@ -1,8 +1,11 @@
-1.0.656
+1.0.657
 2026-04-01 (VN)
-Fix: Sau OTP cho 10s de Google xu ly xong roi moi check URL
-- Truoc: chi cho 3s → Google chua redirect → 15 check deu fail → "Login FAILED"
-- Sau: cho 10s → Google da xu ly OTP + redirect → check thanh cong
+Fix: Login check thong minh - doi URL thay doi thay vi sleep co dinh
+- Truoc: sleep 10s co dinh → mang nhanh thi lang phi, mang cham thi thieu
+- Sau: Loop 1s/lan (max 30s) doi URL roi khoi trang login
+  → Nhanh khi mang nhanh (2-3s), cho du khi mang cham (30s)
+  → Khi URL thay doi → cho them 5s de page on dinh
+  → Log moi 5s de biet dang cho
 - File: google_login.py
 
 1.0.655

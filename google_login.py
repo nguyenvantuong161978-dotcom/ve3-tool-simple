@@ -1338,38 +1338,43 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
                 log(f"2FA step error: {e}", "WARN")
 
         # === KIỂM TRA LOGIN THỰC SỰ THÀNH CÔNG ===
-        # v1.0.656: Cho Google xu ly OTP xong (10s) roi moi check URL
-        # Truoc: 3s qua ngan → Google chua redirect → check 15 lan deu fail
-        log("Waiting 10s for Google to process login...")
-        time.sleep(10)
+        # v1.0.657: Doi URL thay doi (roi khoi trang login) roi cho 5s
+        # Khong co dinh 10s/20s - nhanh khi mang nhanh, cho du khi mang cham
+        log("Waiting for Google to redirect after login...")
 
-        # Kiểm tra URL sau khi login (da cho 10s roi, 5 lan x 2s = 10s nua la du)
-        max_check = 5
         login_success = False
-        for check in range(max_check):
+        max_wait = 30  # Toi da 30s cho Google xu ly
+        for wait_i in range(max_wait):
             current_url = driver.url.lower()
-            log(f"Check {check+1}/{max_check}: URL = {current_url[:60]}...")
 
-            # Login thành công nếu URL đã rời khỏi accounts.google.com
+            # Da roi khoi trang login
             if "myaccount.google.com" in current_url or \
                "google.com/search" in current_url or \
                "labs.google" in current_url:
                 login_success = True
-                log("Login SUCCESS - URL changed!", "OK")
+                log(f"Login SUCCESS - redirected after {wait_i+1}s!", "OK")
                 break
 
-            # Vẫn ở accounts.google.com nhưng KHÔNG còn ở signin/challenge
+            # Van o accounts.google.com nhung KHONG con o signin/challenge
             if "accounts.google.com" in current_url and \
                "/signin" not in current_url and \
                "/challenge" not in current_url:
                 login_success = True
-                log("Login SUCCESS - URL changed!", "OK")
+                log(f"Login SUCCESS - left login page after {wait_i+1}s!", "OK")
                 break
 
-            time.sleep(2)
+            # Log moi 5s de biet dang cho
+            if (wait_i + 1) % 5 == 0:
+                log(f"Still waiting... ({wait_i+1}/{max_wait}s) URL={current_url[:50]}...")
 
-        if not login_success:
-            log("Login FAILED - still on login page!", "ERROR")
+            time.sleep(1)
+
+        if login_success:
+            # Cho them 5s de page on dinh truoc khi lam gi tiep
+            log("Page redirected, waiting 5s for stability...")
+            time.sleep(5)
+        else:
+            log("Login FAILED - still on login page after 30s!", "ERROR")
             # Đóng Chrome
             try:
                 driver.quit()
