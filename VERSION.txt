@@ -1,3 +1,10 @@
+1.0.658
+2026-04-01 (VN)
+Fix: Login retry tang 2 → 5 lan, khong bo qua Chrome khi fail
+- Truoc: retry 2 lan roi bo qua Chrome do → di Chrome tiep theo
+- Sau: retry 5 lan, doi 5s giua cac lan → du thoi gian cho Google
+- File: _run_chrome1.py
+
 1.0.657
 2026-04-01 (VN)
 Fix: Login check thong minh - doi URL thay doi thay vi sleep co dinh

@@ -1084,8 +1084,9 @@ def _do_pre_login_if_needed(project_code: str = None):
         if _proxy_arg:
             print(f"[PRE-LOGIN] Proxy: {_proxy_arg}")
 
-        # v1.0.655: Check return value - retry neu login fail
-        max_login_retries = 2
+        # v1.0.658: Retry login cho den khi thanh cong (max 5 lan moi Chrome)
+        # Khong bo qua Chrome nao - phai login THANH CONG moi tiep tuc
+        max_login_retries = 5
 
         print("[PRE-LOGIN] Logging into Chrome 1...")
         chrome1_ok = False
@@ -1098,9 +1099,9 @@ def _do_pre_login_if_needed(project_code: str = None):
             else:
                 if _login_try < max_login_retries - 1:
                     print(f"[PRE-LOGIN] Chrome 1 login FAILED, retry {_login_try+2}/{max_login_retries}...")
-                    time.sleep(3)
+                    time.sleep(5)
                 else:
-                    print("[PRE-LOGIN] Chrome 1 login FAILED after all retries!", "ERROR")
+                    print("[PRE-LOGIN] Chrome 1 login FAILED after 5 retries!")
 
         chrome2_exe = str(TOOL_DIR / "GoogleChromePortable - Copy" / "GoogleChromePortable.exe")
         print("[PRE-LOGIN] Logging into Chrome 2...")
@@ -1114,12 +1115,12 @@ def _do_pre_login_if_needed(project_code: str = None):
             else:
                 if _login_try < max_login_retries - 1:
                     print(f"[PRE-LOGIN] Chrome 2 login FAILED, retry {_login_try+2}/{max_login_retries}...")
-                    time.sleep(3)
+                    time.sleep(5)
                 else:
-                    print("[PRE-LOGIN] Chrome 2 login FAILED after all retries!")
+                    print("[PRE-LOGIN] Chrome 2 login FAILED after 5 retries!")
 
         if not chrome1_ok and not chrome2_ok:
-            print("[PRE-LOGIN] CA 2 Chrome login FAILED! Dung lai, khong tao anh.", "ERROR")
+            print("[PRE-LOGIN] CA 2 Chrome login FAILED! Dung lai, khong tao anh.")
             print("[PRE-LOGIN] Kiem tra tai khoan Google hoac mang.")
             return  # Dung processing
 
