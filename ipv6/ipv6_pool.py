@@ -742,11 +742,14 @@ class IPv6Pool:
 
             self.log(f"[POOL] Tim thay {len(old_ids)} IP cu tren router (subnets: {len(old_subnets)})")
 
-            # 2. Xoa tat ca IP cu tren router
+            # 2. Xoa tat ca IP cu tren router (delay giua cac lenh de khong qua tai router)
+            # v1.0.665: Delay 0.1s giua moi operation de tranh router CPU spike
+            # → giam anh huong toi IPv6 traffic khac (RDP, YouTube)
             removed = 0
             for addr_id in old_ids:
                 if self.api.remove_ipv6_address(addr_id):
                     removed += 1
+                time.sleep(0.1)  # Cho router xu ly xong truoc khi tiep
             self.log(f"[POOL] Da xoa {removed}/{len(old_ids)} IP cu tren router")
 
             # 3. Clear pool va burned list
@@ -775,6 +778,7 @@ class IPv6Pool:
                     added += 1
                 else:
                     self.log(f"[POOL] [!] Cannot create gateway for subnet {subnet:02x}, skip")
+                time.sleep(0.1)  # v1.0.665: Delay de khong qua tai router
 
             self.log(f"[POOL] Da them {added}/{len(selected)} gateway tren router")
 

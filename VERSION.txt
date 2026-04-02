@@ -1,3 +1,16 @@
+1.0.665
+2026-04-02 (VN)
+Fix: IPv6 Pool rotate_all() gay mat ket noi RDP - them delay giua cac lenh router
+- VAN DE: rotate_all() gui 300+ lenh lien tuc (150 xoa + 150 them) toi MikroTik
+  → Router CPU qua tai → routing table khong on dinh
+  → TAT CA IPv6 traffic bi anh huong (ke ca 100 IP YouTube khong lien quan)
+  → RDP qua IPv6 bi cham/mat ket noi khi Pool chay
+- FIX: Them time.sleep(0.1) giua moi lenh add/remove tren router
+  → Router co thoi gian xu ly xong truoc khi nhan lenh tiep
+  → 300 lenh × 0.1s = ~30s tong cong (chap nhan duoc cho rotate_all)
+  → IPv6 traffic khac (RDP, YouTube) khong bi gian doan
+- File: ipv6/ipv6_pool.py
+
 1.0.664
 2026-04-02 (VN)
 Fix: IPv6 Pool bao ve 100 IP YouTube - HANG RAO CUNG khong cho Pool dong vao
