@@ -60,6 +60,12 @@ class MikroTikAPI:
         self.subnet_end = subnet_end
         self.log = log_func
 
+        # v1.0.663: RESERVED SUBNETS - Pool KHONG BAO GIO duoc dong vao
+        # Subnet 01-65 hex (1-101 decimal) = 100 IP YouTube
+        # Day la HANG RAO CUNG - bat ke subnet_start config the nao
+        self._reserved_start = 0x01
+        self._reserved_end = 0x65  # 100 IP YouTube
+
         self.session = requests.Session()
         self.session.auth = (username, password)
         self.session.verify = False  # MikroTik self-signed cert
@@ -101,6 +107,25 @@ class MikroTikAPI:
             self.log(f"[MikroTik] List IPv6 failed: {e}")
             return []
 
+    def _is_reserved_subnet(self, subnet: int) -> bool:
+        """
+        v1.0.663: Check subnet co nam trong reserved range khong.
+        Reserved = 100 IP YouTube (subnet 01-65) - KHONG BAO GIO duoc dong vao.
+        """
+        return self._reserved_start <= subnet <= self._reserved_end
+
+    def _check_address_reserved(self, address: str) -> bool:
+        """
+        v1.0.663: Check 1 IPv6 address co thuoc reserved subnet khong.
+        Returns True neu RESERVED (KHONG duoc dong vao).
+        """
+        subnet = self._extract_subnet(address)
+        if subnet is not None and self._is_reserved_subnet(subnet):
+            self.log(f"[MikroTik] ⛔ BLOCKED: subnet {subnet:02x} nam trong reserved range "
+                     f"({self._reserved_start:02x}-{self._reserved_end:02x}) - KHONG DONG VAO!")
+            return True
+        return False
+
     def add_ipv6_address(self, address: str, interface: str = None) -> Optional[str]:
         """
         Them IPv6 address vao interface.
@@ -112,6 +137,10 @@ class MikroTikAPI:
         Returns:
             Address ID (vd: "*A") neu thanh cong, None neu that bai
         """
+        # v1.0.663: Guard - khong add vao reserved subnet
+        if self._check_address_reserved(address):
+            return None
+
         iface = interface or self.interface
         data = {
             "address": address,

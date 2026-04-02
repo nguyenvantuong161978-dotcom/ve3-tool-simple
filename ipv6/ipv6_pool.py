@@ -338,6 +338,14 @@ class IPv6Pool:
             old_subnet = burned_entry.get("subnet")
             old_subnet_hex = burned_entry.get("subnet_hex", "")
 
+            # v1.0.663: Guard - KHONG xoa reserved subnet
+            if old_subnet is not None and self.api._is_reserved_subnet(old_subnet):
+                self.log(f"[POOL] BURN: subnet {old_subnet_hex} la RESERVED → KHONG xoa gateway!")
+                # Chi xoa khoi pool, KHONG dong vao router
+                self.pool.pop(burned_idx)
+                self._save_pool()
+                return
+
             # 1. Xoa gateway cu tren router
             if old_subnet is not None:
                 router_addrs = self.api.list_ipv6_addresses()
@@ -630,6 +638,9 @@ class IPv6Pool:
                     break
                 if s in pool_subnets_int:
                     continue
+                # v1.0.663: Skip reserved subnet
+                if self.api._is_reserved_subnet(s):
+                    continue
 
                 # Tao gateway moi tren router
                 s_hex = f"{s:02x}"
@@ -720,6 +731,10 @@ class IPv6Pool:
                 if subnet is None:
                     continue
                 if subnet < self.api.subnet_start or subnet > self.api.subnet_end:
+                    continue
+
+                # v1.0.663: KHONG dong vao reserved subnet
+                if self.api._is_reserved_subnet(subnet):
                     continue
 
                 old_ids.append(addr_id)

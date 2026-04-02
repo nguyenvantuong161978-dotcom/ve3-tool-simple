@@ -1,3 +1,17 @@
+1.0.664
+2026-04-02 (VN)
+Fix: IPv6 Pool bao ve 100 IP YouTube - HANG RAO CUNG khong cho Pool dong vao
+- mikrotik_api.py: Reserved subnet range 01-65 (100 IP YouTube)
+  → _is_reserved_subnet(): Check subnet co reserved khong
+  → _check_address_reserved(): Block add IPv6 vao reserved subnet
+  → add_ipv6_address(): Guard truoc khi add → return None neu reserved
+- ipv6_pool.py: Guard o 3 cho:
+  → burn_ip(): KHONG xoa gateway reserved subnet tren router
+  → rotate_all(): Skip reserved subnet khi xoa IP cu
+  → _refill(): Skip reserved subnet khi tao gateway moi
+- BAT KE config subnet_start la bao nhieu, reserved subnet KHONG BAO GIO bi dong vao
+- Files: mikrotik_api.py, ipv6_pool.py
+
 1.0.663
 2026-04-02 (VN)
 Feature: TTL-aware proxy - phan biet proxy die vs 403 that (GENERIC, khong rieng ProxyXoay)
