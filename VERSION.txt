@@ -1,3 +1,13 @@
+1.0.661
+2026-04-02 (VN)
+Fix: ProxyXoay login + pool_api override bug
+- google_login.py: Them proxyxoay vao get_proxy_arg_from_settings()
+  → Login qua ProxyXoay proxy (truoc: chi ho tro IPv6/Webshare)
+- __init__.py: Fix pool_api_url override khi da chon webshare/proxyxoay
+  → Truoc: co pool_url → luon chon IPv6 (ke ca khi type=proxyxoay)
+  → Sau: chi override khi type la ipv6 hoac none
+- Files: google_login.py, __init__.py
+
 1.0.660
 2026-04-02 (VN)
 Feature: Them ProxyXoay.shop proxy provider - proxy xoay Viet Nam

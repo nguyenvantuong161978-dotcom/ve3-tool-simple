@@ -99,7 +99,8 @@ def create_provider(config: dict = None, log_func: Callable = print) -> ProxyPro
 
     # v1.0.574: ipv6_pool cung dung IPv6Provider (ipv6_rotator da co pool mode)
     # ipv6_rotator tu dong detect pool_api_url va dung Pool API
-    if not pp_config or provider_type == 'ipv6':
+    # CHI apply khi chua co pp_config hoac dang la ipv6 (khong override webshare/proxyxoay)
+    if provider_type == 'ipv6' or (not pp_config and provider_type not in ('webshare', 'proxyxoay')):
         mikrotik_cfg = config.get('mikrotik', {})
         pool_url = mikrotik_cfg.get('pool_api_url', '')
         if pool_url:

@@ -63,7 +63,7 @@ def get_proxy_arg_from_settings(ensure_ready: bool = True) -> str:
             if ipv6_cfg.get('enabled', False):
                 pp_type = 'ipv6'
 
-        # Pool API override
+        # Pool API override (chi khi dang la ipv6/none, khong override webshare/proxyxoay)
         mikrotik_cfg = cfg.get('mikrotik', {})
         pool_url = mikrotik_cfg.get('pool_api_url', '')
         if pool_url and pp_type in ('ipv6', 'none'):
@@ -105,6 +105,28 @@ def get_proxy_arg_from_settings(ensure_ready: bool = True) -> str:
             pwd = ws_cfg.get('rotating_password', '')
             if user and pwd:
                 return f"http://{user}:{pwd}@{host}:{ws_port}"
+
+        elif pp_type == 'proxyxoay':
+            # v1.0.661: ProxyXoay - lay proxy tu API cho login
+            px_cfg = pp_cfg.get('proxyxoay', {})
+            px_keys = px_cfg.get('api_keys', [])
+            if not px_keys:
+                single = px_cfg.get('api_key', '')
+                if single:
+                    px_keys = [single]
+            if px_keys:
+                try:
+                    from modules.proxy_providers.proxyxoay_provider import ProxyXoayProvider
+                    provider = ProxyXoayProvider(config={'proxyxoay': px_cfg}, log_func=log)
+                    if provider.setup(worker_id=0):
+                        proxy_arg = provider.get_chrome_arg()
+                        log(f"[PROXY] ProxyXoay for login: {provider.get_current_ip()}", "INFO")
+                        return proxy_arg
+                    else:
+                        log("[PROXY] ProxyXoay setup failed → login KHONG qua proxy", "WARN")
+                except Exception as e:
+                    log(f"[PROXY] ProxyXoay error: {e}", "WARN")
+
         return ""
     except Exception as e:
         log(f"[PROXY] Error reading settings: {e}", "WARN")
