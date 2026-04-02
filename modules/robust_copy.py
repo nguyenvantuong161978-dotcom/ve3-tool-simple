@@ -308,6 +308,141 @@ POSSIBLE_AUTO_PATHS = [
     r"C:\AUTO",
 ]
 
+# =========================================================================
+# SMB AUTO-RECONNECT
+# =========================================================================
+
+# SMB config mac dinh (giong START.py)
+_SMB_DEFAULTS = {
+    "server_ip": "192.168.88.14",
+    "share_name": "D",
+    "username": "smbuser",
+    "password": "159753",
+    "drive_letter": "Z:",
+}
+
+
+def _load_smb_config() -> dict:
+    """
+    Load SMB config tu settings.yaml hoac dung default.
+    settings.yaml co the co:
+        smb:
+            server_ip: "192.168.88.14"
+            share_name: "D"
+            username: "smbuser"
+            password: "159753"
+            drive_letter: "Z:"
+    """
+    cfg = dict(_SMB_DEFAULTS)
+    try:
+        import yaml
+        settings_path = Path(__file__).parent.parent / "config" / "settings.yaml"
+        if settings_path.exists():
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f) or {}
+            smb = data.get('smb', {})
+            if smb:
+                for k in cfg:
+                    if k in smb and smb[k]:
+                        cfg[k] = smb[k]
+    except Exception:
+        pass
+    return cfg
+
+
+def ensure_smb_connected(log: Callable = None) -> bool:
+    """
+    v1.0.666: Dam bao SMB share (Z:) da ket noi.
+    Neu mat ket noi → tu dong reconnect bang net use.
+
+    Goi TRUOC moi lan can truy cap Z:\AUTO.
+    Windows hay mat SMB credential sau restart/reset VM.
+
+    Returns:
+        True neu Z: accessible (da co san hoac reconnect thanh cong)
+    """
+    log = log or _log_default
+    cfg = _load_smb_config()
+    drive = cfg["drive_letter"]
+    auto_path = f"{drive}\\AUTO"
+
+    # Check nhanh - da ket noi chua?
+    try:
+        if Path(auto_path).exists():
+            return True
+    except Exception:
+        pass
+
+    # Mat ket noi → reconnect
+    log(f"[SMB] {drive} mat ket noi, dang reconnect...", "WARN")
+
+    server = cfg["server_ip"]
+    share = cfg["share_name"]
+    user = cfg["username"]
+    pwd = cfg["password"]
+
+    try:
+        # Xoa mapping cu (co the bi stale)
+        subprocess.run(
+            ['net', 'use', drive, '/delete', '/y'],
+            capture_output=True, text=True, timeout=10
+        )
+    except Exception:
+        pass
+
+    # Tao mapping moi voi /persistent:yes va /savecred
+    try:
+        cmd = [
+            'net', 'use', drive,
+            f'\\\\{server}\\{share}',
+            f'/user:{user}', pwd,
+            '/persistent:yes'
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+        if result.returncode == 0:
+            # Verify
+            time.sleep(1)
+            if Path(auto_path).exists():
+                log(f"[SMB] [v] Reconnect {drive} thanh cong!", "INFO")
+
+                # Luu credential vao Windows Credential Manager de khong bi hoi lai
+                _save_smb_credential(server, user, pwd, log)
+                return True
+            else:
+                log(f"[SMB] Reconnect OK nhung {auto_path} khong ton tai", "WARN")
+                return False
+        else:
+            stderr = (result.stderr or "").strip()
+            log(f"[SMB] Reconnect THAT BAI: {stderr}", "ERROR")
+            return False
+    except subprocess.TimeoutExpired:
+        log(f"[SMB] Reconnect timeout!", "ERROR")
+        return False
+    except Exception as e:
+        log(f"[SMB] Reconnect error: {e}", "ERROR")
+        return False
+
+
+def _save_smb_credential(server: str, username: str, password: str, log: Callable = None):
+    """
+    Luu credential vao Windows Credential Manager.
+    Sau khi luu, Windows tu dong dung credential nay khi ket noi lai
+    → khong bi hoi password sau restart.
+    """
+    log = log or _log_default
+    try:
+        # cmdkey /add:server /user:username /pass:password
+        cmd = ['cmdkey', f'/add:{server}', f'/user:{username}', f'/pass:{password}']
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            log(f"[SMB] Credential saved to Windows Credential Manager", "INFO")
+        else:
+            # Khong quan trong neu fail - net use van hoat dong
+            pass
+    except Exception:
+        pass
+
 
 def find_auto_path(log: Callable = None) -> Optional[str]:
     """
@@ -317,6 +452,9 @@ def find_auto_path(log: Callable = None) -> Optional[str]:
         Đường dẫn AUTO path nếu tìm thấy, None nếu không
     """
     log = log or _log_default
+
+    # v1.0.666: Thu reconnect SMB truoc khi tim path
+    ensure_smb_connected(log)
 
     for path in POSSIBLE_AUTO_PATHS:
         try:
@@ -335,7 +473,7 @@ def get_working_auto_path(current_path: str = None, log: Callable = None) -> Opt
     """
     Lấy AUTO path đang hoạt động.
     Nếu current_path vẫn accessible → dùng tiếp.
-    Nếu current_path mất kết nối → tìm path khác (fallback).
+    Nếu current_path mất kết nối → reconnect SMB → thử lại → fallback.
 
     Args:
         current_path: Path hiện tại đang dùng (có thể None)
@@ -354,10 +492,24 @@ def get_working_auto_path(current_path: str = None, log: Callable = None) -> Opt
                 return current_path
         except Exception:
             pass
-        log(f"[AUTO] Path hiện tại KHÔNG truy cập được: {current_path}", "WARN")
+
+        # v1.0.666: Path mat ket noi → thu reconnect SMB truoc khi bo cuoc
+        log(f"[AUTO] Path KHÔNG truy cập được: {current_path}, thu reconnect SMB...", "WARN")
+        if ensure_smb_connected(log):
+            # Reconnect OK → thu lai path cu
+            try:
+                p = Path(current_path)
+                if p.exists() and p.is_dir():
+                    log(f"[AUTO] [v] Reconnect SMB thanh cong, {current_path} OK!", "INFO")
+                    return current_path
+            except Exception:
+                pass
+
         log(f"[AUTO] Tìm path dự phòng...", "INFO")
 
-    # Tìm path khác
+    # Tìm path khác (dam bao SMB da reconnect)
+    ensure_smb_connected(log)
+
     for path in POSSIBLE_AUTO_PATHS:
         if path == current_path:
             continue  # Đã thử rồi

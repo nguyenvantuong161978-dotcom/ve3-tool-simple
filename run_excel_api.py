@@ -1093,6 +1093,13 @@ class ExcelAPIWorker:
                 log(f"")
                 log(f"[CYCLE {cycle}] Starting scan...")
 
+                # v1.0.666: Re-detect auto_path moi cycle (SMB co the mat ket noi)
+                if not self.auto_path or not safe_path_exists(self.auto_path):
+                    self.auto_path = detect_auto_path()
+                    if self.auto_path:
+                        self.master_projects = self.auto_path / "ve3-tool-simple" / "PROJECTS"
+                        log(f"[SMB] Reconnected: {self.auto_path}")
+
                 try:
                     self.run_once()
                 except Exception as e:

@@ -2061,8 +2061,8 @@ class VMManager:
 
         # Check if project is completed
         if status.current_step == "done":
-            # v1.0.294: Re-detect auto_path nếu chưa có (có thể mount sau khi GUI khởi động)
-            if not self.auto_path:
+            # v1.0.666: Re-detect auto_path neu mat ket noi (SMB auto-reconnect)
+            if not self.auto_path or not self.auto_path.exists():
                 self.auto_path = self._detect_auto_path()
                 if self.auto_path:
                     self.log(f"AUTO path detected: {self.auto_path}", "SYSTEM", "SUCCESS")

@@ -1,3 +1,20 @@
+1.0.666
+2026-04-03 (VN)
+Fix: SMB mat ket noi sau VM restart - tu dong reconnect Z: drive
+- VAN DE: VM restart → mat SMB credential → Z:\AUTO khong truy cap duoc
+  → Project xong khong copy ve master duoc (treo)
+  → Excel worker khong tim thay project moi (khong co gi lam)
+  → Phai vao tay map lai Z: drive
+- FIX: ensure_smb_connected() tu dong reconnect truoc moi lan truy cap Z:
+  → robust_copy.py: Them ensure_smb_connected() goi net use reconnect
+  → cmdkey luu credential vao Windows Credential Manager (khong bi hoi pass)
+  → get_working_auto_path(): Thu reconnect khi path mat ket noi
+  → find_auto_path(): Goi ensure_smb truoc khi scan paths
+  → run_excel_api.py: Re-detect auto_path moi scan cycle
+  → vm_manager.py: Re-detect khi project done ma auto_path mat
+- SMB config doc tu settings.yaml (smb: section) hoac dung default (START.py)
+- Files: modules/robust_copy.py, run_excel_api.py, vm_manager.py
+
 1.0.665
 2026-04-02 (VN)
 Fix: IPv6 Pool rotate_all() gay mat ket noi RDP - them delay giua cac lenh router
