@@ -984,6 +984,12 @@ def login_google_chrome(account_info: dict, chrome_portable: str = None, profile
             options.set_argument(f'--proxy-server={proxy_arg}')
             options.set_argument('--proxy-bypass-list=<-loopback>')
             log(f"[NET] Login qua proxy: {proxy_arg}")
+            # v1.0.662: Xoa firewall block IPv4 cu (tu IPv6 mode) de proxy IPv4 hoat dong
+            try:
+                from modules.drission_flow_api import DrissionFlowAPI
+                DrissionFlowAPI._unblock_ipv4_for_chrome_static(lambda msg: log(msg))
+            except Exception:
+                pass
         else:
             # v1.0.619: Direct mode - block IPv4 TRUOC khi mo Chrome
             try:

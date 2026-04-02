@@ -1570,6 +1570,28 @@ class DrissionFlowAPI:
             else:
                 log_func(f"[FW] [WARN] Khong block duoc {folder_name}")
 
+    @staticmethod
+    def _unblock_ipv4_for_chrome_static(log_func=print):
+        """
+        v1.0.662: Xoa firewall rules block IPv4 (khi chuyen tu IPv6 sang proxy IPv4).
+        Goi tu google_login.py khi login qua proxy (ProxyXoay/Webshare).
+        """
+        import subprocess
+        FW_PREFIX = "VE3_Block_IPv4_Chrome"
+        deleted = 0
+        for i in range(8):
+            try:
+                r = subprocess.run(
+                    f'netsh advfirewall firewall delete rule name="{FW_PREFIX}_{i}"',
+                    shell=True, capture_output=True, text=True, timeout=3
+                )
+                if r.returncode == 0:
+                    deleted += 1
+            except Exception:
+                pass
+        if deleted > 0:
+            log_func(f"[FW] Da xoa {deleted} rules block IPv4 (chuyen sang proxy mode)")
+
     def log(self, msg: str, level: str = "INFO"):
         """Log message - chỉ dùng 1 trong 2: callback hoặc print."""
         if self.log_callback:
@@ -3204,6 +3226,8 @@ class DrissionFlowAPI:
                     options.set_argument('--force-webrtc-ip-handling-policy=disable_non_proxied_udp')
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")
                     self.log(f"[NET] Chrome → {chrome_arg} (WebRTC blocked)")
+                    # v1.0.662: Xoa firewall block IPv4 cu (proxy can IPv4)
+                    self._unblock_ipv4_for_chrome()
                 else:
                     # v1.0.617: VM mode DIRECT - IPv6 tren interface + firewall block IPv4
                     self.log(f"[NET] ProxyProvider ({self._proxy_provider.get_type()}): {self._proxy_provider.get_current_ip()}")

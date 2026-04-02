@@ -1,3 +1,15 @@
+1.0.662
+2026-04-02 (VN)
+Fix: Firewall block IPv4 chan ProxyXoay - xoa rules cu khi dung proxy IPv4
+- VAN DE: May truoc dung IPv6 → firewall block IPv4 cho Chrome
+  → Chuyen sang ProxyXoay (IPv4 proxy) → Chrome khong ket noi duoc
+  → Login load trang Google nhung khong render (email/password not found)
+- FIX: Xoa firewall rules khi dung proxy IPv4 (ProxyXoay/Webshare)
+  → google_login.py: Goi _unblock_ipv4_for_chrome_static() truoc login
+  → drission_flow_api.py: Goi _unblock khi setup Chrome voi proxy
+  → Them _unblock_ipv4_for_chrome_static() method
+- Files: google_login.py, drission_flow_api.py
+
 1.0.661
 2026-04-02 (VN)
 Fix: ProxyXoay login + pool_api override bug
