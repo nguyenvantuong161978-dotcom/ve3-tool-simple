@@ -161,6 +161,16 @@ class ProxyXoayProvider(ProxyProvider):
             return f"{self._current_ip} (TTL:{ttl}s)"
         return "unknown"
 
+    def has_ttl(self) -> bool:
+        """ProxyXoay co TTL - proxy het han sau ~1777s."""
+        return True
+
+    def get_ttl(self) -> int:
+        """Tra ve so giay con lai cua proxy hien tai."""
+        if self._proxy_expire_time > 0:
+            return max(0, int(self._proxy_expire_time - time.time()))
+        return 0
+
     def stop(self):
         """Khong can cleanup gi (khong co local bridge)."""
         self._ready = False

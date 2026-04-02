@@ -435,7 +435,7 @@ class IPv6PoolGUI:
             ("Password:", "password", mk.get("password", "")),
             ("Interface:", "interface", mk.get("interface", "bridge")),
             ("Prefix:", "prefix", mk.get("prefix", "")),
-            ("Subnet start:", "subnet_start", str(mk.get("subnet_start", 101))),
+            ("Subnet start:", "subnet_start", str(mk.get("subnet_start", 102))),
             ("Subnet end:", "subnet_end", str(mk.get("subnet_end", 255))),
             ("API port:", "api_port", str(mk.get("api_port", 8765))),
         ]

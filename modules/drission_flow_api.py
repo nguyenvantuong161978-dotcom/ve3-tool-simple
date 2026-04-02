@@ -1738,20 +1738,79 @@ class DrissionFlowAPI:
             self.log(f"[{tag}] [IPv6] Rotate error: {e}", "WARN")
             return False
 
+    def _recover_dead_proxy(self, tag: str = "RECOVER") -> bool:
+        """
+        v1.0.663: Check va recover khi proxy het TTL (die).
+
+        Ap dung cho BAT KY provider nao co TTL (has_ttl()=True).
+        Hien tai: ProxyXoay. Sau nay: bat ky provider nao co TTL.
+
+        Khi proxy die → mat mang → 403/timeout/network error
+        KHONG PHAI loi tu Google → KHONG dem 403 counter
+        Chi can rotate lay proxy moi + restart Chrome.
+
+        Returns:
+            True neu proxy da die VA recover thanh cong
+            False neu proxy con song hoac provider khong co TTL
+        """
+        if not self._proxy_provider or not self._proxy_provider.has_ttl():
+            return False
+
+        ttl = self._proxy_provider.get_ttl()
+        if ttl > 10:  # Proxy con song (>10s buffer)
+            return False
+
+        # Proxy DA DIE hoac SAP DIE → rotate + restart (KHONG dem 403)
+        ptype = self._proxy_provider.get_type()
+        self.log(f"[{tag}] [PROXY-{ptype}] Proxy het TTL ({ttl}s) → ROTATE + RESTART (khong dem 403)", "WARN")
+        self._kill_chrome()
+        self.close()
+        self._proxy_provider.rotate("proxy_died")
+        time.sleep(2)
+        saved_url = getattr(self, '_current_project_url', None)
+        return self.setup(project_url=saved_url, skip_403_reset=True)
+
     def _handle_video_403(self, tag: str = "VIDEO") -> bool:
         """
         Xu ly 403 cho VIDEO (KHONG switch model).
 
-        LUOT 1:
-          403 x1-4: restart + cleanup + fingerprint moi
-          403 x5:   clear data + login lai + fingerprint moi
+        Provider co TTL (v1.0.663):
+          403 x1-2: restart Chrome
+          403 x3:   restart + fingerprint moi + ROTATE IP → reset counter
 
-        LUOT 2 (sau clear data van 403):
-          DOI IPv6 → restart lai tu dau
+        IPv6/Webshare (logic cu):
+          403 x1-4: restart + cleanup + fingerprint moi
+          403 x5:   DOI IPv6 + reset profile + login lai
 
         Returns: True neu restart thanh cong (caller nen continue)
         """
         self._consecutive_403 += 1
+
+        # v1.0.663: Provider co TTL (ProxyXoay) - 403 = Google block, doi IP nhanh
+        if self._proxy_provider and self._proxy_provider.has_ttl():
+            self.log(f"[{tag}] [403-TTL] Count: {self._consecutive_403}/3", "WARN")
+
+            if self._consecutive_403 < 3:
+                # Chua du 3 lan → chi restart Chrome
+                self.log(f"[{tag}] [403-TTL] Restart Chrome...", "WARN")
+                self._kill_chrome()
+                self.close()
+                time.sleep(2)
+                saved_url = getattr(self, '_current_project_url', None)
+                return self.setup(project_url=saved_url, skip_403_reset=True)
+            else:
+                # Du 3 lan → restart + fingerprint moi + DOI IP XOAY
+                self.log(f"[{tag}] [403-TTL] 3 lan → RESTART + FINGERPRINT + DOI IP XOAY!", "WARN")
+                self._kill_chrome()
+                self.close()
+                self._rotate_ipv6(tag)  # Goi provider.rotate() - co doi cooldown 60s
+                self._consecutive_403 = 0
+                self.activate_fingerprint_spoof()
+                time.sleep(2)
+                saved_url = getattr(self, '_current_project_url', None)
+                return self.setup(project_url=saved_url, skip_403_reset=True)
+
+        # Logic cu cho IPv6/Webshare/None
         cleared_flag = self._cleared_data_for_403
         self.log(f"[{tag}] [403] Count: {self._consecutive_403}/5 | cleared={cleared_flag}", "WARN")
 
@@ -1788,17 +1847,44 @@ class DrissionFlowAPI:
         """
         Xu ly 403 cho IMAGE (co switch model).
 
-        LUOT 1:
+        Provider co TTL (v1.0.663):
+          403 x1-2: restart Chrome
+          403 x3:   restart + fingerprint moi + ROTATE IP → reset counter
+
+        IPv6/Webshare (logic cu):
           Model 0 (Nano Banana Pro): 5 lan 403 → switch Model 1
           Model 1 (Nano Banana 2):   2 lan 403 → switch Model 2
-          Model 2 (Imagen 4):        2 lan 403 → clear data + reset Model 0 + login lai
-
-        LUOT 2 (sau clear data van 403):
-          DOI IPv6 → restart lai tu dau (model 0)
+          Model 2 (Imagen 4):        2 lan 403 → DOI IPv6 + reset
 
         Returns: True neu restart/switch thanh cong (caller nen continue)
         """
         self._consecutive_403 += 1
+
+        # v1.0.663: Provider co TTL (ProxyXoay) - 403 = Google block, doi IP nhanh
+        if self._proxy_provider and self._proxy_provider.has_ttl():
+            self.log(f"[{tag}] [403-TTL] Count: {self._consecutive_403}/3", "WARN")
+
+            if self._consecutive_403 < 3:
+                # Chua du 3 lan → chi restart Chrome
+                self.log(f"[{tag}] [403-TTL] Restart Chrome...", "WARN")
+                self._kill_chrome()
+                self.close()
+                time.sleep(2)
+                saved_url = getattr(self, '_current_project_url', None)
+                return self.setup(project_url=saved_url, skip_403_reset=True)
+            else:
+                # Du 3 lan → restart + fingerprint moi + DOI IP XOAY
+                self.log(f"[{tag}] [403-TTL] 3 lan → RESTART + FINGERPRINT + DOI IP XOAY!", "WARN")
+                self._kill_chrome()
+                self.close()
+                self._rotate_ipv6(tag)  # Goi provider.rotate() - co doi cooldown 60s
+                self._consecutive_403 = 0
+                self.activate_fingerprint_spoof()
+                time.sleep(2)
+                saved_url = getattr(self, '_current_project_url', None)
+                return self.setup(project_url=saved_url, skip_403_reset=True)
+
+        # Logic cu cho IPv6/Webshare/None
         current_model = self._current_model_index
         model_names = ["Nano Banana Pro", "Nano Banana 2", "Imagen 4"]
         cleared_flag = self._cleared_data_for_403
@@ -5372,6 +5458,14 @@ class DrissionFlowAPI:
         # current_image_inputs có thể bị set None khi retry 400 không có refs
         current_image_inputs = image_inputs
 
+        # v1.0.663: Check TTL truoc khi tao anh
+        # Neu proxy sap het han → rotate truoc de tranh mat ket noi giua chung
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=120)
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
+
         attempt = 0
         while attempt < effective_max_retries:
             # SỬ DỤNG FORWARD MODE - không cancel request
@@ -5486,6 +5580,14 @@ class DrissionFlowAPI:
                 if "timeout" in error.lower():
                     self.log(f"[WARN] Timeout (attempt {attempt+1}/{effective_max_retries}) - RESTART CHROME!", "WARN")
 
+                    # v1.0.663: Provider co TTL → check proxy die hay timeout that
+                    if self._recover_dead_proxy("TIMEOUT"):
+                        # Proxy die → da recover, retry ngay
+                        if attempt < effective_max_retries - 1:
+                            attempt += 1
+                            continue
+                        return False, [], f"Timeout sau {effective_max_retries} lần retry (proxy died)"
+
                     # v1.0.202: Cleanup TRƯỚC khi restart (đồng bộ với 403 handling)
                     # Timeout có thể do 403 không được detect, cần cleanup
                     self.log("[CLEANUP] Cleanup trước khi restart (timeout)...")
@@ -5505,6 +5607,12 @@ class DrissionFlowAPI:
                             return False, [], "Không restart được Chrome sau timeout"
 
                     return False, [], f"Timeout sau {effective_max_retries} lần retry"
+
+                # v1.0.663: ProxyXoay - loi khac cung co the do proxy die
+                if self._recover_dead_proxy("ERROR"):
+                    if attempt < effective_max_retries - 1:
+                        attempt += 1
+                        continue
 
                 # Lỗi khác, không retry
                 return False, [], error
@@ -6404,6 +6512,13 @@ class DrissionFlowAPI:
             return False, None, "Media ID không được để trống"
 
         self.log(f"[I2V] Creating video from media: {media_id[:50]}...")
+
+        # v1.0.663: Check TTL truoc khi tao video (can nhieu thoi gian hon anh)
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=420)  # 7 phut cho video
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
 
         last_error = None
 

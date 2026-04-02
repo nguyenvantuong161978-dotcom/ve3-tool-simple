@@ -47,7 +47,7 @@ class MikroTikAPI:
         password: str = "",
         interface: str = "ether1",
         prefix: str = "",
-        subnet_start: int = 0x52,
+        subnet_start: int = 0x66,  # 102 decimal, tranh 100 IP YouTube (subnet 01-65)
         subnet_end: int = 0xFF,
         log_func=print,
     ):

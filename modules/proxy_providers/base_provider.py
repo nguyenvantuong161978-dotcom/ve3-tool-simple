@@ -96,3 +96,40 @@ class ProxyProvider(ABC):
         Override neu provider can test.
         """
         return True
+
+    def has_ttl(self) -> bool:
+        """
+        Provider nay co TTL (proxy het han sau 1 thoi gian) hay khong?
+        Override = True cho provider co TTL (vd: ProxyXoay).
+        Mac dinh: False (IPv6, Webshare khong co TTL).
+        """
+        return False
+
+    def get_ttl(self) -> int:
+        """
+        Tra ve so giay con lai cua proxy hien tai.
+        Mac dinh: 9999 (khong co TTL = luon song).
+        Override cho provider co TTL.
+        """
+        return 9999
+
+    def ensure_proxy_alive(self, min_ttl: int = 120) -> bool:
+        """
+        Dam bao proxy con song it nhat min_ttl giay.
+        Neu TTL < min_ttl → tu dong rotate lay proxy moi.
+        Mac dinh: luon True (provider khong co TTL).
+        Override cho provider co TTL.
+
+        Args:
+            min_ttl: So giay toi thieu can
+
+        Returns:
+            True neu proxy OK (con du TTL hoac rotate thanh cong)
+        """
+        if not self.has_ttl():
+            return True
+        ttl = self.get_ttl()
+        if ttl >= min_ttl:
+            return True
+        self.log(f"[PROXY] TTL={ttl}s < {min_ttl}s → rotate truoc...")
+        return self.rotate("ttl_low")

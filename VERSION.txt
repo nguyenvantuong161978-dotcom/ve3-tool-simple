@@ -1,3 +1,25 @@
+1.0.663
+2026-04-02 (VN)
+Feature: TTL-aware proxy - phan biet proxy die vs 403 that (GENERIC, khong rieng ProxyXoay)
+- THIET KE GENERIC: Dung interface has_ttl()/get_ttl()/ensure_proxy_alive()
+  → drission_flow_api.py KHONG biet provider cu the la gi
+  → Chi check has_ttl() → ap dung logic TTL chung
+  → De xoa/them provider moi sau nay (chi can override has_ttl/get_ttl)
+- base_provider.py: Them 3 methods vao ProxyProvider ABC:
+  → has_ttl() → False (mac dinh, IPv6/Webshare khong co TTL)
+  → get_ttl() → 9999 (mac dinh, luon song)
+  → ensure_proxy_alive(min_ttl) → rotate neu TTL thap
+- proxyxoay_provider.py: Override has_ttl()=True, get_ttl() tu _proxy_expire_time
+- PHAN BIET 2 LOAI LOI (cho provider co TTL):
+  → Proxy die (TTL<=10s): _recover_dead_proxy() rotate + restart, KHONG dem 403
+  → 403 that (TTL>10s): dem counter, 3 lan → doi IP + fingerprint
+- _recover_dead_proxy(): Check TTL truoc MOI error handler
+  → 403, timeout, network error → deu check proxy die truoc
+  → Neu proxy die → recover ngay, khong dem 403
+- TTL AUTO-ROTATE truoc khi tao anh/video:
+  → Image: min 120s TTL | Video: min 420s TTL
+- Files: base_provider.py, proxyxoay_provider.py, drission_flow_api.py
+
 1.0.662
 2026-04-02 (VN)
 Fix: Firewall block IPv4 chan ProxyXoay - xoa rules cu khi dung proxy IPv4
