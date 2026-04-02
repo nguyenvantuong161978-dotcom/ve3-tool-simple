@@ -347,6 +347,14 @@ class ChromePool:
                     else:
                         self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): FAILED", "ERROR")
 
+                elif pp_type == 'proxyxoay':
+                    # ProxyXoay: setup voi worker_id (moi worker lay key rieng)
+                    if provider.setup(worker_id=worker.index):
+                        worker.proxy_provider = provider
+                        self._log(f"[Chrome-{worker.index}] Proxy (proxyxoay): {provider.get_current_ip()}")
+                    else:
+                        self._log(f"[Chrome-{worker.index}] Proxy (proxyxoay): FAILED", "ERROR")
+
                 elif pp_type == 'ipv6':
                     # IPv6: setup dedicated voi IPv6 cua worker
                     if worker.ipv6:

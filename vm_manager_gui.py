@@ -272,6 +272,7 @@ class SettingsWindow(tk.Toplevel):
         _pp_cfg = _cfg.get('proxy_provider', {})
         _current_ptype = _pp_cfg.get('type', 'ipv6') if _pp_cfg else 'ipv6'
         _ws_cfg = _pp_cfg.get('webshare', {}) if _pp_cfg else {}
+        _px_cfg = _pp_cfg.get('proxyxoay', {}) if _pp_cfg else {}
         _mikrotik_cfg = _cfg.get('mikrotik', {})
         _pool_url = _mikrotik_cfg.get('pool_api_url', '')
         if _pool_url and _current_ptype == 'ipv6':
@@ -280,7 +281,7 @@ class SettingsWindow(tk.Toplevel):
         self.proxy_type_var = tk.StringVar(value=_current_ptype)
         pt_row = tk.Frame(proxy_lf, bg='#16213e')
         pt_row.pack(fill="x", pady=3)
-        for txt, val in [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare")]:
+        for txt, val in [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare"), ("ProxyXoay", "proxyxoay")]:
             tk.Radiobutton(pt_row, text=txt, variable=self.proxy_type_var, value=val,
                            bg='#16213e', fg='white', selectcolor='#16213e', font=("Arial", 9),
                            command=self._on_proxy_type_changed).pack(side="left", padx=6)
@@ -309,6 +310,37 @@ class SettingsWindow(tk.Toplevel):
         self.ws_status_var = tk.StringVar(value="")
         self.ws_status_lbl = tk.Label(ws_btn, textvariable=self.ws_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
         self.ws_status_lbl.pack(side="left", padx=8)
+
+        # ProxyXoay sub-frame
+        self._px_frame = tk.Frame(proxy_lf, bg='#16213e')
+        px_r = tk.Frame(self._px_frame, bg='#16213e')
+        px_r.pack(fill="x", pady=3)
+        self.px_type_var = tk.StringVar(value=_px_cfg.get('proxy_type', 'socks5'))
+        tk.Label(px_r, text="API Keys (moi dong 1 key):", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left")
+        tk.Label(px_r, text="Type:", bg='#16213e', fg='white', font=("Arial", 8)).pack(side="left", padx=(12, 0))
+        px_type_menu = tk.OptionMenu(px_r, self.px_type_var, "socks5", "http")
+        px_type_menu.config(bg='#0f3460', fg='white', font=("Arial", 8), highlightthickness=0)
+        px_type_menu.pack(side="left", padx=3)
+
+        self.px_keys_text = tk.Text(self._px_frame, height=3, bg='#0f3460', fg='white',
+                                     font=("Consolas", 9), insertbackground='white')
+        self.px_keys_text.pack(fill="x", pady=3)
+        # Load keys: api_keys list hoac api_key string
+        _px_keys = _px_cfg.get('api_keys', [])
+        if not _px_keys:
+            _single = _px_cfg.get('api_key', '')
+            if _single:
+                _px_keys = [_single]
+        if _px_keys:
+            self.px_keys_text.insert("1.0", '\n'.join(_px_keys))
+
+        px_btn = tk.Frame(self._px_frame, bg='#16213e')
+        px_btn.pack(fill="x", pady=2)
+        tk.Button(px_btn, text="TEST", command=self._test_proxyxoay,
+                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"), relief="flat", padx=8).pack(side="left")
+        self.px_status_var = tk.StringVar(value="")
+        self.px_status_lbl = tk.Label(px_btn, textvariable=self.px_status_var, bg='#16213e', fg='#ffd93d', font=("Arial", 8))
+        self.px_status_lbl.pack(side="left", padx=8)
 
         # Pool sub-frame
         self._pool_frame = tk.Frame(proxy_lf, bg='#16213e')
@@ -835,22 +867,20 @@ class SettingsWindow(tk.Toplevel):
     def _on_proxy_type_changed(self):
         """Show/hide proxy sub-sections based on selected type."""
         ptype = self.proxy_type_var.get()
+        # Hide all first
+        self._ws_frame.pack_forget()
+        self._px_frame.pack_forget()
+        self._pool_frame.pack_forget()
+        self._ipv6_frame.pack_forget()
+        # Show selected
         if ptype == "webshare":
             self._ws_frame.pack(fill="x", pady=5, padx=5)
-            self._pool_frame.pack_forget()
-            self._ipv6_frame.pack_forget()
+        elif ptype == "proxyxoay":
+            self._px_frame.pack(fill="x", pady=5, padx=5)
         elif ptype == "ipv6_pool":
-            self._ws_frame.pack_forget()
             self._pool_frame.pack(fill="x", pady=5, padx=5)
-            self._ipv6_frame.pack_forget()
         elif ptype == "ipv6":
-            self._ws_frame.pack_forget()
-            self._pool_frame.pack_forget()
             self._ipv6_frame.pack(fill="x", pady=5, padx=5)
-        else:
-            self._ws_frame.pack_forget()
-            self._pool_frame.pack_forget()
-            self._ipv6_frame.pack_forget()
 
     def _test_webshare(self):
         """Test Webshare proxy connectivity."""
@@ -883,6 +913,44 @@ class SettingsWindow(tk.Toplevel):
                 self.after(0, _show)
             except Exception as e:
                 self.after(0, lambda: (self.ws_status_var.set(f"LOI: {str(e)[:40]}"), self.ws_status_lbl.config(fg='#e94560')))
+
+        threading.Thread(target=_do_test, daemon=True).start()
+
+    def _test_proxyxoay(self):
+        """Test ProxyXoay proxy connectivity (test key dau tien)."""
+        import threading
+        keys = [k.strip() for k in self.px_keys_text.get("1.0", "end").split('\n') if k.strip()]
+        if not keys:
+            self.px_status_var.set("Nhap API key!")
+            self.px_status_lbl.config(fg='#e94560')
+            return
+        self.px_status_var.set(f"Dang test {len(keys)} key...")
+        self.px_status_lbl.config(fg='#ffd93d')
+
+        def _do_test():
+            try:
+                from modules.proxy_providers.proxyxoay_provider import ProxyXoayProvider
+                provider = ProxyXoayProvider(config={'proxyxoay': {
+                    'api_keys': keys,
+                    'proxy_type': self.px_type_var.get(),
+                }})
+                ok = provider.setup(worker_id=0)
+                if ok:
+                    ip_info = provider.get_current_ip()
+                    test_ok = provider.test_connectivity()
+                    provider.stop()
+                    def _show():
+                        if test_ok:
+                            self.px_status_var.set(f"OK! {len(keys)} key, {ip_info}")
+                            self.px_status_lbl.config(fg='#00ff88')
+                        else:
+                            self.px_status_var.set(f"Proxy lay duoc nhung khong ket noi duoc")
+                            self.px_status_lbl.config(fg='#e94560')
+                    self.after(0, _show)
+                else:
+                    self.after(0, lambda: (self.px_status_var.set("THAT BAI! Kiem tra API key"), self.px_status_lbl.config(fg='#e94560')))
+            except Exception as e:
+                self.after(0, lambda: (self.px_status_var.set(f"LOI: {str(e)[:40]}"), self.px_status_lbl.config(fg='#e94560')))
 
         threading.Thread(target=_do_test, daemon=True).start()
 
@@ -1101,7 +1169,7 @@ class SettingsWindow(tk.Toplevel):
 
             # Save proxy_provider section
             ptype = self.proxy_type_var.get()
-            pp_type = 'ipv6' if ptype == 'ipv6_pool' else ptype
+            pp_type = 'ipv6' if ptype == 'ipv6_pool' else ptype  # ipv6_pool dung IPv6Provider
             if 'proxy_provider' not in config:
                 config['proxy_provider'] = {}
             config['proxy_provider']['type'] = pp_type
@@ -1112,6 +1180,12 @@ class SettingsWindow(tk.Toplevel):
                 'rotating_username': self.ws_username_var.get().strip(),
                 'rotating_password': self.ws_password_var.get().strip(),
                 'machine_id': int(self.ws_machine_var.get() or 1),
+            }
+
+            px_keys = [k.strip() for k in self.px_keys_text.get("1.0", "end").split('\n') if k.strip()]
+            config['proxy_provider']['proxyxoay'] = {
+                'api_keys': px_keys,
+                'proxy_type': self.px_type_var.get(),
             }
 
             if 'mikrotik' not in config:
@@ -1134,8 +1208,9 @@ class SettingsWindow(tk.Toplevel):
                 if hasattr(self.master.manager, 'settings') and hasattr(self.master.manager.settings, 'config'):
                     self.master.manager.settings.config = config.copy()
 
-            type_labels = {'none': 'KHONG DUNG', 'ipv6': 'IPv6 FILE', 'ipv6_pool': 'IPv6 POOL', 'webshare': 'WEBSHARE'}
-            self.proxy_save_status_var.set(f"DA LUU! Proxy: {type_labels.get(ptype, ptype)}")
+            type_labels = {'none': 'KHONG DUNG', 'ipv6': 'IPv6 FILE', 'ipv6_pool': 'IPv6 POOL', 'webshare': 'WEBSHARE', 'proxyxoay': 'PROXYXOAY'}
+            extra = f" ({len(px_keys)} keys)" if ptype == 'proxyxoay' and px_keys else ""
+            self.proxy_save_status_var.set(f"DA LUU! Proxy: {type_labels.get(ptype, ptype)}{extra}")
             self.proxy_save_status_lbl.config(fg='#00ff88')
         except Exception as e:
             self.proxy_save_status_var.set(f"LOI: {str(e)[:40]}")
@@ -3727,6 +3802,9 @@ class SimpleGUI(tk.Tk):
         current_ws_password = ""
         current_ws_machine_id = "1"
         current_pool_api_url = ""
+        current_px_key = ""
+        current_px_keys = []
+        current_px_type = "socks5"
         try:
             if config_path.exists():
                 with open(config_path, "r", encoding="utf-8") as f:
@@ -3738,6 +3816,10 @@ class SimpleGUI(tk.Tk):
                     current_ws_username = ws_cfg.get('rotating_username', '')
                     current_ws_password = ws_cfg.get('rotating_password', '')
                     current_ws_machine_id = str(ws_cfg.get('machine_id', 1))
+                    px_cfg = pp_cfg.get('proxyxoay', {})
+                    current_px_key = px_cfg.get('api_key', '')
+                    current_px_keys = px_cfg.get('api_keys', [])
+                    current_px_type = px_cfg.get('proxy_type', 'socks5')
                 else:
                     # Backward compat
                     ipv6_cfg = _cfg.get('ipv6_rotation', {})
@@ -3751,7 +3833,7 @@ class SimpleGUI(tk.Tk):
             pass
 
         proxy_type_var = tk.StringVar(value=current_proxy_type)
-        proxy_types = [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare")]
+        proxy_types = [("Khong dung", "none"), ("IPv6 File", "ipv6"), ("IPv6 Pool", "ipv6_pool"), ("Webshare", "webshare"), ("ProxyXoay", "proxyxoay")]
 
         for text, val in proxy_types:
             tk.Radiobutton(proxy_type_frame, text=text, variable=proxy_type_var, value=val,
@@ -3824,6 +3906,77 @@ class SimpleGUI(tk.Tk):
             threading.Thread(target=_do_test, daemon=True).start()
 
         tk.Button(ws_frame, text="TEST KET NOI", command=_test_webshare,
+                 bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
+                 relief="flat", padx=10, pady=2).pack(anchor="w", pady=3)
+
+        # --- ProxyXoay section ---
+        px_frame = tk.LabelFrame(scroll_frame, text=" ProxyXoay.shop ", bg='#16213e', fg='#ffd93d',
+                                  font=("Arial", 9, "bold"), padx=10, pady=8)
+
+        px_form = tk.Frame(px_frame, bg='#16213e')
+        px_form.pack(fill="x", pady=5)
+
+        tk.Label(px_form, text="Proxy Type:", bg='#16213e', fg='white', font=("Arial", 9)).grid(row=0, column=0, sticky="e", pady=3)
+        px_ptype_var = tk.StringVar(value=current_px_type)
+        px_ptype_menu = tk.OptionMenu(px_form, px_ptype_var, "socks5", "http")
+        px_ptype_menu.config(bg='#0f3460', fg='white', font=("Arial", 9), highlightthickness=0)
+        px_ptype_menu.grid(row=0, column=1, pady=3, padx=5, sticky="w")
+
+        tk.Label(px_frame, text="API Keys (moi dong 1 key - moi worker dung 1 key rieng):",
+                 bg='#16213e', fg='white', font=("Arial", 9)).pack(anchor="w", pady=(5, 0))
+        px_keys_text = tk.Text(px_frame, height=4, bg='#0f3460', fg='white',
+                               font=("Consolas", 9), insertbackground='white')
+        px_keys_text.pack(fill="x", pady=3)
+        # Load keys
+        _popup_px_keys = current_px_keys if current_px_keys else ([current_px_key] if current_px_key else [])
+        if _popup_px_keys:
+            px_keys_text.insert("1.0", '\n'.join(_popup_px_keys))
+
+        tk.Label(px_frame, text="proxyxoay.shop - Proxy xoay Viet Nam (SOCKS5/HTTP)",
+                 bg='#16213e', fg='#888', font=("Arial", 8)).pack(anchor="w")
+
+        px_status_var2 = tk.StringVar(value="")
+        px_status_lbl2 = tk.Label(px_frame, textvariable=px_status_var2, bg='#16213e', fg='#ffd93d', font=("Arial", 9))
+        px_status_lbl2.pack(anchor="w", pady=3)
+
+        def _test_proxyxoay_popup():
+            """Test ProxyXoay proxy connectivity (test key dau tien)."""
+            keys = [k.strip() for k in px_keys_text.get("1.0", "end").split('\n') if k.strip()]
+            if not keys:
+                px_status_var2.set("Nhap API key!")
+                px_status_lbl2.config(fg='#e94560')
+                return
+            px_status_var2.set(f"Dang test {len(keys)} key...")
+            px_status_lbl2.config(fg='#ffd93d')
+
+            def _do_test():
+                try:
+                    from modules.proxy_providers.proxyxoay_provider import ProxyXoayProvider
+                    provider = ProxyXoayProvider(config={'proxyxoay': {
+                        'api_keys': keys,
+                        'proxy_type': px_ptype_var.get(),
+                    }})
+                    ok = provider.setup(worker_id=0)
+                    if ok:
+                        ip_info = provider.get_current_ip()
+                        test_ok = provider.test_connectivity()
+                        provider.stop()
+                        def _show():
+                            if test_ok:
+                                px_status_var2.set(f"OK! {len(keys)} key, {ip_info}")
+                                px_status_lbl2.config(fg='#00ff88')
+                            else:
+                                px_status_var2.set("Proxy lay duoc nhung khong ket noi duoc")
+                                px_status_lbl2.config(fg='#e94560')
+                        popup.after(0, _show)
+                    else:
+                        popup.after(0, lambda: (px_status_var2.set("THAT BAI! Kiem tra API key"), px_status_lbl2.config(fg='#e94560')))
+                except Exception as e:
+                    popup.after(0, lambda: (px_status_var2.set(f"LOI: {str(e)[:40]}"), px_status_lbl2.config(fg='#e94560')))
+
+            threading.Thread(target=_do_test, daemon=True).start()
+
+        tk.Button(px_frame, text="TEST KET NOI", command=_test_proxyxoay_popup,
                  bg='#6c5ce7', fg='white', font=("Arial", 8, "bold"),
                  relief="flat", padx=10, pady=2).pack(anchor="w", pady=3)
 
@@ -3999,22 +4152,20 @@ class SimpleGUI(tk.Tk):
         # Show/hide based on proxy type
         def _on_proxy_type_changed():
             ptype = proxy_type_var.get()
+            # Hide all
+            ws_frame.pack_forget()
+            px_frame.pack_forget()
+            pool_frame.pack_forget()
+            ipv6_section_frame.pack_forget()
+            # Show selected
             if ptype == "webshare":
                 ws_frame.pack(fill="x", padx=20, pady=5, after=proxy_type_frame)
-                pool_frame.pack_forget()
-                ipv6_section_frame.pack_forget()
+            elif ptype == "proxyxoay":
+                px_frame.pack(fill="x", padx=20, pady=5, after=proxy_type_frame)
             elif ptype == "ipv6_pool":
-                ws_frame.pack_forget()
                 pool_frame.pack(fill="x", padx=20, pady=5, after=proxy_type_frame)
-                ipv6_section_frame.pack_forget()
             elif ptype == "ipv6":
-                ws_frame.pack_forget()
-                pool_frame.pack_forget()
                 ipv6_section_frame.pack(fill="x", padx=0, pady=5, after=proxy_type_frame)
-            else:
-                ws_frame.pack_forget()
-                pool_frame.pack_forget()
-                ipv6_section_frame.pack_forget()
 
         # IPv6 content inside ipv6_section_frame
         tk.Label(ipv6_section_frame, text="IPv6 ROTATION",
@@ -4132,7 +4283,7 @@ class SimpleGUI(tk.Tk):
                 # Save proxy_provider section
                 ptype = proxy_type_var.get()
                 # Map ipv6_pool back to ipv6 for proxy_provider (pool is IPv6 source, not provider type)
-                pp_type = 'ipv6' if ptype == 'ipv6_pool' else ptype
+                pp_type = 'ipv6' if ptype == 'ipv6_pool' else ptype  # ipv6_pool dung IPv6Provider
                 if 'proxy_provider' not in config:
                     config['proxy_provider'] = {}
                 config['proxy_provider']['type'] = pp_type
@@ -4144,6 +4295,13 @@ class SimpleGUI(tk.Tk):
                     'rotating_username': ws_username_var.get().strip(),
                     'rotating_password': ws_password_var.get().strip(),
                     'machine_id': int(ws_machine_var.get() or 1),
+                }
+
+                # ProxyXoay settings
+                _px_keys_list = [k.strip() for k in px_keys_text.get("1.0", "end").split('\n') if k.strip()]
+                config['proxy_provider']['proxyxoay'] = {
+                    'api_keys': _px_keys_list,
+                    'proxy_type': px_ptype_var.get(),
                 }
 
                 # v1.0.562: Pool API URL → mikrotik section
@@ -4169,7 +4327,7 @@ class SimpleGUI(tk.Tk):
                         if hasattr(self.manager.settings, 'config'):
                             self.manager.settings.config = config.copy()
 
-                type_labels = {'none': 'KHONG DUNG', 'ipv6': 'IPv6 FILE', 'ipv6_pool': 'IPv6 POOL', 'webshare': 'WEBSHARE'}
+                type_labels = {'none': 'KHONG DUNG', 'ipv6': 'IPv6 FILE', 'ipv6_pool': 'IPv6 POOL', 'webshare': 'WEBSHARE', 'proxyxoay': 'PROXYXOAY'}
                 save_status_var.set(f"DA LUU! Proxy: {type_labels.get(ptype, ptype)}")
                 save_status_lbl.config(fg='#00ff88')
                 print(f"[GUI] Proxy config saved: type={ptype}")

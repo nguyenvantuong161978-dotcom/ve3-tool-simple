@@ -1,3 +1,19 @@
+1.0.660
+2026-04-02 (VN)
+Feature: Them ProxyXoay.shop proxy provider - proxy xoay Viet Nam
+- MOI: modules/proxy_providers/proxyxoay_provider.py
+  → Ket noi proxyxoay.shop API (SOCKS5/HTTP)
+  → Moi worker dung API key rieng (api_keys list)
+  → Tu dong doi cooldown 60s khi rotate
+  → Chrome ket noi direct (khong can bridge)
+- modules/proxy_providers/__init__.py: Them proxyxoay vao factory
+- server/chrome_pool.py: Them proxyxoay vao setup_proxy_providers()
+- vm_manager_gui.py: Them GUI chon ProxyXoay (main + settings popup)
+  → Nhap nhieu API key (moi dong 1 key)
+  → Chon proxy type (socks5/http)
+  → Nut TEST kiem tra ket noi
+- Files: proxyxoay_provider.py, __init__.py, chrome_pool.py, vm_manager_gui.py
+
 1.0.659
 2026-04-01 (VN)
 Fix: Login cho mang IPv6 cham - tang thoi gian cho + PHAI login thanh cong

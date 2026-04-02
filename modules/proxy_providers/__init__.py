@@ -121,6 +121,13 @@ def create_provider(config: dict = None, log_func: Callable = print) -> ProxyPro
         log_func(f"[PROXY] Provider: Webshare Rotating Residential")
         return provider
 
+    elif provider_type == 'proxyxoay':
+        from modules.proxy_providers.proxyxoay_provider import ProxyXoayProvider
+        px_config = pp_config.get('proxyxoay', {})
+        provider = ProxyXoayProvider(config={'proxyxoay': px_config}, log_func=log_func)
+        log_func(f"[PROXY] Provider: ProxyXoay.shop")
+        return provider
+
     else:
         log_func(f"[PROXY] Provider: None (direct connection)")
         return NoneProvider(config=config, log_func=log_func)
@@ -133,4 +140,5 @@ def get_provider_types() -> list:
         {"value": "ipv6", "label": "IPv6 Rotation"},
         {"value": "ipv6_pool", "label": "IPv6 Pool API"},
         {"value": "webshare", "label": "Webshare Rotating Residential"},
+        {"value": "proxyxoay", "label": "ProxyXoay.shop"},
     ]
