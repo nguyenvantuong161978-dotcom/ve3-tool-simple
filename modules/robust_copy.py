@@ -312,28 +312,41 @@ POSSIBLE_AUTO_PATHS = [
 # SMB AUTO-RECONNECT
 # =========================================================================
 
-# SMB config mac dinh (giong START.py)
-_SMB_DEFAULTS = {
-    "server_ip": "192.168.88.14",
-    "share_name": "D",
-    "username": "smbuser",
-    "password": "159753",
-    "drive_letter": "Z:",
-}
+# Password chung cho tat ca SMB connections
+_SMB_PASSWORD = "159753"
+_SMB_USERNAME = "smbuser"
+_SMB_SHARE = "D"
+_SMB_DRIVE = "Z:"
+
+# Danh sach IP may chu - thu lan luot neu khong co mapping cu
+_MASTER_SERVERS = [
+    "192.168.88.254",
+    "192.168.88.14",
+    "192.168.88.100",
+]
 
 
 def _load_smb_config() -> dict:
     """
-    Load SMB config tu settings.yaml hoac dung default.
-    settings.yaml co the co:
+    Load SMB config tu settings.yaml.
+
+    settings.yaml co the override:
         smb:
-            server_ip: "192.168.88.14"
-            share_name: "D"
             username: "smbuser"
             password: "159753"
             drive_letter: "Z:"
+            share_name: "D"
+            servers:
+                - "192.168.88.254"
+                - "192.168.88.14"
     """
-    cfg = dict(_SMB_DEFAULTS)
+    cfg = {
+        "username": _SMB_USERNAME,
+        "password": _SMB_PASSWORD,
+        "drive_letter": _SMB_DRIVE,
+        "share_name": _SMB_SHARE,
+        "servers": [],
+    }
     try:
         import yaml
         settings_path = Path(__file__).parent.parent / "config" / "settings.yaml"
@@ -342,47 +355,126 @@ def _load_smb_config() -> dict:
                 data = yaml.safe_load(f) or {}
             smb = data.get('smb', {})
             if smb:
-                for k in cfg:
-                    if k in smb and smb[k]:
+                for k in ('username', 'password', 'drive_letter', 'share_name'):
+                    if smb.get(k):
                         cfg[k] = smb[k]
+                if smb.get('servers'):
+                    cfg['servers'] = smb['servers']
     except Exception:
         pass
     return cfg
 
 
+def _get_existing_smb_mappings(log: Callable = None) -> list:
+    """
+    Lay danh sach SMB drive da map bang 'net use'.
+    Tra ve list cua (drive_letter, unc_path).
+    VD: [("Z:", "\\\\192.168.88.14\\D"), ("Y:", "\\\\10.0.0.5\\Share")]
+    """
+    log = log or _log_default
+    mappings = []
+    try:
+        result = subprocess.run(
+            ['net', 'use'],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            import re
+            # net use output format: "Status  Local  Remote  Network"
+            # VD: "Unavailable Z:  \\192.168.88.14\D  Microsoft Windows Network"
+            #     "OK          Z:  \\192.168.88.14\D  Microsoft Windows Network"
+            for line in (result.stdout or "").split('\n'):
+                # Tim dong co drive letter va UNC path
+                m = re.search(r'([A-Z]:)\s+(\\\\[^\s]+)', line)
+                if m:
+                    mappings.append((m.group(1), m.group(2)))
+    except Exception:
+        pass
+    return mappings
+
+
 def ensure_smb_connected(log: Callable = None) -> bool:
     """
-    v1.0.666: Dam bao SMB share (Z:) da ket noi.
-    Neu mat ket noi → tu dong reconnect bang net use.
+    v1.0.667: Dam bao SMB share da ket noi.
 
-    Goi TRUOC moi lan can truy cap Z:\AUTO.
-    Windows hay mat SMB credential sau restart/reset VM.
+    Moi VM ket noi toi may chu RIENG (IP khac nhau), nen:
+    1. Detect drive letter + UNC path DA MAP tu truoc (net use)
+    2. Neu mat ket noi → reconnect voi CUNG UNC path + password
+    3. Luu credential vao Windows Credential Manager
+
+    KHONG hardcode IP - dung thong tin mapping co san.
 
     Returns:
-        True neu Z: accessible (da co san hoac reconnect thanh cong)
+        True neu it nhat 1 SMB drive accessible
     """
     log = log or _log_default
     cfg = _load_smb_config()
-    drive = cfg["drive_letter"]
-    auto_path = f"{drive}\\AUTO"
-
-    # Check nhanh - da ket noi chua?
-    try:
-        if Path(auto_path).exists():
-            return True
-    except Exception:
-        pass
-
-    # Mat ket noi → reconnect
-    log(f"[SMB] {drive} mat ket noi, dang reconnect...", "WARN")
-
-    server = cfg["server_ip"]
-    share = cfg["share_name"]
     user = cfg["username"]
     pwd = cfg["password"]
 
+    # Check nhanh - co drive nao co AUTO khong?
+    for path in POSSIBLE_AUTO_PATHS:
+        if path.startswith("\\\\") or ":" not in path[:3]:
+            continue  # Chi check drive letter paths (Z:\, Y:\)
+        try:
+            if Path(path).exists():
+                return True
+        except Exception:
+            pass
+
+    # Khong co drive nao accessible → tim mapping cu de reconnect
+    log(f"[SMB] SMB drive mat ket noi, dang reconnect...", "WARN")
+    mappings = _get_existing_smb_mappings(log)
+
+    # === CACH 1: Reconnect mapping cu (da biet drive + UNC path) ===
+    if mappings:
+        for drive, unc_path in mappings:
+            auto_check = f"{drive}\\AUTO"
+            try:
+                if Path(auto_check).exists():
+                    return True
+            except Exception:
+                pass
+
+            # Drive mat ket noi → reconnect voi password
+            log(f"[SMB] Reconnect {drive} → {unc_path}...", "INFO")
+            if _reconnect_drive(drive, unc_path, user, pwd, log):
+                return True
+
+    # === CACH 2: Khong co mapping cu → thu 3 IP may chu ===
+    log(f"[SMB] Khong co mapping cu, thu ket noi may chu...", "INFO")
+    drive = cfg.get("drive_letter", _SMB_DRIVE)
+    share = cfg.get("share_name", _SMB_SHARE)
+
+    # Doc danh sach server tu settings.yaml hoac dung default
+    servers = list(_MASTER_SERVERS)
+    cfg_servers = cfg.get("servers", [])
+    if cfg_servers:
+        # Them server tu config vao dau danh sach (uu tien)
+        for s in reversed(cfg_servers):
+            if s not in servers:
+                servers.insert(0, s)
+
+    for server_ip in servers:
+        unc_path = f"\\\\{server_ip}\\{share}"
+        log(f"[SMB] Thu {drive} → {unc_path}...", "INFO")
+        if _reconnect_drive(drive, unc_path, user, pwd, log):
+            return True
+
+    log(f"[SMB] Khong ket noi duoc may chu nao!", "ERROR")
+    return False
+
+
+def _reconnect_drive(drive: str, unc_path: str, user: str, pwd: str, log: Callable) -> bool:
+    """Reconnect 1 drive toi UNC path voi credential."""
+    # Extract server tu UNC path
     try:
-        # Xoa mapping cu (co the bi stale)
+        server = unc_path.strip("\\").split("\\")[0]
+    except Exception:
+        server = ""
+
+    try:
+        # Xoa mapping cu (stale)
         subprocess.run(
             ['net', 'use', drive, '/delete', '/y'],
             capture_output=True, text=True, timeout=10
@@ -390,37 +482,38 @@ def ensure_smb_connected(log: Callable = None) -> bool:
     except Exception:
         pass
 
-    # Tao mapping moi voi /persistent:yes va /savecred
     try:
         cmd = [
-            'net', 'use', drive,
-            f'\\\\{server}\\{share}',
+            'net', 'use', drive, unc_path,
             f'/user:{user}', pwd,
             '/persistent:yes'
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode == 0:
-            # Verify
             time.sleep(1)
-            if Path(auto_path).exists():
-                log(f"[SMB] [v] Reconnect {drive} thanh cong!", "INFO")
+            auto_check = f"{drive}\\AUTO"
+            try:
+                if Path(auto_check).exists():
+                    log(f"[SMB] [v] {drive} → {unc_path} thanh cong!", "INFO")
+                else:
+                    log(f"[SMB] [v] {drive} → {unc_path} OK (AUTO chua thay)", "INFO")
+            except Exception:
+                pass
 
-                # Luu credential vao Windows Credential Manager de khong bi hoi lai
+            # Luu credential de Windows nho sau restart
+            if server:
                 _save_smb_credential(server, user, pwd, log)
-                return True
-            else:
-                log(f"[SMB] Reconnect OK nhung {auto_path} khong ton tai", "WARN")
-                return False
+            return True
         else:
             stderr = (result.stderr or "").strip()
-            log(f"[SMB] Reconnect THAT BAI: {stderr}", "ERROR")
+            log(f"[SMB] {drive} → {unc_path} THAT BAI: {stderr}", "WARN")
             return False
     except subprocess.TimeoutExpired:
-        log(f"[SMB] Reconnect timeout!", "ERROR")
+        log(f"[SMB] {drive} → {unc_path} timeout!", "WARN")
         return False
     except Exception as e:
-        log(f"[SMB] Reconnect error: {e}", "ERROR")
+        log(f"[SMB] {drive} → {unc_path} error: {e}", "WARN")
         return False
 
 
@@ -432,14 +525,10 @@ def _save_smb_credential(server: str, username: str, password: str, log: Callabl
     """
     log = log or _log_default
     try:
-        # cmdkey /add:server /user:username /pass:password
         cmd = ['cmdkey', f'/add:{server}', f'/user:{username}', f'/pass:{password}']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
-            log(f"[SMB] Credential saved to Windows Credential Manager", "INFO")
-        else:
-            # Khong quan trong neu fail - net use van hoat dong
-            pass
+            log(f"[SMB] Credential saved for {server}", "INFO")
     except Exception:
         pass
 
