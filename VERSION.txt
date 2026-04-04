@@ -1,3 +1,16 @@
+1.0.677
+2026-04-04 (VN)
+Fix: IPv6 Pool route ::/0 KHONG update khi rotate → TAT CA worker mat mang
+- BUG: Worker rotate (403) → Pool burn subnet cu → xoa gateway tren MikroTik
+  → Nhung route ::/0 tren Windows VAN tro toi gateway cu (da bi xoa)
+  → _add_to_interface() thay _default_route_gateway da co → SKIP them route moi
+  → TAT CA IPv6 traffic timeout (ke ca worker khac)
+- FIX: Detect gateway thay doi trong _add_to_interface()
+  → Gateway moi != gateway cu → xoa route cu + them route moi
+  → Update _default_route_gateway → cac worker khac dung route moi
+  → Traffic IPv6 tiep tuc hoat dong sau rotation
+- File: modules/proxy_providers/ipv6_provider.py
+
 1.0.676
 2026-04-04 (VN)
 Fix: Server GUI crash khi Start - px_keys_text widget bi destroy
