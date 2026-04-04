@@ -1,3 +1,16 @@
+1.0.669
+2026-04-04 (VN)
+Fix: claim() treo vinh vien do Google Sheets API khong co timeout
+- VAN DE: claim() goi _get_account_from_sheet() qua gspread API
+  → gspread KHONG co default timeout
+  → Mang cham hoac Google API khong phan hoi → treo vinh vien
+  → VM khong claim duoc ma → khong lay duoc project tu master
+- FIX: Wrap Google Sheet calls trong ThreadPoolExecutor voi timeout
+  → account: max 15s, topic: max 10s, character: max 10s
+  → Neu timeout → claim KHONG co metadata nhung VAN TIEN HANH
+  → Log warning de biet Google Sheet khong phan hoi
+- Files: modules/robust_copy.py
+
 1.0.668
 2026-04-04 (VN)
 Fix: Excel Worker khong lay ma tu master - diagnostic logging + auto-detect path

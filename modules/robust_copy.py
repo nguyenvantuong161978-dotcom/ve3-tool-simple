@@ -833,9 +833,33 @@ class TaskQueue:
             return False
 
         try:
-            account_str = self._get_account_from_sheet(code)
-            topic_str = self._get_topic_from_sheet(code)
-            character_str = self._get_character_from_sheet(code)
+            # v1.0.668: Timeout cho Google Sheet calls (tranh treo vinh vien)
+            import concurrent.futures
+            account_str = ""
+            topic_str = ""
+            character_str = ""
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    self.log(f"[QUEUE] {code}: loading account/topic from Google Sheet...")
+                    fut_acc = executor.submit(self._get_account_from_sheet, code)
+                    try:
+                        account_str = fut_acc.result(timeout=15)
+                    except concurrent.futures.TimeoutError:
+                        self.log(f"[QUEUE] {code}: Google Sheet timeout (15s) - skip account", "WARN")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    fut_topic = executor.submit(self._get_topic_from_sheet, code)
+                    try:
+                        topic_str = fut_topic.result(timeout=10)
+                    except concurrent.futures.TimeoutError:
+                        self.log(f"[QUEUE] {code}: Google Sheet topic timeout - skip", "WARN")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    fut_char = executor.submit(self._get_character_from_sheet, code)
+                    try:
+                        character_str = fut_char.result(timeout=10)
+                    except concurrent.futures.TimeoutError:
+                        self.log(f"[QUEUE] {code}: Google Sheet character timeout - skip", "WARN")
+            except Exception as e:
+                self.log(f"[QUEUE] {code}: Google Sheet error: {e} - claim without metadata", "WARN")
             claim_content = self._make_claim_content(account=account_str, topic=topic_str, character=character_str)
 
             # Bước 2: Tạo file _CLAIMING_{VM_ID} bằng O_CREAT|O_EXCL (atomic)
