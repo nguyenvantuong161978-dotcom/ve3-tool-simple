@@ -17,11 +17,13 @@ v1.0.643: Single-route architecture
 - NDP keepalive thread ping gateway moi 20s → giu NDP cache alive
 - Scale duoc 10+ Chrome instances on dinh
 
-v1.0.677: Fix route ::/0 khong update khi rotate
+v1.0.677-678: Fix route ::/0 khong update khi rotate
 - BUG: Pool burn subnet cu → xoa gateway tren MikroTik
   → Route ::/0 van tro toi gateway cu (da xoa) → TAT CA worker timeout
-- FIX: Detect gateway thay doi trong _add_to_interface()
-  → Xoa route cu + them route moi → traffic chay qua gateway moi
+- v1.0.677: Detect gateway thay doi → update route (QUA RONG - doi ca initial setup)
+- v1.0.678: Chi reset route khi rotate_to() VA old_gw == default_route
+  → Initial setup: worker 1 KHONG doi route cua worker 0
+  → Rotation: chi doi khi gateway bi burn la default route
 """
 
 import time
@@ -450,28 +452,18 @@ class IPv6Provider(ProxyProvider):
             self._run_cmd(f'netsh interface ipv6 add route {onlink_prefix} "{iface}"')
 
         # v1.0.643: SINGLE-ROUTE - chi 1 route ::/0 duy nhat
-        # v1.0.677: Update route ::/0 khi gateway thay doi (rotation)
-        #   Pool burn subnet cu → xoa gateway cu tren MikroTik
-        #   Route ::/0 van tro toi gateway cu (da bi xoa) → TIMEOUT
-        #   FIX: Detect gateway thay doi → xoa route cu + them route moi
+        # v1.0.678: Chi update route khi rotate_to() da reset _default_route_gateway
+        #   Initial setup: worker 1 KHONG doi route cua worker 0 (gateway cu van hop le)
+        #   Rotation: rotate_to() reset _default_route_gateway → _add_to_interface them route moi
         with IPv6Provider._route_lock:
             if not IPv6Provider._default_route_gateway:
-                # Worker dau tien: them route ::/0
+                # Chua co route ::/0 → them moi (worker dau tien HOAC sau rotation reset)
                 self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
                 IPv6Provider._default_route_gateway = gateway
-                self.log(f"[PROXY-IPv6] [v] Added DEFAULT route ::/0 via {gateway} (first worker)")
-            elif IPv6Provider._default_route_gateway != gateway:
-                # v1.0.677: Gateway thay doi (worker rotate sang subnet moi)
-                # Pool da burn subnet cu → gateway cu khong con tren MikroTik
-                # PHAI update route ::/0 sang gateway moi
-                old_gw = IPv6Provider._default_route_gateway
-                self._run_cmd(f'netsh interface ipv6 delete route ::/0 "{iface}" {old_gw}')
-                self._run_cmd(f'netsh interface ipv6 add route ::/0 "{iface}" {gateway}')
-                IPv6Provider._default_route_gateway = gateway
-                self.log(f"[PROXY-IPv6] [v] UPDATED DEFAULT route ::/0: {old_gw} → {gateway} (rotation)")
+                self.log(f"[PROXY-IPv6] [v] Added DEFAULT route ::/0 via {gateway}")
             else:
-                # Cung gateway, khong can thay doi
-                self.log(f"[PROXY-IPv6] [v] Reuse DEFAULT route ::/0 via {IPv6Provider._default_route_gateway} (same gw)")
+                # Da co route ::/0 → dung chung (initial setup worker khac)
+                self.log(f"[PROXY-IPv6] [v] Reuse DEFAULT route ::/0 via {IPv6Provider._default_route_gateway} (skip add)")
 
         # Step 5: IPv6 prefix policy - uu tien IPv6 (giong ipv6_rotator)
         self._run_cmd('netsh interface ipv6 set prefixpolicy ::1/128 50 0')
@@ -684,7 +676,9 @@ class IPv6Provider(ProxyProvider):
         v1.0.609: Them gateway param. Remove old IP, add new IP to interface.
         v1.0.640: Update _active_gateways khi rotate.
         v1.0.643: Giu nguyen route ::/0, chi doi IP address + on-link route.
-        v1.0.677: _add_to_interface() se tu dong update route ::/0 khi gateway thay doi.
+        v1.0.678: Reset _default_route_gateway khi gateway cu cua worker nay
+                   chinh la default route → _add_to_interface() se them route moi.
+                   Worker khac rotate (gateway != default) → KHONG doi route.
         """
         # v1.0.643: Stop NDP keepalive cu truoc khi rotate
         if self._ndp_keepalive:
@@ -696,6 +690,17 @@ class IPv6Provider(ProxyProvider):
         if hasattr(self, 'worker_id') and self.worker_id in IPv6Provider._active_gateways:
             del IPv6Provider._active_gateways[self.worker_id]
 
+        # v1.0.678: Neu gateway cu cua worker nay LA default route
+        # → Pool se burn subnet nay → gateway cu bi xoa tren MikroTik
+        # → PHAI reset de _add_to_interface() them route moi
+        # Neu gateway cu KHONG phai default → default van hop le, KHONG doi
+        with IPv6Provider._route_lock:
+            if old_gw and old_gw == IPv6Provider._default_route_gateway:
+                iface = self._get_interface_name()
+                self._run_cmd(f'netsh interface ipv6 delete route ::/0 "{iface}" {old_gw}')
+                IPv6Provider._default_route_gateway = ""
+                self.log(f"[PROXY-IPv6] [v] Reset DEFAULT route ::/0 (old gw {old_gw} burned by Pool)")
+
         # Remove old IP from interface
         if self._current_ipv6 and self._current_ipv6 != new_ipv6:
             self._remove_from_interface(self._current_ipv6)
@@ -705,7 +710,7 @@ class IPv6Provider(ProxyProvider):
 
         try:
             # v1.0.609: Add new IP to interface
-            # v1.0.643: _add_to_interface se KHONG them ::/0 moi (da co _default_route_gateway)
+            # v1.0.678: _add_to_interface se them ::/0 moi neu da reset o tren
             if not self._add_to_interface(new_ipv6, gateway):
                 self.log(f"[PROXY-IPv6] Warning: Could not add {new_ipv6} to interface")
 

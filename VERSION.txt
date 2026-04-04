@@ -1,3 +1,18 @@
+1.0.678
+2026-04-04 (VN)
+Fix: v1.0.677 doi route cho CA initial setup (sai) - chi doi khi rotation
+- VAN DE v1.0.677: Moi gateway khac → update route ::/0 (ke ca worker moi)
+  → Worker 1 setup → doi route tu worker 0 sang worker 1 (KHONG CAN)
+  → Worker 1 bi 403 → pool burn gateway → route die → worker 0 CUNG chet
+- FIX: Logic 2 buoc:
+  1. _add_to_interface(): Chi them route khi _default_route_gateway chua co
+     → Worker 1 setup → KHONG doi route cua worker 0 (dung)
+  2. rotate_to(): Truoc khi add IP moi, check old_gw == default_route
+     → Neu dung (gateway bi burn) → reset _default_route_gateway
+     → _add_to_interface() se them route moi voi gateway moi
+     → Neu khong (gateway khac van hop le) → giu nguyen route
+- File: modules/proxy_providers/ipv6_provider.py
+
 1.0.677
 2026-04-04 (VN)
 Fix: IPv6 Pool route ::/0 KHONG update khi rotate → TAT CA worker mat mang
