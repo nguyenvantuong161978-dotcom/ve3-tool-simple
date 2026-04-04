@@ -97,6 +97,12 @@ webshare_proxy:
   rotating_host: p.webshare.io
   rotating_password: cf1bi3yvq0t1
   rotating_port: 80
+proxy_provider:
+  type: proxyxoay
+  proxyxoay:
+    api_keys:
+      - "kMhAbBOUEUsXHFztkKtCOF"
+    proxy_type: socks5
 distributed_mode: true
 whisper_language: en
 whisper_model: base

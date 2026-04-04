@@ -1,3 +1,29 @@
+1.0.674
+2026-04-04 (VN)
+Fix: Mode SMALL project xong 100% anh nhung KHONG copy ve master
+- BUG: video_mode setter normalize "small" thanh "full"
+  → GUI set video_mode = "small"
+  → setter: "basic" in "small" = False → default "full"
+  → settings.yaml luu video_mode: full (SAI!)
+  → get_project_status() doc video_mode = "full" → doi video xong
+  → Mode Small KHONG tao video → KHONG BAO GIO "done" → KHONG copy
+- FIX: Them "small" vao video_mode setter (truoc "basic" check)
+  → "small" → "small", "basic" → "basic", con lai → "full"
+- File: vm_manager.py
+
+1.0.672
+2026-04-04 (VN)
+Feature: Server GUI - Them ProxyXoay vao giao dien cai dat
+- Them option "ProxyXoay" vao combobox che do proxy
+- UI nhap API keys (moi dong 1 key), chon socks5/http
+- Nut TEST: kiem tra ket noi key dau tien
+- VALIDATE khi START: so key PHAI >= so Chrome
+  → Thieu key → hien thong bao loi, KHONG cho chay
+  → Moi Chrome can 1 key rieng de co IP khac nhau
+- Save/load ProxyXoay settings (px_keys, px_type)
+- Pass proxyxoay config vao _get_proxy_config()
+- File: server/server_gui.py
+
 1.0.671
 2026-04-04 (VN)
 Fix: Them ensure_proxy_alive(min_ttl=420) cho 5 video methods bi thieu

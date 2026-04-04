@@ -79,7 +79,7 @@ class ServerGUI(tk.Tk):
 
         # v1.0.607: Unified IPv6 mode selector
         self.ipv6_mode_var = tk.StringVar(value="pool")
-        mode_options = ["Tat", "IPv6 Pool", "IPv6 Thu cong", "Webshare"]
+        mode_options = ["Tat", "IPv6 Pool", "IPv6 Thu cong", "Webshare", "ProxyXoay"]
         self.ipv6_mode_combo = ttk.Combobox(row_mode, textvariable=self.ipv6_mode_var,
                                              values=mode_options, state='readonly', width=14)
         self.ipv6_mode_combo.set("IPv6 Pool")
@@ -179,6 +179,41 @@ class ServerGUI(tk.Tk):
                                       command=self._test_webshare)
         self.ws_test_btn.pack(side='right')
 
+        # --- ProxyXoay frame (hien khi chon "ProxyXoay") ---
+        self.px_frame = tk.Frame(card, bg=BG2)
+
+        tk.Label(self.px_frame, text="API Keys (moi dong 1 key, moi Chrome can 1 key rieng):",
+                 font=("Segoe UI", 9), bg=BG2, fg=FG2).pack(anchor='w', pady=(0, 2))
+
+        self.px_keys_text = tk.Text(self.px_frame, height=3, width=50,
+                                     font=("Consolas", 9), bg='#0f172a', fg=FG,
+                                     insertbackground=FG, relief='solid', bd=1,
+                                     highlightbackground=BORDER)
+        self.px_keys_text.pack(fill='x')
+
+        px_opt_row = tk.Frame(self.px_frame, bg=BG2)
+        px_opt_row.pack(fill='x', pady=(4, 2))
+        tk.Label(px_opt_row, text="Proxy type:", font=("Segoe UI", 9),
+                 bg=BG2, fg=FG2).pack(side='left')
+        self.px_type_var = tk.StringVar(value="socks5")
+        ttk.Combobox(px_opt_row, textvariable=self.px_type_var,
+                      values=["socks5", "http"], state='readonly', width=8).pack(side='left', padx=(4, 0))
+
+        self.px_key_count_label = tk.Label(px_opt_row, text="", font=("Segoe UI", 9),
+                                            bg=BG2, fg=FG2)
+        self.px_key_count_label.pack(side='right')
+
+        px_btn_row = tk.Frame(self.px_frame, bg=BG2)
+        px_btn_row.pack(fill='x', pady=(2, 5))
+        self.px_test_btn = tk.Button(px_btn_row, text="TEST",
+                                      font=("Segoe UI", 9, "bold"),
+                                      bg=ORANGE, fg='#0f172a', relief='flat', cursor='hand2',
+                                      command=self._test_proxyxoay)
+        self.px_test_btn.pack(side='left')
+        self.px_status_label = tk.Label(px_btn_row, text="", font=("Segoe UI", 9),
+                                         bg=BG2, fg=FG2)
+        self.px_status_label.pack(side='left', padx=10)
+
         # Backward compat vars
         self.ipv6_var = tk.BooleanVar(value=True)
         self.proxy_type_var = tk.StringVar(value="none")
@@ -263,6 +298,7 @@ class ServerGUI(tk.Tk):
         self.pool_frame.pack_forget()
         self.manual_ipv6_frame.pack_forget()
         self.ws_frame.pack_forget()
+        self.px_frame.pack_forget()
 
         # Update backward compat vars
         if mode == "Tat":
@@ -284,6 +320,12 @@ class ServerGUI(tk.Tk):
             self.proxy_type_var.set("webshare")
             self.mode_desc.config(text="Dung Webshare.io Rotating Residential Proxy.")
             self.ws_frame.pack(fill='x', padx=20, pady=(0, 5))
+        elif mode == "ProxyXoay":
+            self.ipv6_var.set(False)
+            self.proxy_type_var.set("proxyxoay")
+            self.mode_desc.config(text="Dung proxyxoay.shop (SOCKS5/HTTP). Moi Chrome can 1 key rieng.")
+            self.px_frame.pack(fill='x', padx=20, pady=(0, 5))
+            self._update_px_key_count()
 
     def _test_pool(self):
         """Test ket noi IPv6 Pool API."""
@@ -352,6 +394,15 @@ class ServerGUI(tk.Tk):
                     self.ws_password_var.set(data['ws_password'])
                 if data.get('ws_machine_id'):
                     self.ws_machine_var.set(str(data['ws_machine_id']))
+                # ProxyXoay settings
+                if data.get('px_keys'):
+                    self.px_keys_text.delete("1.0", "end")
+                    self.px_keys_text.insert("1.0", "\n".join(data['px_keys']))
+                if data.get('px_type'):
+                    self.px_type_var.set(data['px_type'])
+                # Migrate: proxy_type=proxyxoay nhung chua co ipv6_mode
+                if not data.get('ipv6_mode') and data.get('proxy_type') == 'proxyxoay':
+                    self.ipv6_mode_combo.set("ProxyXoay")
                 # Apply mode UI
                 self._on_ipv6_mode_changed()
         except Exception:
@@ -373,6 +424,8 @@ class ServerGUI(tk.Tk):
                 'ws_password': self.ws_password_var.get().strip(),
                 'ws_machine_id': int(self.ws_machine_var.get().strip() or '1'),
                 'pool_api_url': self.pool_api_var.get().strip(),
+                'px_keys': self._get_px_keys(),
+                'px_type': self.px_type_var.get(),
             }
             self._settings_file.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False),
@@ -411,10 +464,67 @@ class ServerGUI(tk.Tk):
                 self.root.after(3000, lambda: self.ws_test_btn.config(text="TEST", bg=ORANGE))
         threading.Thread(target=_do_test, daemon=True).start()
 
+    def _get_px_keys(self):
+        """Lay danh sach ProxyXoay API keys tu text box."""
+        text = self.px_keys_text.get("1.0", "end").strip()
+        return [line.strip() for line in text.split('\n') if line.strip()]
+
+    def _update_px_key_count(self):
+        """Cap nhat so key hien thi."""
+        keys = self._get_px_keys()
+        chrome_count = self._get_chrome_count()
+        count_text = f"{len(keys)} key"
+        if chrome_count > 0 and len(keys) < chrome_count:
+            count_text += f" (CAN {chrome_count} cho {chrome_count} Chrome!)"
+            self.px_key_count_label.config(text=count_text, fg=RED)
+        else:
+            self.px_key_count_label.config(text=count_text, fg=GREEN)
+
+    def _test_proxyxoay(self):
+        """Test ket noi ProxyXoay."""
+        keys = self._get_px_keys()
+        if not keys:
+            self.px_status_label.config(text="Chua nhap API key!", fg=RED)
+            return
+
+        self.px_test_btn.config(state='disabled', text="Testing...")
+        self.px_status_label.config(text="", fg=FG2)
+
+        def _do_test():
+            try:
+                from modules.proxy_providers.proxyxoay_provider import ProxyXoayProvider
+                provider = ProxyXoayProvider(
+                    config={'proxyxoay': {
+                        'api_keys': [keys[0]],
+                        'proxy_type': self.px_type_var.get(),
+                    }},
+                    log_func=lambda msg, lvl="INFO": print(msg),
+                )
+                if provider.setup(worker_id=0):
+                    ok = provider.test_connectivity()
+                    if ok:
+                        ip = provider.get_current_ip()
+                        self.after(0, lambda: self.px_status_label.config(
+                            text=f"OK! IP: {ip}", fg=GREEN))
+                    else:
+                        self.after(0, lambda: self.px_status_label.config(
+                            text="Proxy loi ket noi!", fg=RED))
+                    provider.stop()
+                else:
+                    self.after(0, lambda: self.px_status_label.config(
+                        text="Setup fail (key sai hoac cooldown)", fg=RED))
+            except Exception as e:
+                self.after(0, lambda: self.px_status_label.config(
+                    text=f"Loi: {e}", fg=RED))
+            finally:
+                self.after(0, lambda: self.px_test_btn.config(state='normal', text="TEST"))
+
+        threading.Thread(target=_do_test, daemon=True).start()
+
     def _get_proxy_config(self) -> dict:
         """v1.0.545: Lay proxy provider config tu GUI."""
         ptype = self.proxy_type_var.get()
-        return {
+        config = {
             'proxy_provider': {
                 'type': ptype,
                 'webshare': {
@@ -424,8 +534,13 @@ class ServerGUI(tk.Tk):
                     'rotating_password': self.ws_password_var.get().strip(),
                     'machine_id': int(self.ws_machine_var.get().strip() or '1'),
                 },
+                'proxyxoay': {
+                    'api_keys': self._get_px_keys(),
+                    'proxy_type': self.px_type_var.get(),
+                },
             }
         }
+        return config
 
     def _get_ipv6_list(self):
         """Lay danh sach IPv6 tu text box."""
@@ -772,6 +887,21 @@ class ServerGUI(tk.Tk):
     def _on_start(self):
         if self._server_started:
             return
+
+        # v1.0.672: Validate ProxyXoay keys vs Chrome count
+        if self.proxy_type_var.get() == "proxyxoay":
+            keys = self._get_px_keys()
+            chrome_count = self._get_chrome_count()
+            if not keys:
+                from tkinter import messagebox
+                messagebox.showerror("ProxyXoay", "Chua nhap API key!\nMoi Chrome can 1 key rieng.")
+                return
+            if chrome_count > 0 and len(keys) < chrome_count:
+                from tkinter import messagebox
+                messagebox.showerror("ProxyXoay",
+                    f"Thieu key! Co {len(keys)} key nhung can {chrome_count} cho {chrome_count} Chrome.\n"
+                    f"Moi Chrome can 1 key rieng de co IP khac nhau.")
+                return
 
         self._server_started = True
         self.start_btn.config(text="DANG KHOI DONG...", bg='#475569', state='disabled')

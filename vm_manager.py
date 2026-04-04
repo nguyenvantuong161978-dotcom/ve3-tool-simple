@@ -191,6 +191,12 @@ class SettingsManager:
 
     def __init__(self):
         self.config = self._load_config()
+        # v1.0.674: Auto-fix video_mode bi luu sai "full" khi excel_mode = "small"
+        em = self.config.get('excel_mode', '')
+        vm = self.config.get('video_mode', '')
+        if em == 'small' and vm != 'small':
+            self.config['video_mode'] = 'small'
+            self.save_config()
 
     def _load_config(self) -> Dict:
         if CONFIG_FILE.exists():
@@ -250,7 +256,10 @@ class SettingsManager:
     @video_mode.setter
     def video_mode(self, value: str):
         # Normalize value (remove "(8s)" suffix if present)
-        if "basic" in value.lower():
+        # v1.0.674: Fix "small" bi doi thanh "full" → project xong khong copy
+        if "small" in value.lower():
+            value = "small"
+        elif "basic" in value.lower():
             value = "basic"
         else:
             value = "full"
