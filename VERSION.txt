@@ -1,3 +1,18 @@
+1.0.681
+2026-04-04 (VN)
+Fix: IPv6 Pool GUI - tu dong tat process cu con chay an khi mo lai
+- VAN DE: Tat GUI nhung Python process van chay ngam (giu port 8765)
+  → Mo GUI moi → port bi chiem → API server start that bai hoac dung server cu
+  → Server cu co _log_func = print() → log khong hien thi trong GUI moi
+  → Phai vao Task Manager tat tay process Python cu
+- FIX 1: _kill_old_instances() khi GUI khoi dong
+  → Tim va kill process Python cu dang chay ipv6_gui
+  → Chi kill process khac (khong kill chinh minh)
+- FIX 2: _kill_port_holder() khi bind port that bai (OSError)
+  → Tim PID dang LISTEN tren port 8765 → kill → retry bind
+  → GUI moi luon start API server thanh cong
+- Files: ipv6/ipv6_gui.py, ipv6/ipv6_server.py
+
 1.0.680
 2026-04-04 (VN)
 Fix: IPv6 Pool log khong hien thi trong GUI - _log_func khong duoc cap nhat

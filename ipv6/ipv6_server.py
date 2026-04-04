@@ -324,6 +324,36 @@ _server: Optional[HTTPServer] = None
 _server_thread: Optional[threading.Thread] = None
 
 
+def _kill_port_holder(port: int, log_func=print):
+    """
+    v1.0.681: Kill process dang giu port (process cu con sot lai).
+    Giai phong port de API server moi co the bind.
+    """
+    import subprocess
+    import os
+
+    my_pid = os.getpid()
+    try:
+        # Tim PID dang LISTEN tren port
+        result = subprocess.run(
+            ["netstat", "-ano", "-p", "TCP"],
+            capture_output=True, text=True, timeout=10
+        )
+        for line in result.stdout.splitlines():
+            if f":{port}" in line and "LISTEN" in line:
+                parts = line.strip().split()
+                if parts:
+                    try:
+                        pid = int(parts[-1])
+                        if pid != my_pid and pid > 0:
+                            os.kill(pid, 9)
+                            log_func(f"[API] Killed old process PID {pid} on port {port}")
+                    except (ValueError, OSError) as e:
+                        log_func(f"[API] Cannot kill PID: {e}")
+    except Exception as e:
+        log_func(f"[API] Port cleanup skip: {e}")
+
+
 def _ensure_firewall_rule(port: int, log_func=print):
     """
     v1.0.565: Tu dong them Windows Firewall rule cho API port.
@@ -396,9 +426,21 @@ def start_api_server(pool, host: str = "0.0.0.0", port: int = 8765, log_func=pri
         log_func(f"[API] Server started: http://{host}:{port}")
         return True
     except OSError as e:
-        log_func(f"[API] Start failed: {e}")
-        _server = None
-        return False
+        # v1.0.681: Port bi chiem boi process cu → kill va thu lai
+        log_func(f"[API] Port {port} bi chiem, dang giai phong...")
+        _kill_port_holder(port, log_func)
+        import time as _t
+        _t.sleep(1)
+        try:
+            _server = ThreadingHTTPServer((host, port), IPv6APIHandler)
+            _server_thread = threading.Thread(target=_server.serve_forever, daemon=True)
+            _server_thread.start()
+            log_func(f"[API] Server started (sau cleanup): http://{host}:{port}")
+            return True
+        except OSError as e2:
+            log_func(f"[API] Start failed: {e2}")
+            _server = None
+            return False
 
 
 def stop_api_server():

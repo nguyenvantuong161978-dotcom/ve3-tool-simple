@@ -600,7 +600,43 @@ class IPv6PoolGUI:
             self.root.after(0, do)
 
 
+def _kill_old_instances():
+    """
+    v1.0.681: Tat process Pool GUI cu con chay an.
+    Neu khong tat → process cu giu port 8765 → GUI moi khong start API duoc
+    → log khong hien, hoac dung server cu voi log_func = print().
+    """
+    import os
+    import subprocess
+
+    my_pid = os.getpid()
+    try:
+        # Tim tat ca python process dang chay ipv6_gui hoac ipv6_server
+        result = subprocess.run(
+            ["wmic", "process", "where",
+             "name like '%python%'",
+             "get", "processid,commandline"],
+            capture_output=True, text=True, timeout=10
+        )
+        for line in result.stdout.splitlines():
+            line_lower = line.lower()
+            if "ipv6_gui" in line_lower or "ipv6.ipv6_gui" in line_lower:
+                # Extract PID (so cuoi cung tren dong)
+                parts = line.strip().split()
+                if parts:
+                    try:
+                        pid = int(parts[-1])
+                        if pid != my_pid:
+                            os.kill(pid, 9)
+                            print(f"[CLEANUP] Killed old ipv6_gui process: PID {pid}")
+                    except (ValueError, OSError):
+                        pass
+    except Exception as e:
+        print(f"[CLEANUP] Skip: {e}")
+
+
 def main():
+    _kill_old_instances()
     root = tk.Tk()
     app = IPv6PoolGUI(root)
     root.mainloop()
