@@ -8,6 +8,7 @@ ProxyXoay.shop: Dich vu proxy xoay Viet Nam
 - Tra ve SOCKS5 hoac HTTP proxy
 - Proxy tu dong doi sau ~1777s (TTL)
 - Rotate = goi lai API de lay proxy moi
+- Whitelist: Tu dong whitelist IPv4 cua may khi goi API
 
 Flow:
   Chrome → socks5://IP:PORT (direct, khong can bridge)
@@ -28,6 +29,7 @@ Config (nhieu key - moi worker 1 key rieng):
 """
 
 import time
+import re
 import requests
 from typing import Optional, Callable
 from modules.proxy_providers.base_provider import ProxyProvider
@@ -69,6 +71,23 @@ class ProxyXoayProvider(ProxyProvider):
         self._current_port = 0
         self._proxy_expire_time = 0  # timestamp khi proxy het han
         self._last_api_message = ''  # Luu message cuoi tu API (de parse cooldown)
+        self._my_public_ip = ''  # IPv4 cua may nay (de whitelist)
+
+    def _detect_public_ip(self) -> str:
+        """Detect IPv4 public cua may nay de whitelist voi ProxyXoay."""
+        if self._my_public_ip:
+            return self._my_public_ip
+        for url in ['https://api.ipify.org', 'https://ifconfig.me/ip', 'https://icanhazip.com']:
+            try:
+                resp = requests.get(url, timeout=5)
+                ip = resp.text.strip()
+                if ip and '.' in ip:  # Chi IPv4
+                    self._my_public_ip = ip
+                    self.log(f"[PROXY-PX] Public IP: {ip}")
+                    return ip
+            except Exception:
+                continue
+        return ''
 
     def setup(self, worker_id: int = 0, port: int = 0) -> bool:
         """
@@ -91,6 +110,9 @@ class ProxyXoayProvider(ProxyProvider):
         self.log(f"[PROXY-PX] Setup worker {worker_id}: proxyxoay.shop (key {key_index+1}/{len(self._api_keys)})")
         self.log(f"[PROXY-PX] Type: {self.proxy_type}")
 
+        # Detect public IP de whitelist
+        self._detect_public_ip()
+
         # Lay proxy dau tien (retry neu dang cooldown)
         max_retries = 3
         for attempt in range(max_retries):
@@ -101,7 +123,6 @@ class ProxyXoayProvider(ProxyProvider):
 
             # Check cooldown
             if self._last_api_message:
-                import re
                 m = re.search(r'(\d+)s', self._last_api_message)
                 if m and attempt < max_retries - 1:
                     wait_secs = int(m.group(1)) + 2
@@ -130,7 +151,6 @@ class ProxyXoayProvider(ProxyProvider):
 
             # Parse cooldown tu error message (vd: "Con 59s moi co the doi proxy")
             if self._last_api_message:
-                import re
                 m = re.search(r'(\d+)s', self._last_api_message)
                 if m:
                     wait_secs = int(m.group(1)) + 2  # +2s buffer
@@ -189,7 +209,11 @@ class ProxyXoayProvider(ProxyProvider):
                 return False
 
         try:
-            proxy_url = self.get_chrome_arg()
+            # v1.0.670: Dung socks5h:// (DNS qua proxy) thay vi socks5:// (DNS local)
+            if self.proxy_type == 'socks5':
+                proxy_url = f"socks5h://{self._current_ip}:{self._current_port}"
+            else:
+                proxy_url = f"http://{self._current_ip}:{self._current_port}"
             proxies = {"http": proxy_url, "https": proxy_url}
             resp = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=15)
             if resp.status_code == 200:
@@ -206,7 +230,7 @@ class ProxyXoayProvider(ProxyProvider):
         """
         Goi API proxyxoay.shop de lay proxy moi.
 
-        API: GET /api/get.php?key={key}&nhamang=random&tinhthanh=0&whitelist=
+        API: GET /api/get.php?key={key}&nhamang=random&tinhthanh=0&whitelist={ip}
         Response: {"status":100,"proxyhttp":"IP:PORT::","proxysocks5":"IP:PORT::","message":"proxy nay se die sau 1777s"}
         """
         try:
@@ -214,7 +238,7 @@ class ProxyXoayProvider(ProxyProvider):
                 'key': self.api_key,
                 'nhamang': 'random',
                 'tinhthanh': 0,
-                'whitelist': '',
+                'whitelist': self._my_public_ip or '',  # v1.0.670: Tu dong whitelist IP may
             }
             resp = requests.get(self.API_URL, params=params, timeout=15)
             data = resp.json()
@@ -250,13 +274,16 @@ class ProxyXoayProvider(ProxyProvider):
             # Parse TTL tu message (vd: "proxy nay se die sau 1777s")
             msg = data.get('message', '')
             ttl = 1777  # default
-            import re
             m = re.search(r'(\d+)s', msg)
             if m:
                 ttl = int(m.group(1))
             self._proxy_expire_time = time.time() + ttl
 
-            self.log(f"[PROXY-PX] Got proxy: {self._current_ip}:{self._current_port} (TTL:{ttl}s)")
+            # Log them thong tin nha mang va vi tri
+            nhamang = data.get('Nha Mang', '')
+            vitri = data.get('Vi Tri', '')
+            extra = f" [{nhamang}/{vitri}]" if nhamang else ""
+            self.log(f"[PROXY-PX] Got proxy: {self._current_ip}:{self._current_port} (TTL:{ttl}s){extra}")
             return True
 
         except Exception as e:

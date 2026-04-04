@@ -1,3 +1,14 @@
+1.0.670
+2026-04-04 (VN)
+Fix: ProxyXoay - auto-whitelist IP + socks5h + log nha mang
+- Auto-whitelist: Detect IPv4 public → gui kem moi API call
+  → VM moi tu dong duoc whitelist, khong can config tay
+- test_connectivity(): Dung socks5h:// (DNS qua proxy) thay vi socks5://
+  → Fix loi "connection forcibly closed" khi test
+- Log them nha mang + vi tri tu API response (vd: [vnpt/ThaiNguyen1])
+- DA TEST THUC TE: Chrome Portable qua proxy → IP khac may ✓
+- File: modules/proxy_providers/proxyxoay_provider.py
+
 1.0.669
 2026-04-04 (VN)
 Fix: claim() treo vinh vien do Google Sheets API khong co timeout
