@@ -466,19 +466,25 @@ class ServerGUI(tk.Tk):
 
     def _get_px_keys(self):
         """Lay danh sach ProxyXoay API keys tu text box."""
-        text = self.px_keys_text.get("1.0", "end").strip()
-        return [line.strip() for line in text.split('\n') if line.strip()]
+        try:
+            text = self.px_keys_text.get("1.0", "end").strip()
+            return [line.strip() for line in text.split('\n') if line.strip()]
+        except Exception:
+            return []
 
     def _update_px_key_count(self):
         """Cap nhat so key hien thi."""
-        keys = self._get_px_keys()
-        chrome_count = self._get_chrome_count()
-        count_text = f"{len(keys)} key"
-        if chrome_count > 0 and len(keys) < chrome_count:
-            count_text += f" (CAN {chrome_count} cho {chrome_count} Chrome!)"
-            self.px_key_count_label.config(text=count_text, fg=RED)
-        else:
-            self.px_key_count_label.config(text=count_text, fg=GREEN)
+        try:
+            keys = self._get_px_keys()
+            chrome_count = self._get_chrome_count()
+            count_text = f"{len(keys)} key"
+            if chrome_count > 0 and len(keys) < chrome_count:
+                count_text += f" (CAN {chrome_count} cho {chrome_count} Chrome!)"
+                self.px_key_count_label.config(text=count_text, fg=RED)
+            else:
+                self.px_key_count_label.config(text=count_text, fg=GREEN)
+        except Exception:
+            pass
 
     def _test_proxyxoay(self):
         """Test ket noi ProxyXoay."""

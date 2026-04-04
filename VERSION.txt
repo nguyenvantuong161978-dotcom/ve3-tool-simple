@@ -1,3 +1,12 @@
+1.0.676
+2026-04-04 (VN)
+Fix: Server GUI crash khi Start - px_keys_text widget bi destroy
+- BUG: _get_proxy_config() LUON goi _get_px_keys() du mode khong phai ProxyXoay
+  → Neu widget bi destroy → TclError: invalid command name
+- FIX: Them try/except trong _get_px_keys() va _update_px_key_count()
+  → Tra ve [] neu widget khong con → khong crash
+- File: server/server_gui.py
+
 1.0.675
 2026-04-04 (VN)
 Debug: ProxyXoay log exit IP that (IP Google thay) sau setup va rotate
