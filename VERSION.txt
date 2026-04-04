@@ -1,3 +1,19 @@
+1.0.680
+2026-04-04 (VN)
+Fix: IPv6 Pool log khong hien thi trong GUI - _log_func khong duoc cap nhat
+- BUG: start_api_server() khi server DA CHAY → return True NGAY
+  → KHONG goi set_pool() → _log_func van la print() (console)
+  → GUI truyen self._log nhung KHONG BAO GIO duoc set
+  → Pool van hoat dong (available giam 121→120) nhung GUI khong thay log
+- BUG 2: ipv6_gui.py _auto_start_api() khi api_is_running() = True
+  → Return ngay, KHONG goi set_pool() va KHONG start auto_refresh
+  → GUI khong cap nhat stats/log tu API server
+- FIX 1: start_api_server() LUON goi set_pool() khi server da chay
+  → Cap nhat _log_func moi lan, ke ca khi server da ton tai
+- FIX 2: ipv6_gui.py goi set_pool() + start_auto_refresh khi server da chay
+  → GUI luon nhan log tu API server
+- Files: ipv6/ipv6_server.py, ipv6/ipv6_gui.py
+
 1.0.679
 2026-04-04 (VN)
 Fix: IPv6 mat mang sau 55s - DNS hardcode Google bi VNPT drop

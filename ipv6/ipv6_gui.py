@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ipv6.mikrotik_api import MikroTikAPI
 from ipv6.ipv6_pool import IPv6Pool
-from ipv6.ipv6_server import start_api_server, stop_api_server, is_running as api_is_running
+from ipv6.ipv6_server import start_api_server, stop_api_server, is_running as api_is_running, set_pool
 from ipv6 import create_pool
 
 CONFIG_FILE = Path(__file__).parent / "config_test.json"
@@ -267,7 +267,11 @@ class IPv6PoolGUI:
         if not self.connected or not self.pool:
             return
         if api_is_running():
+            # v1.0.680: Cap nhat log_func cho server dang chay
+            set_pool(self.pool, self._log)
             self._update_api_status(True)
+            self._start_auto_refresh()
+            self._log("API Server dang chay - da cap nhat log")
             return
 
         port = self.config.get("mikrotik", {}).get("api_port", 8765)

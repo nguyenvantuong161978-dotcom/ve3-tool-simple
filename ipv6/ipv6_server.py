@@ -376,6 +376,9 @@ def start_api_server(pool, host: str = "0.0.0.0", port: int = 8765, log_func=pri
     global _server, _server_thread
 
     if _server:
+        # v1.0.680: Luon cap nhat log_func khi server da chay
+        # Fix: truoc day log di ra print() thay vi GUI
+        set_pool(pool, log_func)
         log_func("[API] Server da chay roi!")
         return True
 
