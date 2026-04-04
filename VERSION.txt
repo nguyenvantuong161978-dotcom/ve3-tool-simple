@@ -1,3 +1,20 @@
+1.0.668
+2026-04-04 (VN)
+Fix: Excel Worker khong lay ma tu master - diagnostic logging + auto-detect path
+- VAN DE: Sau "Scanning for projects..." khong co log [QUEUE] nao
+  → master_projects path sai hoac khong ton tai → skip toan bo
+  → VM khong lay duoc ma moi du master co du lieu
+- FIX 1: Diagnostic logging truoc khi vao TaskQueue
+  → Log RO RANG ly do skip: path not set, path not accessible, ongoing project
+  → Neu path sai → list folders trong auto_path de debug
+- FIX 2: Auto-detect alternative master paths
+  → Thu "ve3-tool-simple/PROJECTS" va "PROJECTS" truc tiep
+  → Tu dong chuyen sang path dung neu tim thay
+- FIX 3: scan_available() log chi tiet
+  → Log moi project bi skip va ly do (no SRT, in visual, claimed)
+  → Log tong so dirs scanned va available
+- Files: run_excel_api.py, modules/robust_copy.py
+
 1.0.667
 2026-04-03 (VN)
 Fix: SMB mat ket noi sau VM restart - tu dong reconnect

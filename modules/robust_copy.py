@@ -739,17 +739,22 @@ class TaskQueue:
         """Scan tất cả projects chưa được claim."""
         available = []
         if not self.master_projects.exists():
+            self.log(f"[QUEUE] master_projects NOT exists: {self.master_projects}")
             return available
         try:
+            scanned = 0
             for item in self.master_projects.iterdir():
                 if not item.is_dir():
                     continue
+                scanned += 1
                 code = item.name
                 claimed_file = item / CLAIMED_FILE
                 srt_files = list(item.glob("*.srt"))
                 if not srt_files:
+                    self.log(f"[QUEUE] {code}: skip - no SRT files")
                     continue
                 if self._is_in_visual(code):
+                    self.log(f"[QUEUE] {code}: skip - already in visual")
                     continue
                 if claimed_file.exists():
                     # v1.0.429: Có _CLAIMED = skip, KHÔNG xóa bất kể thời gian
@@ -775,6 +780,7 @@ class TaskQueue:
                 if has_claiming:
                     continue
                 available.append(code)
+            self.log(f"[QUEUE] Scanned {scanned} dirs, {len(available)} available")
         except Exception as e:
             self.log(f"[QUEUE] Lỗi scan: {e}", "ERROR")
         return sorted(available)

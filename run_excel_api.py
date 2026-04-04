@@ -849,6 +849,32 @@ class ExcelAPIWorker:
 
         # v1.0.355: Dùng TaskQueue.claim_next() - claim atomic, tránh race condition
         # v1.0.361: Chỉ lấy mã mới khi KHÔNG có project đang chờ Chrome
+        # v1.0.668: Diagnostic logging
+        if not self.master_projects:
+            log(f"  [SCAN] Skip master: master_projects not set")
+        elif not safe_path_exists(self.master_projects):
+            log(f"  [SCAN] Skip master: path NOT accessible: {self.master_projects}")
+            # v1.0.668: Thu auto-detect lai master path
+            if self.auto_path and safe_path_exists(self.auto_path):
+                # Thu cac path pho bien
+                for sub in ["ve3-tool-simple/PROJECTS", "PROJECTS"]:
+                    alt = self.auto_path / sub
+                    if safe_path_exists(alt):
+                        log(f"  [SCAN] Found alternative: {alt}")
+                        self.master_projects = alt
+                        break
+                else:
+                    # List cac folder trong auto_path de debug
+                    try:
+                        items = [f.name for f in self.auto_path.iterdir() if f.is_dir()]
+                        log(f"  [SCAN] Folders in {self.auto_path}: {items[:10]}")
+                    except Exception as e:
+                        log(f"  [SCAN] Cannot list {self.auto_path}: {e}")
+        elif results:
+            log(f"  [SCAN] Skip master: local has {len(results)} projects to process")
+        elif has_ongoing_project:
+            log(f"  [SCAN] Skip master: has ongoing project waiting for Chrome")
+
         if self.master_projects and safe_path_exists(self.master_projects) and not results and not has_ongoing_project:
             try:
                 from modules.robust_copy import TaskQueue
