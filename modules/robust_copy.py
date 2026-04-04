@@ -834,27 +834,30 @@ class TaskQueue:
 
         try:
             # v1.0.669: Timeout + retry cho Google Sheet calls
+            # KHONG dung 'with' vi shutdown(wait=True) se doi thread treo xong
             import concurrent.futures
             account_str = ""
             topic_str = ""
             character_str = ""
 
             def _call_with_timeout_retry(func, args, timeout_s=15, max_retries=3, label=""):
-                """Goi func voi timeout va retry."""
+                """Goi func voi timeout va retry. KHONG block neu timeout."""
                 for attempt in range(max_retries):
+                    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                     try:
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                            fut = executor.submit(func, *args)
-                            result = fut.result(timeout=timeout_s)
-                            if attempt > 0:
-                                self.log(f"[QUEUE] {label} OK sau {attempt + 1} lan thu")
-                            return result
+                        fut = executor.submit(func, *args)
+                        result = fut.result(timeout=timeout_s)
+                        executor.shutdown(wait=False)
+                        if attempt > 0:
+                            self.log(f"[QUEUE] {label} OK sau {attempt + 1} lan thu")
+                        return result
                     except concurrent.futures.TimeoutError:
+                        executor.shutdown(wait=False)  # Bo thread treo, khong doi
                         self.log(f"[QUEUE] {label} timeout ({timeout_s}s) lan {attempt + 1}/{max_retries}", "WARN")
-                        # Reset cache de lan sau load lai
                         self._sheet_cache = None
                         self._thongtin_cache = None
                     except Exception as e:
+                        executor.shutdown(wait=False)
                         self.log(f"[QUEUE] {label} error lan {attempt + 1}: {e}", "WARN")
                         self._sheet_cache = None
                         self._thongtin_cache = None
