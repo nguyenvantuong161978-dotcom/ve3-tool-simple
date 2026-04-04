@@ -2063,6 +2063,11 @@ class SmartEngine:
                 generator.config['flow_project_id'] = cached_project_id
                 self.log(f"  -> Dùng project_id: {cached_project_id[:8]}... (từ cache)")
 
+            # v1.0.682: Mode small → skip video trong BrowserFlowGenerator
+            if getattr(self, '_skip_video', False):
+                generator.config['video_count'] = 0
+                self.log("[INFO] skip_video=True → video_count=0 (mode small)")
+
             # === TÁCH PROMPTS: REFERENCES TRƯỚC, SCENES SAU ===
             # Đảm bảo TẤT CẢ ảnh tham chiếu (nv/loc) được tạo TRƯỚC scenes
             ref_prompts = [p for p in prompts if p['id'].startswith('nv') or p['id'].startswith('loc')]
@@ -2460,6 +2465,10 @@ class SmartEngine:
             def custom_log(msg, level="info"):
                 self.log(msg, level.upper() if level else "INFO")
             generator._log = custom_log
+
+            # v1.0.682: Mode small → skip video trong BrowserFlowGenerator
+            if getattr(self, '_skip_video', False):
+                generator.config['video_count'] = 0
 
             # Truyen prompts da load san (tu _load_prompts) thay vi doc lai Excel
             # Su dung generate_from_prompts_auto de tu dong chon mode (chrome/api)

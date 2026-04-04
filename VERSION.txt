@@ -1,3 +1,16 @@
+1.0.682
+2026-04-04 (VN)
+Fix: Mode SMALL van tao video - BrowserFlowGenerator khong biet skip_video
+- BUG: smart_engine set _skip_video=True cho mode small
+  → Log "[MODE] IMAGE ONLY - Bo qua tao video" (DUNG)
+  → Nhung BrowserFlowGenerator doc video_count tu settings.yaml (KHONG check _skip_video)
+  → Sau khi tao xong anh → van chay "[I2V] TAO VIDEO TU ANH" → lang phi thoi gian
+- FIX: Truyen skip_video xuong BrowserFlowGenerator
+  → Set generator.config['video_count'] = 0 khi _skip_video=True
+  → Ca 2 mode (API va Browser) deu duoc fix
+  → Mode small chi tao anh, KHONG tao video
+- File: modules/smart_engine.py
+
 1.0.681
 2026-04-04 (VN)
 Fix: IPv6 Pool GUI - tu dong tat process cu con chay an khi mo lai
