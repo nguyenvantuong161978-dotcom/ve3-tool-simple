@@ -1,3 +1,15 @@
+1.0.671
+2026-04-04 (VN)
+Fix: Them ensure_proxy_alive(min_ttl=420) cho 5 video methods bi thieu
+- 5 methods goi truc tiep tu smart_engine, BYPASS generate_video()
+  → generate_video_chrome(), generate_video_force_mode()
+  → generate_video_t2v_mode(), generate_video_pure_t2v()
+  → generate_video_modify_mode()
+- Khong co TTL check → proxy die giua luc tao video → mat 6 phut cho timeout
+- FIX: Them TTL check (min 420s = 7 phut) truoc retry loop
+  → Proxy TTL thap → rotate truoc → video tao tren proxy moi
+- File: modules/drission_flow_api.py
+
 1.0.670
 2026-04-04 (VN)
 Fix: ProxyXoay - auto-whitelist IP + socks5h + log nha mang

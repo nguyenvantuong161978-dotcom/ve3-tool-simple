@@ -6767,6 +6767,13 @@ class DrissionFlowAPI:
         if not media_id:
             return False, None, "Media ID không được để trống"
 
+        # v1.0.671: TTL check truoc khi tao video (can nhieu thoi gian hon anh)
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=420)  # 7 phut cho video
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
+
         last_error = None
 
         for attempt in range(max_retries):
@@ -7223,6 +7230,13 @@ class DrissionFlowAPI:
         if not media_id:
             return False, None, "Media ID không được để trống"
 
+        # v1.0.671: TTL check truoc khi tao video (can nhieu thoi gian hon anh)
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=420)  # 7 phut cho video
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
+
         last_error = None
 
         for attempt in range(max_retries):
@@ -7584,6 +7598,13 @@ class DrissionFlowAPI:
 
         if not media_id:
             return False, None, "Media ID không được để trống"
+
+        # v1.0.671: TTL check truoc khi tao video (can nhieu thoi gian hon anh)
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=420)  # 7 phut cho video
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
 
         last_error = None
 
@@ -8174,6 +8195,13 @@ class DrissionFlowAPI:
         if not self._ready:
             return False, None, "API chưa setup! Gọi setup() trước."
 
+        # v1.0.671: TTL check truoc khi tao video (can nhieu thoi gian hon anh)
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=420)  # 7 phut cho video
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
+
         last_error = None
 
         for attempt in range(max_retries):
@@ -8374,6 +8402,13 @@ class DrissionFlowAPI:
 
         if not media_id:
             return False, None, "Media ID không được để trống"
+
+        # v1.0.671: TTL check truoc khi tao video (can nhieu thoi gian hon anh)
+        if self._proxy_provider:
+            try:
+                self._proxy_provider.ensure_proxy_alive(min_ttl=420)  # 7 phut cho video
+            except Exception as e:
+                self.log(f"[PROXY-TTL] TTL check error: {e}", "WARN")
 
         last_error = None
 
