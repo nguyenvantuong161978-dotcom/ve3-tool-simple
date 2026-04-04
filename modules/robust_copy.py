@@ -833,31 +833,41 @@ class TaskQueue:
             return False
 
         try:
-            # v1.0.668: Timeout cho Google Sheet calls (tranh treo vinh vien)
+            # v1.0.669: Timeout + retry cho Google Sheet calls
             import concurrent.futures
             account_str = ""
             topic_str = ""
             character_str = ""
+
+            def _call_with_timeout_retry(func, args, timeout_s=15, max_retries=3, label=""):
+                """Goi func voi timeout va retry."""
+                for attempt in range(max_retries):
+                    try:
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                            fut = executor.submit(func, *args)
+                            result = fut.result(timeout=timeout_s)
+                            if attempt > 0:
+                                self.log(f"[QUEUE] {label} OK sau {attempt + 1} lan thu")
+                            return result
+                    except concurrent.futures.TimeoutError:
+                        self.log(f"[QUEUE] {label} timeout ({timeout_s}s) lan {attempt + 1}/{max_retries}", "WARN")
+                        # Reset cache de lan sau load lai
+                        self._sheet_cache = None
+                        self._thongtin_cache = None
+                    except Exception as e:
+                        self.log(f"[QUEUE] {label} error lan {attempt + 1}: {e}", "WARN")
+                        self._sheet_cache = None
+                        self._thongtin_cache = None
+                return ""
+
             try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    self.log(f"[QUEUE] {code}: loading account/topic from Google Sheet...")
-                    fut_acc = executor.submit(self._get_account_from_sheet, code)
-                    try:
-                        account_str = fut_acc.result(timeout=15)
-                    except concurrent.futures.TimeoutError:
-                        self.log(f"[QUEUE] {code}: Google Sheet timeout (15s) - skip account", "WARN")
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    fut_topic = executor.submit(self._get_topic_from_sheet, code)
-                    try:
-                        topic_str = fut_topic.result(timeout=10)
-                    except concurrent.futures.TimeoutError:
-                        self.log(f"[QUEUE] {code}: Google Sheet topic timeout - skip", "WARN")
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    fut_char = executor.submit(self._get_character_from_sheet, code)
-                    try:
-                        character_str = fut_char.result(timeout=10)
-                    except concurrent.futures.TimeoutError:
-                        self.log(f"[QUEUE] {code}: Google Sheet character timeout - skip", "WARN")
+                self.log(f"[QUEUE] {code}: loading account/topic from Google Sheet...")
+                account_str = _call_with_timeout_retry(
+                    self._get_account_from_sheet, (code,), timeout_s=15, label=f"{code} account")
+                topic_str = _call_with_timeout_retry(
+                    self._get_topic_from_sheet, (code,), timeout_s=10, label=f"{code} topic")
+                character_str = _call_with_timeout_retry(
+                    self._get_character_from_sheet, (code,), timeout_s=10, label=f"{code} character")
             except Exception as e:
                 self.log(f"[QUEUE] {code}: Google Sheet error: {e} - claim without metadata", "WARN")
             claim_content = self._make_claim_content(account=account_str, topic=topic_str, character=character_str)
