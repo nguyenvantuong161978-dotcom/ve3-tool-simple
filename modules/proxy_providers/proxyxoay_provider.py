@@ -119,6 +119,8 @@ class ProxyXoayProvider(ProxyProvider):
             ok = self._fetch_proxy()
             if ok:
                 self._ready = True
+                # v1.0.675: Log exit IP khi setup lan dau
+                self._log_exit_ip()
                 return True
 
             # Check cooldown
@@ -147,6 +149,8 @@ class ProxyXoayProvider(ProxyProvider):
             ok = self._fetch_proxy()
             if ok:
                 self.log(f"[PROXY-PX] [v] Proxy moi: {self._current_ip}:{self._current_port}")
+                # v1.0.675: Log exit IP that (IP ma Google thay) de debug 403
+                self._log_exit_ip()
                 return True
 
             # Parse cooldown tu error message (vd: "Con 59s moi co the doi proxy")
@@ -190,6 +194,21 @@ class ProxyXoayProvider(ProxyProvider):
         if self._proxy_expire_time > 0:
             return max(0, int(self._proxy_expire_time - time.time()))
         return 0
+
+    def _log_exit_ip(self):
+        """v1.0.675: Log exit IP that (IP ma Google thay) qua httpbin."""
+        try:
+            if self.proxy_type == 'socks5':
+                proxy_url = f"socks5h://{self._current_ip}:{self._current_port}"
+            else:
+                proxy_url = f"http://{self._current_ip}:{self._current_port}"
+            proxies = {"http": proxy_url, "https": proxy_url}
+            resp = requests.get("https://httpbin.org/ip", proxies=proxies, timeout=10)
+            if resp.status_code == 200:
+                exit_ip = resp.json().get('origin', 'unknown')
+                self.log(f"[PROXY-PX] Exit IP (Google thay): {exit_ip}")
+        except Exception as e:
+            self.log(f"[PROXY-PX] Khong check duoc exit IP: {e}")
 
     def stop(self):
         """Khong can cleanup gi (khong co local bridge)."""

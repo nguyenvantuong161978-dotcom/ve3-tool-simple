@@ -1,3 +1,13 @@
+1.0.675
+2026-04-04 (VN)
+Debug: ProxyXoay log exit IP that (IP Google thay) sau setup va rotate
+- Proxy server endpoint co dinh (160.250.166.13:11622)
+- Exit IP (IP Google thay) thay doi moi lan rotate nhung KHONG duoc log
+- Them _log_exit_ip(): Goi httpbin.org/ip qua proxy de lay exit IP that
+- Log khi setup lan dau + sau moi lan rotate
+- Giup debug 403: biet IP co thay doi that su hay khong
+- File: modules/proxy_providers/proxyxoay_provider.py
+
 1.0.674
 2026-04-04 (VN)
 Fix: Mode SMALL project xong 100% anh nhung KHONG copy ve master
