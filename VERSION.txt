@@ -1,3 +1,16 @@
+1.0.679
+2026-04-04 (VN)
+Fix: IPv6 mat mang sau 55s - DNS hardcode Google bi VNPT drop
+- BUG: _add_to_interface() va set_ipv6() hardcode DNS = Google (2001:4860:4860::8888)
+  → VNPT drop/throttle UDP IPv6 toi Google DNS
+  → DNS cache het han (~55s) → moi DNS query timeout 60s
+  → Chrome khong resolve duoc domain → "IPv6 connect failed" lien tuc
+  → Test Internet luc setup pass vi DNS cache con → that bai sau do
+- FIX: Dung MikroTik gateway (::1) lam DNS primary
+  → Gateway co allow-remote-requests=true → relay DNS qua ISP → instant
+  → Google DNS xuong index=2 (fallback) thay vi primary
+- Files: modules/proxy_providers/ipv6_provider.py, modules/ipv6_rotator.py
+
 1.0.678
 2026-04-04 (VN)
 Fix: v1.0.677 doi route cho CA initial setup (sai) - chi doi khi rotation

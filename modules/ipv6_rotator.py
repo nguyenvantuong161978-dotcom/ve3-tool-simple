@@ -755,11 +755,14 @@ class IPv6Rotator:
                 except Exception as e:
                     self.log(f"[IPv6] [WARN] Route verify error: {e}")
 
-                # Bước 5: v1.0.375 - Set DNS IPv6 (Google Public DNS)
-                # Chạy RIÊNG với timeout dài hơn, fail thì chỉ warn (không fail IPv6)
+                # Bước 5: v1.0.375 - Set DNS IPv6
+                # v1.0.679: Dung gateway lam DNS primary (MikroTik allow-remote-requests=true)
+                # VNPT drop/throttle UDP IPv6 toi Google DNS → timeout 60s
+                # Gateway relay qua ISP DNS → instant. Google DNS lam fallback.
+                dns_primary = new_gateway if new_gateway else '2001:4860:4860::8888'
                 dns_commands = [
-                    f'netsh interface ipv6 set dnsservers "{self.interface_name}" static 2001:4860:4860::8888 primary',
-                    f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8844 index=2',
+                    f'netsh interface ipv6 set dnsservers "{self.interface_name}" static {dns_primary} primary',
+                    f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8888 index=2',
                 ]
                 for dns_cmd in dns_commands:
                     try:
@@ -773,9 +776,11 @@ class IPv6Rotator:
                     self.log("[IPv6] [x] Failed to get admin privileges")
                     return False
                 # DNS riêng (non-fatal)
+                # v1.0.679: Gateway lam DNS primary
+                dns_primary = new_gateway if new_gateway else '2001:4860:4860::8888'
                 dns_commands = [
-                    f'netsh interface ipv6 set dnsservers "{self.interface_name}" static 2001:4860:4860::8888 primary',
-                    f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8844 index=2',
+                    f'netsh interface ipv6 set dnsservers "{self.interface_name}" static {dns_primary} primary',
+                    f'netsh interface ipv6 add dnsservers "{self.interface_name}" 2001:4860:4860::8888 index=2',
                 ]
                 _run_netsh_admin(dns_commands, self.log)  # Best-effort
 

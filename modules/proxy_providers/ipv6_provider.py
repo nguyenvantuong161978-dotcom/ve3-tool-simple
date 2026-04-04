@@ -500,9 +500,13 @@ class IPv6Provider(ProxyProvider):
             self.log(f"[PROXY-IPv6] [!] Gateway ping timeout")
 
         # Step 7: DNS (non-fatal - chay rieng, timeout rieng)
+        # v1.0.679: Dung MikroTik gateway lam DNS primary (allow-remote-requests=true)
+        # VNPT drop/throttle UDP IPv6 toi Google DNS → DNS timeout 60s → mat mang
+        # Gateway ::1 relay qua ISP DNS noi bo → instant
+        # Google DNS lam fallback (index=2) phong khi gateway khong co DNS relay
         for dns_cmd in [
-            f'netsh interface ipv6 set dnsservers "{iface}" static 2001:4860:4860::8888 primary',
-            f'netsh interface ipv6 add dnsservers "{iface}" 2001:4860:4860::8844 index=2',
+            f'netsh interface ipv6 set dnsservers "{iface}" static {gateway} primary',
+            f'netsh interface ipv6 add dnsservers "{iface}" 2001:4860:4860::8888 index=2',
         ]:
             try:
                 subprocess.run(dns_cmd, shell=True, capture_output=True, timeout=15)
