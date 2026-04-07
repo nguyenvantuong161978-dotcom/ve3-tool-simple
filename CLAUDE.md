@@ -227,9 +227,30 @@ Layer 5: Account Switch
   → Last resort
 ```
 
+**Browser Cleanup JS** (`drission_flow_api.py`):
+```javascript
+localStorage.clear(); sessionStorage.clear();
+indexedDB.databases().then(dbs => dbs.forEach(db => indexedDB.deleteDatabase(db.name)));
+document.cookie.split(";").forEach(c => document.cookie = c.replace(/=.*/, "=;expires=..."));
+caches.keys().then(names => names.forEach(name => caches.delete(name)));
+navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+```
+→ Chạy NGAY sau 403 + sau mỗi ảnh thành công (v1.0.196-198)
+→ Lý do: Google dùng localStorage/IndexedDB để track browser, đổi IP không đủ
+
+**Fingerprint sync** (`google_login.py` ↔ `drission_flow_api.py`):
+- Login: generate seed → save `config/.fingerprint_seed_{worker_id}` → CDP inject
+- DrissionFlowAPI: read seed → inject CÙNG fingerprint → Google thấy nhất quán
+- 403 recovery: new seed → save → login lại dùng seed mới
+
+**Chrome Model Index**: `0=Nano Banana Pro`, `1=Nano Banana 2`, `2=Imagen 4`
+- 5 total 403 → switch chrome_model_index++ → restart workers
+
 **Chrome Data Clearing**: Xóa `ChromePortable/Data/profile/*` NGOẠI TRỪ `First Run` file.
 
 **403 Tracker**: `config/.403_tracker.json` - đếm 403 mỗi worker.
+
+**Bug quan trọng đã fix** (v1.0.195): `setup()` luôn reset `_consecutive_403 = 0` → counter không bao giờ đạt threshold. Fix: thêm `skip_403_reset` parameter.
 
 ---
 
@@ -276,20 +297,62 @@ ipv6_pool.py (port 8765) ←→ ipv6_pool_provider.py (client)
 
 ---
 
-## Server Mode (Distributed)
+## Server Mode (Distributed) - Chi tiết
 
 ```
-Server Machine (server/)
-  ├── server_gui.py      → GUI config, start server
-  ├── app.py             → Flask API: /api/fix/create-image-veo3, /api/fix/task-status
-  ├── chrome_pool.py     → Pool Chrome instances + proxy providers
-  └── chrome_session.py  → Login + fingerprint sync
+┌─────────────────────────────────────────────────────┐
+│ Server Machine (1 process duy nhất)                  │
+│                                                       │
+│  server/app.py (Flask port 5000)                     │
+│    ├── Web Dashboard: GET /                           │
+│    ├── API: POST /api/fix/create-image-veo3          │
+│    ├── API: GET  /api/fix/task-status?taskId=xxx     │
+│    ├── API: GET  /api/status                          │
+│    ├── API: GET  /api/workers                         │
+│    └── API: GET  /api/queue                           │
+│                                                       │
+│  chrome_pool.py (N Chrome workers, mỗi worker 1 thread)
+│    ├── Chrome 0: GoogleChromePortable/        (port 19222)
+│    ├── Chrome 1: GoogleChromePortable - Copy/ (port 19223)
+│    ├── Chrome 2: GoogleChromePortable - Copy (2)/ (19224)
+│    ├── Chrome 3: GoogleChromePortable - Copy (3)/ (19225)
+│    └── Chrome 4: GoogleChromePortable - Copy (4)/ (19226)
+│                                                       │
+│  Mỗi Chrome instance:                                │
+│    - 1 Google account riêng (từ Google Sheet "SERVER" col B)
+│    - 1 IPv6/proxy riêng (từ Sheet col C)             │
+│    - 1 debug port riêng                               │
+│    - 1 queue worker thread                            │
+│    - Task queue: FIFO, worker rảnh lấy task tiếp     │
+└─────────────────────────────────────────────────────┘
 
-VM Machines (clients)
-  └── smart_engine.py    → POST prompts → server → poll status → download result
+┌─────────────────────────────────────────────────────┐
+│ VM Machines (clients)                                │
+│                                                       │
+│  smart_engine.py (generation_mode: api)              │
+│    → POST prompt + references → server               │
+│    → Poll GET /api/fix/task-status?taskId=xxx        │
+│    → Download ảnh kết quả                             │
+│                                                       │
+│  Multi-server load balancing (server_pool.py):       │
+│    → Chọn server ít việc nhất (least-queue)           │
+│    → Config: local_server_list trong settings.yaml   │
+└─────────────────────────────────────────────────────┘
+```
+
+**Account format** (Google Sheet "SERVER" worksheet):
+```
+Col B: email@gmail.com|password|totp_secret
+Col C: 2001:db8::1 (IPv6 address, optional)
 ```
 
 **Login trên server**: `chrome_session.py` login cùng port + cùng proxy với worker (v1.0.653). Fingerprint đồng bộ qua seed file (v1.0.650).
+
+**Khởi động server**:
+```bash
+python server/server_gui.py   # GUI mode (config proxy, Chrome count, start)
+python server/app.py           # Direct Flask (no GUI)
+```
 
 ---
 
@@ -301,6 +364,114 @@ VM ←→ Master qua SMB (Z:\AUTO hoặc \\IP\AUTO)
   → Thu 3 IP máy chủ (88.254, 88.14, 88.100)
   → cmdkey lưu credential → Windows không hỏi lại
   → Project xong → copy img/ + Excel + thumb/ về AUTO/visual/{code}/
+```
+
+**Config** (`settings.yaml`):
+```yaml
+smb:
+  servers:
+    - ip: "192.168.88.254"
+      share: "D"
+      username: "smbuser"
+      password: "..."
+```
+
+---
+
+## Distributed Task Queue (Multi-VM)
+
+Nhiều VM cùng lấy project từ master → cần tránh trùng lặp.
+
+```
+modules/robust_copy.py → TaskQueue class
+
+Master (Z:\AUTO):
+  ├── KA2-0001/KA2-0001.srt        (available → VM1 claim)
+  ├── KA2-0002_status.json          (claimed by VM2, skip)
+  └── visual/KA2-0003/              (completed, skip)
+
+Flow:
+  VM1: queue.claim("KA2-0001") → tạo status.json → exclusive lock
+  VM2: scan → thấy status.json → skip
+  VM1: done → copy kết quả → release
+```
+
+**Google Sheets claim** (cho accounts):
+- `_call_with_timeout_retry()`: timeout 15s × 3 retries
+- Claim account/topic/character từ Google Sheet
+- Race condition safe giữa nhiều VM
+
+---
+
+## Config chính (`config/settings.yaml`) - Key Fields
+
+```yaml
+# === GENERATION MODE ===
+generation_mode: api          # api | browser | chrome
+# api: Gửi qua server (local_server_url)
+# browser: DrissionPage automation
+# chrome: Chrome trực tiếp (không API)
+
+# === EXCEL MODE ===
+excel_mode: full              # full | basic
+topic: finance_history        # story | psychology | finance_history | finance_history_vn
+
+# === VIDEO ===
+video_mode: small             # full | small | basic
+video_count: full             # Số video/scene
+video_model: fast             # fast | standard
+video_generation_mode: t2v    # t2v (text-to-video) | i2v (image-to-video)
+
+# === CHROME MODELS ===
+chrome_model_index: 0         # 0=Nano Banana Pro, 1=Nano Banana 2, 2=Imagen 4
+
+# === CHROME PATHS ===
+chrome_portable: ./GoogleChromePortable/GoogleChromePortable.exe
+chrome_portable_2: ./GoogleChromePortable - Copy/GoogleChromePortable.exe
+
+# === API KEYS ===
+deepseek_api_key: sk-xxx      # DeepSeek API cho Excel Worker
+deepseek_api_keys: [sk-xxx]   # Multiple keys
+gemini_api_keys: ['']          # Gemini fallback
+
+# === SERVER MODE ===
+local_server_enabled: false
+local_server_url: ''           # Single server (backward compat)
+local_server_list: []          # Multi-server load balancing
+# Vd: [{url: 'http://192.168.88.146:5000', name: 'Server-1', enabled: true}]
+
+# === PROXY ===
+proxy_provider:
+  type: proxyxoay              # none | ipv6 | ipv6_pool | webshare | proxyxoay
+  proxyxoay:
+    api_keys: ["key1"]         # Mỗi worker 1 key
+    proxy_type: socks5          # socks5 | http
+
+# === IPv6 ===
+ipv6_rotation:
+  enabled: false
+  interface_name: Ethernet
+  prefix_length: 56
+  max_403_before_rotate: 3
+
+# === IPv6 POOL ===
+mikrotik:
+  pool_api_url: ''             # Khi có → dùng Pool thay vì ipv6.txt
+  pool_api_timeout: 5
+  worker_name: vm1
+
+# === TIMEOUTS ===
+browser_generate_timeout: 120  # Timeout tạo ảnh (giây)
+browser_login_timeout: 120     # Timeout login Google
+retry_count: 3
+max_parallel_api: 10           # Parallel API calls cho Steps 6-7
+
+# === SCENE DURATION ===
+min_scene_duration: 4
+max_scene_duration: 8          # 8s rule cho full mode
+
+# === DISTRIBUTED ===
+distributed_mode: true         # Bật multi-VM mode
 ```
 
 ---
@@ -338,7 +509,11 @@ git push official main            # Push lên repo chính thức
 2. **Google Login**: Chrome PHẢI đăng nhập Google trước khi tạo ảnh
    - `google_login.py` xử lý login + OTP 2FA
    - Verify login qua myaccount.google.com
-   - Retry 2 lần mỗi Chrome, cả 2 fail → DỪNG
+   - Chrome 1: Retry 10 lần, PHẢI thành công (v1.0.659)
+   - Chrome 2: Retry 2 lần, fail thì bỏ qua (Chrome 1 vẫn chạy)
+   - Smart wait: Loop 1s/lần đợi URL thay đổi (không sleep cố định) (v1.0.657)
+   - Mạng IPv6 chậm: max wait 60s cho Google redirect (v1.0.659)
+   - Fingerprint inject TRƯỚC khi navigate (v1.0.650)
 
 3. **IPv6 DNS**: Dùng MikroTik gateway `::1` làm DNS primary (v1.0.679)
    - Google DNS `2001:4860:4860::8888` chỉ là fallback
@@ -354,6 +529,20 @@ git push official main            # Push lên repo chính thức
 7. **Project Priority**: Project gần xong (completion % cao) → làm trước (v1.0.83)
 
 8. **Auto-copy**: Project done → tự copy về master + tạo thumbnail (v1.0.34-35)
+
+9. **EARLY CHECK** (v1.0.82): Kiểm tra step_7 status == "COMPLETED" (không check scenes exist)
+   - Nếu COMPLETED → skip Excel worker, chỉ chạy Chrome workers
+   - Nếu chưa COMPLETED → chạy tiếp từ step đang dở
+   - Bug cũ v1.0.79: Check "if scenes exist" → SAI vì scenes có thể chưa đủ
+
+10. **Server Chrome**: 5 Chrome Portable folders (không phải 2 như VM mode)
+    - `GoogleChromePortable/`, `- Copy/`, `- Copy (2)/`, `- Copy (3)/`, `- Copy (4)/`
+    - Ports: 19222, 19223, 19224, 19225, 19226
+    - Mỗi Chrome: 1 account + 1 IPv6 riêng (từ Google Sheet "SERVER")
+
+11. **Proxy chuyển đổi**: Khi chuyển IPv6 → ProxyXoay (IPv4)
+    - PHẢI xóa firewall rules block IPv4 (`_unblock_ipv4_for_chrome_static()`)
+    - Nếu không: Chrome load trang nhưng không render (v1.0.662)
 
 ---
 
