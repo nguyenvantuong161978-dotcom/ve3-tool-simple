@@ -3,827 +3,388 @@
 ## Tổng quan
 **Phần mềm tạo video YouTube tự động** sử dụng Veo3 Flow (labs.google/fx).
 
-### Mục đích
-- Tool này chạy trên **MÁY ẢO (VM)**
-- Các VM tạo: Excel (kịch bản) → Ảnh → Video → Visual
-- Sau đó chuyển kết quả về **MÁY CHỦ (Master)**
-
-### Workflow hoàn chỉnh
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         MÁY CHỦ (Master)                                │
-│  - Chứa file SRT gốc (phụ đề video)                                     │
-│  - Nhận kết quả cuối cùng (ảnh + video)                                 │
-└───────────────────────────────┬─────────────────────────────────────────┘
-                                │ (1) Lấy SRT
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    MÁY ẢO (VM) - Tool này                               │
-│                                                                         │
-│   ┌─────────────────────────────────────────────────────────────────┐   │
-│   │              VM_MANAGER_GUI.PY (Entry Point)                     │   │
-│   │                   - GUI chính (Tkinter)                          │   │
-│   │                   - Điều phối tất cả workers                     │   │
-│   │                   - TẤT CẢ XOAY QUANH NÓ                         │   │
-│   └─────────────────────────────────────────────────────────────────┘   │
-│                                │                                         │
-│         ┌──────────────────────┼──────────────────────┐                 │
-│         ▼                      ▼                      ▼                 │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐              │
-│   │ Excel Worker │    │Chrome Worker1│    │Chrome Worker2│              │
-│   │  (Python)    │    │   (Python)   │    │   (Python)   │              │
-│   │              │    │              │    │              │              │
-│   │ SRT → Excel  │    │ Excel → Ảnh  │    │ Excel → Ảnh  │              │
-│   │ (API AI)     │    │ (Google Flow)│    │ (Google Flow)│              │
-│   └──────────────┘    └──────────────┘    └──────────────┘              │
-│                                                                         │
-│   (2) Bước 1: SRT → Excel (7 steps qua API DeepSeek/Gemini)            │
-│       - Phân tích story → Tạo segments → Characters → Locations         │
-│       - Director plan → Scene planning → Scene prompts                  │
-│                                                                         │
-│   (3) Bước 2: Excel → Ảnh + Video (Chrome automation với Google Flow)   │
-│       - Chrome 1: Tạo ảnh scenes chẵn (2,4,6...) + reference images     │
-│       - Chrome 2: Tạo ảnh scenes lẻ (1,3,5...)                          │
-│       - Song song để tối ưu tốc độ                                      │
-│                                                                         │
-└───────────────────────────────┬─────────────────────────────────────────┘
-                                │ (4) Trả kết quả
-                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         MÁY CHỦ (Master)                                │
-│  - Nhận ảnh (img/*.png)                                                 │
-│  - Nhận video (nếu có)                                                  │
-│  - Tiếp tục xử lý (compose video, upload YouTube...)                    │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 2 Chức năng chính
-1. **PY Đạo Diễn (Excel Worker)**: Tạo Excel kịch bản từ SRT - phân tích story, tạo segments, characters, locations, director plan, scene prompts
-2. **Flow Image/Video (Chrome Workers)**: Tạo ảnh và video từ prompts bằng Google Veo3 Flow
-
 - **Owner**: nguyenvantuong161978-dotcom
-- **Repo chính thức**: https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple
+- **Repo**: https://github.com/nguyenvantuong161978-dotcom/ve3-tool-simple
+- Tool chạy trên **MÁY ẢO (VM)**, tạo Excel → Ảnh → Video → copy về **MÁY CHỦ (Master)**
 
-## Kiến trúc chính
+## Workflow tổng quan
+
+```
+MÁY CHỦ (Master - Z:\AUTO)
+  │ (1) Chứa SRT gốc trong AUTO/{code}/
+  ▼
+MÁY ẢO (VM) - Tool này
+  ├── Excel Worker: SRT → Excel (7 steps qua API DeepSeek/Gemini)
+  ├── Chrome Worker 1: Excel → Ảnh scenes chẵn + Reference images (nv/loc)
+  └── Chrome Worker 2: Excel → Ảnh scenes lẻ
+  │ (2) Copy kết quả về master
+  ▼
+MÁY CHỦ (Master)
+  └── AUTO/visual/{code}/ (Excel + img/ + nv/ + thumb/)
+```
+
+## 2 Chức năng chính
+
+1. **PY Đạo Diễn (Excel Worker)**: SRT → Excel kịch bản (7 bước API)
+2. **Flow Image/Video (Chrome Workers)**: Prompts → Ảnh/Video qua Google Veo3 Flow
+
+## Chế độ chạy (Video Modes)
+
+| Mode | Mô tả |
+|------|--------|
+| `full` | Tạo tất cả scenes + videos |
+| `small` | Chỉ tạo ảnh, KHÔNG tạo video |
+| `basic` | Tối thiểu - ít scenes hơn |
+
+---
+
+## Kiến trúc file
 
 ### Entry Points
-- `vm_manager_gui.py` - GUI chính (Tkinter), quản lý workers
-- `vm_manager.py` - Logic điều phối workers (VMManager class)
-- `START.py` / `START.bat` - Khởi động tool
+| File | Mô tả |
+|------|--------|
+| `vm_manager_gui.py` | GUI chính (Tkinter), điều phối workers |
+| `vm_manager.py` | VMManager class - logic điều phối |
+| `START.py` / `START.bat` | Khởi động tool |
+| `run_excel_api.py` | Excel Worker - SRT → Excel (7 bước API), chạy `--loop` continuous |
+| `_run_chrome1.py` | Chrome Worker 1 - scenes chẵn + references |
+| `_run_chrome2.py` | Chrome Worker 2 - scenes lẻ |
+| `google_login.py` | Đăng nhập Gmail cho Chrome workers |
+| `_pre_login.py` | Pre-login setup |
+| `run_worker.py` | Worker runner |
 
-### Workers (chạy song song)
-- **Excel Worker** (`run_excel_api.py`): Tạo Excel từ SRT (7 bước: story → segments → characters → locations → director_plan → scene_planning → prompts)
-- **Chrome Worker 1** (`_run_chrome1.py`): Tạo ảnh scenes chẵn (2,4,6...) + reference images (nv/loc)
-- **Chrome Worker 2** (`_run_chrome2.py`): Tạo ảnh scenes lẻ (1,3,5...)
+### Modules chính (`modules/`)
 
----
+| File | Mô tả |
+|------|--------|
+| `smart_engine.py` | **Engine chính** - điều phối tạo ảnh/video, quản lý references, retry logic |
+| `drission_flow_api.py` | **DrissionPage API** - browser automation cho Google Flow, fingerprint spoof, proxy, 403 recovery |
+| `browser_flow_generator.py` | Browser automation - submit prompts, poll results, download images |
+| `progressive_prompts.py` | **7-step pipeline** SRT → Excel (story → segments → chars → locs → director → planning → prompts) |
+| `excel_manager.py` | PromptWorkbook class - đọc/ghi Excel (characters, locations, scenes sheets) |
+| `ai_providers.py` | API calls DeepSeek/Gemini với retry logic |
+| `google_flow_api.py` | Google Flow API (REST mode, không dùng browser) |
+| `server_pool.py` | Load balancing nhiều server |
+| `chrome_manager.py` | Quản lý Chrome processes, kill by port/folder, clear data |
+| `fingerprint_data.py` | Browser fingerprint data cho anti-detection |
+| `chrome_token_extractor.py` | Extract auth token từ Chrome |
+| `auto_token.py` | Auto-refresh token |
+| `ipv6_manager.py` | Quản lý IPv6 rotation (legacy) |
+| `ipv6_rotator.py` | IPv6 rotation logic |
+| `ipv6_proxy.py` | IPv6 proxy setup |
+| `ipv6_pool_client.py` | Client cho IPv6 Pool HTTP API |
+| `agent_protocol.py` | Workers giao tiếp qua `.agent/status/*.json` |
+| `robust_copy.py` | Copy project master↔VM, SMB reconnect, claim accounts |
+| `shared_403_tracker.py` | Track 403 errors across workers |
+| `reference_validator.py` | Validate reference images |
+| `ken_burns.py` | Ken Burns effect cho video |
+| `process_killer.py` | Kill processes |
+| `settings_sync.py` | Sync settings |
+| `central_logger.py` | Centralized logging |
+| `utils.py` | Utilities |
+| `voice_to_srt.py` | Voice → SRT conversion |
+| `flow_image_generator.py` | Flow image generation |
+| `parallel_flow_generator.py` | Parallel image generation |
+| `prompts_generator.py` | Prompt generation |
+| `prompts_loader.py` | Load prompts |
 
-## 3 FILE PYTHON CHÍNH
+### Proxy Providers (`modules/proxy_providers/`)
 
-### 1. `run_excel_api.py` - Excel Worker (PY Đạo Diễn)
+Hệ thống proxy pluggable - mỗi provider kế thừa `ProxyProvider` ABC.
 
-**Mục đích**: Chuyển đổi file SRT (phụ đề) thành Excel kịch bản hoàn chỉnh qua 7 bước API.
+| File | Mô tả |
+|------|--------|
+| `base_provider.py` | Abstract base - interface: `get_ip()`, `rotate()`, `has_ttl()`, `get_ttl()`, `ensure_proxy_alive()` |
+| `ipv6_provider.py` | IPv6 trực tiếp qua MikroTik router (cần ipv6_list.txt) |
+| `ipv6_pool_provider.py` | IPv6 Pool HTTP API (port 8765) - quản lý pool IPv6 tập trung |
+| `webshare_provider.py` | Webshare.io proxy service |
+| `proxyxoay_provider.py` | ProxyXoay.shop - proxy xoay Việt Nam (SOCKS5/HTTP), mỗi worker 1 API key |
+| `__init__.py` | Factory - chọn provider theo config (`ipv6`/`ipv6_pool`/`webshare`/`proxyxoay`) |
 
-**Input**: `PROJECTS/{code}/{code}.srt`
-**Output**: `PROJECTS/{code}/{code}_prompts.xlsx`
+**TTL-aware proxy** (v1.0.663): Providers có TTL (ProxyXoay) tự rotate khi TTL thấp. `drission_flow_api.py` gọi `ensure_proxy_alive(min_ttl)` trước khi tạo ảnh (120s) hoặc video (420s).
 
-**7 Bước xử lý**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ STEP 1: Story Analysis                                                  │
-│   - Đọc toàn bộ SRT                                                     │
-│   - API phân tích: thể loại, mood, style, tổng quan câu chuyện          │
-│   - Output: story_analysis sheet trong Excel                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│ STEP 2: Segments (Phân đoạn)                                            │
-│   - Chia SRT thành các đoạn logic (mỗi đoạn ~5-15 SRT entries)          │
-│   - VALIDATION 1: Check ratio SRT/images, split nếu quá lớn             │
-│   - VALIDATION 2: Check coverage, call API bổ sung nếu thiếu            │
-│   - Output: segments sheet (segment_id, name, srt_range, image_count)   │
-├─────────────────────────────────────────────────────────────────────────┤
-│ STEP 3: Characters (Nhân vật)                                           │
-│   - API phân tích các nhân vật xuất hiện trong story                    │
-│   - Output: characters sheet (id, name, description, appearance)        │
-├─────────────────────────────────────────────────────────────────────────┤
-│ STEP 4: Locations (Địa điểm)                                            │
-│   - API phân tích các địa điểm/bối cảnh                                 │
-│   - Output: locations sheet (id, name, description, atmosphere)         │
-├─────────────────────────────────────────────────────────────────────────┤
-│ STEP 5: Director Plan (Kế hoạch đạo diễn)                               │
-│   - Tạo danh sách scenes cho từng segment                               │
-│   - Mỗi scene: visual_moment, srt_start, srt_end, duration              │
-│   - GAP-FILL: Đảm bảo 100% SRT coverage                                 │
-│   - Output: director_plan sheet                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│ STEP 6: Scene Planning (Chi tiết hóa)                                   │
-│   - API chi tiết từng scene: camera_angle, lighting, composition        │
-│   - Parallel processing: 15 scenes/batch, max 10 concurrent             │
-│   - Output: Update director_plan với chi tiết                           │
-├─────────────────────────────────────────────────────────────────────────┤
-│ STEP 7: Scene Prompts (Tạo prompts)                                     │
-│   - Tạo img_prompt cho từng scene (dùng để tạo ảnh)                     │
-│   - Parallel processing: 10 scenes/batch, max 10 concurrent             │
-│   - Duplicate detection + fallback                                      │
-│   - Output: scenes sheet (img_prompt, ref_files, characters_used, etc.) │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+### Topic Prompts (`modules/topic_prompts/`)
 
-**Key modules sử dụng**:
-- `modules/progressive_prompts.py` - Logic 7 steps
-- `modules/ai_providers.py` - API calls (DeepSeek/Gemini)
-- `modules/excel_manager.py` - Excel I/O (PromptWorkbook class)
+Prompt templates theo chủ đề cho 7-step pipeline.
 
-**Chế độ chạy**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ CONTINUOUS MODE (--loop) - Chạy liên tục tự động                        │
-│                                                                         │
-│   Workflow vòng lặp:                                                    │
-│   1. Scan master (Z:\AUTO) cho projects mới có SRT                      │
-│   2. IMPORT: Copy project từ master → local PROJECTS                    │
-│   3. Xóa project trên master (tránh xử lý trùng)                        │
-│   4. Chạy 7 bước API tạo Excel                                          │
-│   5. Đợi SCAN_INTERVAL (60s) rồi lặp lại                                │
-│                                                                         │
-│   → Chrome workers sẽ tự động pick up project từ local                  │
-│   → Sau khi có ảnh, Chrome sẽ copy về VISUAL trên master                │
-└─────────────────────────────────────────────────────────────────────────┘
+| File | Chủ đề |
+|------|--------|
+| `story_prompts.py` | Story/narrative (default) |
+| `psychology_prompts.py` | Tâm lý học |
+| `psychology_video_prompts.py` | Tâm lý (video mode) |
+| `finance_history_prompts.py` | Tài chính/lịch sử |
+| `finance_history_vn_prompts.py` | Tài chính/lịch sử (VN) |
+| `finance_video_prompts.py` | Tài chính (video mode) |
 
-Usage:
-    python run_excel_api.py --loop    # Chạy continuous mode
-```
+### Server Mode (`server/`)
 
----
+Server nhận requests tạo ảnh từ nhiều VM (distributed mode).
 
-### 2. `_run_chrome1.py` - Chrome Worker 1
+| File | Mô tả |
+|------|--------|
+| `app.py` | Flask API server |
+| `server_gui.py` | Server GUI (Tkinter) - config proxy, Chrome count |
+| `chrome_pool.py` | Pool Chrome instances cho server, setup proxy providers |
+| `chrome_session.py` | Quản lý Chrome session, login, fingerprint sync |
+| `worker.py` | Server worker xử lý requests |
+| `start_server.py` | Entry point server |
 
-**Mục đích**: Tạo ảnh cho scenes CHẴN (2, 4, 6, 8...) + Reference images
+### IPv6 Pool (`ipv6/`)
 
-**Chrome Portable**: `GoogleChromePortable/`
+Quản lý pool IPv6 tập trung qua MikroTik router API.
 
-**Nhiệm vụ**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ 1. TẠO REFERENCE IMAGES (ưu tiên cao)                                   │
-│    - Characters: nv/{char_id}.png (ảnh nhân vật)                        │
-│    - Locations: loc/{loc_id}.png (ảnh địa điểm)                         │
-│    - Dùng làm style reference cho scenes                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│ 2. TẠO SCENE IMAGES (scenes chẵn)                                       │
-│    - Scene 2, 4, 6, 8, 10...                                            │
-│    - Output: img/scene_002.png, img/scene_004.png...                    │
-│    - Upload reference images kèm theo                                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│ 3. TẠO VIDEO (nếu cần - video_mode)                                     │
-│    - Dùng ảnh scene để tạo video clips                                  │
-│    - Output: video/scene_XXX.mp4                                        │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+| File | Mô tả |
+|------|--------|
+| `ipv6_pool.py` | Core pool - manage IPs (available/in_use/burned/cooldown), auto-recover burned subnets |
+| `ipv6_server.py` | HTTP API server (port 8765) - GET/ROTATE/BURN/STATUS endpoints |
+| `ipv6_gui.py` | Pool GUI - hiển thị stats, logs, reset pool |
+| `mikrotik_api.py` | RouterOS API - add/remove IPv6 addresses & routes, reserved subnet protection |
 
-**Key modules sử dụng**:
-- `modules/drission_flow_api.py` - DrissionPage browser control
-- `modules/smart_engine.py` - Main image/video generation engine
-- `modules/chrome_manager.py` - Chrome process management
-
----
-
-### 3. `_run_chrome2.py` - Chrome Worker 2
-
-**Mục đích**: Tạo ảnh cho scenes LẺ (1, 3, 5, 7...)
-
-**Chrome Portable**: `GoogleChromePortable - Copy/` (riêng biệt để chạy song song)
-
-**Nhiệm vụ**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ TẠO SCENE IMAGES (scenes lẻ)                                            │
-│    - Scene 1, 3, 5, 7, 9...                                             │
-│    - Output: img/scene_001.png, img/scene_003.png...                    │
-│    - KHÔNG tạo reference (Chrome 1 đã làm)                              │
-│    - skip_references=True để tránh trùng lặp                            │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**Lý do tách 2 Chrome Workers**:
-- Google Flow rate limit → chạy song song để tăng tốc 2x
-- Chrome 1 tạo references trước, Chrome 2 chỉ tạo scenes
-- Mỗi Chrome dùng folder Data riêng để tránh xung đột
-
-**Key modules sử dụng** (giống Chrome 1):
-- `modules/drission_flow_api.py`
-- `modules/smart_engine.py`
-- `modules/chrome_manager.py`
-
----
-
-### Modules quan trọng
-- `modules/smart_engine.py` - Engine chính tạo ảnh/video
-- `modules/drission_flow_api.py` - DrissionPage API cho Google Flow
-- `modules/browser_flow_generator.py` - Browser automation
-- `modules/excel_manager.py` - Quản lý Excel (PromptWorkbook)
-- `modules/ipv6_manager.py` - Quản lý IPv6 rotation
-- `modules/chrome_manager.py` - Quản lý Chrome instances
+**Key concepts**:
+- Subnet = /64 prefix, mỗi subnet có 1 gateway + nhiều IP
+- Reserved subnets (01-65): 100 IP YouTube, KHÔNG BAO GIỜ bị pool đụng vào
+- Burned subnet auto-recover sau 10 phút cooldown
+- `rotate_all()`: Đổi toàn bộ pool (có delay 0.1s/lệnh để không crash router)
 
 ### Cấu trúc dữ liệu
+
 ```
 PROJECTS/
 └── {project_code}/
-    ├── {code}.srt           # File phụ đề
-    ├── {code}_prompts.xlsx  # Excel chứa prompts
-    ├── nv/                  # Reference images (characters/locations)
-    └── img/                 # Scene images (scene_001.png, ...)
+    ├── {code}.srt              # File phụ đề gốc
+    ├── {code}_prompts.xlsx     # Excel kịch bản (7 sheets)
+    ├── nv/                     # Reference images: nv1.png, nv2.png, loc1.png...
+    ├── img/                    # Scene images: scene_001.png, scene_002.png...
+    ├── video/                  # Scene videos: scene_001.mp4... (mode full)
+    └── thumb/                  # Thumbnail (main character image)
 ```
 
-## Config
-- `config/settings.yaml` - Cấu hình chính (API keys, Chrome paths, IPv6...)
-- `config/ipv6_list.txt` - Danh sách IPv6 addresses
+### Config (`config/`)
 
-## Quy tắc xử lý lỗi
-
-### 1. LỖI 403 (Google Flow bị block IP)
-
-**Nguyên nhân**: Google Flow rate limit hoặc block IP khi request quá nhiều.
-
-**Cơ chế xử lý tự động**:
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ LEVEL 1: Worker-level recovery (3 lỗi 403 liên tiếp)                    │
-│                                                                         │
-│   Chrome Worker gặp 403 x3 → Tự động:                                   │
-│   1. Xóa Chrome Data folder (giữ lại First Run)                         │
-│   2. Restart worker                                                     │
-│   3. Tiếp tục từ scene đang làm dở                                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│ LEVEL 2: System-level recovery (5 lỗi 403 tổng cộng)                    │
-│                                                                         │
-│   Nếu tổng 403 từ cả 2 workers >= 5 → VM Manager tự động:               │
-│   1. Stop tất cả Chrome workers                                         │
-│   2. Rotate IPv6 (đổi sang IP mới từ config/ipv6.txt)                   │
-│   3. Xóa Chrome Data của cả 2 workers                                   │
-│   4. Restart tất cả workers                                             │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**File tracking**: `config/.403_tracker.json` - lưu số lỗi 403 của mỗi worker
-
-**Modules liên quan**:
-- `modules/shared_403_tracker.py` - Đếm và track 403 errors
-- `modules/ipv6_manager.py` - Rotate IPv6 address
-- `modules/chrome_manager.py` - Clear Chrome data
+| File | Mô tả |
+|------|--------|
+| `settings.yaml` | Config chính: API keys, Chrome paths, IPv6, proxy, video mode, server URLs |
+| `prompts.yaml` | Custom prompt templates |
+| `accounts.csv` | Google accounts cho login |
+| `proxies.txt` | Proxy list |
+| `session_state.yaml` | Session state tracking |
 
 ---
 
-### 2. LỖI TIMEOUT (Google Flow không phản hồi)
+## Chi tiết 7-Step Pipeline (Excel Worker)
 
-**Nguyên nhân**: Network chậm, Google Flow quá tải, hoặc prompt phức tạp.
-
-**Cơ chế xử lý**:
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Image generation timeout (120s mặc định)                                │
-│   → Retry 3 lần với cùng prompt                                         │
-│   → Nếu vẫn fail → Skip scene, log warning, tiếp tục scene khác         │
-├─────────────────────────────────────────────────────────────────────────┤
-│ Video generation timeout (180s mặc định)                                │
-│   → Retry 2 lần                                                         │
-│   → Nếu vẫn fail → Đánh dấu scene cần regenerate sau                    │
-└─────────────────────────────────────────────────────────────────────────┘
+Input: {code}.srt → Output: {code}_prompts.xlsx
+
+Step 1: Story Analysis     → Phân tích thể loại, mood, style
+Step 2: Segments           → Chia SRT thành đoạn (~5-15 entries/đoạn)
+                             + VALIDATION 1: Split segments ratio > 15
+                             + VALIDATION 2: API bổ sung missing ranges
+Step 3: Characters         → Phân tích nhân vật (id, name, appearance)
+Step 4: Locations          → Phân tích địa điểm (id, name, atmosphere)
+Step 5: Director Plan      → Tạo scenes cho từng segment
+                             + GAP-FILL: Đảm bảo 100% SRT coverage
+                             + 8s rule: scene duration 5-8s (full mode)
+Step 6: Scene Planning     → Chi tiết: camera, lighting, composition
+                             (parallel: 15 scenes/batch, max 10 concurrent)
+Step 7: Scene Prompts      → Tạo img_prompt cho từng scene
+                             (parallel: 10 scenes/batch, max 10 concurrent)
+                             + Duplicate detection + fallback
+                             + Metadata parse từ prompt (nv/loc IDs)
 ```
 
-**Config**: `config/settings.yaml`
-- `browser_generate_timeout: 120` - Timeout tạo ảnh (giây)
-- `retry_count: 3` - Số lần retry
+**Resume logic**: Mỗi step lưu status. Nếu bị ngắt → chạy lại từ step đang dở, không mất work.
+
+**API retry**: Exponential backoff (3s base, max 15 retries). Handles 429, 5xx, timeout.
 
 ---
 
-### 3. LỖI CHROME DISCONNECT
+## Hệ thống chống 403 (5 lớp phòng thủ)
 
-**Nguyên nhân**: Chrome crash, memory leak, hoặc network disconnect.
+Google Flow rate limit/block IP khi request nhiều. 5 lớp xử lý:
 
-**Cơ chế xử lý**:
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Chrome bị disconnect:                                                   │
-│   1. Worker detect qua DrissionPage connection check                    │
-│   2. Kill Chrome process cũ (chỉ worker đó, không kill hết)             │
-│   3. Clear Chrome Data                                                  │
-│   4. Restart Chrome với profile mới                                     │
-│   5. Resume từ scene đang làm dở                                        │
-└─────────────────────────────────────────────────────────────────────────┘
+Layer 1: Browser Cleanup
+  → Xóa localStorage, IndexedDB, cookies, cache, service workers
+  → Chạy NGAY sau 403 + sau mỗi ảnh thành công
+
+Layer 2: Fingerprint Rotation
+  → Browser fingerprint spoof (canvas, webGL, audio, navigator)
+  → Đồng bộ fingerprint giữa login và tạo ảnh (cùng seed)
+  → Đổi seed khi 403
+
+Layer 3: Model Switch
+  → 3 consecutive 403 → switch model (image ↔ video)
+  → Counter tăng qua setup() (skip_403_reset=True)
+
+Layer 4: IP Rotation
+  → 5 total 403 → rotate IPv6/proxy
+  → IPv6: Đổi IP trên MikroTik router
+  → ProxyXoay: Rotate qua API (cooldown 60s)
+
+Layer 5: Account Switch
+  → Đổi Google account (từ accounts.csv)
+  → Last resort
 ```
 
-**Module**: `modules/chrome_manager.py` - `kill_chrome_by_port()`
+**Chrome Data Clearing**: Xóa `ChromePortable/Data/profile/*` NGOẠI TRỪ `First Run` file.
+
+**403 Tracker**: `config/.403_tracker.json` - đếm 403 mỗi worker.
 
 ---
 
-### 4. LỖI API (Excel Worker)
+## Proxy System
 
-**Các loại lỗi thường gặp**:
+### Chọn proxy (`modules/proxy_providers/__init__.py`)
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ API rate limit (429):                                                   │
-│   → Exponential backoff: 1s → 2s → 4s → 8s                              │
-│   → Max retry: 5 lần                                                    │
-├─────────────────────────────────────────────────────────────────────────┤
-│ API response không đủ data:                                             │
-│   → VALIDATION 1: Chia nhỏ segment, gọi API lại                         │
-│   → VALIDATION 2: Detect missing range, call API bổ sung                │
-│   → GAP-FILL: Tạo fill scenes cho SRT còn thiếu                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│ Duplicate prompts (>80%):                                               │
-│   → Tạo unique fallback prompts thay vì skip batch                      │
-│   → Đảm bảo không mất scenes                                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│ JSON parse error:                                                       │
-│   → Retry với temperature cao hơn                                       │
-│   → Max retry: 3 lần                                                    │
-└─────────────────────────────────────────────────────────────────────────┘
+```python
+# Factory chọn provider theo settings.yaml > proxy_type:
+# "ipv6"       → IPv6Provider (MikroTik trực tiếp)
+# "ipv6_pool"  → IPv6PoolProvider (HTTP API port 8765)
+# "webshare"   → WebshareProvider
+# "proxyxoay"  → ProxyXoayProvider
 ```
 
-**Module**: `modules/progressive_prompts.py` - `_call_api_with_retry()`
-
----
-
-### 5. LỖI CONTENT POLICY (Google Flow từ chối prompt)
-
-**Nguyên nhân**: Prompt chứa nội dung vi phạm policy của Google.
-
-**Cơ chế xử lý**:
+### IPv6 Provider flow
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Content policy violation detected:                                      │
-│   1. Log prompt bị reject                                               │
-│   2. Tạo fallback prompt (generic, safe)                                │
-│   3. Retry với fallback prompt                                          │
-│   4. Nếu vẫn fail → Skip scene, đánh dấu manual review                  │
-└─────────────────────────────────────────────────────────────────────────┘
+MikroTik Router ←→ ipv6_provider.py
+  → Add IPv6 address lên interface
+  → Add default route ::/0 qua gateway
+  → DNS: Gateway ::1 (primary) + Google (fallback)
+  → Firewall: Block IPv4 cho Chrome (chỉ dùng IPv6)
+  → Rotate: Xóa IP cũ + thêm IP mới
+```
+
+### ProxyXoay flow
+```
+proxyxoay.shop API ←→ proxyxoay_provider.py
+  → Mỗi worker 1 API key riêng
+  → SOCKS5/HTTP proxy endpoint
+  → TTL tracking → auto-rotate khi TTL thấp
+  → Auto-whitelist VM IPv4
+```
+
+### IPv6 Pool flow
+```
+ipv6_pool.py (port 8765) ←→ ipv6_pool_provider.py (client)
+  → Pool quản lý ~150 subnets trên MikroTik
+  → VM workers gọi GET /get_ip → nhận IPv6
+  → 403 → POST /burn_ip → pool xóa subnet, chọn subnet mới
+  → Burned subnets auto-recover sau 10 phút
+  → Reserved subnets (01-65) KHÔNG BAO GIỜ bị đụng
 ```
 
 ---
 
-### Chrome Data Clearing (Chi tiết)
+## Server Mode (Distributed)
 
-**Khi nào clear**:
-- 403 error x3
-- Chrome disconnect
-- Manual restart từ GUI
-
-**Cách clear**:
 ```
-ChromePortable/Data/
-├── profile/
-│   ├── First Run          ← GIỮ LẠI (tránh first-run prompts)
-│   ├── Default/           ← XÓA
-│   ├── Cache/             ← XÓA
-│   └── ...                ← XÓA
+Server Machine (server/)
+  ├── server_gui.py      → GUI config, start server
+  ├── app.py             → Flask API: /api/fix/create-image-veo3, /api/fix/task-status
+  ├── chrome_pool.py     → Pool Chrome instances + proxy providers
+  └── chrome_session.py  → Login + fingerprint sync
+
+VM Machines (clients)
+  └── smart_engine.py    → POST prompts → server → poll status → download result
 ```
 
-**Code**: `modules/chrome_manager.py` - `clear_chrome_data()`
-- GIỮ LẠI `Data/profile/First Run` để tránh first-run prompts
+**Login trên server**: `chrome_session.py` login cùng port + cùng proxy với worker (v1.0.653). Fingerprint đồng bộ qua seed file (v1.0.650).
+
+---
+
+## SMB / Master Connection
+
+```
+VM ←→ Master qua SMB (Z:\AUTO hoặc \\IP\AUTO)
+  → robust_copy.py: ensure_smb_connected() tự reconnect sau VM restart
+  → Thu 3 IP máy chủ (88.254, 88.14, 88.100)
+  → cmdkey lưu credential → Windows không hỏi lại
+  → Project xong → copy img/ + Excel + thumb/ về AUTO/visual/{code}/
+```
+
+---
 
 ## Commands thường dùng
 
 ```bash
-# Chạy GUI
+# Chạy GUI chính
 python vm_manager_gui.py
 
-# Chạy worker riêng
-python run_excel_api.py --loop
-python _run_chrome1.py
-python _run_chrome2.py
+# Chạy workers riêng
+python run_excel_api.py --loop    # Excel worker continuous
+python _run_chrome1.py            # Chrome worker 1
+python _run_chrome2.py            # Chrome worker 2
+
+# Server mode
+python server/start_server.py     # hoặc server/server_gui.py
+
+# IPv6 Pool
+python -m ipv6.ipv6_gui           # Pool GUI
 
 # Git
-git push official main  # Push lên repo chính thức
+git push official main            # Push lên repo chính thức
 ```
+
+---
 
 ## Lưu ý quan trọng
 
-1. **Chrome Portable**: Sử dụng 2 Chrome Portable riêng biệt
+1. **Chrome Portable**: 2 instances riêng biệt
    - Chrome 1: `GoogleChromePortable/`
    - Chrome 2: `GoogleChromePortable - Copy/`
+   - Kill Chrome theo thư mục (v1.0.192), KHÔNG kill Chrome khác
 
-2. **Google Login**: Chrome phải đăng nhập Google trước khi chạy
+2. **Google Login**: Chrome PHẢI đăng nhập Google trước khi tạo ảnh
+   - `google_login.py` xử lý login + OTP 2FA
+   - Verify login qua myaccount.google.com
+   - Retry 2 lần mỗi Chrome, cả 2 fail → DỪNG
 
-3. **IPv6**: Cần có IPv6 list trong `config/ipv6_list.txt` để bypass rate limit
+3. **IPv6 DNS**: Dùng MikroTik gateway `::1` làm DNS primary (v1.0.679)
+   - Google DNS `2001:4860:4860::8888` chỉ là fallback
+   - VNPT drop/throttle UDP IPv6 tới Google DNS → mất mạng sau 55s
 
-4. **Agent Protocol**: Workers giao tiếp qua `.agent/status/*.json`
+4. **Firewall IPv4**: Khi dùng IPv6, firewall block IPv4 cho Chrome
+   - Khi chuyển sang proxy IPv4 (ProxyXoay/Webshare) → phải xóa firewall rules (v1.0.662)
 
-## Recent Fixes
+5. **VERSION.txt**: PHẢI update trong cùng commit với code changes
 
-### 2026-02-04 - Project Priority (v1.0.83)
-- **TÍNH NĂNG**: Project gần xong → làm trước
-- **Logic**: `completion = images_done / total_scenes`
-- **Sort**: Descending - completion cao hơn = priority cao hơn
-- **Code**: `vm_manager.py` - `scan_projects()`
-- **Mục đích**: Tối ưu hóa thời gian hoàn thành project
+6. **Agent Protocol**: Workers giao tiếp qua `.agent/status/*.json`
 
-### 2026-02-04 - EARLY CHECK Logic Fix (v1.0.82)
-- **BUG**: v1.0.79 EARLY CHECK kiểm tra "if scenes exist" → SAI!
-  - Scenes có thể tồn tại nhưng chưa đủ (API bị ngắt giữa chừng)
-  - Dẫn đến skip khi Excel chưa hoàn thành
-- **FIX**: Kiểm tra `step_7 status == "COMPLETED"` thay vì check scenes
-  - Nếu step_7 = COMPLETED → skip (Excel đã hoàn thành)
-  - Nếu step_7 != COMPLETED → chạy tiếp từ bước đang dở
-- **Code**: `modules/progressive_prompts.py` lines 3245-3259
-- **Kết hợp với v1.0.81**: `workbook.save()` sau mỗi `update_step_status()`
+7. **Project Priority**: Project gần xong (completion % cao) → làm trước (v1.0.83)
 
-### 2026-01-23 - Excel API 100% SRT Coverage (v1.0.4)
-- **CRITICAL**: Fixed Excel worker losing scenes and SRT coverage
-- **4 Major Fixes in `modules/progressive_prompts.py`**:
-  1. **VALIDATION 1 (lines 833-1021)**: Split disproportionate segments
-     - Ratio > 15: Local split into smaller segments
-     - Ratio > 30: Recursive API retry with smaller input
-  2. **VALIDATION 2 (lines 1023-1130)**: API call for missing segments
-     - Detects gaps in SRT coverage after Step 2
-     - Calls API for missing ranges with proper context
-     - Recalculates image_count: `seg_entries / 10`
-  3. **GAP-FILL (lines 2146-2198)**: Post-processing in Step 5
-     - Finds all uncovered SRT indices
-     - Creates fill scenes (max 10 SRT per scene)
-     - Guarantees 100% SRT coverage
-  4. **Duplicate Fallback (line ~2730)**: No more skipped batches
-     - Creates unique fallback prompts instead of skipping
-     - Prevents losing scenes due to >80% duplicates
-- **Test Result (KA2-0238)**: 1183 SRT entries, 100% coverage, 520 scenes
-
-### 2026-01-22 - Chrome 2 Control Fix
-- **CRITICAL**: Fixed Chrome 2 using wrong portable path
-  - Added `not self._chrome_portable` check to prevent auto-detect override
-  - Added relative-to-absolute path conversion in drission_flow_api.py
-- Created check_version.py to verify fixes are applied
-- Created FIX_CHROME2_INSTRUCTIONS.txt for user update guide
-- Fixed CMD hiding (START.bat uses pythonw)
-- Fixed Chrome window positioning (even split, no overlap)
-- Added show_cmd_windows() function
-
-### 2026-01-20
-- Fix GUI hiển thị đúng ProjectStatus attributes
-- Fix bug `scene_number` → `scene_id` trong `get_project_status()`
-- Thêm Chrome data clearing khi 403 errors
-- Xóa log cũ khi start worker mới
-- Đổi UPDATE URL sang repo mới `ve3-tool-simple`
+8. **Auto-copy**: Project done → tự copy về master + tạo thumbnail (v1.0.34-35)
 
 ---
 
-## GHI CHÚ CÔNG VIỆC (Session Notes)
+## Quy tắc xử lý lỗi
 
-> **QUAN TRỌNG**: Claude Code phải cập nhật section này sau mỗi phiên làm việc để phiên sau sử dụng hiệu quả.
+### 403 (Google block IP)
+- Level 1: Worker 3x403 → cleanup browser data + restart
+- Level 2: Total 5x403 → rotate IP + clear Chrome data + restart all
 
-### Phiên hiện tại: 2026-02-28 - 403 Handling Complete Overhaul (v1.0.192-198 ✅)
+### Timeout
+- Image: 120s timeout → retry 3 lần → skip scene
+- Video: 180s timeout → retry 2 lần → mark for regenerate
 
-**MISSION**: Fix 403 errors - Giảm thiểu và xử lý 403 từ Google Flow
+### Chrome Disconnect
+- Detect via DrissionPage → kill Chrome cũ → clear data → restart → resume
 
-**PROBLEMS DISCOVERED**:
-1. Chrome kill không đúng thư mục (kill cả Chrome khác)
-2. Double restart khi gặp 403
-3. Restart thừa sau mỗi ảnh thành công
-4. 403 counter bị reset về 0 trong setup() - không bao giờ switch model
-5. **CRITICAL**: Google dùng localStorage/IndexedDB để track và flag browser - dù đổi IP vẫn 403
+### API Errors (Excel Worker)
+- 429 rate limit: Exponential backoff (3s × 2^n, max 15 retries)
+- Missing data: VALIDATION 1+2, GAP-FILL ensures 100% SRT coverage
+- Duplicate prompts (>80%): Tạo unique fallback, không skip batch
 
-**SOLUTIONS**:
+### Content Policy Violation
+- Server retry 1 lần → nếu vẫn 400 → POLICY_VIOLATION → VM skip prompt + tạo .SKIP file
 
-**v1.0.192**: Kill Chrome theo thư mục Portable
-- Phân biệt `GoogleChromePortable/` và `GoogleChromePortable - Copy/`
-- Chỉ kill Chrome của worker đang xử lý
-
-**v1.0.193**: Fix double restart khi 403
-- Bỏ restart thừa sau các if/elif blocks
-
-**v1.0.194**: Bỏ restart sau mỗi ảnh thành công
-- Không cần thiết và gây chậm
-
-**v1.0.195**: Fix 403 counter không tăng
-- BUG: setup() luôn reset `_consecutive_403 = 0`
-- FIX: Thêm `skip_403_reset` parameter
-
-**v1.0.196-197**: Cleanup localStorage/IndexedDB khi 403
-- Phát hiện: Google dùng browser data để track
-- Thêm JS_CLEANUP xóa localStorage, IndexedDB, cookies, cache, service workers
-- Cleanup chạy NGAY SAU 403 trước khi restart
-
-**v1.0.198**: Cleanup + Restart sau mỗi ảnh thành công
-- Gửi prompt liên tiếp bằng API → bị 403
-- Flow: Ảnh thành công → Cleanup → Restart → Sẵn sàng cho ảnh tiếp
-
-**JS_CLEANUP** (`modules/drission_flow_api.py`):
-```javascript
-// Xóa localStorage, sessionStorage, IndexedDB, cookies, cache, service workers
-localStorage.clear();
-sessionStorage.clear();
-indexedDB.databases().then(dbs => dbs.forEach(db => indexedDB.deleteDatabase(db.name)));
-document.cookie.split(";").forEach(c => document.cookie = c.replace(/=.*/, "=;expires=..."));
-caches.keys().then(names => names.forEach(name => caches.delete(name)));
-navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
-```
-
-**FLOW MỚI**:
-```
-403 xảy ra
-  → cleanup_browser_data() (xóa localStorage/IndexedDB)
-  → restart Chrome
-  → 403 counter tăng: 1/5 → 2/5 → 5/5
-  → switch model khi đủ threshold
-
-Ảnh thành công
-  → cleanup_browser_data()
-  → restart Chrome (sạch)
-  → sẵn sàng cho ảnh tiếp
-```
-
-**VERSION**: 1.0.198
-**STATUS**: ✅ PRODUCTION READY
+### SMB Mất kết nối
+- `ensure_smb_connected()` tự reconnect, thử 3 IP máy chủ
 
 ---
 
-### Phiên trước: 2026-02-04 - EARLY CHECK Logic Fix (v1.0.82 ✅)
+## Phiên bản hiện tại
 
-**STATUS**: Đã hoàn thành - Fix EARLY CHECK dựa vào trạng thái 7 bước thay vì scenes
+**VERSION**: 1.0.682 (2026-04-04)
 
----
-
-### Phiên trước: 2026-01-24 - Step 7 Metadata Fix (100% Accuracy ✅)
-
-**MISSION**: Fix metadata/prompt mismatch - Đảm bảo metadata chính xác 100%
-
-**PROBLEM DISCOVERED**:
-- User phát hiện 3 scenes có metadata không khớp prompt:
-  - Scene 21: Có char ref `(nv1.png)` trong prompt nhưng `characters_used=None`
-  - Scene 171, 172: Có loc ref `(loc1.png)` trong prompt nhưng `location_used=None`
-
-**ROOT CAUSE**:
-- Step 7 tạo prompts từ API (có thể add references)
-- Nhưng metadata (characters_used, location_used) lấy từ `original` director_plan
-- Nếu original có empty metadata → metadata vẫn empty dù prompt có refs
-
-**SOLUTION - PARSE PROMPTS FOR ACTUAL IDs**:
-
-**Implementation** (`modules/progressive_prompts.py` lines 2947-2975):
-```python
-import re
-
-# Extract all character IDs from prompt (pattern: nvX.png)
-char_pattern = r'\(([nN][vV]_?\d+)\.png\)'
-prompt_char_matches = re.findall(char_pattern, img_prompt)
-if prompt_char_matches:
-    char_ids = list(set(prompt_char_matches))  # Use IDs from prompt
-
-# Extract location ID from prompt (pattern: locX.png)
-loc_pattern = r'\(([lL][oO][cC]_?\d+)\.png\)'
-prompt_loc_matches = re.findall(loc_pattern, img_prompt)
-if prompt_loc_matches:
-    loc_id = prompt_loc_matches[0]  # Use ID from prompt
-
-# Use parsed IDs for metadata (not original)
-chars_used_str = ",".join(char_ids) if char_ids else ""
-loc_used_str = loc_id if loc_id else ""
-
-scene = Scene(
-    ...
-    characters_used=chars_used_str,  # Parsed from prompt
-    location_used=loc_used_str,  # Parsed from prompt
-    ...
-)
-```
-
-**REGEX TESTS - ALL PASSED**:
-- ✅ `"A man (nv1.png)"` → chars=['nv1'], loc=None
-- ✅ `"in room (loc1.png)"` → chars=[], loc='loc1'
-- ✅ `"(nv1.png) in (loc5.png)"` → chars=['nv1'], loc='loc5'
-- ✅ `"(nv1.png) and (nv2.png) in (loc3.png)"` → chars=['nv1','nv2'], loc='loc3'
-- ✅ `"Empty room"` → chars=[], loc=None
-
-**RESULT**:
-- ✅ **0 issues found** - 100% metadata accuracy
-- ✅ All metadata now matches prompt content exactly
-- ✅ No more mismatches between references in prompt vs metadata
-
-**KEY INSIGHT**:
-- Metadata phải reflect ACTUAL content trong prompt
-- Parse output để extract thực tế thay vì trust input
-- Regex parsing = simple, fast, accurate
-
-**COMMIT**: fcdd929
-**VERSION**: 1.0.31
-**STATUS**: ✅ PRODUCTION READY - Perfect metadata accuracy!
-
----
-
-### Phiên tiếp theo: 2026-01-24 - API Retry Logic (Prevent Mid-Process Failures ✅)
-
-**MISSION**: Implement retry logic to prevent API failures from stopping Excel generation mid-process
-
-**PROBLEM DISCOVERED**:
-- First two full test runs failed at Step 5 (Director Plan)
-- Steps 5-7 stayed PENDING, 0 scenes created
-- Third test succeeded → indicates intermittent API issues
-- User identified: "hay là do api bị kiểu phải chờ vì làm nhiều" (API needs waiting due to many calls)
-
-**ROOT CAUSE**:
-- DeepSeek API rate limiting / quota exhaustion
-- No retry mechanism → single API failure = process stops
-- High API call volume in Steps 5-7 triggers rate limits
-
-**SOLUTION - EXPONENTIAL BACKOFF RETRY LOGIC**:
-
-**Implementation** (`modules/progressive_prompts.py` lines 144-233):
-```python
-def _call_api(self, prompt: str, temperature: float = 0.7, max_tokens: int = 8192) -> Optional[str]:
-    """Gọi DeepSeek API với retry logic để tránh mid-process failures."""
-    import requests
-    import time
-
-    max_retries = 5
-    base_delay = 2  # seconds
-
-    for attempt in range(max_retries):
-        try:
-            resp = requests.post(self.DEEPSEEK_URL, headers=headers, json=data, timeout=120)
-
-            if resp.status_code == 200:
-                # Success!
-                if attempt > 0:
-                    self._log(f"  API success after {attempt + 1} attempts", "INFO")
-                return resp.json()["choices"][0]["message"]["content"]
-
-            elif resp.status_code == 429:
-                # Rate limit - retry with exponential backoff
-                delay = base_delay * (2 ** attempt)  # 2, 4, 8, 16, 32 seconds
-                self._log(f"  Rate limit hit (429), retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
-                if attempt < max_retries - 1:
-                    time.sleep(delay)
-                    continue
-
-            elif resp.status_code >= 500:
-                # Server error - retry
-                delay = base_delay * (2 ** attempt)
-                self._log(f"  Server error ({resp.status_code}), retry {attempt + 1}/{max_retries} after {delay}s", "WARN")
-                if attempt < max_retries - 1:
-                    time.sleep(delay)
-                    continue
-
-            else:
-                # Client error (4xx except 429) - don't retry
-                self._log(f"  API error: {resp.status_code}", "ERROR")
-                return None
-
-        except requests.exceptions.Timeout:
-            # Timeout - retry
-            delay = base_delay * (2 ** attempt)
-            if attempt < max_retries - 1:
-                time.sleep(delay)
-                continue
-
-    return None
-```
-
-**FEATURES**:
-- ✅ **15 max retries** with exponential backoff (3 × 2^n seconds) - increased for multi-machine environments
-- ✅ **Rate limit handling** (429 errors) → automatic retry with backoff
-- ✅ **Server error handling** (5xx errors) → automatic retry
-- ✅ **Timeout handling** → automatic retry
-- ✅ **Smart retry** - Skip retry for client errors (4xx except 429)
-- ✅ **Detailed logging** - Track retry attempts and success
-
-**RETRY DELAYS** (v1.0.33):
-- Base delay: 3 seconds
-- Attempt 1: 3s, Attempt 2: 6s, Attempt 3: 12s
-- Attempt 4: 24s, Attempt 5: 48s, Attempt 6: 96s
-- Total max wait: ~6 minutes per API call (handles heavy rate limiting)
-
-**RESUME LOGIC** (Already Built-in):
-- ✅ **Step 5**: Skips if director_plan already exists
-- ✅ **Step 6**: Skips if scene_planning already exists
-- ✅ **Step 7**: Only creates missing scenes (pending_scenes)
-- ✅ **If interrupted**: Just rerun → continues from last checkpoint, no lost work!
-
-**RESULT**:
-- ✅ Prevents mid-process failures from API rate limiting
-- ✅ Automatic recovery without manual intervention
-- ✅ No lost work due to temporary API issues
-- ✅ Handles high-volume API calls gracefully
-- ✅ Multi-machine safe - 15 retries handle quota contention
-
-**COMMITS**: 71a0512 (v1.0.32), eacbf3d (v1.0.33)
-**VERSION**: 1.0.33
-**STATUS**: ✅ PRODUCTION READY - Pushed to GitHub
-
----
-
-### Phiên tiếp theo: 2026-01-24 - Auto-Copy on Completion + Thumbnail Generation ✅
-
-**MISSION**: Auto-copy results to master when project completes + Generate thumbnail for master
-
-**REQUIREMENTS**:
-1. Copy to master when project completes (not just on timeout)
-2. Select main character (not child) image for thumbnail
-3. Copy thumbnail to thumb/ folder for master to use
-
-**IMPLEMENTATION**:
-
-**1. Auto-Copy on Completion** (`vm_manager.py` lines 1644-1675):
-```python
-def create_tasks_for_project(self, project_code: str):
-    status = self.quality_checker.get_project_status(project_code)
-
-    # Check if project is completed
-    if status.current_step == "done":
-        if self.auto_path and project_code not in self._completed_projects:
-            self.log(f"PROJECT COMPLETED: {project_code}", "SYSTEM", "SUCCESS")
-            self.copy_project_to_master(project_code)
-            self._completed_projects.add(project_code)
-            # Reset timer for next project
-            self.project_start_time = None
-            self.current_project_code = None
-        return
-```
-
-**2. Thumbnail Generation** (`vm_manager.py` lines 1541-1599):
-```python
-def create_thumbnail(self, project_code: str):
-    # Read characters from Excel
-    wb = PromptWorkbook(excel_path)
-    characters = wb.get_characters()
-
-    # Filter out locations (id starts with "loc" or role="location")
-    actual_characters = [
-        c for c in characters
-        if not c.id.lower().startswith("loc") and c.role != "location"
-    ]
-
-    # Selection strategy:
-    # 1. Find protagonist/main role + not child
-    # 2. Find first non-child character
-    # 3. Use first character if all are children
-
-    # Copy selected character image to thumb/ folder
-    thumb_dir = src_dir / "thumb"
-    thumb_dir.mkdir(exist_ok=True)
-    shutil.copy2(src_image, dest_image)
-```
-
-**COPY TRIGGERS**:
-- ✅ **Project completion** (`current_step = "done"`) - NEW!
-- ✅ **6-hour timeout** (existing)
-
-**COPY STRUCTURE**:
-```
-AUTO/visual/{project_code}/
-  ├── {code}.srt
-  ├── {code}_prompts.xlsx
-  ├── nv/ (character references)
-  ├── img/ (scene images/videos)
-  └── thumb/ (main character for thumbnail) ⭐ NEW
-```
-
-**THUMBNAIL SELECTION LOGIC**:
-1. Filter out locations (`loc*` IDs or `role="location"`)
-2. Prefer `protagonist` or `main` role
-3. Exclude children (`is_child=False`)
-4. Fallback to first non-child character
-5. Last resort: first character
-
-**RESULT**:
-- ✅ Projects auto-copied when completed (no manual intervention)
-- ✅ Thumbnail ready for master video generation
-- ✅ Master gets complete package: Excel + Images + Videos + Thumbnail
-- ✅ No duplicate copies (tracking via `_completed_projects` set)
-
-**COMMIT**: 55526ec (v1.0.34), 2801a4c (v1.0.35 - path fix)
-**VERSION**: 1.0.35
-**STATUS**: ✅ PRODUCTION READY - Pushed to GitHub
-
-### Backlog (việc cần làm)
-
-**High Priority:**
-- [x] **API Validation Framework**: ✅ DONE (v1.0.4)
-  - VALIDATION 1: Check ratio, split if disproportionate
-  - VALIDATION 2: Check coverage, call API for missing
-  - GAP-FILL: Post-processing to fill remaining gaps
-- [ ] **Pipeline Optimization**: Step 6+7 chạy song song (30-40% speedup)
-  - Step 7 bắt đầu khi Step 6 hoàn thành batch đầu
-  - Excel làm "message queue" giữa 2 steps
-
-**Medium Priority:**
-- [ ] Worker logs không hiển thị trong GUI (trade-off để Chrome automation hoạt động)
-- [ ] Kiểm tra và làm sạch IPv6 list
-- [ ] Test auto-recovery khi Chrome disconnect
-
-**Low Priority:**
-- [ ] Batch size optimization (Step 6: 15→20, Step 7: 10→15)
-- [ ] Cache character/location lookups trong parallel processing
-
-### Lịch sử phiên trước
-
-**2026-01-23 - Excel API 100% SRT Coverage (COMPLETED ✅)**
-- Mission: Fix Excel worker để đảm bảo 100% SRT coverage
-- 4 CRITICAL FIXES: VALIDATION 1+2, GAP-FILL, Duplicate Fallback
-- Test result: 1183 SRT → 520 scenes, 100% coverage
-- Status: PRODUCTION READY
-
-**2026-01-22 - Chrome 2 Portable Path Fix:**
-- Fixed Chrome 2 using wrong portable path (2 fixes applied)
-- Created check_version.py to verify fixes
-- Fixed CMD hiding and Chrome window positioning
-- Commit: 43d3158
+Xem `VERSION.txt` để biết chi tiết tất cả các phiên bản và thay đổi.
