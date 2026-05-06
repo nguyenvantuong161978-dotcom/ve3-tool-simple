@@ -1,3 +1,21 @@
+1.0.683
+2026-05-06 (VN)
+Fix: Video generation hang - Server poll Google qua Chrome cho den khi SUCCESSFUL
+- VAN DE: Server tra operations (PENDING) ve client ngay lap tuc
+  -> Client tu poll Google truc tiep -> bi 403 captcha -> treo vinh vien
+  -> Chrome tren server tao video THANH CONG nhung client khong nhan duoc
+- FIX 1: Server tu poll Google qua Chrome fetch (co session hop le)
+  -> _poll_video_status_via_chrome(): Poll moi 5s cho den khi SUCCESSFUL
+  -> Dung window._pollResult pattern (khong dung await trong run_js)
+  -> Server chi tra ket qua khi video XONG (co video URL)
+- FIX 2: Handle ca 2 format response tu Google:
+  -> operations: [{"status": "PENDING"}] (format cu)
+  -> media: [{"mediaMetadata": {"mediaStatus": {"mediaGenerationStatus": "PENDING"}}}] (format moi)
+- FIX 3: Fix ReferenceError: await is not defined
+  -> page.run_js() wrap code trong sync function -> await crash
+  -> Doi sang async IIFE + window variable pattern
+- File: server/chrome_session.py
+
 1.0.682
 2026-04-04 (VN)
 Fix: Mode SMALL van tao video - BrowserFlowGenerator khong biet skip_video
