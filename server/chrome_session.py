@@ -1,4 +1,4 @@
-﻿"""
+"""
 Chrome Session Manager - Quáº£n lÃ½ Chrome cho proxy server.
 
 TÃ¡i sá»­ dá»¥ng flow tá»« tool (drission_flow_api.py):
@@ -2110,29 +2110,55 @@ class ChromeSession:
                             pass
                         return result
 
-                # 7. v1.0.640: Server tu poll Google cho den khi video XONG
-                # Cu: tra operations (PENDING) ve VM -> VM poll Google -> bi 403
-                # Moi: Server poll Google qua Chrome fetch (co session hop le)
+                # 7. v1.0.641: Server tu poll Google cho den khi video XONG
+                # Google co the tra {"operations": [...]} HOAC {"media": [...]}
+                # Ca 2 truong hop deu can poll de cho SUCCESSFUL
                 operations = result.get('operations', [])
+                media_items = result.get('media', [])
+                
+                # Xac dinh status tu operations hoac media
+                need_poll = False
                 if operations:
                     op = operations[0]
                     op_status = op.get('status', '')
                     is_done = op.get('done', False)
-
                     if 'SUCCESSFUL' in op_status or is_done:
-                        self.log(f"Video SUCCESSFUL ngay tu dau!", "OK")
+                        self.log(f"Video SUCCESSFUL ngay tu dau! (operations)", "OK")
                     elif 'FAILED' in op_status:
-                        self.log(f"Video FAILED ngay tu dau: {op_status}", "ERROR")
+                        self.log(f"Video FAILED: {op_status}", "ERROR")
                     else:
-                        # PENDING/PROCESSING -> poll Google qua Chrome
-                        self.log(f"Video status: {op_status} -> poll Google qua Chrome...")
-                        poll_result = self._poll_video_status_via_chrome(
-                            operations=operations,
-                            bearer_token=client_bearer_token,
-                            timeout=300
-                        )
-                        if poll_result:
-                            result = poll_result
+                        need_poll = True
+                        self.log(f"Video operations status: {op_status} -> can poll")
+                elif media_items:
+                    # Google tra media array voi PENDING status
+                    media_status = ''
+                    try:
+                        media_status = media_items[0].get('mediaMetadata', {}).get('mediaStatus', {}).get('mediaGenerationStatus', '')
+                    except (IndexError, AttributeError):
+                        pass
+                    if 'SUCCESSFUL' in media_status or 'COMPLETE' in media_status:
+                        self.log(f"Video SUCCESSFUL ngay tu dau! (media)", "OK")
+                    elif 'FAILED' in media_status:
+                        self.log(f"Video FAILED: {media_status}", "ERROR")
+                    elif 'PENDING' in media_status:
+                        need_poll = True
+                        self.log(f"Video media status: {media_status} -> can poll")
+                        # Chuyen media format thanh operations format de poll
+                        operations = media_items
+                    else:
+                        self.log(f"Video media status unknown: {media_status}")
+                        need_poll = True
+                        operations = media_items
+                
+                if need_poll and (operations or media_items):
+                    self.log(f"Poll Google qua Chrome...")
+                    poll_result = self._poll_video_status_via_chrome(
+                        operations=operations if operations else media_items,
+                        bearer_token=client_bearer_token,
+                        timeout=300
+                    )
+                    if poll_result:
+                        result = poll_result
 
                 # 8. Cleanup
                 try:
@@ -2215,8 +2241,12 @@ class ChromeSession:
                 ops_json_str = json.dumps(operations)
                 token_str = bearer_token
 
+                # v1.0.642: Fix ReferenceError: await is not defined
+                # page.run_js() wraps code in sync function() => await fails
+                # Solution: Use Promise + window variable, then poll for result
                 poll_js = (
-                    "return await (async function() {"
+                    "window._pollResult = null; window._pollDone = false;"
+                    "(async function() {"
                     "  try {"
                     "    var response = await fetch("
                     "      'https://aisandbox-pa.googleapis.com/v1/video:batchCheckAsyncVideoGenerationStatus',"
@@ -2232,16 +2262,29 @@ class ChromeSession:
                     "    if (!response.ok) {"
                     "      var text = '';"
                     "      try { text = await response.text(); } catch(e) {}"
-                    "      return { _httpError: response.status, _httpText: text.substring(0, 200) };"
+                    "      window._pollResult = { _httpError: response.status, _httpText: text.substring(0, 200) };"
+                    "    } else {"
+                    "      window._pollResult = await response.json();"
                     "    }"
-                    "    return await response.json();"
                     "  } catch(e) {"
-                    "    return { _fetchError: e.message };"
+                    "    window._pollResult = { _fetchError: e.message };"
                     "  }"
+                    "  window._pollDone = true;"
                     "})();"
+                    "return 'POLL_STARTED';"
                 )
 
-                result = self.page.run_js(poll_js)
+                self.page.run_js(poll_js)
+
+                # Wait for async fetch to complete (max 30s)
+                fetch_start = time.time()
+                result = None
+                while time.time() - fetch_start < 30:
+                    time.sleep(1)
+                    done = self.page.run_js("return window._pollDone;")
+                    if done:
+                        result = self.page.run_js("return window._pollResult;")
+                        break
 
                 if not result:
                     if poll_count % 6 == 1:
