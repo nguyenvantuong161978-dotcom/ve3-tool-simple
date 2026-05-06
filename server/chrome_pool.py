@@ -21,9 +21,11 @@ Architecture:
 - Worker nao ranh se lay task tiep theo
 """
 import sys
+import os
 import time
 import threading
 import traceback
+import re
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
 
@@ -32,6 +34,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 TOOL_DIR = Path(__file__).parent.parent
 
 # Chrome Portable folder names (relative to TOOL_DIR)
+# Legacy defaults. discover_chromes() se auto scan them folder de ho tro 10+ Chrome.
 CHROME_FOLDERS = [
     "GoogleChromePortable",
     "GoogleChromePortable - Copy",
@@ -42,6 +45,21 @@ CHROME_FOLDERS = [
 
 # Base port for Chrome debug
 BASE_PORT = 19222
+
+
+def _chrome_slot_from_folder(folder: str) -> int:
+    """Tinh slot uu tien tu ten folder portable."""
+    if folder == "GoogleChromePortable":
+        return 0
+    if folder == "GoogleChromePortable - Copy":
+        return 1
+    m = re.match(r"GoogleChromePortable - Copy \((\d+)\)$", folder)
+    if m:
+        return max(0, int(m.group(1)))
+    m2 = re.match(r"GoogleChromePortable_(\d+)$", folder)
+    if m2:
+        return max(0, int(m2.group(1)) - 1)
+    return 10_000
 
 
 def get_server_config() -> List[Dict]:
@@ -129,14 +147,24 @@ class ChromeWorker:
         self.session = None  # ChromeSession
         self.ready = False
         self.busy = False
+        self.recovering = False
         self.current_task_id: Optional[str] = None
         self.total_completed = 0
         self.total_failed = 0
         self.last_error = ""
         self.proxy_provider = None  # v1.0.545: ProxyProvider instance
+        self.proxy_setup_done = False
+        self.proxy_setup_error = ""
 
     def __repr__(self):
-        status = "READY" if self.ready and not self.busy else ("BUSY" if self.busy else "DOWN")
+        if self.busy:
+            status = "BUSY"
+        elif self.ready:
+            status = "READY"
+        elif self.recovering:
+            status = "RECOVERING"
+        else:
+            status = "DOWN"
         acc = self.account["id"][:20] if self.account else "?"
         return f"Chrome-{self.index}({status}, {acc}, done={self.total_completed})"
 
@@ -159,12 +187,37 @@ class ChromePool:
         self._ipv6_usage: Dict[str, int] = {}  # ipv6 -> so lan da dung
         self._all_accounts: List[Dict] = []  # Tat ca tai khoan
         self._account_usage: Dict[str, int] = {}  # email -> so lan da dung
+        self._account_last_assigned: Dict[str, int] = {}  # email -> thu tu gan gan nhat
+        self._account_assign_seq = 0
+        self._account_lock = threading.Lock()
         # v1.0.561: IPv6 Pool Client (MikroTik dynamic pool)
         self._pool_client = None  # IPv6PoolClient instance
         self._pool_mode = False  # True = dung pool API thay vi static list
+        self._proxy_config: Dict = {}
+        # Startup tuning: tranh login/paste dong thoi gay race clipboard + UI.
+        try:
+            self._setup_concurrency = max(1, int(os.getenv("CHROME_SETUP_CONCURRENCY", "3")))
+        except Exception:
+            self._setup_concurrency = 3
+        try:
+            self._setup_stagger_sec = max(0.0, float(os.getenv("CHROME_SETUP_STAGGER_SEC", "1.0")))
+        except Exception:
+            self._setup_stagger_sec = 1.0
+        self._setup_sem = threading.Semaphore(self._setup_concurrency)
 
     def _log(self, msg: str, level: str = "INFO"):
         self._log_fn(msg, level)
+
+    def _mark_account_used(self, account_or_email):
+        """Danh dau account da duoc 1 worker su dung trong pool."""
+        if not account_or_email:
+            return
+        email = account_or_email if isinstance(account_or_email, str) else account_or_email.get('id', '')
+        if not email:
+            return
+        self._account_assign_seq += 1
+        self._account_usage[email] = self._account_usage.get(email, 0) + 1
+        self._account_last_assigned[email] = self._account_assign_seq
 
     def setup_pool_client(self, pool_api_url: str, timeout: int = 5):
         """
@@ -231,18 +284,36 @@ class ChromePool:
             self._pool_client.release_ip(ip, worker=worker_name)
 
     def discover_chromes(self) -> List[Dict]:
-        """Tim cac Chrome Portable folder co san."""
+        """Tim cac Chrome Portable folder co san (ho tro 5, 10, ...)."""
         found = []
-        for i, folder in enumerate(CHROME_FOLDERS):
+        candidates = {}
+
+        # 1) Legacy list de giu tuong thich.
+        for folder in CHROME_FOLDERS:
             chrome_dir = TOOL_DIR / folder
             chrome_exe = chrome_dir / "GoogleChromePortable.exe"
             if chrome_exe.exists():
-                found.append({
-                    "index": i,
-                    "path": str(chrome_exe),
-                    "folder": folder,
-                    "port": BASE_PORT + i,
-                })
+                candidates[folder] = str(chrome_exe)
+
+        # 2) Auto-scan them folder portable de ho tro >5 Chrome.
+        for p in TOOL_DIR.iterdir():
+            if not p.is_dir():
+                continue
+            name = p.name
+            if not name.startswith("GoogleChromePortable"):
+                continue
+            chrome_exe = p / "GoogleChromePortable.exe"
+            if chrome_exe.exists():
+                candidates[name] = str(chrome_exe)
+
+        ordered = sorted(candidates.items(), key=lambda kv: (_chrome_slot_from_folder(kv[0]), kv[0].lower()))
+        for i, (folder, chrome_exe) in enumerate(ordered):
+            found.append({
+                "index": i,
+                "path": chrome_exe,
+                "folder": folder,
+                "port": BASE_PORT + i,
+            })
         return found
 
     def init_workers(self, server_configs: List[Dict] = None):
@@ -267,6 +338,9 @@ class ChromePool:
         self._log(f"Tim thay {len(chromes)} Chrome Portables:")
         for c in chromes:
             self._log(f"  [{c['index']}] {c['folder']} (port {c['port']})")
+        ports = [c["port"] for c in chromes]
+        if len(ports) != len(set(ports)):
+            self._log("[WARN] Phat hien trung port debug trong danh sach Chrome!", "WARN")
 
         # Match: chrome[i] <-> config[i]
         for i, chrome_info in enumerate(chromes):
@@ -297,6 +371,9 @@ class ChromePool:
                 gateway=gateway,
             )
             self.workers.append(worker)
+            if account:
+                with self._account_lock:
+                    self._mark_account_used(account)
 
             acc_str = account["id"] if account else "no-account"
             ipv6_str = ipv6[:30] if ipv6 else "no-ipv6"
@@ -313,7 +390,12 @@ class ChromePool:
                 { "proxy_provider": { "type": "webshare", "webshare": {...} } }
         """
         if not proxy_config:
+            for worker in self.workers:
+                worker.proxy_setup_done = True
+                worker.proxy_setup_error = ""
             return
+
+        self._proxy_config = dict(proxy_config)
 
         try:
             from modules.proxy_providers import create_provider
@@ -321,6 +403,9 @@ class ChromePool:
             pp_type = proxy_config.get('proxy_provider', {}).get('type', 'none')
             if pp_type == 'none':
                 self._log(f"[PROXY] Provider type = none, skip")
+                for worker in self.workers:
+                    worker.proxy_setup_done = True
+                    worker.proxy_setup_error = ""
                 return
 
             # v1.0.611: Pool mode + IPv6 → cleanup old static IPs truoc
@@ -331,50 +416,73 @@ class ChromePool:
                     _cleaner = IPv6Provider(log_func=lambda msg, lvl="INFO": self._log(msg, lvl))
                     _cleaner.cleanup_old_addresses(keep_ips=pool_ips)
 
-            for worker in self.workers:
+            def setup_single_proxy(worker):
+                worker.proxy_setup_done = False
+                worker.proxy_setup_error = ""
                 # Moi worker co provider rieng (port rieng)
                 proxy_port = worker.port + 200  # 19222 → 19422, 19223 → 19423
-                provider = create_provider(
-                    config=proxy_config,
-                    log_func=lambda msg, lvl="INFO", wn=f"Chrome-{worker.index}": self._log(f"[{wn}] {msg}", lvl),
-                )
+                try:
+                    provider = create_provider(
+                        config=proxy_config,
+                        log_func=lambda msg, lvl="INFO", wn=f"Chrome-{worker.index}": self._log(f"[{wn}] {msg}", lvl),
+                    )
 
-                if pp_type == 'webshare':
-                    # Webshare: setup bridge tren proxy_port
-                    if provider.setup(worker_id=worker.index, port=proxy_port):
-                        worker.proxy_provider = provider
-                        self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): OK on port {proxy_port}")
-                    else:
-                        self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): FAILED", "ERROR")
-
-                elif pp_type == 'proxyxoay':
-                    # ProxyXoay: setup voi worker_id (moi worker lay key rieng)
-                    if provider.setup(worker_id=worker.index):
-                        worker.proxy_provider = provider
-                        self._log(f"[Chrome-{worker.index}] Proxy (proxyxoay): {provider.get_current_ip()}")
-                    else:
-                        self._log(f"[Chrome-{worker.index}] Proxy (proxyxoay): FAILED", "ERROR")
-
-                elif pp_type == 'ipv6':
-                    # IPv6: setup dedicated voi IPv6 cua worker
-                    if worker.ipv6:
-                        # v1.0.609: Pass gateway de add IPv6 to Windows interface
-                        # v1.0.627: Check return value - neu fail (khong co internet) → rotate IPv6
-                        setup_ok = provider.setup_dedicated(
-                            worker_id=worker.index,
-                            port=proxy_port,
-                            ipv6_address=worker.ipv6,
-                            gateway=getattr(worker, 'gateway', ''),
-                        )
-                        if setup_ok:
+                    if pp_type == 'webshare':
+                        # Webshare: setup bridge tren proxy_port
+                        if provider.setup(worker_id=worker.index, port=proxy_port):
                             worker.proxy_provider = provider
-                            self._log(f"[Chrome-{worker.index}] Proxy (ipv6): {worker.ipv6} on port {proxy_port}")
+                            self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): OK on port {proxy_port}")
                         else:
-                            self._log(f"[Chrome-{worker.index}] Proxy (ipv6): FAILED - {worker.ipv6} khong co internet!", "ERROR")
-                            # Rotate sang IPv6 moi tu pool
-                            self._try_rotate_worker_ipv6(worker, provider, proxy_port, proxy_config)
-                    else:
-                        self._log(f"[Chrome-{worker.index}] Proxy (ipv6): skip (no IPv6 assigned)")
+                            worker.proxy_setup_error = f"Proxy ({pp_type}) setup failed"
+                            self._log(f"[Chrome-{worker.index}] Proxy ({pp_type}): FAILED", "ERROR")
+
+                    elif pp_type == 'proxyxoay':
+                        # ProxyXoay: setup voi worker_id (moi worker lay key rieng)
+                        if provider.setup(worker_id=worker.index):
+                            worker.proxy_provider = provider
+                            self._log(f"[Chrome-{worker.index}] Proxy (proxyxoay): {provider.get_current_ip()}")
+                        else:
+                            worker.proxy_setup_error = "Proxy (proxyxoay) setup failed"
+                            self._log(f"[Chrome-{worker.index}] Proxy (proxyxoay): FAILED", "ERROR")
+
+                    elif pp_type == 'ipv6':
+                        # IPv6: setup dedicated voi IPv6 cua worker
+                        if worker.ipv6:
+                            # v1.0.609: Pass gateway de add IPv6 to Windows interface
+                            # v1.0.627: Check return value - neu fail (khong co internet) → rotate IPv6
+                            setup_ok = provider.setup_dedicated(
+                                worker_id=worker.index,
+                                port=proxy_port,
+                                ipv6_address=worker.ipv6,
+                                gateway=getattr(worker, 'gateway', ''),
+                            )
+                            if setup_ok:
+                                worker.proxy_provider = provider
+                                self._log(f"[Chrome-{worker.index}] Proxy (ipv6): {worker.ipv6} on port {proxy_port}")
+                            else:
+                                worker.proxy_setup_error = f"Proxy (ipv6) setup failed for {worker.ipv6}"
+                                self._log(f"[Chrome-{worker.index}] Proxy (ipv6): FAILED - {worker.ipv6} khong co internet!", "ERROR")
+                                # Rotate sang IPv6 moi tu pool
+                                self._try_rotate_worker_ipv6(worker, provider, proxy_port, proxy_config)
+                        else:
+                            worker.proxy_setup_error = ""
+                            self._log(f"[Chrome-{worker.index}] Proxy (ipv6): skip (no IPv6 assigned)")
+                except Exception as e:
+                    worker.proxy_setup_error = str(e)
+                    self._log(f"[Chrome-{worker.index}] Proxy setup error: {e}", "ERROR")
+                finally:
+                    worker.proxy_setup_done = True
+
+            threads = []
+            for worker in self.workers:
+                t = threading.Thread(
+                    target=setup_single_proxy,
+                    args=(worker,),
+                    daemon=True,
+                    name=f"ProxySetup-{worker.index}",
+                )
+                t.start()
+                threads.append(t)
 
         except ImportError as e:
             self._log(f"[PROXY] Import error: {e}", "ERROR")
@@ -439,28 +547,48 @@ class ChromePool:
         if not self._all_accounts:
             return None
 
-        best = None
-        best_score = float('inf')
-        for acc in self._all_accounts:
-            email = acc['id']
-            if email == current_email:
-                continue
-            usage = self._account_usage.get(email, 0)
-            # Phat diem neu dang duoc worker khac dung (tranh trung)
-            in_use = any(
-                w.account and w.account['id'] == email
-                for w in self.workers
-            )
-            score = usage + (1000 if in_use else 0)
-            if score < best_score:
-                best_score = score
-                best = acc
+        with self._account_lock:
+            best = None
+            best_score = None
+            for acc in self._all_accounts:
+                email = acc['id']
+                if email == current_email:
+                    continue
 
-        if best:
-            self._account_usage[best['id']] = self._account_usage.get(best['id'], 0) + 1
-            self._log(f"Next account: {best['id']} (used={self._account_usage[best['id']]}x)")
+                in_use = any(
+                    w.account and w.account['id'] == email
+                    for w in self.workers
+                )
+                if in_use:
+                    continue
 
-        return best
+                usage = self._account_usage.get(email, 0)
+                last_assigned = self._account_last_assigned.get(email, -1)
+                score = (usage, last_assigned, email)
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best = acc
+
+            if not best:
+                for acc in self._all_accounts:
+                    email = acc['id']
+                    if email == current_email:
+                        continue
+                    usage = self._account_usage.get(email, 0)
+                    last_assigned = self._account_last_assigned.get(email, -1)
+                    score = (usage, last_assigned, email)
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        best = acc
+
+            if best:
+                self._mark_account_used(best)
+                self._log(
+                    f"Next account: {best['id']} "
+                    f"(used={self._account_usage[best['id']]}x, last={self._account_last_assigned[best['id']]})"
+                )
+
+            return best
 
     def get_next_ipv6(self, current_ipv6: str = "") -> str:
         """
@@ -496,71 +624,89 @@ class ChromePool:
         """Setup 1 Chrome worker (co retry). Tra ve True neu thanh cong."""
         from server.chrome_session import ChromeSession
         worker_name = f"Chrome-{worker.index}"
+        next_self_heal_at = 0.0
         max_retries = 3
+        worker.recovering = True
+        worker.ready = False
 
-        for attempt in range(max_retries):
-            try:
-                # v1.0.633: Close session cu truoc khi tao moi (tranh chiem port)
-                if attempt > 0 and worker.session:
-                    try:
-                        worker.session.close()
-                    except Exception:
-                        pass
-                    worker.session = None
+        try:
+            for attempt in range(max_retries):
+                try:
+                    # v1.0.633: Close session cu truoc khi tao moi (tranh chiem port)
+                    if attempt > 0 and worker.session:
+                        try:
+                            worker.session.close()
+                        except Exception:
+                            pass
+                        worker.session = None
 
-                if attempt == 0:
-                    self._log(f"[{worker_name}] Bat dau setup...")
+                    if attempt == 0:
+                        self._log(f"[{worker_name}] Bat dau setup...")
+                        if worker.account:
+                            self._log(f"[{worker_name}] Account: {worker.account['id']}")
+                        if worker.ipv6:
+                            self._log(f"[{worker_name}] IPv6: {worker.ipv6}")
+                    else:
+                        self._log(f"[{worker_name}] Retry setup ({attempt + 1}/{max_retries})...", "WARN")
+
+                    session = ChromeSession(
+                        chrome_portable_path=worker.chrome_path,
+                        port=worker.port,
+                        ipv6=worker.ipv6,
+                        proxy_provider=getattr(worker, 'proxy_provider', None),
+                    )
                     if worker.account:
-                        self._log(f"[{worker_name}] Account: {worker.account['id']}")
-                    if worker.ipv6:
-                        self._log(f"[{worker_name}] IPv6: {worker.ipv6}")
-                else:
-                    self._log(f"[{worker_name}] Retry setup ({attempt + 1}/{max_retries})...", "WARN")
+                        session._account = worker.account
 
-                session = ChromeSession(
-                    chrome_portable_path=worker.chrome_path,
-                    port=worker.port,
-                    ipv6=worker.ipv6,
-                    proxy_provider=getattr(worker, 'proxy_provider', None),
-                )
-                if worker.account:
-                    session._account = worker.account
+                    ok = session.setup()
+                    if ok:
+                        worker.session = session
+                        worker.ready = True
+                        self._log(f"[{worker_name}] READY!", "OK")
+                        return True
+                    else:
+                        self._log(f"[{worker_name}] Setup FAILED (attempt {attempt + 1})", "ERROR")
+                except Exception as e:
+                    self._log(f"[{worker_name}] Setup error: {e}", "ERROR")
 
-                ok = session.setup()
-                if ok:
-                    worker.session = session
-                    worker.ready = True
-                    self._log(f"[{worker_name}] READY!", "OK")
-                    return True
-                else:
-                    self._log(f"[{worker_name}] Setup FAILED (attempt {attempt + 1})", "ERROR")
-            except Exception as e:
-                self._log(f"[{worker_name}] Setup error: {e}", "ERROR")
+                # Doi truoc khi retry
+                if attempt < max_retries - 1:
+                    time.sleep(5)
 
-            # Doi truoc khi retry
-            if attempt < max_retries - 1:
-                time.sleep(5)
+            self._log(f"[{worker_name}] Setup FAILED sau {max_retries} lan!", "ERROR")
+            return False
+        finally:
+            worker.recovering = False
 
-        self._log(f"[{worker_name}] Setup FAILED sau {max_retries} lan!", "ERROR")
-        return False
+    def _setup_single_worker_limited(self, worker: 'ChromeWorker') -> bool:
+        """Setup worker co gioi han so luong setup dong thoi."""
+        with self._setup_sem:
+            return self._setup_single_worker(worker)
 
     def setup_all(self) -> int:
         """
-        Setup tat ca Chrome workers SONG SONG.
-        Moi worker chay trong thread rieng, khong doi nhau.
+        Setup tat ca Chrome workers co gioi han concurrency + stagger.
+        Muc tieu: tranh mo/login tat ca Chrome cung luc.
 
         Returns: so workers ready.
         """
+        self._log(
+            f"Setup workers: concurrency={self._setup_concurrency}, stagger={self._setup_stagger_sec:.1f}s"
+        )
         threads = []
+        def _setup_with_limit(w: ChromeWorker):
+            self._setup_single_worker_limited(w)
+
         for worker in self.workers:
             t = threading.Thread(
-                target=self._setup_single_worker,
+                target=_setup_with_limit,
                 args=(worker,),
                 daemon=True,
             )
             t.start()
             threads.append(t)
-            time.sleep(1)  # Delay nhe giua cac Chrome
+            if self._setup_stagger_sec > 0:
+                time.sleep(self._setup_stagger_sec)
 
         # Doi tat ca setup xong
         for t in threads:
@@ -576,6 +722,9 @@ class ChromePool:
         Khoi dong worker threads cho TAT CA workers (ke ca chua ready).
         Worker chua ready se tu retry setup trong loop.
         """
+        self._log(
+            f"[STARTUP] workers={len(self.workers)} | setup_concurrency={self._setup_concurrency} | stagger={self._setup_stagger_sec:.1f}s"
+        )
         for worker in self.workers:
             t = threading.Thread(
                 target=self._worker_loop,
@@ -585,6 +734,8 @@ class ChromePool:
             )
             t.start()
             self._log(f"[Chrome-{worker.index}] Worker thread started" + (" (chua ready, se retry)" if not worker.ready else ""))
+            if self._setup_stagger_sec > 0:
+                time.sleep(self._setup_stagger_sec)
 
     def _worker_loop(self, worker: ChromeWorker, task_queue: list,
                      queue_lock: threading.Lock, tasks: dict,
@@ -596,8 +747,29 @@ class ChromePool:
         """
         worker_name = f"Chrome-{worker.index}"
 
+        def _requeue_task(task_id: str):
+            """Dua task quay lai cuoi queue de worker ranh khac co the lay ngay."""
+            with queue_lock:
+                task_queue.append(task_id)
+
+        def _wait_for_own_proxy_setup():
+            """Chi cho proxy cua chinh worker nay, khong doi cac worker khac."""
+            pp_type = self._proxy_config.get('proxy_provider', {}).get('type', 'none')
+            if pp_type == 'none':
+                return
+            start_wait = time.time()
+            while not worker.proxy_setup_done:
+                waited = int(time.time() - start_wait)
+                if waited > 120:
+                    self._log(f"[{worker_name}] Proxy setup qua lau (>120s), tiep tuc startup khong doi them", "WARN")
+                    break
+                time.sleep(0.5)
+            if worker.proxy_setup_error:
+                self._log(f"[{worker_name}] Proxy setup issue: {worker.proxy_setup_error}", "WARN")
+
         # Neu chua ready → retry setup, rotate IPv6 neu can
         if not worker.ready:
+            _wait_for_own_proxy_setup()
             self._log(f"[{worker_name}] Chua ready, retry setup...", "WARN")
             for retry in range(3):
                 # v1.0.633: Kill Chrome cu truoc khi retry (tranh chiem port + IPv6 cu)
@@ -611,9 +783,13 @@ class ChromePool:
 
                 time.sleep(5)
 
-                # v1.0.633: Rotate IPv6 TRUOC khi retry setup (khong phai sau)
-                if worker.ipv6 and self._pool_client:
-                    self._log(f"[{worker_name}] Rotate IPv6 truoc khi retry setup...", "WARN")
+                ok = self._setup_single_worker_limited(worker)
+                if ok:
+                    break
+
+                # Chi rotate sau khi setup THAT BAI (khong rotate truoc lan thu 1)
+                if retry < 2 and worker.ipv6 and self._pool_client:
+                    self._log(f"[{worker_name}] Setup fail -> rotate IPv6 truoc lan thu tiep...", "WARN")
                     result = self._pool_client.rotate_ip(
                         worker.ipv6, reason="setup_fail",
                         worker=f"server_chrome{worker.index}"
@@ -630,27 +806,45 @@ class ChromePool:
                                 try:
                                     from modules.proxy_providers import create_provider
                                     proxy_port = worker.port + 200
+                                    old_provider = worker.proxy_provider
+                                    try:
+                                        old_provider.stop()
+                                    except Exception as stop_err:
+                                        self._log(f"[{worker_name}] Stop old proxy error: {stop_err}", "WARN")
+                                    worker.proxy_provider = None
+
+                                    provider_config = self._proxy_config or {'proxy_provider': {'type': 'ipv6'}}
                                     new_provider = create_provider(
-                                        config={'proxy_type': 'ipv6'},
+                                        config=provider_config,
                                         log_func=lambda msg, lvl="INFO", wn=worker_name: self._log(f"[{wn}] {msg}", lvl),
                                     )
+                                    if not hasattr(new_provider, 'setup_dedicated'):
+                                        raise TypeError(f"Unexpected proxy provider: {new_provider.get_type()}")
                                     if new_provider.setup_dedicated(worker.index, proxy_port, new_ip, new_gw):
                                         worker.proxy_provider = new_provider
                                         self._log(f"[{worker_name}] Proxy re-setup OK voi IPv6 moi")
                                 except Exception as e:
                                     self._log(f"[{worker_name}] Re-setup proxy error: {e}", "ERROR")
 
-                ok = self._setup_single_worker(worker)
-                if ok:
-                    break
-
             if not worker.ready:
-                self._log(f"[{worker_name}] Setup THAT BAI sau retry + rotate! Worker dung.", "ERROR")
-                return
+                self._log(f"[{worker_name}] Setup THAT BAI sau retry + rotate! Worker se vao che do self-heal.", "ERROR")
 
         self._log(f"[{worker_name}] Worker loop started - doi task...")
 
         while True:
+            # Neu worker dang down/recovering va queue rong, server van phai tu setup lai.
+            if not worker.ready:
+                now = time.time()
+                if now >= next_self_heal_at:
+                    _wait_for_own_proxy_setup()
+                    self._log(f"[{worker_name}] Idle self-heal: worker not ready -> setup lai", "WARN")
+                    ok = self._setup_single_worker_limited(worker)
+                    next_self_heal_at = time.time() + (15 if ok else 30)
+                    if not ok:
+                        self._log(f"[{worker_name}] Idle self-heal chua thanh cong, se thu lai", "WARN")
+                time.sleep(1.0)
+                continue
+
             # Lay task tiep theo tu queue
             task_id = None
             with queue_lock:
@@ -684,7 +878,7 @@ class ChromePool:
                 # Check session ready - retry setup neu can
                 if not worker.session or not worker.session.ready:
                     self._log(f"[{worker_name}] Session not ready, re-setup...", "WARN")
-                    ok = self._setup_single_worker(worker)
+                    ok = self._setup_single_worker_limited(worker)
                     if not ok:
                         raise RuntimeError("Chrome session setup failed")
 
@@ -767,8 +961,7 @@ class ChromePool:
                                 old_idx = worker.session._current_model_index
                                 worker.session._current_model_index = (old_idx + 1) % 3
                                 self._log(f"[{worker_name}] [QUOTA] Model {old_idx} → {worker.session._current_model_index} | retry {retry_count + 1}/3", "WARN")
-                                with queue_lock:
-                                    task_queue.append(task_id)
+                                _requeue_task(task_id)
                             else:
                                 tasks[task_id]['status'] = 'failed'
                                 tasks[task_id]['error'] = f"Quota exhausted - all models tried"
@@ -784,8 +977,7 @@ class ChromePool:
                                 tasks[task_id]['status'] = 'queued'
                                 tasks[task_id]['error'] = ''
                                 self._log(f"[{worker_name}] RE-QUEUE (interceptor): {task_id[:8]}... | retry {retry_count + 1}/3", "WARN")
-                                with queue_lock:
-                                    task_queue.append(task_id)
+                                _requeue_task(task_id)
                                 # Restart Chrome (co the page bi loi)
                                 if worker.session:
                                     try:
@@ -815,6 +1007,7 @@ class ChromePool:
                                 tasks[task_id]['_400_retries'] = _400_retries + 1
                                 tasks[task_id]['status'] = 'queued'
                                 tasks[task_id]['error'] = ''
+                                _requeue_task(task_id)
                                 self._log(f"[{worker_name}] 400 RETRY {_400_retries+1}/1: {task_id[:8]}...", "WARN")
                             else:
                                 # Da retry roi → POLICY_VIOLATION cho VM skip
@@ -835,8 +1028,7 @@ class ChromePool:
                                 tasks[task_id]['status'] = 'queued'
                                 tasks[task_id]['error'] = ''
                                 self._log(f"[{worker_name}] RE-QUEUE (proxy-dead): {task_id[:8]}... | retry {retry_count + 1}/10", "WARN")
-                                with queue_lock:
-                                    task_queue.append(task_id)
+                                _requeue_task(task_id)
                             else:
                                 tasks[task_id]['status'] = 'failed'
                                 tasks[task_id]['error'] = f"Proxy dead + {err_code} x10"
@@ -851,15 +1043,14 @@ class ChromePool:
                         elif err_code == 403:
                             # Track retry count cho task nay (toi da 10 lan = 2 vong x 5 lan)
                             retry_count = tasks[task_id].get('_403_retries', 0)
-                            max_retries = 10  # 2 vong x 5 lan
+                            max_retries = 1  # 403 -> recovery manh tay ngay, chi thu lai 1 lan
                             if retry_count < max_retries:
                                 tasks[task_id]['_403_retries'] = retry_count + 1
                                 tasks[task_id]['status'] = 'queued'
                                 tasks[task_id]['error'] = ''
                                 self._log(f"[{worker_name}] RE-QUEUE (403): {task_id[:8]}... | retry {retry_count + 1}/{max_retries}", "WARN")
                                 # Re-queue task de retry sau khi recovery
-                                with queue_lock:
-                                    task_queue.append(task_id)
+                                _requeue_task(task_id)
                             else:
                                 tasks[task_id]['status'] = 'failed'
                                 tasks[task_id]['error'] = f"403 x{max_retries} - het retry"
@@ -874,21 +1065,18 @@ class ChromePool:
                             self._log(f"[{worker_name}] FAIL: {task_id[:8]}... | {err_str[:80]}", "ERROR")
 
                         # === 403 RECOVERY ===
-                        # Lan 1-3: DOI IPv6 + fingerprint moi (giu data, nhanh)
-                        # Lan 4:   CLEAR DATA + DOI IPv6 + login lai (cung account)
-                        # Lan 5+:  CLEAR DATA + DOI IPv6 + DOI ACCOUNT MOI + login
-                        # Counter chi reset khi TAO ANH THANH CONG hoac doi account
+                        # Xu ly manh tay ngay tu lan dau:
+                        # - Clear Chrome data
+                        # - Doi IPv6/proxy moi
+                        # - Doi account moi
+                        # - Restart Chrome + login lai
                         if err_code == 403 and worker.session:
                             worker.session._consecutive_403 += 1
                             c403 = worker.session._consecutive_403
-
-                            if c403 <= 3:
-                                action = f"DOI IPv6 + fingerprint moi (lan {c403}/3)"
-                            elif c403 == 4:
-                                action = "CLEAR DATA + DOI IPv6 + LOGIN LAI"
-                            else:
-                                action = "CLEAR DATA + DOI IPv6 + DOI ACCOUNT MOI"
-                            self._log(f"[{worker_name}] [403] Lan thu {c403} → {action}", "WARN")
+                            self._log(
+                                f"[{worker_name}] [403] Lan thu {c403} -> CLEAR DATA + DOI ACCOUNT MOI + DOI IPv6",
+                                "WARN"
+                            )
 
                             # Cleanup browser data ngay
                             try:
@@ -900,7 +1088,7 @@ class ChromePool:
 
                             worker.ready = False
                             try:
-                                # v1.0.609: Pool mode + ProxyProvider → rotate_to() voi IP moi tu pool
+                                # Rotate IPv6/proxy truoc khi restart Chrome
                                 if self._pool_mode and self._pool_client and worker.proxy_provider:
                                     pool_worker = f"server_chrome{worker.index}"
                                     pool_result = self.rotate_pool_ip(
@@ -909,8 +1097,7 @@ class ChromePool:
                                     new_ip = pool_result.get("ip", "") if isinstance(pool_result, dict) else pool_result
                                     new_gw = pool_result.get("gateway", "") if isinstance(pool_result, dict) else ""
                                     if new_ip and new_ip != worker.ipv6:
-                                        self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} → {new_ip}", "WARN")
-                                        # Dung rotate_to() de add IP to interface + restart SOCKS5
+                                        self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} -> {new_ip}", "WARN")
                                         worker.proxy_provider.rotate_to(new_ip, gateway=new_gw)
                                         worker.ipv6 = new_ip
                                         worker.gateway = new_gw
@@ -918,72 +1105,54 @@ class ChromePool:
                                         self._log(f"[{worker_name}] [403] Pool: khong co IPv6 khac", "WARN")
 
                                 elif worker.session._proxy_provider and not self._pool_mode:
-                                    # Non-pool mode voi ProxyProvider (webshare, ipv6 static)
                                     ok_rotate = worker.session.rotate_proxy("403")
                                     if ok_rotate:
-                                        self._log(f"[{worker_name}] [403] Proxy rotated: → {worker.session._proxy_provider.get_current_ip()}", "WARN")
+                                        self._log(
+                                            f"[{worker_name}] [403] Proxy rotated: -> {worker.session._proxy_provider.get_current_ip()}",
+                                            "WARN"
+                                        )
                                     else:
                                         self._log(f"[{worker_name}] [403] Proxy rotate failed", "WARN")
                                 elif self._pool_mode and self._pool_client:
-                                    # v1.0.561: Pool mode without ProxyProvider
                                     pool_worker = f"server_chrome{worker.index}"
                                     pool_result = self.rotate_pool_ip(
                                         worker.ipv6, worker_name=pool_worker, reason="403"
                                     )
                                     new_ip = pool_result.get("ip", "") if isinstance(pool_result, dict) else pool_result
                                     if new_ip and new_ip != worker.ipv6:
-                                        self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} → {new_ip}", "WARN")
+                                        self._log(f"[{worker_name}] [403] Pool IPv6: {worker.ipv6} -> {new_ip}", "WARN")
                                         worker.session.rotate_ipv6(new_ip)
                                         worker.ipv6 = new_ip
                                     else:
                                         self._log(f"[{worker_name}] [403] Pool: khong co IPv6 khac", "WARN")
                                 else:
-                                    # Backward compat: IPv6 static list
                                     new_ip = self.get_next_ipv6(worker.ipv6)
                                     if new_ip and new_ip != worker.ipv6:
-                                        self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6} → {new_ip}", "WARN")
+                                        self._log(f"[{worker_name}] [403] IPv6: {worker.ipv6} -> {new_ip}", "WARN")
                                         worker.session.rotate_ipv6(new_ip)
                                         worker.ipv6 = new_ip
                                     else:
                                         self._log(f"[{worker_name}] [403] Khong co IPv6 khac", "WARN")
 
-                                if c403 <= 3:
-                                    # Lan 1-3: Restart + fingerprint moi (giu data)
-                                    ok = worker.session.restart_with_new_fingerprint(clear_data=False)
-                                    worker.ready = ok
-                                    if ok:
-                                        self._log(f"[{worker_name}] [403] Restart OK - IPv6 moi + fingerprint moi", "OK")
-                                    else:
-                                        self._log(f"[{worker_name}] [403] Restart FAIL!", "ERROR")
-
-                                elif c403 == 4:
-                                    # Lan 4: CLEAR DATA + login lai (cung account)
-                                    ok = worker.session.restart_with_new_fingerprint(clear_data=True)
-                                    worker.ready = ok
-                                    if ok:
-                                        self._log(f"[{worker_name}] [403] Clear data + login lai OK", "OK")
-                                    else:
-                                        self._log(f"[{worker_name}] [403] Clear data + login FAIL!", "ERROR")
-
+                                old_email = worker.account['id'] if worker.account else "?"
+                                new_account = self.get_next_account(old_email)
+                                if new_account:
+                                    self._log(f"[{worker_name}] [403] DOI ACCOUNT: {old_email} -> {new_account['id']}", "WARN")
+                                    worker.account = new_account
+                                    worker.session._account = new_account
                                 else:
-                                    # Lan 5+: DOI ACCOUNT MOI + clear data + login
-                                    old_email = worker.account['id'] if worker.account else "?"
-                                    new_account = self.get_next_account(old_email)
-                                    if new_account:
-                                        self._log(f"[{worker_name}] [403] DOI ACCOUNT: {old_email} → {new_account['id']}", "WARN")
-                                        worker.account = new_account
-                                        worker.session._account = new_account
-                                    else:
-                                        self._log(f"[{worker_name}] [403] Khong co account khac, giu {old_email}", "WARN")
+                                    self._log(f"[{worker_name}] [403] Khong co account khac, giu {old_email}", "WARN")
 
-                                    ok = worker.session.restart_with_new_fingerprint(clear_data=True)
-                                    worker.ready = ok
-                                    if ok:
-                                        # Reset counter sau khi doi account
-                                        worker.session._consecutive_403 = 0
-                                        self._log(f"[{worker_name}] [403] Doi account + clear data + login OK → reset counter", "OK")
-                                    else:
-                                        self._log(f"[{worker_name}] [403] Doi account + login FAIL!", "ERROR")
+                                ok = worker.session.restart_with_new_fingerprint(clear_data=True)
+                                worker.ready = ok
+                                if ok:
+                                    worker.session._consecutive_403 = 0
+                                    self._log(
+                                        f"[{worker_name}] [403] Clear data + doi IPv6 + doi account OK -> reset counter",
+                                        "OK"
+                                    )
+                                else:
+                                    self._log(f"[{worker_name}] [403] Recovery manh tay FAIL!", "ERROR")
 
                             except Exception as re:
                                 self._log(f"[{worker_name}] [403] Recovery error: {re}", "ERROR")
@@ -1024,6 +1193,10 @@ class ChromePool:
         """So workers da setup xong (ke ca dang busy)."""
         return sum(1 for w in self.workers if w.ready)
 
+    def recovering_count(self) -> int:
+        """So workers dang setup/recover."""
+        return sum(1 for w in self.workers if w.recovering)
+
     def get_stats(self) -> List[Dict]:
         """Thong ke tung worker."""
         return [
@@ -1031,6 +1204,13 @@ class ChromePool:
                 "index": w.index,
                 "ready": w.ready,
                 "busy": w.busy,
+                "recovering": w.recovering,
+                "status": (
+                    "busy" if w.busy else
+                    "ready" if w.ready else
+                    "recovering" if w.recovering else
+                    "down"
+                ),
                 "current_task": w.current_task_id[:8] + "..." if w.current_task_id else None,
                 "account": w.account["id"] if w.account else None,
                 "ipv6": w.ipv6 or None,
@@ -1058,3 +1238,4 @@ class ChromePool:
             w.ready = False
             w.busy = False
         self._log("All Chrome sessions closed")
+

@@ -236,6 +236,11 @@ body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: 
                 <option value="3">3 Chrome</option>
                 <option value="4">4 Chrome</option>
                 <option value="5">5 Chrome</option>
+                <option value="6">6 Chrome</option>
+                <option value="7">7 Chrome</option>
+                <option value="8">8 Chrome</option>
+                <option value="9">9 Chrome</option>
+                <option value="10">10 Chrome</option>
             </select>
             <div class="hint">Chon so Chrome workers chay song song</div>
         </div>
@@ -659,6 +664,7 @@ def server_status():
     total_workers = len(chrome_pool.workers) if chrome_pool else 0
     ready_workers = chrome_pool.total_ready() if chrome_pool else 0
     available_workers = chrome_pool.available_count() if chrome_pool else 0
+    recovering_workers = chrome_pool.recovering_count() if chrome_pool else 0
 
     processing = []
     if chrome_pool:
@@ -683,12 +689,30 @@ def server_status():
                     "task": ew["current_task_id"][:8] + "...",
                 })
 
+    processing_count = len(processing)
+    if total_workers <= 0:
+        server_state = "down"
+    elif available_workers > 0:
+        server_state = "ready"
+    elif ready_workers > 0:
+        server_state = "busy"
+    elif recovering_workers > 0:
+        server_state = "recovering"
+    else:
+        server_state = "down"
+    accepting_tasks = server_state in ("ready", "busy", "recovering")
+
     return jsonify({
         "status": "running",
         "chrome_count": total_workers,
         "chrome_ready": ready_workers,
         "chrome_available": available_workers,
+        "recovering_workers": recovering_workers,
         "queue_size": queue_size,
+        "processing_count": processing_count,
+        "load_count": queue_size + processing_count,
+        "server_state": server_state,
+        "accepting_tasks": accepting_tasks,
         "processing": processing,
         "vm_active": vm_tasks,
         "stats": {
@@ -728,6 +752,7 @@ def workers_info():
                 "index": f"ext-{ew['index']}",
                 "ready": is_ready,
                 "busy": ew["status"] == "busy",
+                "recovering": ew["status"] == "recovering",
                 "status": ew["status"],
                 "current_task": ew["current_task_id"][:8] + "..." if ew.get("current_task_id") else None,
                 "account": ew.get("account"),
@@ -1180,7 +1205,9 @@ def _do_start_workers():
 
     # GOP mode (default): start Chrome worker threads in same process
     if chrome_pool.workers:
-        server_log(f"Setup {len(chrome_pool.workers)} Chrome workers SONG SONG...")
+        server_log(f"Khoi dong {len(chrome_pool.workers)} Chrome workers doc lap...")
+        chrome_pool.start_workers(task_queue, queue_lock, tasks, task_lock, stats)
+        return
 
         def setup_worker_thread(worker):
             """Setup 1 worker trong thread rieng. Retry neu fail. Xong → start worker loop."""
