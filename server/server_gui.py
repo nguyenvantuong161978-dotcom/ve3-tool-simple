@@ -14,6 +14,8 @@ import os
 import json
 import threading
 import time
+import subprocess
+import ctypes
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
@@ -44,14 +46,303 @@ class ServerGUI(tk.Tk):
         self.geometry("700x850")
         self.configure(bg=BG)
         self.resizable(True, True)
+        self._apply_gui_layout()
 
         self._server_started = False
         self._logs = []
         self._workers_info = []
         self._settings_file = TOOL_DIR / "config" / "server_gui.json"
+        self._is_closing = False
+
+        # Dong GUI -> cleanup Chrome/CMD do tool tao
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_setup_page()
         self._load_settings()
+
+    def _apply_gui_layout(self):
+        """Dat GUI ben trai man hinh, danh vung ben phai cho Chrome."""
+        try:
+            sw = int(self.winfo_screenwidth())
+            sh = int(self.winfo_screenheight())
+            # Lay work area de tranh bi taskbar che.
+            work_left, work_top, work_right, work_bottom = 0, 0, sw, sh
+            try:
+                class _RECT(ctypes.Structure):
+                    _fields_ = [
+                        ("left", ctypes.c_long),
+                        ("top", ctypes.c_long),
+                        ("right", ctypes.c_long),
+                        ("bottom", ctypes.c_long),
+                    ]
+                rect = _RECT()
+                SPI_GETWORKAREA = 0x0030
+                ok = ctypes.windll.user32.SystemParametersInfoW(
+                    SPI_GETWORKAREA, 0, ctypes.byref(rect), 0
+                )
+                if ok:
+                    work_left, work_top, work_right, work_bottom = (
+                        int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+                    )
+            except Exception:
+                pass
+
+            work_w = max(800, work_right - work_left)
+            work_h = max(700, work_bottom - work_top)
+            # Tru them mot khoang an toan de tranh bi che taskbar/khung cua so.
+            safe_bottom_gap = 18
+            gui_h = max(700, work_h - safe_bottom_gap)
+            if sw >= 3800:
+                reserve_left = int(os.getenv("CHROME_LAYOUT_LEFT_RESERVED", "1920"))
+            elif sw >= 2500:
+                reserve_left = int(os.getenv("CHROME_LAYOUT_LEFT_RESERVED", "960"))
+            else:
+                reserve_left = int(os.getenv("CHROME_LAYOUT_LEFT_RESERVED", "760"))
+            reserve_left = max(560, min(reserve_left, work_w - 300))
+            self.geometry(f"{reserve_left}x{gui_h}+{work_left}+{work_top}")
+            self.minsize(700, 850)
+        except Exception:
+            pass
+
+    # ============================================================
+    # Shutdown / Cleanup
+    # ============================================================
+    def _close_tool_cmd_windows(self):
+        """Dong cac cua so CMD do tool tao (khong dong CMD khac)."""
+        if os.name != 'nt':
+            return
+        try:
+            user32 = ctypes.windll.user32
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            WM_CLOSE = 0x0010
+            titles = ("WORKER-", "SERVER - Main", "ChromeWorker-")
+
+            def _enum_cb(hwnd, lparam):
+                if not user32.IsWindowVisible(hwnd):
+                    return True
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length <= 0:
+                    return True
+                buff = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buff, length + 1)
+                title = (buff.value or "").strip()
+                if title and any(key in title for key in titles):
+                    user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+                return True
+
+            user32.EnumWindows(WNDENUMPROC(_enum_cb), 0)
+        except Exception:
+            pass
+
+    def _kill_portable_chrome_processes(self):
+        """Kill Chrome Portable processes con sot (khong kill toan bo Chrome ca may)."""
+        try:
+            from modules.process_killer import kill_pid, kill_all_by_name
+        except Exception:
+            return
+
+        # Kill launcher GoogleChromePortable.exe (chi tool nay dung)
+        try:
+            kill_all_by_name("GoogleChromePortable.exe")
+        except Exception:
+            pass
+
+    def _kill_tool_python_processes(self):
+        """Kill python process do tool nay tao (worker/server), tranh sot CMD."""
+        if os.name != 'nt':
+            return
+        try:
+            from modules.process_killer import kill_pid
+        except Exception:
+            return
+
+        try:
+            proc = subprocess.run(
+                ['wmic', 'process', 'where', 'name="python.exe" or name="pythonw.exe"', 'get', 'ProcessId,CommandLine', '/FORMAT:CSV'],
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            out = proc.stdout or ""
+            markers = (
+                "server/worker.py",
+                "server\\worker.py",
+                "server/app.py",
+                "server\\app.py",
+                "START_SERVER.bat",
+            )
+            for line in out.splitlines():
+                s = line.strip()
+                if not s:
+                    continue
+                cmd_lower = s.lower()
+                if not any(m.lower() in cmd_lower for m in markers):
+                    continue
+                parts = s.rsplit(',', 1)
+                if len(parts) != 2:
+                    continue
+                try:
+                    pid = int(parts[1].strip())
+                    kill_pid(pid)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _kill_tool_cmd_processes(self):
+        """Kill cmd.exe do tool tao (launcher/worker wrappers)."""
+        if os.name != 'nt':
+            return
+        try:
+            from modules.process_killer import kill_pid
+        except Exception:
+            return
+
+        try:
+            proc = subprocess.run(
+                ['wmic', 'process', 'where', 'name="cmd.exe"', 'get', 'ProcessId,CommandLine', '/FORMAT:CSV'],
+                capture_output=True,
+                text=True,
+                timeout=8,
+            )
+            out = proc.stdout or ""
+            markers = (
+                "start_server.bat",
+                "server\\worker.py",
+                "server/worker.py",
+                "run_worker.py",
+                "server\\start_server.py",
+                "server/start_server.py",
+            )
+            for line in out.splitlines():
+                s = line.strip()
+                if not s:
+                    continue
+                cmd_lower = s.lower()
+                if not any(m in cmd_lower for m in markers):
+                    continue
+                parts = s.rsplit(',', 1)
+                if len(parts) != 2:
+                    continue
+                try:
+                    pid = int(parts[1].strip())
+                    kill_pid(pid)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        if os.name != 'nt':
+            return
+
+        # v1.0.684: Kill ALL chrome.exe co GoogleChromePortable trong command line
+        # Truoc: kill_pid() tung PID → chi kill parent, child thanh orphan
+        # Sau: WMIC terminate tat ca cung luc + taskkill /F /T tree kill
+        try:
+            # Cach 1: WMIC terminate tat ca matching processes cung luc (nhanh nhat)
+            subprocess.run(
+                ['wmic', 'process', 'where',
+                 "name='chrome.exe' and CommandLine like '%GoogleChromePortable%'",
+                 'call', 'terminate'],
+                capture_output=True, text=True, timeout=10,
+                creationflags=0x08000000  # CREATE_NO_WINDOW
+            )
+        except Exception:
+            pass
+
+        # Cach 2: Backup - tim PID va kill tree (phong khi WMIC terminate khong du)
+        try:
+            proc = subprocess.run(
+                ['wmic', 'process', 'where',
+                 "name='chrome.exe' and CommandLine like '%GoogleChromePortable%'",
+                 'get', 'ProcessId', '/FORMAT:CSV'],
+                capture_output=True, text=True, timeout=8,
+                creationflags=0x08000000
+            )
+            for line in (proc.stdout or "").splitlines():
+                s = line.strip()
+                if not s or not any(c.isdigit() for c in s):
+                    continue
+                parts = s.rsplit(',', 1)
+                if len(parts) != 2:
+                    continue
+                try:
+                    pid = int(parts[1].strip())
+                    # taskkill /F /T = force kill + kill ca tree (children)
+                    subprocess.run(
+                        ['taskkill', '/F', '/T', '/PID', str(pid)],
+                        capture_output=True, timeout=5,
+                        creationflags=0x08000000
+                    )
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _on_close(self):
+        """Khi dong GUI: stop workers + dong Chrome/CMD.
+        v1.0.684: Cleanup trong thread rieng voi timeout.
+        Truoc: page.quit() treo → _on_close khong bao gio den os._exit(0) → CMD + Chrome song mai.
+        """
+        if self._is_closing:
+            return
+        self._is_closing = True
+
+        try:
+            self._add_log("Dang dong GUI: cleanup Chrome/CMD...", "WARN")
+        except Exception:
+            pass
+
+        def _cleanup_thread():
+            """Chay cleanup trong thread rieng - neu treo thi timeout se kill."""
+            # 1) Yeu cau pool dong sessions truoc
+            try:
+                from server.app import chrome_pool, server_settings, settings_lock
+                if chrome_pool:
+                    try:
+                        chrome_pool.close_all()
+                    except Exception:
+                        pass
+                with settings_lock:
+                    server_settings['started'] = False
+            except Exception:
+                pass
+
+            # 2) Dong CMD cua tool + kill process Chrome Portable con sot
+            self._close_tool_cmd_windows()
+            self._kill_tool_cmd_processes()
+            self._kill_portable_chrome_processes()
+            self._kill_tool_python_processes()
+
+        # Chay cleanup trong thread voi timeout 15s
+        cleanup = threading.Thread(target=_cleanup_thread, daemon=True)
+        cleanup.start()
+        cleanup.join(timeout=15)  # Doi toi da 15s
+
+        if cleanup.is_alive():
+            # Cleanup treo (page.quit() block) → force kill Chrome truc tiep
+            try:
+                self._add_log("Cleanup timeout 15s! Force kill...", "ERROR")
+            except Exception:
+                pass
+            # Last resort: kill tat ca GoogleChromePortable chrome.exe
+            try:
+                subprocess.run(
+                    ['wmic', 'process', 'where',
+                     "name='chrome.exe' and CommandLine like '%GoogleChromePortable%'",
+                     'call', 'terminate'],
+                    capture_output=True, timeout=5,
+                    creationflags=0x08000000
+                )
+            except Exception:
+                pass
+
+        # 3) LUON dong GUI + thoat - BAT KE cleanup thanh cong hay khong
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        os._exit(0)  # Force exit Python → CMD dong theo
 
     # ============================================================
     # Setup Page
@@ -232,7 +523,7 @@ class ServerGUI(tk.Tk):
                  bg=BG2, fg=FG).pack(side='left')
 
         self.chrome_var = tk.StringVar(value="0")
-        chrome_options = ["Tat ca", "1", "2", "3", "4", "5"]
+        chrome_options = ["Tat ca", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
         self.chrome_combo = ttk.Combobox(row2, textvariable=self.chrome_var,
                                          values=chrome_options, state='readonly', width=10)
         self.chrome_combo.set("Tat ca")
@@ -1110,7 +1401,7 @@ class ServerGUI(tk.Tk):
                     if wid not in self.worker_labels:
                         frame = tk.Frame(self.workers_container, bg=BG, highlightbackground=BORDER,
                                          highlightthickness=1, padx=8, pady=4)
-                        frame.pack(side='left', padx=4, fill='y')
+                        frame.grid(sticky='nsew', padx=4, pady=4)
 
                         name_lbl = tk.Label(frame, text=f"Chrome-{w.index}", font=("Segoe UI", 10, "bold"),
                                             bg=BG, fg=FG)
@@ -1151,7 +1442,7 @@ class ServerGUI(tk.Tk):
                     if wid not in self.worker_labels:
                         frame = tk.Frame(self.workers_container, bg=BG, highlightbackground=BORDER,
                                          highlightthickness=1, padx=8, pady=4)
-                        frame.pack(side='left', padx=4, fill='y')
+                        frame.grid(sticky='nsew', padx=4, pady=4)
 
                         name_lbl = tk.Label(frame, text=f"Ext-{ew['index']}", font=("Segoe UI", 10, "bold"),
                                             bg=BG, fg=FG)
@@ -1188,6 +1479,34 @@ class ServerGUI(tk.Tk):
 
                     acc = str(ew.get('account', '')).split('@')[0] if ew.get('account') else ""
                     labels['info'].config(text=f"{acc}\nDone:{ew.get('total_completed',0)} Fail:{ew.get('total_failed',0)}")
+
+            # Reflow cards: 5 cot -> 10 workers se thanh 2 dong.
+            cols = 5
+            try:
+                cols = max(1, int(os.getenv("GUI_WORKER_COLUMNS", "5")))
+            except Exception:
+                cols = 5
+
+            # Sap xep on dinh: internal w0..wn truoc, external sau.
+            def _sort_key(k: str):
+                if k.startswith('w'):
+                    try:
+                        return (0, int(k[1:]))
+                    except Exception:
+                        return (0, 10_000)
+                if k.startswith('ext'):
+                    try:
+                        return (1, int(k[3:]))
+                    except Exception:
+                        return (1, 10_000)
+                return (2, 10_000)
+
+            keys = sorted(self.worker_labels.keys(), key=_sort_key)
+            for idx, wid in enumerate(keys):
+                row = idx // cols
+                col = idx % cols
+                self.worker_labels[wid]['frame'].grid_configure(row=row, column=col)
+                self.workers_container.grid_columnconfigure(col, weight=1)
 
         except:
             pass
