@@ -1,33 +1,17 @@
-1.0.683
-2026-05-06 (VN)
-Fix: Video generation hang - Server poll Google qua Chrome cho den khi SUCCESSFUL
-- VAN DE: Server tra operations (PENDING) ve client ngay lap tuc
-  -> Client tu poll Google truc tiep -> bi 403 captcha -> treo vinh vien
-  -> Chrome tren server tao video THANH CONG nhung client khong nhan duoc
-- FIX 1: Server tu poll Google qua Chrome fetch (co session hop le)
-  -> _poll_video_status_via_chrome(): Poll moi 5s cho den khi SUCCESSFUL
-  -> Dung window._pollResult pattern (khong dung await trong run_js)
-  -> Server chi tra ket qua khi video XONG (co video URL)
-- FIX 2: Handle ca 2 format response tu Google:
-  -> operations: [{"status": "PENDING"}] (format cu)
-  -> media: [{"mediaMetadata": {"mediaStatus": {"mediaGenerationStatus": "PENDING"}}}] (format moi)
-- FIX 3: Fix ReferenceError: await is not defined
-  -> page.run_js() wrap code trong sync function -> await crash
-  -> Doi sang async IIFE + window variable pattern
+1.0.684
+2026-05-08 (VN)
+Fix: Video poll LUON tra HTTP 400 - media format khong convert dung sang operations
+- VAN DE: Google tra 2 format: {operations:[...]} HOAC {media:[...]}
+  → Khi tra media format (SCHEDULED/PENDING), server gan operations = media_items TRUC TIEP
+  → Poll API (batchCheckAsyncVideoGenerationStatus) can {operations:[{operation:{name:id}}]}
+  → Nhung gui {operations:[{mediaMetadata:{...}}]} → SAI FORMAT → Google tra 400 BAD REQUEST
+  → 100% video poll FAIL → timeout 300s → server danh dau OK nhung KHONG co video URL
+  → Client doi 600s → "Timeout waiting for video from proxy"
+- FIX: Convert media format sang operations format truoc khi poll
+  → Trich media_id tu media items → tao {operation:{name:media_id}, status:PENDING}
+  → Poll API nhan dung format → tra SUCCESSFUL + video URL
+  → SCHEDULED status (moi) cung duoc handle (giong PENDING)
 - File: server/chrome_session.py
-
-1.0.682
-2026-04-04 (VN)
-Fix: Mode SMALL van tao video - BrowserFlowGenerator khong biet skip_video
-- BUG: smart_engine set _skip_video=True cho mode small
-  → Log "[MODE] IMAGE ONLY - Bo qua tao video" (DUNG)
-  → Nhung BrowserFlowGenerator doc video_count tu settings.yaml (KHONG check _skip_video)
-  → Sau khi tao xong anh → van chay "[I2V] TAO VIDEO TU ANH" → lang phi thoi gian
-- FIX: Truyen skip_video xuong BrowserFlowGenerator
-  → Set generator.config['video_count'] = 0 khi _skip_video=True
-  → Ca 2 mode (API va Browser) deu duoc fix
-  → Mode small chi tao anh, KHONG tao video
-- File: modules/smart_engine.py
 
 1.0.681
 2026-04-04 (VN)

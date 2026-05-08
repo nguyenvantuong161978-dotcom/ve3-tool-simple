@@ -2110,7 +2110,7 @@ class ChromeSession:
                             pass
                         return result
 
-                # 7. v1.0.641: Server tu poll Google cho den khi video XONG
+                # 7. v1.0.684: Server tu poll Google cho den khi video XONG
                 # Google co the tra {"operations": [...]} HOAC {"media": [...]}
                 # Ca 2 truong hop deu can poll de cho SUCCESSFUL
                 operations = result.get('operations', [])
@@ -2130,7 +2130,7 @@ class ChromeSession:
                         need_poll = True
                         self.log(f"Video operations status: {op_status} -> can poll")
                 elif media_items:
-                    # Google tra media array voi PENDING status
+                    # Google tra media array — can convert sang operations format
                     media_status = ''
                     try:
                         media_status = media_items[0].get('mediaMetadata', {}).get('mediaStatus', {}).get('mediaGenerationStatus', '')
@@ -2140,20 +2140,35 @@ class ChromeSession:
                         self.log(f"Video SUCCESSFUL ngay tu dau! (media)", "OK")
                     elif 'FAILED' in media_status:
                         self.log(f"Video FAILED: {media_status}", "ERROR")
-                    elif 'PENDING' in media_status:
-                        need_poll = True
-                        self.log(f"Video media status: {media_status} -> can poll")
-                        # Chuyen media format thanh operations format de poll
-                        operations = media_items
                     else:
-                        self.log(f"Video media status unknown: {media_status}")
+                        # SCHEDULED, PENDING, or unknown -> can poll
                         need_poll = True
-                        operations = media_items
+                        self.log(f"Video media status: {media_status} -> convert to operations for poll")
+                        
+                        # v1.0.684: Convert media format -> operations format
+                        # media items co dang: {mediaId, mediaMetadata: {mediaStatus: {...}}}
+                        # Google poll API can: {operations: [{operation: {name: <mediaId>}, status: "..PENDING.."}]}
+                        converted_ops = []
+                        for mi in media_items:
+                            media_id = mi.get('mediaId', '') or mi.get('name', '') or mi.get('id', '')
+                            scene_id = mi.get('sceneId', '')
+                            converted_ops.append({
+                                "operation": {"name": media_id},
+                                "sceneId": scene_id,
+                                "status": "MEDIA_GENERATION_STATUS_PENDING"
+                            })
+                        if converted_ops:
+                            operations = converted_ops
+                            self.log(f"Converted {len(converted_ops)} media items to operations (ids: {[o['operation']['name'][:12] for o in converted_ops]})")
+                        else:
+                            self.log(f"Cannot convert media to operations - no mediaId found", "WARN")
+                            self.log(f"Media items: {json.dumps(media_items)[:500]}")
+                            need_poll = False
                 
-                if need_poll and (operations or media_items):
-                    self.log(f"Poll Google qua Chrome...")
+                if need_poll and operations:
+                    self.log(f"Poll Google qua Chrome ({len(operations)} ops)...")
                     poll_result = self._poll_video_status_via_chrome(
-                        operations=operations if operations else media_items,
+                        operations=operations,
                         bearer_token=client_bearer_token,
                         timeout=300
                     )
