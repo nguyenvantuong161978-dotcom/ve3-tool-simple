@@ -13,6 +13,25 @@ Fix: Video poll LUON tra HTTP 400 - media format khong convert dung sang operati
   → SCHEDULED status (moi) cung duoc handle (giong PENDING)
 - File: server/chrome_session.py
 
+Fix: Worker chet vinh vien khong hoi phuc - next_self_heal_at khong duoc khoi tao
+- VAN DE: next_self_heal_at dung trong while True nhung KHONG BAO GIO duoc khai bao
+  → Worker fail setup → vao self-heal block → NameError → thread crash im lang
+  → Worker chet vinh vien (daemon thread), 10 Chrome → con 3-4 sau vai tieng
+- FIX: Khoi tao next_self_heal_at + self_heal_failures truoc while True
+  → Self-heal loop chay dung: retry setup voi delay tang dan (30s → 120s)
+  → Moi 3 lan fail → rotate IPv6 moi truoc khi retry
+  → Worker LUON tu hoi phuc, khong chet vinh vien
+- File: server/chrome_pool.py
+
+Fix: Chrome zombie khi tat GUI - page.quit() fail thi Chrome con song
+- VAN DE: close_all() chi dung page.quit() (DrissionPage)
+  → Chrome hung/crash → quit() fail im lang → Chrome process con chay
+  → Tat GUI nhung Chrome van chiem RAM + port
+- FIX: close_all() them force kill bang taskkill /F
+  → Sau graceful quit → scan chrome.exe co GoogleChromePortable → kill PID
+  → Dam bao 100% Chrome bi tat khi dong GUI
+- File: server/chrome_pool.py
+
 1.0.681
 2026-04-04 (VN)
 Fix: IPv6 Pool GUI - tu dong tat process cu con chay an khi mo lai

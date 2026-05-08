@@ -829,6 +829,10 @@ class ChromePool:
             if not worker.ready:
                 self._log(f"[{worker_name}] Setup THAT BAI sau retry + rotate! Worker se vao che do self-heal.", "ERROR")
 
+        # v1.0.684: Init self-heal timer (FIX: truoc day khong co dong nay -> NameError -> thread crash)
+        next_self_heal_at = time.time()
+        self_heal_failures = 0
+
         self._log(f"[{worker_name}] Worker loop started - doi task...")
 
         while True:
@@ -837,11 +841,39 @@ class ChromePool:
                 now = time.time()
                 if now >= next_self_heal_at:
                     _wait_for_own_proxy_setup()
-                    self._log(f"[{worker_name}] Idle self-heal: worker not ready -> setup lai", "WARN")
+                    self_heal_failures += 1
+                    self._log(f"[{worker_name}] Idle self-heal (lan {self_heal_failures}): worker not ready -> setup lai", "WARN")
+
+                    # v1.0.684: Rotate IPv6 moi 3 lan self-heal fail (tranh retry cung IP mai)
+                    if self_heal_failures > 1 and self_heal_failures % 3 == 0 and worker.ipv6 and self._pool_client:
+                        try:
+                            pool_worker = f"server_chrome{worker.index}"
+                            pool_result = self.rotate_pool_ip(
+                                worker.ipv6, worker_name=pool_worker, reason="self_heal"
+                            )
+                            new_ip = pool_result.get("ip", "") if isinstance(pool_result, dict) else pool_result
+                            new_gw = pool_result.get("gateway", "") if isinstance(pool_result, dict) else ""
+                            if new_ip and new_ip != worker.ipv6:
+                                self._log(f"[{worker_name}] [self-heal] IPv6: {worker.ipv6} -> {new_ip}", "WARN")
+                                worker.ipv6 = new_ip
+                                worker.gateway = new_gw
+                                if worker.proxy_provider:
+                                    try:
+                                        worker.proxy_provider.rotate_to(new_ip, gateway=new_gw)
+                                    except Exception:
+                                        pass
+                        except Exception as e:
+                            self._log(f"[{worker_name}] [self-heal] IPv6 rotate error: {e}", "WARN")
+
                     ok = self._setup_single_worker_limited(worker)
-                    next_self_heal_at = time.time() + (15 if ok else 30)
-                    if not ok:
-                        self._log(f"[{worker_name}] Idle self-heal chua thanh cong, se thu lai", "WARN")
+                    if ok:
+                        self_heal_failures = 0
+                        next_self_heal_at = time.time() + 15
+                    else:
+                        # Tang dan thoi gian giua cac lan retry: 30s, 60s, max 120s
+                        delay = min(30 * self_heal_failures, 120)
+                        next_self_heal_at = time.time() + delay
+                        self._log(f"[{worker_name}] Idle self-heal chua thanh cong, thu lai sau {delay}s", "WARN")
                 time.sleep(1.0)
                 continue
 
@@ -1222,7 +1254,8 @@ class ChromePool:
         ]
 
     def close_all(self):
-        """Dong tat ca Chrome sessions."""
+        """Dong tat ca Chrome sessions + force kill process con sot."""
+        # 1) Thu graceful quit truoc
         for w in self.workers:
             try:
                 if w.session:
@@ -1237,5 +1270,37 @@ class ChromePool:
                     pass
             w.ready = False
             w.busy = False
+
+        # 2) v1.0.684: Force kill Chrome processes con sot (by port)
+        if os.name == 'nt':
+            try:
+                import subprocess
+                # Kill tat ca chrome.exe co command line chua GoogleChromePortable
+                proc = subprocess.run(
+                    ['wmic', 'process', 'where', 'name="chrome.exe"', 'get', 'ProcessId,CommandLine', '/FORMAT:CSV'],
+                    capture_output=True, text=True, timeout=8,
+                )
+                killed = 0
+                for line in (proc.stdout or "").splitlines():
+                    s = line.strip()
+                    if not s or 'chrome.exe' not in s.lower():
+                        continue
+                    if 'GoogleChromePortable' not in s:
+                        continue
+                    parts = s.rsplit(',', 1)
+                    if len(parts) != 2:
+                        continue
+                    try:
+                        pid = int(parts[1].strip())
+                        subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                      capture_output=True, timeout=5)
+                        killed += 1
+                    except Exception:
+                        continue
+                if killed:
+                    self._log(f"Force killed {killed} Chrome processes con sot")
+            except Exception as e:
+                self._log(f"Force kill Chrome warning: {e}", "WARN")
+
         self._log("All Chrome sessions closed")
 
