@@ -2151,6 +2151,9 @@ class ChromeSession:
                         converted_ops = []
                         for mi in media_items:
                             media_id = mi.get('mediaId', '') or mi.get('name', '') or mi.get('id', '')
+                            if not media_id:
+                                self.log(f"Media item khong co mediaId: {json.dumps(mi)[:200]}", "WARN")
+                                continue
                             scene_id = mi.get('sceneId', '')
                             converted_ops.append({
                                 "operation": {"name": media_id},
