@@ -281,68 +281,92 @@ class ServerGUI(tk.Tk):
 
     def _on_close(self):
         """Khi dong GUI: stop workers + dong Chrome/CMD.
-        v1.0.684: Cleanup trong thread rieng voi timeout.
-        Truoc: page.quit() treo → _on_close khong bao gio den os._exit(0) → CMD + Chrome song mai.
+        v1.0.685: Kill Chrome TRUOC, cleanup sau, os._exit(0) LUON chay.
         """
         if self._is_closing:
             return
         self._is_closing = True
 
-        try:
-            self._add_log("Dang dong GUI: cleanup Chrome/CMD...", "WARN")
-        except Exception:
-            pass
+        print("[GUI] _on_close v1.0.685: bat dau shutdown...")
 
-        def _cleanup_thread():
-            """Chay cleanup trong thread rieng - neu treo thi timeout se kill."""
-            # 1) Yeu cau pool dong sessions truoc
-            try:
-                from server.app import chrome_pool, server_settings, settings_lock
-                if chrome_pool:
-                    try:
-                        chrome_pool.close_all()
-                    except Exception:
-                        pass
-                with settings_lock:
-                    server_settings['started'] = False
-            except Exception:
-                pass
-
-            # 2) Dong CMD cua tool + kill process Chrome Portable con sot
-            self._close_tool_cmd_windows()
-            self._kill_tool_cmd_processes()
-            self._kill_portable_chrome_processes()
-            self._kill_tool_python_processes()
-
-        # Chay cleanup trong thread voi timeout 15s
-        cleanup = threading.Thread(target=_cleanup_thread, daemon=True)
-        cleanup.start()
-        cleanup.join(timeout=15)  # Doi toi da 15s
-
-        if cleanup.is_alive():
-            # Cleanup treo (page.quit() block) → force kill Chrome truc tiep
-            try:
-                self._add_log("Cleanup timeout 15s! Force kill...", "ERROR")
-            except Exception:
-                pass
-            # Last resort: kill tat ca GoogleChromePortable chrome.exe
+        # === BUOC 1: FORCE KILL CHROME NGAY LAP TUC (khong doi page.quit) ===
+        if os.name == 'nt':
+            print("[GUI] Force kill ALL GoogleChromePortable chrome.exe...")
             try:
                 subprocess.run(
                     ['wmic', 'process', 'where',
                      "name='chrome.exe' and CommandLine like '%GoogleChromePortable%'",
                      'call', 'terminate'],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=0x08000000
+                )
+            except Exception as e:
+                print(f"[GUI] WMIC terminate error: {e}")
+
+            # Backup: taskkill tree kill
+            try:
+                proc = subprocess.run(
+                    ['wmic', 'process', 'where',
+                     "name='chrome.exe' and CommandLine like '%GoogleChromePortable%'",
+                     'get', 'ProcessId', '/FORMAT:CSV'],
+                    capture_output=True, text=True, timeout=8,
+                    creationflags=0x08000000
+                )
+                for line in (proc.stdout or "").splitlines():
+                    s = line.strip()
+                    if not s or not any(c.isdigit() for c in s):
+                        continue
+                    parts = s.rsplit(',', 1)
+                    if len(parts) == 2:
+                        try:
+                            pid = int(parts[1].strip())
+                            subprocess.run(
+                                ['taskkill', '/F', '/T', '/PID', str(pid)],
+                                capture_output=True, timeout=5,
+                                creationflags=0x08000000
+                            )
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Kill GoogleChromePortable.exe launcher
+            try:
+                subprocess.run(
+                    ['taskkill', '/F', '/IM', 'GoogleChromePortable.exe'],
                     capture_output=True, timeout=5,
                     creationflags=0x08000000
                 )
             except Exception:
                 pass
 
-        # 3) LUON dong GUI + thoat - BAT KE cleanup thanh cong hay khong
+            print("[GUI] Chrome kill done.")
+
+        # === BUOC 2: Cleanup nhanh (server state, CMD windows) ===
+        try:
+            from server.app import chrome_pool, server_settings, settings_lock
+            if chrome_pool:
+                # Chi set state, KHONG goi close_all (Chrome da bi kill roi)
+                for w in chrome_pool.workers:
+                    w.ready = False
+                    w.busy = False
+                    w.session = None
+            with settings_lock:
+                server_settings['started'] = False
+        except Exception:
+            pass
+
+        self._close_tool_cmd_windows()
+        self._kill_tool_python_processes()
+
+        print("[GUI] Cleanup done. Exiting...")
+
+        # === BUOC 3: THOAT NGAY ===
         try:
             self.destroy()
         except Exception:
             pass
-        os._exit(0)  # Force exit Python → CMD dong theo
+        os._exit(0)
 
     # ============================================================
     # Setup Page
