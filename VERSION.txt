@@ -1,3 +1,17 @@
+1.0.685
+2026-05-08 (VN)
+Fix: Tat GUI khong tat Chrome/CMD - page.quit() treo block _on_close vinh vien
+- VAN DE: page.quit() (DrissionPage) treo khi Chrome bi ket (interceptor/fingerprint)
+  → _on_close() KHONG BAO GIO den os._exit(0) → CMD den van chay, Chrome van song
+  → Phai vao Task Manager tat tay
+- FIX 1: _on_close chay cleanup trong thread rieng, timeout 15s
+  → Neu page.quit() treo → sau 15s bo qua → WMIC batch terminate Chrome
+  → os._exit(0) LUON chay → CMD dong, Python exit
+- FIX 2: _kill_tool_cmd_processes dung WMIC batch terminate + taskkill /F /T
+  → Truoc: kill_pid() chi kill 1 process → Chrome children thanh orphan
+  → Sau: WMIC terminate tat ca cung luc + taskkill /T kill tree (ca children)
+- Files: server/server_gui.py, server/chrome_pool.py
+
 1.0.684
 2026-05-08 (VN)
 Fix: Video poll LUON tra HTTP 400 - media format khong convert dung sang operations
