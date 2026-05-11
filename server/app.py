@@ -558,14 +558,19 @@ def create_video():
         # Extract video params
         prompt = ""
         media_id = ""
-        video_model = "veo_3_1_r2v_fast_landscape_ultra_relaxed"
+        # Let Chrome UI decide the current video model. Flow's UI changes model
+        # keys often; forcing a client-sent key can make the selected Lite
+        # Lower Priority option ineffective and trigger Google 500 errors.
+        video_model = ""
         aspect_ratio = "VIDEO_ASPECT_RATIO_LANDSCAPE"
         seed = None
 
         if 'requests' in body_json and body_json['requests']:
             req = body_json['requests'][0]
             prompt = req.get('textInput', {}).get('prompt', '') or req.get('prompt', '')
-            video_model = req.get('videoModelKey', video_model)
+            # Do not trust/forward client videoModelKey for server Chrome mode.
+            # The interceptor will convert the Chrome-selected T2V model to I2V.
+            video_model = ""
             aspect_ratio = req.get('aspectRatio', aspect_ratio)
             seed = req.get('seed', None)
 

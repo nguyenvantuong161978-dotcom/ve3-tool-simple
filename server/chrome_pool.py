@@ -924,7 +924,7 @@ class ChromePool:
                         client_project_id=task['project_id'],
                         client_prompt=task['prompt'],
                         media_id=task.get('media_id', ''),
-                        video_model=task.get('video_model', 'veo_3_1_r2v_fast_landscape_ultra_relaxed'),
+                        video_model=task.get('video_model', ''),  # '' = let Chrome UI decide model (Lite LP)
                         aspect_ratio=task.get('aspect_ratio', 'VIDEO_ASPECT_RATIO_LANDSCAPE'),
                         seed=task.get('seed'),
                     )

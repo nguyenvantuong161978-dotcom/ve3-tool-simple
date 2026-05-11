@@ -352,14 +352,16 @@ JS_SELECT_VIDEO_MODE = """
 def build_video_interceptor_js(client_bearer_token: str, client_project_id: str,
                                 media_id: str, video_model: str = '') -> str:
     """
-    v1.0.634: Video interceptor - THAY bearer token + projectId + inject mediaId + videoModelKey.
+    v1.0.687: Video interceptor - THAY bearer token + projectId + inject mediaId.
+    KHONG override videoModelKey - de Chrome UI quyet dinh model (Lite LP).
 
     Chrome DA O VIDEO MODE (da click chuyen sang video UI).
     Interceptor:
-    - Thay token â†’ client's token (VM co quyen Lower Priority)
-    - Thay projectId â†’ client's projectId
+    - Thay token -> client's token (VM co quyen Lower Priority)
+    - Thay projectId -> client's projectId
     - Inject referenceImages voi mediaId (anh lam khung dau)
-    - Thay videoModelKey â†’ model VM yeu cau (VD: lower priority)
+    - Convert T2V -> I2V model (giu nguyen model Chrome UI da chon)
+    - Chi override videoModelKey khi client gui model cu the (video_model != '')
     - GIU NGUYEN recaptchaToken tu Chrome (hop le cho video mode)
     """
     safe_token = client_bearer_token.replace("\\", "\\\\").replace("'", "\\'")
@@ -1966,7 +1968,7 @@ class ChromeSession:
 
     def generate_video(self, client_bearer_token: str, client_project_id: str,
                        client_prompt: str, media_id: str,
-                       video_model: str = 'veo_3_1_r2v_fast_landscape_ultra_relaxed',
+                       video_model: str = '',  # '' = let Chrome UI decide (Lite LP)
                        aspect_ratio: str = 'VIDEO_ASPECT_RATIO_LANDSCAPE',
                        seed: int = None) -> dict:
         """
