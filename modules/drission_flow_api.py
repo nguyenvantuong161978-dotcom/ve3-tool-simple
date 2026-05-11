@@ -831,8 +831,8 @@ JS_SELECT_T2V_MODE_STEP3 = '''
 })();
 '''
 
-# JS để chuyển model sang "Lower Priority" (tránh rate limit)
-# Flow: Click Cài đặt → Click Mô hình dropdown → Select Lower Priority
+# JS để chuyển model sang "Veo 3.1 - Lite [Lower Priority]" (tránh rate limit)
+# Flow: Click Cài đặt → Click Mô hình dropdown → Select Lite Lower Priority
 JS_SWITCH_TO_LOWER_PRIORITY = '''
 (function() {
     window._modelSwitchResult = 'PENDING';
@@ -853,17 +853,25 @@ JS_SWITCH_TO_LOWER_PRIORITY = '''
                         console.log('[MODEL] [2] [v] Clicked Mô hình dropdown');
 
                         setTimeout(function() {
-                            // Step 3: Select "Lower Priority"
+                            // Step 3: Select "Veo 3.1 - Lite [Lower Priority]"
                             var spans = document.querySelectorAll('span');
+                            var target = null;
+                            var fallback = null;
                             for (var span of spans) {
-                                if (span.textContent.includes('Lower Priority')) {
-                                    span.click();
-                                    console.log('[MODEL] [3] [v] Selected Lower Priority');
-                                    window._modelSwitchResult = 'SUCCESS';
-                                    return;
+                                var label = (span.textContent || '').replace(/\\s+/g, ' ').trim();
+                                if (label.includes('Lower Priority')) {
+                                    if (!fallback) fallback = span;
+                                    if (label.includes('Lite')) { target = span; break; }
                                 }
                             }
-                            console.log('[MODEL] [3] [FAIL] Lower Priority not found');
+                            target = target || fallback;
+                            if (target) {
+                                target.click();
+                                console.log('[MODEL] [3] [v] Selected ' + target.textContent.substring(0, 60));
+                                window._modelSwitchResult = 'SUCCESS';
+                                return;
+                            }
+                            console.log('[MODEL] [3] [FAIL] Veo Lite Lower Priority not found');
                             window._modelSwitchResult = 'NOT_FOUND_OPTION';
                         }, 300);
                         return;
@@ -1135,18 +1143,28 @@ JS_SWITCH_TO_T2V_MODE = '''
                             }
                         }
 
-                        // 7. Chon Lower Priority
+                        // 7. Chon Veo 3.1 - Lite [Lower Priority]
                         setTimeout(function() {
                             var items = document.querySelectorAll('[role="menuitem"]');
+                            var target = null;
+                            var fallback = null;
                             for (var i = 0; i < items.length; i++) {
-                                if (items[i].textContent.indexOf('Lower') >= 0) {
-                                    items[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                                    items[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                                    items[i].click();
-                                    console.log('[T2V] 7. Selected: ' + items[i].textContent.substring(0, 40));
-                                    window._t2vResult = 'SUCCESS';
-                                    break;
+                                var label = (items[i].textContent || '').replace(/\s+/g, ' ').trim();
+                                if (label.indexOf('Lower Priority') >= 0 || label.indexOf('Lower') >= 0) {
+                                    if (!fallback) fallback = items[i];
+                                    if (label.indexOf('Lite') >= 0) { target = items[i]; break; }
                                 }
+                            }
+                            target = target || fallback;
+                            if (target) {
+                                target.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                target.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                target.click();
+                                console.log('[T2V] 7. Selected: ' + target.textContent.substring(0, 60));
+                                window._t2vResult = 'SUCCESS';
+                            } else {
+                                console.log('[T2V] 7. WARN: Veo Lite Lower Priority not found');
+                                window._t2vResult = 'NO_LOWER_PRIORITY_MODEL';
                             }
                             // 8. Dong menu
                             setTimeout(function() {
@@ -8117,8 +8135,8 @@ class DrissionFlowAPI:
 
     def switch_to_lower_priority_model(self) -> bool:
         """
-        Chuyển model sang "Veo 3.1 - Fast [Lower Priority]" để tránh rate limit.
-        Flow: Click Cài đặt → Click Mô hình dropdown → Select Lower Priority
+        Chuyển model sang "Veo 3.1 - Lite [Lower Priority]" để tránh rate limit.
+        Flow: Click Cài đặt → Click Mô hình dropdown → Select Lite Lower Priority
 
         Returns:
             True nếu thành công

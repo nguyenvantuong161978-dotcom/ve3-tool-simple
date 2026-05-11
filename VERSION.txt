@@ -1,3 +1,17 @@
+1.0.686
+2026-05-11 (VN)
+Fix: Server Chrome chon dung video model Veo 3.1 - Lite [Lower Priority]
+- VAN DE: Giao dien Flow moi hien dropdown video theo thu tu:
+  Veo 3.1 - Lite / Fast / Quality / Lite [Lower Priority]
+  -> Server cu chon item dau tien sau khi mo dropdown
+  -> Roi vao Veo 3.1 - Lite thuong thay vi Lower Priority
+- FIX: Khi vao Video mode, server uu tien item co ca "Lite" va "Lower Priority"
+  -> Neu Google doi text nhe, fallback sang bat ky item "Lower Priority"
+  -> Ap dung cho server Chrome I2V va Drission T2V/model switch
+- TEST: Da mo D:\VE3_SUITE\GoogleChromePortable - Copy\GoogleChromePortable.exe
+  tren port 19331 va JS_SELECT_VIDEO_MODE tra SUCCESS
+- Files: server/chrome_session.py, modules/drission_flow_api.py
+
 1.0.685
 2026-05-08 (VN)
 Fix: Tat GUI khong tat Chrome/CMD - page.quit() treo block _on_close vinh vien

@@ -310,16 +310,28 @@ JS_SELECT_VIDEO_MODE = """
                             }
                         }
 
-                        // 7. Chon model bat ky (chi can o Video mode, interceptor se thay model tu VM)
+                        // 7. Chon Veo 3.1 - Lite [Lower Priority]
                         setTimeout(function() {
                             var items = document.querySelectorAll('[role="menuitem"]');
-                            if (items.length > 0) {
-                                // Chon model dau tien co san
-                                items[0].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                                items[0].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-                                items[0].click();
-                                console.log('[VIDEO-MODE] 7. Selected: ' + items[0].textContent.substring(0, 40));
+                            var target = null;
+                            var fallback = null;
+                            for (var i = 0; i < items.length; i++) {
+                                var label = (items[i].textContent || '').replace(/\s+/g, ' ').trim();
+                                if (label.indexOf('Lower Priority') >= 0) {
+                                    if (!fallback) fallback = items[i];
+                                    if (label.indexOf('Lite') >= 0) { target = items[i]; break; }
+                                }
+                            }
+                            target = target || fallback;
+                            if (target) {
+                                target.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                                target.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                                target.click();
+                                console.log('[VIDEO-MODE] 7. Selected: ' + target.textContent.substring(0, 60));
                                 window._videoModeResult = 'SUCCESS';
+                            } else {
+                                console.log('[VIDEO-MODE] 7. WARN: Veo Lite Lower Priority not found');
+                                window._videoModeResult = 'NO_LOWER_PRIORITY_MODEL';
                             }
                             // 8. Dong menu
                             setTimeout(function() {
