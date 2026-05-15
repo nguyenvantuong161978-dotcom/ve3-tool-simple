@@ -2158,6 +2158,10 @@ class ChromeSession:
                         # SCHEDULED, PENDING, or unknown -> can poll
                         need_poll = True
                         self.log(f"Video media status: {media_status} -> convert to operations for poll")
+                        try:
+                            self.log(f"Video media raw: {json.dumps(media_items[0])[:800]}")
+                        except Exception:
+                            pass
                         
                         # v1.0.684: Convert media format -> operations format
                         # media items co dang: {mediaId, mediaMetadata: {mediaStatus: {...}}}
@@ -2219,13 +2223,24 @@ class ChromeSession:
         while time.time() - start < timeout:
             elapsed = time.time() - start
 
-            state = self.page.run_js("""
-                return {
-                    pending: window._videoPending,
-                    hasResponse: !!window._videoResponse,
-                    error: window._videoError
-                };
-            """)
+            try:
+                state = self.page.run_js("""
+                    return {
+                        pending: window._videoPending,
+                        hasResponse: !!window._videoResponse,
+                        error: window._videoError
+                    };
+                """)
+            except Exception as e:
+                err = str(e)
+                if "page is refreshed" in err.lower() or "refreshed or loaded" in err.lower():
+                    elapsed_int = int(elapsed)
+                    if elapsed_int > 0 and elapsed_int % 10 == 0 and elapsed_int != getattr(self, '_last_video_wait_log', 0):
+                        self._last_video_wait_log = elapsed_int
+                        self.log(f"... page dang reload, tiep tuc cho video ({elapsed_int}s/{timeout}s)", "WARN")
+                    time.sleep(1)
+                    continue
+                return {"error": err}
 
             if state and state.get('error'):
                 self.log(f"VIDEO ERROR: {state['error']}", "ERROR")
@@ -2357,8 +2372,14 @@ class ChromeSession:
                     return result
 
                 if 'FAILED' in op_status or 'ERROR' in op_status:
-                    error_msg = op.get('error', op_status)
+                    error_msg = op.get('error') or op.get('operation', {}).get('error') or op_status
+                    if isinstance(error_msg, dict):
+                        error_msg = error_msg.get('message') or json.dumps(error_msg)
                     self.log(f"Video FAILED: {error_msg}", "ERROR")
+                    try:
+                        self.log(f"Video failed op raw: {json.dumps(op)[:800]}", "ERROR")
+                    except Exception:
+                        pass
                     return {"operations": ops, "error": str(error_msg)}
 
                 time.sleep(poll_interval)

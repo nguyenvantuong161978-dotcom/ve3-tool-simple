@@ -1,3 +1,12 @@
+1.0.688
+2026-05-16 (VN)
+Fix: Video server 5050 + Flow reload/high-traffic diagnostics
+- FIX 1: app.py - them --port/VE3_SERVER_PORT de VE3 server chay 5050, tranh dung port 5000 cua SOCKS gateway.
+- FIX 2: app.py - /api/ping sieu nhe va /api/status co cache ngan, tranh timeout khi Chrome dang setup/recover.
+- FIX 3: chrome_session.py - khi Flow reload page sau Enter, tiep tuc cho response thay vi fail task voi "page is refreshed".
+- FIX 4: chrome_session.py - giu dung loi goc tu Google operation, vi du PUBLIC_ERROR_HIGH_TRAFFIC, thay vi chi bao MEDIA_GENERATION_STATUS_FAILED.
+- Files: server/app.py, server/chrome_session.py
+
 1.0.687
 2026-05-11 (VN)
 Fix: Video model override - de Chrome UI quyet dinh model (Lite LP)

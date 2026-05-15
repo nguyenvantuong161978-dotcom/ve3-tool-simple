@@ -78,6 +78,17 @@ external_workers_lock = threading.Lock()
 _stored_server_configs = []
 _stored_chromes = []
 
+# Status cache (v1.0.700: Fix GIL blocking timeout)
+status_cache = {"data": None, "timestamp": 0.0}
+status_cache_lock = threading.Lock()
+STATUS_CACHE_TTL = 2.0  # Cache 2 giay
+
+
+def invalidate_status_cache():
+    with status_cache_lock:
+        status_cache["data"] = None
+        status_cache["timestamp"] = 0.0
+
 
 def server_log(msg: str, level: str = "INFO"):
     """Log + luu cho dashboard."""
@@ -523,6 +534,7 @@ def create_image():
         with queue_lock:
             task_queue.append(task_id)
             queue_position = len(task_queue)
+        invalidate_status_cache()
 
         ready = chrome_pool.total_ready() if chrome_pool else 0
         avail = chrome_pool.available_count() if chrome_pool else 0
@@ -558,9 +570,9 @@ def create_video():
         # Extract video params
         prompt = ""
         media_id = ""
-        # Let Chrome UI decide the current video model. Flow's UI changes model
-        # keys often; forcing a client-sent key can make the selected Lite
-        # Lower Priority option ineffective and trigger Google 500 errors.
+        # Keep this empty so Chrome UI decides the current video model.
+        # The interceptor will convert Chrome's T2V model to I2V and inject mediaId.
+        # Forcing a client model here has caused Flow 500 / generation failed.
         video_model = ""
         aspect_ratio = "VIDEO_ASPECT_RATIO_LANDSCAPE"
         seed = None
@@ -568,9 +580,6 @@ def create_video():
         if 'requests' in body_json and body_json['requests']:
             req = body_json['requests'][0]
             prompt = req.get('textInput', {}).get('prompt', '') or req.get('prompt', '')
-            # Do not trust/forward client videoModelKey for server Chrome mode.
-            # The interceptor will convert the Chrome-selected T2V model to I2V.
-            video_model = ""
             aspect_ratio = req.get('aspectRatio', aspect_ratio)
             seed = req.get('seed', None)
 
@@ -612,6 +621,7 @@ def create_video():
         with queue_lock:
             task_queue.append(task_id)
             queue_position = len(task_queue)
+        invalidate_status_cache()
 
         ready = chrome_pool.total_ready() if chrome_pool else 0
         avail = chrome_pool.available_count() if chrome_pool else 0
@@ -653,9 +663,34 @@ def task_status():
         return jsonify(response)
 
 
+@app.route('/api/ping', methods=['GET'])
+def ping():
+    """
+    Ultra-lightweight health check - NO locks, NO chrome_pool access.
+    v1.0.700: Fix GIL blocking timeout issue.
+    """
+    return jsonify({
+        "status": "alive",
+        "timestamp": time.time(),
+        "server_state": "unknown",  # Client dung /api/status de biet chi tiet
+    })
+
+
 @app.route('/api/status', methods=['GET'])
 def server_status():
-    uptime = time.time() - stats['start_time']
+    """
+    Server status with 2s cache to reduce GIL contention.
+    v1.0.700: Fix timeout khi worker threads dang setup Chrome.
+    """
+    now = time.time()
+
+    # Return cache neu con fresh (< 2s)
+    with status_cache_lock:
+        if status_cache["data"] and (now - status_cache["timestamp"]) < STATUS_CACHE_TTL:
+            return jsonify(status_cache["data"])
+
+    # Tinh toan status moi
+    uptime = now - stats['start_time']
     with queue_lock:
         queue_size = len(task_queue)
 
@@ -705,9 +740,9 @@ def server_status():
         server_state = "recovering"
     else:
         server_state = "down"
-    accepting_tasks = server_state in ("ready", "busy", "recovering")
+    accepting_tasks = available_workers > 0
 
-    return jsonify({
+    result = {
         "status": "running",
         "chrome_count": total_workers,
         "chrome_ready": ready_workers,
@@ -726,7 +761,14 @@ def server_status():
             "total_failed": stats['total_failed'],
             "uptime_hours": round(uptime / 3600, 2),
         },
-    })
+    }
+
+    # Luu cache
+    with status_cache_lock:
+        status_cache["data"] = result
+        status_cache["timestamp"] = now
+
+    return jsonify(result)
 
 
 @app.route('/api/workers', methods=['GET'])
@@ -1290,6 +1332,8 @@ if __name__ == '__main__':
     parser.add_argument('--auto', action='store_true', help='Tu dong start (khong doi dashboard)')
     parser.add_argument('--mode', choices=['gop', 'tach'], default='gop',
                         help='gop=Chrome threads trong process, tach=Flask only (workers chay rieng)')
+    parser.add_argument('--port', type=int, default=int(os.environ.get('VE3_SERVER_PORT', '5000')),
+                        help='HTTP server port')
     args = parser.parse_args()
 
     # Apply args to settings
@@ -1319,7 +1363,7 @@ if __name__ == '__main__':
         print("  Mo dashboard va bam START de bat dau!")
 
     print()
-    print(f"  Dashboard: http://0.0.0.0:5000/")
+    print(f"  Dashboard: http://0.0.0.0:{args.port}/")
     print()
     print("=" * 60)
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=args.port, debug=False, threaded=True)

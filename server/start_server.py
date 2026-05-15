@@ -55,7 +55,7 @@ def main():
 
     # 1. Khoi dong Main Server trong CMD rieng
     print("[1/2] Khoi dong Main Server...")
-    server_cmd = f'start "SERVER - Main" cmd /k "{python_exe}" -u server/app.py'
+    server_cmd = f'start "SERVER - Main" cmd /k "{python_exe}" -u server/app.py --port {args.port}'
     subprocess.Popen(server_cmd, shell=True, cwd=str(TOOL_DIR))
     print(f"  → Main Server started (port {args.port})")
 
