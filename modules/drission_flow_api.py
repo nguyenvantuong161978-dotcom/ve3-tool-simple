@@ -832,59 +832,83 @@ JS_SELECT_T2V_MODE_STEP3 = '''
 '''
 
 # JS để chuyển model sang "Veo 3.1 - Lite [Lower Priority]" (tránh rate limit)
-# Flow: Click Cài đặt → Click Mô hình dropdown → Select Lite Lower Priority
+# Flow: Open settings panel → Click model dropdown → Select Lite Lower Priority
+# v2: Updated for new UI - no more "Cài đặt" button or combobox, use bottom bar + arrow_drop_down
 JS_SWITCH_TO_LOWER_PRIORITY = '''
 (function() {
     window._modelSwitchResult = 'PENDING';
 
-    // Step 1: Click "Cài đặt"
+    // Step 1: Open settings panel (click bottom bar button with model keywords)
+    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
     var buttons = document.querySelectorAll('button');
-    for (var btn of buttons) {
-        if (btn.textContent.includes('Cài đặt')) {
-            btn.click();
-            console.log('[MODEL] [1] [v] Clicked Cài đặt');
-
-            setTimeout(function() {
-                // Step 2: Click dropdown "Mô hình"
-                var combos = document.querySelectorAll('button[role="combobox"]');
-                for (var combo of combos) {
-                    if (combo.textContent.includes('Mô hình')) {
-                        combo.click();
-                        console.log('[MODEL] [2] [v] Clicked Mô hình dropdown');
-
-                        setTimeout(function() {
-                            // Step 3: Select "Veo 3.1 - Lite [Lower Priority]"
-                            var spans = document.querySelectorAll('span');
-                            var target = null;
-                            var fallback = null;
-                            for (var span of spans) {
-                                var label = (span.textContent || '').replace(/\\s+/g, ' ').trim();
-                                if (label.includes('Lower Priority')) {
-                                    if (!fallback) fallback = span;
-                                    if (label.includes('Lite')) { target = span; break; }
-                                }
-                            }
-                            target = target || fallback;
-                            if (target) {
-                                target.click();
-                                console.log('[MODEL] [3] [v] Selected ' + target.textContent.substring(0, 60));
-                                window._modelSwitchResult = 'SUCCESS';
-                                return;
-                            }
-                            console.log('[MODEL] [3] [FAIL] Veo Lite Lower Priority not found');
-                            window._modelSwitchResult = 'NOT_FOUND_OPTION';
-                        }, 300);
-                        return;
-                    }
-                }
-                console.log('[MODEL] [2] [FAIL] Mô hình dropdown not found');
-                window._modelSwitchResult = 'NOT_FOUND_DROPDOWN';
-            }, 500);
-            return;
+    var halfH = window.innerHeight * 0.5;
+    var settingsBtn = null;
+    for (var i = 0; i < buttons.length; i++) {
+        var t = buttons[i].textContent.trim();
+        var rect = buttons[i].getBoundingClientRect();
+        if (rect.width > 50 && rect.y > halfH) {
+            for (var k = 0; k < keywords.length; k++) {
+                if (t.indexOf(keywords[k]) >= 0) { settingsBtn = buttons[i]; break; }
+            }
+            if (settingsBtn) break;
         }
     }
-    console.log('[MODEL] [1] [FAIL] Cài đặt button not found');
-    window._modelSwitchResult = 'NOT_FOUND_SETTINGS';
+    if (settingsBtn) {
+        settingsBtn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        settingsBtn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+        console.log('[MODEL] [1] [v] Opened settings: ' + settingsBtn.textContent.trim().substring(0, 40));
+    } else {
+        console.log('[MODEL] [1] [FAIL] Settings button not found');
+        window._modelSwitchResult = 'NOT_FOUND_SETTINGS';
+        return;
+    }
+
+    setTimeout(function() {
+        // Step 2: Click model dropdown (button with arrow_drop_down)
+        var btns = document.querySelectorAll('button');
+        var dropBtn = null;
+        for (var i = 0; i < btns.length; i++) {
+            var t = btns[i].textContent.trim();
+            if (t.indexOf('arrow_drop_down') >= 0 && btns[i].getBoundingClientRect().width > 0) {
+                dropBtn = btns[i];
+                break;
+            }
+        }
+        if (dropBtn) {
+            dropBtn.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+            dropBtn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+            console.log('[MODEL] [2] [v] Clicked dropdown: ' + dropBtn.textContent.trim().substring(0, 40));
+        } else {
+            console.log('[MODEL] [2] [FAIL] Model dropdown not found');
+            window._modelSwitchResult = 'NOT_FOUND_DROPDOWN';
+            return;
+        }
+
+        setTimeout(function() {
+            // Step 3: Select "Veo 3.1 - Lite [Lower Priority]" from menuitem list
+            var items = document.querySelectorAll('[role="menuitem"]');
+            var target = null;
+            var fallback = null;
+            for (var i = 0; i < items.length; i++) {
+                var label = (items[i].textContent || '').replace(/\s+/g, ' ').trim();
+                if (label.indexOf('Lower Priority') >= 0 || label.indexOf('Lower') >= 0) {
+                    if (!fallback) fallback = items[i];
+                    if (label.indexOf('Lite') >= 0) { target = items[i]; break; }
+                }
+            }
+            target = target || fallback;
+            if (target) {
+                target.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                target.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+                target.click();
+                console.log('[MODEL] [3] [v] Selected ' + target.textContent.trim().substring(0, 60));
+                window._modelSwitchResult = 'SUCCESS';
+            } else {
+                console.log('[MODEL] [3] [FAIL] Veo Lite Lower Priority not found');
+                window._modelSwitchResult = 'NOT_FOUND_OPTION';
+            }
+        }, 800);
+    }, 1500);
 })();
 '''
 
@@ -897,7 +921,7 @@ JS_SELECT_ORIENTATION = '''
     window._orientationResult = 'PENDING';
 
     // Buoc 1: Mo menu chinh - tim bang TEXT (khong dung CSS class)
-    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
     var btns = document.querySelectorAll('button');
     var btn1 = null;
     var halfH = window.innerHeight * 0.5;
@@ -957,7 +981,7 @@ JS_SELECT_MODEL_BY_INDEX = '''
     var imgTab = document.querySelector('[id*="trigger-IMAGE"]');
     if (!imgTab || imgTab.getBoundingClientRect().width === 0) {
         // Tim nut settings bang POSITIVE KEYWORDS (giong JS_SELECT_ORIENTATION)
-        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
         var btns = document.querySelectorAll('button');
         var halfH = window.innerHeight * 0.5;
         var btn1 = null;
@@ -1062,7 +1086,7 @@ JS_SWITCH_TO_T2V_MODE = '''
     if (!vidTab) vidTab = document.querySelector('[id*="trigger-VIDEO"]:not([id*="FRAMES"]):not([id*="REFERENCES"])');
     if (!vidTab || vidTab.getBoundingClientRect().width === 0) {
         // Tim nut settings bang POSITIVE KEYWORDS (giong JS_SELECT_ORIENTATION)
-        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
         var btns = document.querySelectorAll('button');
         var halfH = window.innerHeight * 0.5;
         var btn1 = null;
@@ -1135,7 +1159,7 @@ JS_SWITCH_TO_T2V_MODE = '''
                         var btns = document.querySelectorAll('button');
                         for (var i = 0; i < btns.length; i++) {
                             var t = btns[i].textContent.trim();
-                            if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
+                            if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0 || t.indexOf('Omni') >= 0 || t.indexOf('Flash') >= 0)) {
                                 btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
                                 btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
                                 console.log('[T2V] 6. Dropdown: ' + t.substring(0, 40));
@@ -5382,25 +5406,46 @@ class DrissionFlowAPI:
                 if isinstance(response_data, dict):
                     if response_data.get('error'):
                         error_info = response_data['error']
-                        error_msg = f"{error_info.get('code', 'unknown')}: {error_info.get('message', str(error_info))}"
+                        error_code = error_info.get('code', 'unknown')
+                        error_msg = error_info.get('message', str(error_info))
 
                         # Log chi tiết nếu có fullDetails từ JS interceptor
                         full_details = error_info.get('fullDetails')
-                        if full_details:
-                            self.log(f"[x] API Error: {error_msg}", "ERROR")
-                            self.log(f"[ERROR_DETAILS] Full error info:", "ERROR")
-                            if full_details.get('violations'):
-                                self.log(f"  - Violations: {full_details['violations']}", "ERROR")
-                            if full_details.get('details'):
-                                self.log(f"  - Details: {full_details['details']}", "ERROR")
-                            if full_details.get('reason'):
-                                self.log(f"  - Reason: {full_details['reason']}", "ERROR")
-                            if full_details.get('metadata'):
-                                self.log(f"  - Metadata: {full_details['metadata']}", "ERROR")
-                        else:
-                            self.log(f"[x] API Error: {error_msg}", "ERROR")
+                        detailed_error_msg = f"{error_code}: {error_msg}"
 
-                        return [], error_msg
+                        if full_details:
+                            self.log(f"[x] API Error: {detailed_error_msg}", "ERROR")
+                            self.log(f"[ERROR_DETAILS] Full error info:", "ERROR")
+
+                            # Build detailed error message
+                            error_parts = [detailed_error_msg]
+
+                            if full_details.get('violations'):
+                                violations = full_details['violations']
+                                self.log(f"  - Violations: {violations}", "ERROR")
+                                error_parts.append(f"Violations: {violations}")
+
+                            if full_details.get('details'):
+                                details = full_details['details']
+                                self.log(f"  - Details: {details}", "ERROR")
+                                error_parts.append(f"Details: {details}")
+
+                            if full_details.get('reason'):
+                                reason = full_details['reason']
+                                self.log(f"  - Reason: {reason}", "ERROR")
+                                error_parts.append(f"Reason: {reason}")
+
+                            if full_details.get('metadata'):
+                                metadata = full_details['metadata']
+                                self.log(f"  - Metadata: {metadata}", "ERROR")
+                                error_parts.append(f"Metadata: {metadata}")
+
+                            # Return detailed error message
+                            detailed_error_msg = " | ".join(error_parts)
+                        else:
+                            self.log(f"[x] API Error: {detailed_error_msg}", "ERROR")
+
+                        return [], detailed_error_msg
 
                     # Parse successful response
                     images = self._parse_response(response_data)
@@ -7977,7 +8022,7 @@ class DrissionFlowAPI:
 
         # Cách 1: PointerEvent (giống cách cũ nhưng tìm bằng text)
         result = self.driver.run_js('''
-            var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+            var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
             var btns = document.querySelectorAll('button');
             var halfH = window.innerHeight * 0.5;
             for (var i = 0; i < btns.length; i++) {
@@ -8136,7 +8181,7 @@ class DrissionFlowAPI:
     def switch_to_lower_priority_model(self) -> bool:
         """
         Chuyển model sang "Veo 3.1 - Lite [Lower Priority]" để tránh rate limit.
-        Flow: Click Cài đặt → Click Mô hình dropdown → Select Lite Lower Priority
+        Flow: Open settings panel → Click model dropdown → Select Lite Lower Priority
 
         Returns:
             True nếu thành công
@@ -8154,8 +8199,8 @@ class DrissionFlowAPI:
                 self.driver.run_js("window._modelSwitchResult = 'PENDING';")
                 self.driver.run_js(JS_SWITCH_TO_LOWER_PRIORITY)
 
-                # Đợi JS async hoàn thành (500ms + 300ms = ~1s)
-                time.sleep(1.2)
+                # Đợi JS async hoàn thành (1500ms + 800ms = ~2.3s)
+                time.sleep(3.5)
 
                 # Kiểm tra kết quả
                 result = self.driver.run_js("return window._modelSwitchResult;")

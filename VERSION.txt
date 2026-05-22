@@ -1,3 +1,20 @@
+1.0.689
+2026-05-23 (VN)
+Fix: Flow UI model selection - them Omni Flash vao keywords + fix dropdown detection
+- VAN DE: Google Flow them model moi "Omni Flash" vao dropdown
+  → Bottom bar hien "Omni Flash" thay vi "Veo..." → keywords cu khong match
+  → JS_SWITCH_TO_T2V_MODE dropdown check (Veo|Fast) khong match "Omni Flash"
+  → Khong chon duoc model Veo 3.1 - Lite [Lower Priority]
+- FIX 1: Them 'Omni', 'Flash' vao tat ca keyword arrays (6 cho)
+  → JS_SWITCH_TO_LOWER_PRIORITY, JS_SELECT_ORIENTATION, JS_SELECT_MODEL_BY_INDEX
+  → JS_SWITCH_TO_T2V_MODE, _open_settings_panel()
+- FIX 2: T2V dropdown detection them Omni/Flash check
+- FIX 3: JS_SWITCH_TO_LOWER_PRIORITY viet lai cho UI moi
+  → Cu: Cai dat button + combobox "Mo hinh" (khong con trong UI moi)
+  → Moi: Bottom bar + arrow_drop_down + menuitem Lower Priority
+- TEST: Chrome portable chon dung Veo 3.1 - Lite [Lower Priority] tren UI moi
+- File: modules/drission_flow_api.py
+
 1.0.688
 2026-05-16 (VN)
 Fix: Video server 5050 + Flow reload/high-traffic diagnostics
