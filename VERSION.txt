@@ -1,4 +1,4 @@
-1.0.689
+1.0.690
 2026-05-23 (VN)
 Fix: Flow UI model selection - them Omni Flash vao keywords + fix dropdown detection
 - VAN DE: Google Flow them model moi "Omni Flash" vao dropdown
