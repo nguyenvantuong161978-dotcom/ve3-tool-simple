@@ -148,7 +148,7 @@ JS_CLICK_NEW_PROJECT = """
 JS_SELECT_MODEL = """
 (function(modelIndex) {
     window._modelSelectResult = 'PENDING';
-    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+    var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
     var btns = document.querySelectorAll('button');
     var halfH = window.innerHeight * 0.5;
     var btn1 = null;
@@ -229,7 +229,7 @@ JS_SELECT_VIDEO_MODE = """
     var vidTab = document.querySelector('[id*="trigger-IMAGE"]');
     if (!vidTab) vidTab = document.querySelector('[id*="trigger-VIDEO"]:not([id*="FRAMES"]):not([id*="REFERENCES"])');
     if (!vidTab || vidTab.getBoundingClientRect().width === 0) {
-        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast'];
+        var keywords = ['Banana', 'Imagen', 'Veo', 'Video', 'Fast', 'Omni', 'Flash'];
         var btns = document.querySelectorAll('button');
         var halfH = window.innerHeight * 0.5;
         var btn1 = null;
@@ -302,7 +302,7 @@ JS_SELECT_VIDEO_MODE = """
                         var btns = document.querySelectorAll('button');
                         for (var i = 0; i < btns.length; i++) {
                             var t = btns[i].textContent.trim();
-                            if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0)) {
+                            if (t.indexOf('arrow_drop_down') >= 0 && (t.indexOf('Veo') >= 0 || t.indexOf('Fast') >= 0 || t.indexOf('Omni') >= 0 || t.indexOf('Flash') >= 0)) {
                                 btns[i].dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
                                 btns[i].dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
                                 console.log('[VIDEO-MODE] 6. Dropdown: ' + t.substring(0, 40));
